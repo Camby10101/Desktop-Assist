@@ -21,11 +21,10 @@ conversation (for example, house style or company-specific context). Up to 8,000
 
 ## Changing the logo
 
-`morse-micro/logo.svg` is currently a **placeholder** "M". To use the real logo, save it as
-`tenants/morse-micro/logo.png` (or overwrite `logo.svg`), then restart `npm run dev`. No code
-changes are needed.
+`morse-micro/logo.png` is the Morse Micro "Mμ" mark, cut to a circle (512×512, transparent
+corners). To change it, replace that file and restart `npm run dev`. No code changes are needed.
 
-The bubble is a 56px circle on a white background, and the image is scaled to fit inside it
-without cropping. A square icon (the logo mark, not the full wordmark) with a transparent
-background and at least 256×256 pixels looks best. A wide wordmark will still work, but it will
-be very small.
+The bubble is a 56px circle with no background of its own, and the image is scaled to fit
+inside it without cropping. A square image of the logo mark (not the full wordmark), already cut
+to a circle with its own background colour and transparent corners, at least 256×256 pixels,
+looks best.

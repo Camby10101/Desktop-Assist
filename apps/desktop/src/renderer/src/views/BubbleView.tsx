@@ -4,8 +4,7 @@ import { useAccentColor, useAssistState } from '../hooks/useAssistState'
 import { useClickThrough } from '../hooks/useClickThrough'
 import { cn } from '../lib/cn'
 
-// The tenant's logo: logo.png wins over logo.svg, so a real PNG logo can be dropped in beside
-// the placeholder SVG without deleting anything.
+// The tenant's logo: logo.png, or logo.svg (if a tenant has both, the PNG wins).
 const logos = import.meta.glob<string>('@tenant/logo.{png,svg}', {
   eager: true,
   query: '?url',
@@ -39,7 +38,7 @@ export function BubbleView() {
         onClick={() => window.assist.bubbleClick()}
         style={{ width: UI.bubbleSize, height: UI.bubbleSize }}
         className={cn(
-          'overflow-hidden rounded-full bg-white shadow-[0_2px_6px_rgba(0,0,0,0.35)] outline-none',
+          'overflow-hidden rounded-full shadow-[0_2px_6px_rgba(0,0,0,0.35)] outline-none',
           'transition-transform duration-150 ease-out hover:scale-105 active:scale-95',
           'motion-reduce:transition-none',
           mode === 'expanded' &&

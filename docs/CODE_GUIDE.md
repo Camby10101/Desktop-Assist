@@ -142,7 +142,7 @@ environment variable (default `morse-micro`). This is what makes the app easy to
 | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `tenants/README.md`               | How tenants work, and how to change the logo.                                                                                                                                                                                                                                        |
 | `tenants/morse-micro/tenant.json` | `id` (must match the folder name), `companyName`, `appName` (also the name of the screenshots folder), `accentColor` (the highlight colour), `actions` (which icons appear above the bubble, from the bubble upward), and optionally `systemPrompt` (extra instructions for Claude). |
-| `tenants/morse-micro/logo.svg`    | The bubble image. Currently a **placeholder** "M". A `logo.png` placed beside it takes priority.                                                                                                                                                                                     |
+| `tenants/morse-micro/logo.png`    | The bubble image: the Morse Micro "Mμ" mark cut to a circle (512×512, transparent corners). A tenant can use `logo.svg` instead; if both exist, the PNG wins.                                                                                                                        |
 
 ---
 

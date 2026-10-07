@@ -144,7 +144,7 @@ Desktop-Assist/
 │  ├─ src/renderer/             React views: BubbleView, PanelView (+ components)
 │  ├─ src/shared/               IPC contract, action registry, UI geometry constants, types
 │  └─ tests/                    Vitest unit tests
-├─ tenants/morse-micro/         tenant.json (names, colours, enabled actions) + logo.svg
+├─ tenants/morse-micro/         tenant.json (names, colours, enabled actions) + logo.png
 └─ docs/PLAN.md
 ```
 
@@ -230,5 +230,6 @@ Claude API (38 checks), so no real key was needed.
 ## 11. Notes
 
 - Keep the repo **outside OneDrive**. `node_modules` plus OneDrive sync locks break Electron builds.
-- The logo in `tenants/morse-micro/logo.svg` is a **placeholder**. Replace it with the real logo
-  (a square SVG with a transparent background is best) and no code changes are needed.
+- The bubble logo is `tenants/morse-micro/logo.png`: the Morse Micro "Mμ" mark cut to a circle.
+  Replacing the file is all it takes to change it. The tray icon is still a plain accent-coloured
+  circle, and the installer still uses the default Electron icon (both to be branded in M4).

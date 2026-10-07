@@ -33,6 +33,27 @@ Milestone 2: JumpCloud sign-in.
 To get an API key, sign in to the [Claude Console](https://platform.claude.com/settings/keys)
 and create one. Usage is billed to that Console account.
 
+## Getting started
+
+**Run it from the code** (for development):
+
+1. Install [Node.js](https://nodejs.org) 24.
+2. Open a terminal in the `Desktop-Assist` folder and run `npm install` (first time only).
+3. Run `npm run dev`. The bubble appears in the bottom-right corner of your screen.
+4. Click the bubble, paste your Claude API key when asked, and start chatting.
+5. To stop it, use the power icon above the bubble, Quit from the tray icon, or Ctrl+C in the
+   terminal.
+
+**Install it like a normal app:**
+
+1. Run `npm run dist`. This builds `apps/desktop/dist/Desktop Assist-Setup-0.1.0.exe`.
+2. Run that installer. It installs for your user only and starts the app straight away.
+3. The installed app starts with Windows (turn this off in Settings). Find it again in the
+   Start menu as **Desktop Assist**.
+
+Windows may warn about an unrecognised app because the installer isn't code-signed yet
+(**More info → Run anyway**). Signing is planned for Milestone 4.
+
 ## Development
 
 Requires Node 22.12 or later (Node 24 recommended). Keep the repo **outside OneDrive**:
@@ -56,8 +77,8 @@ at a local mock of the Claude API. Installed builds ignore it and always use Ant
 
 To build for a different tenant: `$env:TENANT = '<folder name>'; npm run dev`.
 
-**Changing the logo:** save the image as `tenants/morse-micro/logo.png` (it takes priority over
-the placeholder `logo.svg`) and restart. See [tenants/README.md](tenants/README.md) for tips.
+**Changing the logo:** replace `tenants/morse-micro/logo.png` (currently the Morse Micro "Mμ"
+mark, cut to a circle) and restart. See [tenants/README.md](tenants/README.md) for tips.
 
 ## Layout
 
