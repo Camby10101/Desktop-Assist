@@ -1,0 +1,19 @@
+{
+  "name": "desktop-assist",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @desktop-assist/desktop",
+    "build": "npm run build -w @desktop-assist/desktop",
+    "dist": "npm run dist -w @desktop-assist/desktop",
+    "test": "npm run test --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "prettier": "^3.9.9"
+  }
+}

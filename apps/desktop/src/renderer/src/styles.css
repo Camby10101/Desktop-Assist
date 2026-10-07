@@ -1,0 +1,29 @@
+@import 'tailwindcss';
+
+@theme {
+  /* Overridden at runtime with the tenant's colour (see useAccentColor). */
+  --color-accent: #1b6ac9;
+  --font-sans: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    background: transparent;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    user-select: none;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  textarea {
+    user-select: text;
+  }
+}
