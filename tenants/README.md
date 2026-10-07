@@ -16,6 +16,9 @@ A tenant folder contains:
 
 Available actions: `screenshot`, `settings`, `bounce`, `close`.
 
+Optional: `systemPrompt`, extra instructions added to what Claude is told at the start of every
+conversation (for example, house style or company-specific context). Up to 8,000 characters.
+
 ## Changing the logo
 
 `morse-micro/logo.svg` is currently a **placeholder** "M". To use the real logo, save it as

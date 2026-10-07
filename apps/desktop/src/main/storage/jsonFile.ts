@@ -28,14 +28,23 @@ const tmpPath = (path: string) => `${path}.${process.pid}.${++tmpCounter}.tmp`
  * `shouldCommit` runs just before the rename; returning false discards the write (used to drop
  * a write that a newer one has already overtaken). Resolves to whether the file was replaced.
  */
-export async function writeJsonFile(
+export function writeJsonFile(
   path: string,
   value: unknown,
   shouldCommit: () => boolean = () => true,
 ): Promise<boolean> {
+  return writeFileAtomic(path, JSON.stringify(value, null, 2), shouldCommit)
+}
+
+/** The same temp-file-and-rename write for any content (text or binary). */
+export async function writeFileAtomic(
+  path: string,
+  data: string | Buffer,
+  shouldCommit: () => boolean = () => true,
+): Promise<boolean> {
   await fs.mkdir(dirname(path), { recursive: true })
   const tmp = tmpPath(path)
-  await fs.writeFile(tmp, JSON.stringify(value, null, 2), 'utf8')
+  await fs.writeFile(tmp, data)
   if (!shouldCommit()) {
     await fs.rm(tmp, { force: true })
     return false

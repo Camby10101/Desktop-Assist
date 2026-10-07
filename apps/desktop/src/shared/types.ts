@@ -16,6 +16,7 @@ export interface Attachment {
   addedAt: string
 }
 
+/** The unsent draft in the text box. */
 export interface Notes {
   text: string
   attachments: Attachment[]
@@ -23,11 +24,15 @@ export interface Notes {
   updatedAt: string | null
 }
 
+/** How hard Claude thinks before answering (the API's `effort`), shown as Fast/Balanced/Thorough. */
+export type Effort = 'low' | 'medium' | 'high'
+
 export interface Settings {
   autoStart: boolean
   /** Starting with Windows only works for an installed build, not `npm run dev`. */
   autoStartAvailable: boolean
   screenshotsDir: string
+  effort: Effort
 }
 
 export interface Branding {
@@ -37,12 +42,46 @@ export interface Branding {
   actions: ActionId[]
 }
 
+/**
+ * Whether the saved Claude API key works.
+ * - `invalid`: Anthropic rejected it; the chat box asks for a new one.
+ * - `unreachable`: it couldn't be checked (offline); it's kept and chat stays available.
+ */
+export type ApiKeyStatus =
+  | { state: 'missing' }
+  | { state: 'checking' }
+  | { state: 'valid' }
+  | { state: 'invalid'; message: string }
+  | { state: 'unreachable'; message: string }
+
+export type ApiKeySubmitResult = { ok: true } | { ok: false; message: string }
+
+/** One message as the chat shows it. */
+export interface ChatMessage {
+  id: string
+  role: 'user' | 'assistant'
+  text: string
+  /** Screenshots sent with a user message. */
+  attachments: Attachment[]
+  status: 'streaming' | 'done' | 'stopped' | 'error'
+  /** Shown under the message, e.g. why it stopped. */
+  notice?: string
+  /** A failed reply that can be requested again. */
+  retryable?: boolean
+}
+
+export type SendResult =
+  | { ok: true; notes: Notes }
+  | { ok: false; reason: 'busy' | 'empty' | 'no-key' | 'missing-screenshot' }
+
 export interface AppState {
   mode: Mode
   notes: Notes
   settings: Settings
   branding: Branding
   version: string
+  apiKey: ApiKeyStatus
+  chat: ChatMessage[]
 }
 
 export type ActionResult = { ok: true; message?: string } | { ok: false; message: string }

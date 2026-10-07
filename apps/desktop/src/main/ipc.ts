@@ -1,6 +1,8 @@
 import {
   BrowserWindow,
+  clipboard,
   ipcMain,
+  shell,
   type IpcMainEvent,
   type IpcMainInvokeEvent,
   type WebContents,
@@ -8,9 +10,11 @@ import {
 import { z } from 'zod'
 import { COMMAND_ACTION_IDS } from '@shared/actions'
 import { IPC } from '@shared/ipc'
-import type { AppState, AttachResult } from '@shared/types'
+import type { AppState, AttachResult, SendResult } from '@shared/types'
 import type { ActionHandlers } from './actions'
 import type { BubbleController } from './bubble/BubbleController'
+import type { ApiKeyManager } from './claude/ApiKeyManager'
+import type { ChatSession, OutgoingImage } from './claude/ChatSession'
 import { MAX_NOTE_LENGTH, type NotesStore } from './notes/NotesStore'
 import type { ScreenshotService } from './screenshots/ScreenshotService'
 import type { SettingsService } from './settings'
@@ -22,12 +26,25 @@ export interface IpcContext {
   notes: NotesStore
   screenshots: ScreenshotService
   settings: SettingsService
+  apiKeys: ApiKeyManager
+  chat: ChatSession
   actions: ActionHandlers
   getState(): AppState
 }
 
 const NoArgs = z.undefined()
 const FilePath = z.string().min(1).max(1024)
+/** Only web links may be opened from the chat (no file:, javascript: and so on). */
+const WebUrl = z
+  .string()
+  .max(4096)
+  .refine((value) => {
+    try {
+      return ['http:', 'https:'].includes(new URL(value).protocol)
+    } catch {
+      return false
+    }
+  })
 
 /** Wires every renderer request to the main process. All arguments are validated with zod. */
 export function registerIpc(ctx: IpcContext): void {
@@ -67,6 +84,8 @@ export function registerIpc(ctx: IpcContext): void {
   })
 
   handle(IPC.invokeAction, z.enum(COMMAND_ACTION_IDS), (id) => ctx.actions[id]())
+  handle(IPC.openExternal, WebUrl, (url) => shell.openExternal(url))
+  handle(IPC.copyText, z.string().max(1_000_000), (text) => clipboard.writeText(text))
 
   on(IPC.notesSetText, z.string().max(MAX_NOTE_LENGTH), (text) => ctx.notes.setText(text))
   handle(IPC.notesAttachLatest, NoArgs, async (): Promise<AttachResult> => {
@@ -78,7 +97,6 @@ export function registerIpc(ctx: IpcContext): void {
   handle(IPC.notesRemoveAttachment, z.string().min(1).max(64), (id) =>
     ctx.notes.removeAttachment(id),
   )
-  handle(IPC.notesClear, NoArgs, () => ctx.notes.clear())
 
   handle(IPC.screenshotThumbnail, FilePath, (path) => ctx.screenshots.thumbnail(path))
   handle(IPC.screenshotOpen, FilePath, (path) => ctx.screenshots.open(path))
@@ -86,4 +104,30 @@ export function registerIpc(ctx: IpcContext): void {
 
   handle(IPC.settingsGet, NoArgs, () => ctx.settings.get())
   handle(IPC.settingsSetAutoStart, z.boolean(), (enabled) => ctx.settings.setAutoStart(enabled))
+  handle(IPC.settingsSetEffort, z.enum(['low', 'medium', 'high']), (effort) =>
+    ctx.settings.setEffort(effort),
+  )
+
+  // The key comes in once, goes straight to Anthropic to be checked, and is stored encrypted.
+  handle(IPC.apiKeySubmit, z.string().max(1000), (key) => ctx.apiKeys.submit(key))
+  handle(IPC.apiKeyRecheck, NoArgs, () => ctx.apiKeys.checkSaved())
+  handle(IPC.apiKeyForget, NoArgs, () => ctx.apiKeys.forget())
+
+  // Sends the draft: the text from the box plus the screenshots attached to it.
+  handle(IPC.chatSend, z.string().max(MAX_NOTE_LENGTH), (text): SendResult => {
+    if (ctx.chat.busy) return { ok: false, reason: 'busy' }
+    const draft = ctx.notes.get()
+    const images: OutgoingImage[] = []
+    for (const attachment of draft.attachments) {
+      const image = ctx.screenshots.forClaude(attachment.path)
+      if (!image) return { ok: false, reason: 'missing-screenshot' }
+      images.push(image)
+    }
+    const status = ctx.chat.send(text, images, draft.attachments)
+    if (status !== 'sent') return { ok: false, reason: status }
+    return { ok: true, notes: ctx.notes.clear() }
+  })
+  handle(IPC.chatStop, NoArgs, () => ctx.chat.stop())
+  handle(IPC.chatRetry, NoArgs, () => ctx.chat.retry())
+  handle(IPC.chatNew, NoArgs, () => ctx.chat.newConversation())
 }

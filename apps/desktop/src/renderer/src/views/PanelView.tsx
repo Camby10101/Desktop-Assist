@@ -1,9 +1,10 @@
 import { useEffect, useState, type PointerEvent } from 'react'
 import type { ActionId } from '@shared/actions'
 import { actionBottom } from '@shared/geometry'
-import type { AppState, Attachment } from '@shared/types'
+import type { AppState, Attachment, Effort } from '@shared/types'
 import { ActionStack } from '../components/ActionStack'
-import { NotesBox, type SaveState } from '../components/NotesBox'
+import { ApiKeyForm } from '../components/ApiKeyForm'
+import { Banner, ChatBox } from '../components/ChatBox'
 import { SettingsMenu } from '../components/SettingsMenu'
 import { useAccentColor, useAssistState } from '../hooks/useAssistState'
 import { useClickThrough } from '../hooks/useClickThrough'
@@ -20,21 +21,23 @@ export function PanelView() {
 
 function Panel({ state }: { state: AppState }) {
   const open = state.mode === 'expanded'
-  const { branding } = state
+  const { branding, apiKey } = state
 
-  // The text and attachments are edited here and mirrored to the main process, which saves them.
-  const [text, setText] = useState(state.notes.text)
+  // The draft is edited here and mirrored to the main process, which saves it.
+  const [draft, setDraft] = useState(state.notes.text)
   const [attachments, setAttachments] = useState(state.notes.attachments)
-  const [saveState, setSaveState] = useState<SaveState>(state.notes.updatedAt ? 'saved' : 'idle')
   const [settings, setSettings] = useState(state.settings)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [changingKey, setChangingKey] = useState(false)
   const [toast, showToast] = useToast()
 
-  useEffect(() => window.assist.onNotesSaved(() => setSaveState('saved')), [])
   useEffect(
     () =>
       window.assist.onModeChanged((mode) => {
-        if (mode !== 'expanded') setSettingsOpen(false)
+        if (mode !== 'expanded') {
+          setSettingsOpen(false)
+          setChangingKey(false)
+        }
       }),
     [],
   )
@@ -48,6 +51,12 @@ function Panel({ state }: { state: AppState }) {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [settingsOpen])
 
+  // No key, or the saved one stopped working: the chat box asks for one before anything else.
+  const needsKey = apiKey.state === 'missing' || apiKey.state === 'invalid'
+  const keyUsable = apiKey.state === 'valid' || apiKey.state === 'unreachable'
+  const busy = state.chat.some((message) => message.status === 'streaming')
+  const canSend = keyUsable && !busy && (draft.trim() !== '' || attachments.length > 0)
+
   async function runAction(id: ActionId) {
     if (id === 'settings') {
       setSettingsOpen(!settingsOpen)
@@ -60,28 +69,35 @@ function Panel({ state }: { state: AppState }) {
     if (result.message) showToast(result.message, result.ok ? 'info' : 'error')
   }
 
-  function changeText(next: string) {
-    setText(next)
-    setSaveState('saving')
+  function changeDraft(next: string) {
+    setDraft(next)
     window.assist.notes.setText(next)
+  }
+
+  async function send() {
+    if (!canSend) return
+    const result = await window.assist.chat.send(draft)
+    if (result.ok) {
+      setDraft(result.notes.text)
+      setAttachments(result.notes.attachments)
+    } else if (result.reason === 'missing-screenshot') {
+      showToast('An attached screenshot is missing. Remove it and try again.', 'error')
+    } else if (result.reason === 'no-key') {
+      showToast('Add your Claude API key first.', 'error')
+    }
   }
 
   async function attachLatest() {
     const result = await window.assist.notes.attachLatestScreenshot()
-    if (result.ok) {
-      setAttachments(result.notes.attachments)
-      setSaveState('saving')
-    } else if (result.reason === 'no-screenshots') {
+    if (result.ok) setAttachments(result.notes.attachments)
+    else if (result.reason === 'no-screenshots') {
       showToast('No screenshots yet. Take one with the camera button.')
-    } else {
-      showToast('That screenshot is already attached')
-    }
+    } else showToast('That screenshot is already attached')
   }
 
   async function removeAttachment(attachment: Attachment) {
     const notes = await window.assist.notes.removeAttachment(attachment.id)
     setAttachments(notes.attachments)
-    setSaveState('saving')
   }
 
   async function openAttachment(attachment: Attachment) {
@@ -89,13 +105,33 @@ function Panel({ state }: { state: AppState }) {
     if (!opened) showToast("That screenshot can't be found", 'error')
   }
 
-  async function clearTextBox() {
-    const notes = await window.assist.notes.clear()
-    setText(notes.text)
-    setAttachments(notes.attachments)
-    setSaveState('saving')
+  async function copy(text: string) {
+    await window.assist.copyText(text)
+    showToast('Copied')
+  }
+
+  async function submitKey(key: string) {
+    const result = await window.assist.apiKey.submit(key)
+    if (result.ok) {
+      setChangingKey(false)
+      showToast('API key saved')
+    }
+    return result
+  }
+
+  async function forgetKey() {
+    await window.assist.apiKey.forget()
+    setChangingKey(false)
+  }
+
+  async function newConversation() {
+    await window.assist.chat.newConversation()
     setSettingsOpen(false)
-    showToast('Text box cleared')
+    showToast('Started a new conversation')
+  }
+
+  async function setEffort(effort: Effort) {
+    setSettings(await window.assist.settings.setEffort(effort))
   }
 
   // Clicking anywhere else in the panel closes the settings menu.
@@ -106,6 +142,37 @@ function Panel({ state }: { state: AppState }) {
     }
   }
 
+  const keyPrompt =
+    needsKey || changingKey ? (
+      <ApiKeyForm
+        open={open}
+        status={apiKey}
+        changing={changingKey && !needsKey}
+        onSubmit={submitKey}
+        onCancel={() => setChangingKey(false)}
+        onForget={() => void forgetKey()}
+      />
+    ) : null
+
+  const banner =
+    apiKey.state === 'checking' ? (
+      <Banner spinner>Checking your Claude API key…</Banner>
+    ) : apiKey.state === 'unreachable' ? (
+      <Banner
+        action={
+          <button
+            type="button"
+            onClick={() => void window.assist.apiKey.recheck()}
+            className="rounded-md px-1.5 py-0.5 font-medium text-accent hover:bg-zinc-100 dark:hover:bg-zinc-800"
+          >
+            Retry
+          </button>
+        }
+      >
+        {apiKey.message}
+      </Banner>
+    ) : null
+
   const settingsIndex = branding.actions.indexOf('settings')
 
   return (
@@ -114,13 +181,21 @@ function Panel({ state }: { state: AppState }) {
       data-open={open ? '' : undefined}
       onPointerDown={closeSettingsOnOutsideClick}
     >
-      <NotesBox
+      <ChatBox
         open={open}
-        text={text}
-        attachments={attachments}
-        saveState={saveState}
         toast={toast}
-        onTextChange={changeText}
+        keyPrompt={keyPrompt}
+        banner={banner}
+        messages={state.chat}
+        busy={busy}
+        canSend={canSend}
+        draft={draft}
+        attachments={attachments}
+        onDraftChange={changeDraft}
+        onSend={() => void send()}
+        onStop={() => void window.assist.chat.stop()}
+        onRetry={() => void window.assist.chat.retry()}
+        onCopy={(text) => void copy(text)}
         onAttachLatest={() => void attachLatest()}
         onOpenAttachment={(attachment) => void openAttachment(attachment)}
         onRemoveAttachment={(attachment) => void removeAttachment(attachment)}
@@ -140,8 +215,13 @@ function Panel({ state }: { state: AppState }) {
           onToggleAutoStart={async () =>
             setSettings(await window.assist.settings.setAutoStart(!settings.autoStart))
           }
+          onSetEffort={(effort) => void setEffort(effort)}
+          onChangeApiKey={() => {
+            setSettingsOpen(false)
+            setChangingKey(true)
+          }}
           onOpenScreenshotsFolder={() => void window.assist.screenshots.openFolder()}
-          onClearTextBox={() => void clearTextBox()}
+          onNewConversation={() => void newConversation()}
         />
       )}
     </div>

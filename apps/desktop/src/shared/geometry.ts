@@ -21,8 +21,9 @@ export const UI = {
   bubblePad: 8,
   /** Space between the bubble and the text box / action stack. */
   gap: 12,
-  panelWidth: 360,
-  panelMaxHeight: 440,
+  /** The chat card. It starts as just the text box and grows upward to this height. */
+  panelWidth: 400,
+  panelMaxHeight: 520,
   actionSize: 40,
   actionGap: 8,
   /** Room for drop shadows along the panel window's top and left edges. */

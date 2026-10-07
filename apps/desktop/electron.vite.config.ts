@@ -16,5 +16,9 @@ const alias = {
 export default defineConfig({
   main: { resolve: { alias } },
   preload: { resolve: { alias } },
-  renderer: { resolve: { alias }, plugins: [react(), tailwindcss()] },
+  renderer: {
+    resolve: { alias },
+    plugins: [react(), tailwindcss()],
+    build: { minify: true }, // electron-vite leaves it off by default
+  },
 })

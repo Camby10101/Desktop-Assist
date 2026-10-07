@@ -11,6 +11,8 @@ export const TenantSchema = z.object({
     .array(z.enum(ACTION_IDS))
     .min(1)
     .refine((ids) => new Set(ids).size === ids.length, 'actions must not repeat'),
+  /** Extra instructions for Claude, added to the built-in system prompt. */
+  systemPrompt: z.string().max(8000).optional(),
 })
 
 export type Tenant = z.infer<typeof TenantSchema>

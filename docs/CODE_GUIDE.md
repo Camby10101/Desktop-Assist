@@ -1,7 +1,8 @@
 # Desktop Assist: Code Guide
 
 A walk through every file in the project: what it's for, and what each function, method or
-constant does. Written for Milestone 0 (Foundation). Update this guide when the code changes.
+constant does. Covers Milestone 0 (Foundation) and Milestone 1 (Chat with Claude). Update this
+guide when the code changes.
 
 Contents:
 
@@ -23,16 +24,17 @@ Contents:
 An Electron app is a Chromium browser and Node.js bundled together. It runs as several
 processes, and the code is split the same way:
 
-| Part             | Runs in                                     | Can do                                                                      | Here                        |
-| ---------------- | ------------------------------------------- | --------------------------------------------------------------------------- | --------------------------- |
-| **Main process** | Node.js, one per app                        | Create windows, read and write files, the tray, screen capture, OS settings | `apps/desktop/src/main`     |
-| **Renderer**     | Chromium, one per window                    | Draw the UI with HTML/CSS/React. **Cannot** touch files or the OS           | `apps/desktop/src/renderer` |
-| **Preload**      | Inside each renderer, before the page loads | Hand the page a small, safe set of functions (`window.assist`)              | `apps/desktop/src/preload`  |
-| **Shared**       | Bundled into all three                      | Types and constants both sides must agree on                                | `apps/desktop/src/shared`   |
+| Part             | Runs in                                     | Can do                                                                                    | Here                        |
+| ---------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------- | --------------------------- |
+| **Main process** | Node.js, one per app                        | Create windows, read and write files, the tray, screen capture, talk to the Claude API    | `apps/desktop/src/main`     |
+| **Renderer**     | Chromium, one per window                    | Draw the UI with HTML/CSS/React. **Cannot** touch files, the network to Claude, or the OS | `apps/desktop/src/renderer` |
+| **Preload**      | Inside each renderer, before the page loads | Hand the page a small, safe set of functions (`window.assist`)                            | `apps/desktop/src/preload`  |
+| **Shared**       | Bundled into all three                      | Types and constants both sides must agree on                                              | `apps/desktop/src/shared`   |
 
 The renderer and the main process talk over **IPC** (inter-process communication): the
 renderer sends a named message (a _channel_), and the main process handles it and optionally
-replies. Every channel is listed in `src/shared/ipc.ts`.
+replies. The main process can also push messages to the renderer, for example each chunk of a
+streaming Claude reply. Every channel is listed in `src/shared/ipc.ts`.
 
 **Why two windows?** The bubble and the panel are separate, transparent, always-on-top windows.
 Both load the same web page; the URL's `?view=bubble` or `?view=panel` decides which UI it
@@ -45,6 +47,10 @@ out _ignoring the mouse_. Windows still forwards pointer movement to the page, a
 pointer is over a real piece of UI (anything marked `data-hit`), the page asks the main process
 to switch mouse input back on.
 
+**Where Claude is called.** Only the main process talks to Claude, using Anthropic's official
+TypeScript SDK (`@anthropic-ai/sdk`). The API key lives in the main process, encrypted on disk;
+the page only ever learns whether the key works.
+
 ---
 
 ## 2. How the pieces work together
@@ -52,37 +58,56 @@ to switch mouse input back on.
 **Starting up** (`src/main/index.ts` → `start()`)
 
 1. Validate `tenant.json`, create the bubble and panel windows (both hidden), load the saved
-   text box from disk, and set up "Start with Windows" for installed builds.
-2. Create the `BubbleController` (the state machine), the `ScreenshotService`, the IPC
-   handlers and the tray icon.
-3. Once both pages have painted, `controller.start()` puts the bubble in the corner and shows it.
+   draft from disk, and load preferences.
+2. Create the `BubbleController` (the bubble's state machine), the `ScreenshotService`, the
+   Claude backend, the `ApiKeyManager` and the `ChatSession`, then the IPC handlers and tray.
+3. **Test the saved API key** (`apiKeys.checkSaved()`): if there's no key, or Anthropic rejects
+   it, the chat box shows the key form first.
+4. Once both pages have painted, `controller.start()` shows the bubble in the corner.
 
-**Clicking the bubble**
+**Entering an API key**
 
-`BubbleView` button → `window.assist.bubbleClick()` → IPC `assist:bubble-click` →
-`BubbleController.clickBubble()`, which decides what the click means from the current mode:
-open the panel, close it, or stop bouncing. The new mode is broadcast to both pages
-(`assist:mode-changed`), and the panel fades in or out to match.
+`ApiKeyForm` → `window.assist.apiKey.submit(key)` → IPC `assist:api-key-submit` →
+`ApiKeyManager.submit()` asks Anthropic whether the key works (`AnthropicBackend.verifyKey()`,
+which fetches the model's details: free, and fails for a bad key). Only a working key is saved
+(`ApiKeyStore.save()`, encrypted with Windows DPAPI). The new status (`valid`) is broadcast and
+the chat appears.
+
+**Sending a message**
+
+1. Enter in the text box → `Panel.send()` → IPC `assist:chat-send` with the text.
+2. The main process collects the draft's attached screenshots, shrinks each one for Claude
+   (`ScreenshotService.forClaude()`), and calls `ChatSession.send()`, then clears the draft.
+3. `ChatSession` appends your message to the conversation history and starts a reply:
+   `AnthropicBackend.reply()` streams it from the Claude API.
+4. As text arrives, `ChatSession` updates the reply and broadcasts it (`assist:chat-message`,
+   batched to at most one update every 50 ms). The page re-renders it as Markdown.
+5. When the reply finishes, the whole reply (including Claude's hidden thinking blocks) is
+   appended to the history unchanged, ready to be sent back with the next message.
+
+**Stop, errors and Retry**
+
+- **Stop** aborts the request. Text that already arrived stays on screen and is added to the
+  history as a plain-text reply (the history is only ever added to, never edited; see
+  `ChatSession`).
+- **A temporary error** (offline, overloaded) before any text arrived shows the reason and a
+  **Retry** button, which sends the same conversation again.
+- **A key error** (revoked key, no credit) tells the `ApiKeyManager`, which switches back to the
+  key form with an explanation.
 
 **Typing in the text box**
 
-`NotesBox` textarea → `Panel.changeText()` → `window.assist.notes.setText()` →
-`NotesStore.setText()`. The store keeps the text in memory and writes `notes.json` about half a
-second after you stop typing. When the write finishes, it sends `assist:notes-saved` and the
-page shows "Saved ✓".
+`Composer` textarea → `Panel.changeDraft()` → `window.assist.notes.setText()` →
+`NotesStore.setText()`. The store keeps the draft in memory and writes `notes.json` about half a
+second after you stop typing, so an unsent message survives a restart.
 
 **Taking a screenshot**
 
 Camera icon → `Panel.runAction('screenshot')` → IPC `assist:invoke-action` → the `screenshot`
 handler in `src/main/actions.ts` → `BubbleController.whileHidden()` hides both windows, waits for
 Windows to repaint, then `ScreenshotService.capture()` saves the PNG. The windows come back and
-the page shows a "Screenshot saved" toast.
-
-**Attach latest screenshot**
-
-Paperclip button → IPC `assist:notes-attach-latest` → `ScreenshotService.latest()` finds the
-newest screenshot file → `NotesStore.addAttachment()` → the page shows a chip. The chip asks for
-a small preview through `assist:screenshot-thumbnail`.
+the page shows a "Screenshot saved" toast. **Attach latest screenshot** then adds it to the
+draft as a chip, and it's sent with your next message.
 
 **Bounce**
 
@@ -99,6 +124,7 @@ which animates it back to the corner with `bounce.glidePosition()`.
 | `package.json`       | The npm _workspaces_ root. `apps/*` are the packages (only `apps/desktop` for now; a gateway service can be added beside it later). Its scripts (`dev`, `test`, `lint`, `typecheck`, `dist`, `format`) forward to the desktop app. |
 | `package-lock.json`  | Exact versions of every installed package, so every machine installs the same thing. Generated by npm; don't edit by hand.                                                                                                         |
 | `.gitignore`         | Keeps `node_modules/`, build output (`out/`, `dist/`) and logs out of git.                                                                                                                                                         |
+| `.gitattributes`     | Keeps line endings as LF in git and on disk, matching Prettier.                                                                                                                                                                    |
 | `.prettierrc.json`   | Code formatting rules (no semicolons, single quotes, 100-character lines). Run `npm run format` to apply.                                                                                                                          |
 | `.prettierignore`    | Files Prettier must not touch (build output, the lock file).                                                                                                                                                                       |
 | `README.md`          | What the app does and how to run, test and build it.                                                                                                                                                                               |
@@ -112,11 +138,11 @@ which animates it back to the corner with `bounce.glidePosition()`.
 A _tenant_ is one business's branding. The build includes exactly one, chosen by the `TENANT`
 environment variable (default `morse-micro`). This is what makes the app easy to re-brand later.
 
-| File                              | Purpose                                                                                                                                                                                                                           |
-| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `tenants/README.md`               | How tenants work, and how to change the logo.                                                                                                                                                                                     |
-| `tenants/morse-micro/tenant.json` | `id` (must match the folder name), `companyName`, `appName` (also the name of the screenshots folder), `accentColor` (the highlight colour), and `actions`: which icons appear above the bubble, in order from the bubble upward. |
-| `tenants/morse-micro/logo.svg`    | The bubble image. Currently a **placeholder** "M". A `logo.png` placed beside it takes priority.                                                                                                                                  |
+| File                              | Purpose                                                                                                                                                                                                                                                                              |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `tenants/README.md`               | How tenants work, and how to change the logo.                                                                                                                                                                                                                                        |
+| `tenants/morse-micro/tenant.json` | `id` (must match the folder name), `companyName`, `appName` (also the name of the screenshots folder), `accentColor` (the highlight colour), `actions` (which icons appear above the bubble, from the bubble upward), and optionally `systemPrompt` (extra instructions for Claude). |
+| `tenants/morse-micro/logo.svg`    | The bubble image. Currently a **placeholder** "M". A `logo.png` placed beside it takes priority.                                                                                                                                                                                     |
 
 ---
 
@@ -124,16 +150,16 @@ environment variable (default `morse-micro`). This is what makes the app easy to
 
 All in `apps/desktop/`.
 
-| File                      | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `package.json`            | The desktop app's own package. `productName` ("Desktop Assist") becomes the app's name and its `%APPDATA%` folder. `main` points Electron at the built main process. Scripts: `dev` (run with hot reload), `build`, `typecheck`, `lint`, `test`, `dist` (build the installer). Every library is a `devDependency` because the build bundles them; the installer ships no `node_modules`. `electron` is pinned to an exact version because the installer builder requires it. |
-| `electron.vite.config.ts` | Build config for electron-vite, which compiles the three parts (main, preload, renderer). Defines the import shortcuts `@shared` → `src/shared` and `@tenant` → `tenants/<TENANT>`, and turns on React and Tailwind for the renderer.                                                                                                                                                                                                                                        |
-| `electron-builder.yml`    | Installer config: app ID, product name, include only the built `out/` folder, and build a per-user one-click NSIS installer (`Desktop Assist-Setup-<version>.exe`) into `dist/`.                                                                                                                                                                                                                                                                                             |
-| `tsconfig.json`           | Points TypeScript at the two configs below.                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| `tsconfig.node.json`      | TypeScript settings for code that runs in Node: main, preload, shared, tests and config files. Strict mode on.                                                                                                                                                                                                                                                                                                                                                               |
-| `tsconfig.web.json`       | TypeScript settings for the renderer (browser code with React/JSX).                                                                                                                                                                                                                                                                                                                                                                                                          |
-| `vitest.config.ts`        | Test runner config: the same `@shared`/`@tenant` shortcuts, run `tests/**/*.test.ts` in Node.                                                                                                                                                                                                                                                                                                                                                                                |
-| `eslint.config.mjs`       | Lint rules: recommended JavaScript and TypeScript rules everywhere, React Hooks rules for the renderer, and Prettier compatibility.                                                                                                                                                                                                                                                                                                                                          |
+| File                      | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `package.json`            | The desktop app's own package. `productName` ("Desktop Assist") becomes the app's name and its `%APPDATA%` folder. `main` points Electron at the built main process. Scripts: `dev`, `build`, `typecheck`, `lint`, `test`, `dist` (build the installer). Every library is a `devDependency` because the build bundles them; the installer ships no `node_modules`. `electron` is pinned to an exact version because the installer builder requires it. |
+| `electron.vite.config.ts` | Build config for electron-vite, which compiles the three parts (main, preload, renderer). Defines the import shortcuts `@shared` → `src/shared` and `@tenant` → `tenants/<TENANT>`, turns on React and Tailwind for the renderer, and minifies the renderer.                                                                                                                                                                                           |
+| `electron-builder.yml`    | Installer config: app ID, product name, include only the built `out/` folder, and build a per-user one-click NSIS installer (`Desktop Assist-Setup-<version>.exe`) into `dist/`.                                                                                                                                                                                                                                                                       |
+| `tsconfig.json`           | Points TypeScript at the two configs below.                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `tsconfig.node.json`      | TypeScript settings for code that runs in Node: main, preload, shared, tests and config files. Strict mode on.                                                                                                                                                                                                                                                                                                                                         |
+| `tsconfig.web.json`       | TypeScript settings for the renderer (browser code with React/JSX).                                                                                                                                                                                                                                                                                                                                                                                    |
+| `vitest.config.ts`        | Test runner config: the same `@shared`/`@tenant` shortcuts, run `tests/**/*.test.ts` in Node.                                                                                                                                                                                                                                                                                                                                                          |
+| `eslint.config.mjs`       | Lint rules: recommended JavaScript and TypeScript rules everywhere, React Hooks rules for the renderer, and Prettier compatibility.                                                                                                                                                                                                                                                                                                                    |
 
 ---
 
@@ -143,15 +169,15 @@ Imported by both the main process and the renderer, so both sides agree on shape
 
 ### `geometry.ts`: sizes and positions
 
-| Name                    | What it is                                                                                                                                                                                                                                                                                                                                                                                               |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Point`, `Size`, `Rect` | Basic shapes: `{x, y}`, `{width, height}`, and both together. All in DIPs (device-independent pixels, i.e. before Windows display scaling).                                                                                                                                                                                                                                                              |
-| `UI`                    | Every UI measurement in one place: bubble size (56), padding around it (8), gap to the panel (12), panel width (360) and max height (440), action icon size (40) and spacing (8), shadow room (16), settings menu width (248), and the margin from the screen edge (16). The main process sizes windows from these and the renderer positions elements with the same numbers, so they can't drift apart. |
-| `BUBBLE_BOX`            | Size of the bubble window: the bubble plus padding on each side (72).                                                                                                                                                                                                                                                                                                                                    |
-| `PANEL_LAYOUT`          | Where the action stack, text box and settings menu sit inside the panel window, measured from its bottom-right corner (which lines up with the bubble).                                                                                                                                                                                                                                                  |
-| `actionStackHeight(n)`  | Height of a stack of `n` action icons including the gaps between them.                                                                                                                                                                                                                                                                                                                                   |
-| `actionBottom(index)`   | Distance from the panel window's bottom edge to the bottom of action icon number `index`. Used to line the settings menu up with the gear.                                                                                                                                                                                                                                                               |
-| `panelWindowSize(n)`    | How big the panel window must be to fit the text box at full height and `n` action icons.                                                                                                                                                                                                                                                                                                                |
+| Name                    | What it is                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `Point`, `Size`, `Rect` | Basic shapes: `{x, y}`, `{width, height}`, and both together. All in DIPs (device-independent pixels, i.e. before Windows display scaling).                                                                                                                                                                                                                                                                  |
+| `UI`                    | Every UI measurement in one place: bubble size (56), padding around it (8), gap to the panel (12), chat card width (400) and max height (520), action icon size (40) and spacing (8), shadow room (16), settings menu width (248), and the margin from the screen edge (16). The main process sizes windows from these and the renderer positions elements with the same numbers, so they can't drift apart. |
+| `BUBBLE_BOX`            | Size of the bubble window: the bubble plus padding on each side (72).                                                                                                                                                                                                                                                                                                                                        |
+| `PANEL_LAYOUT`          | Where the action stack, chat card and settings menu sit inside the panel window, measured from its bottom-right corner (which lines up with the bubble).                                                                                                                                                                                                                                                     |
+| `actionStackHeight(n)`  | Height of a stack of `n` action icons including the gaps between them.                                                                                                                                                                                                                                                                                                                                       |
+| `actionBottom(index)`   | Distance from the panel window's bottom edge to the bottom of action icon number `index`. Used to line the settings menu up with the gear.                                                                                                                                                                                                                                                                   |
+| `panelWindowSize(n)`    | How big the panel window must be to fit the chat card at full height and `n` action icons.                                                                                                                                                                                                                                                                                                                   |
 
 ### `actions.ts`: the action registry
 
@@ -168,23 +194,28 @@ an icon in `ActionStack.tsx`, and list it in `tenant.json`.
 
 ### `types.ts`: data shapes
 
-| Name           | What it is                                                                                                                                   |
-| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Mode`         | What the bubble is doing: `collapsed`, `expanded`, `bouncing`, `returning` (gliding home), or `capturing` (windows hidden for a screenshot). |
-| `Attachment`   | A screenshot attached to the text box: an ID, the file path, the file name and when it was added.                                            |
-| `Notes`        | The text box's saved contents: text, attachments and last-changed time.                                                                      |
-| `Settings`     | What the settings menu shows: whether Start with Windows is on, whether it's available (installed builds only), and the screenshots folder.  |
-| `Branding`     | The parts of the tenant config the pages need.                                                                                               |
-| `AppState`     | Everything a page needs when it first loads.                                                                                                 |
-| `ActionResult` | What running an action returns: success or failure, plus an optional message to show as a toast.                                             |
-| `AttachResult` | What "attach latest" returns: the updated notes, or why it didn't attach (`no-screenshots` or `already-attached`).                           |
+| Name                 | What it is                                                                                                                                                                                              |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Mode`               | What the bubble is doing: `collapsed`, `expanded`, `bouncing`, `returning` (gliding home), or `capturing` (windows hidden for a screenshot).                                                            |
+| `Attachment`         | A screenshot attached to the draft or a sent message: an ID, the file path, the file name and when it was added.                                                                                        |
+| `Notes`              | The unsent draft: text, attachments and last-changed time.                                                                                                                                              |
+| `Effort`             | How hard Claude thinks: `low`, `medium` or `high` (shown as Fast, Balanced, Thorough).                                                                                                                  |
+| `Settings`           | What the settings menu shows: Start with Windows (and whether it's available), the screenshots folder, and the response style (`effort`).                                                               |
+| `Branding`           | The parts of the tenant config the pages need.                                                                                                                                                          |
+| `ApiKeyStatus`       | Whether the API key works: `missing`, `checking`, `valid`, `invalid` (rejected, with a message) or `unreachable` (couldn't be checked, e.g. offline; the key is kept).                                  |
+| `ApiKeySubmitResult` | What entering a key returns: success, or a message saying why not.                                                                                                                                      |
+| `ChatMessage`        | One message as the chat shows it: who sent it, the text, any screenshots, its status (`streaming`, `done`, `stopped`, `error`), an optional notice (e.g. why it stopped) and whether it can be retried. |
+| `SendResult`         | What sending returns: the cleared draft, or why it wasn't sent (`busy`, `empty`, `no-key`, `missing-screenshot`).                                                                                       |
+| `AppState`           | Everything a page needs when it first loads, including the key status and the chat so far.                                                                                                              |
+| `ActionResult`       | What running an action returns: success or failure, plus an optional toast message.                                                                                                                     |
+| `AttachResult`       | What "attach latest" returns: the updated draft, or why it didn't attach.                                                                                                                               |
 
 ### `ipc.ts`: the IPC contract
 
-| Name        | What it is                                                                                                                                                                                                                                                        |
-| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `IPC`       | Every channel name, e.g. `assist:bubble-click`. One list means the preload and the main process can't disagree about a name.                                                                                                                                      |
-| `AssistApi` | The exact set of functions the pages get as `window.assist`: get the state, click the bubble, collapse, switch mouse input on or off, run an action, edit notes, work with screenshots, read and change settings, and listen for mode changes and "saved" events. |
+| Name        | What it is                                                                                                                                                                                                                                                                                                                                              |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `IPC`       | Every channel name, e.g. `assist:chat-send`. One list means the preload and the main process can't disagree about a name.                                                                                                                                                                                                                               |
+| `AssistApi` | The exact set of functions the pages get as `window.assist`: the bubble and actions, opening links and copying text, the draft (`notes`), screenshots, settings, the API key (`submit`, `recheck`, `forget`), the chat (`send`, `stop`, `retry`, `newConversation`), and listeners for mode changes, key status changes, chat messages and chat resets. |
 
 ### `format.ts`
 
@@ -198,53 +229,123 @@ an icon in `ActionStack.tsx`, and list it in `tenant.json`.
 
 ### `index.ts`: startup and shutdown
 
-| Part                          | What it does                                                                                                                                                                                                                                                                                                                                                                                                 |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Top-level code                | In dev runs, moves app data to `%APPDATA%\Desktop Assist (Dev)` so a dev copy never shares notes or the single-instance lock with an installed copy. Takes the **single-instance lock**: if the app is already running, the new copy quits, and the running one opens its panel (`second-instance` event).                                                                                                   |
-| `start()`                     | Runs once Electron is ready. Validates the tenant, creates both windows, starts listening for "page ready", loads notes, initialises settings, creates the `BubbleController` (and connects panel blur to `panelBlurred()`), the `ScreenshotService`, the IPC handlers and the tray. Moves the bubble home on display changes. Sets up shutdown (below), then shows the bubble once both pages have painted. |
-| `broadcast(channel, payload)` | (inside `start`) Sends a message to both pages, e.g. a mode change.                                                                                                                                                                                                                                                                                                                                          |
-| `before-quit` handler         | On quit: stops animations, removes the tray icon, and waits (up to 2 seconds) for the text box to finish saving before letting the app exit.                                                                                                                                                                                                                                                                 |
-| `session-end` handler         | When Windows logs off or shuts down: saves the text box synchronously, since there's no time for async work.                                                                                                                                                                                                                                                                                                 |
-| `fail(error)`                 | If startup fails, shows an error box and exits.                                                                                                                                                                                                                                                                                                                                                              |
+| Part                          | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Top-level code                | In dev runs, moves app data to `%APPDATA%\Desktop Assist (Dev)` so a dev copy never shares notes, the API key or the single-instance lock with an installed copy. Takes the **single-instance lock**: if the app is already running, the new copy quits and the running one opens its panel.                                                                                                                                                                       |
+| `start()`                     | Runs once Electron is ready. Validates the tenant; creates both windows; loads the draft and preferences; creates the `BubbleController`, `ScreenshotService`, `AnthropicBackend`, `ApiKeyManager` (with an `ApiKeyStore` that encrypts using Electron's `safeStorage`) and `ChatSession`; **checks the saved key**; registers IPC; adds the tray; moves the bubble home on display changes; sets up shutdown; then shows the bubble once both pages have painted. |
+| `ANTHROPIC_BASE_URL`          | In dev runs only, this environment variable can point the app at a local test server instead of Anthropic. Installed builds always use `https://api.anthropic.com`.                                                                                                                                                                                                                                                                                                |
+| `broadcast(channel, payload)` | (inside `start`) Sends a message to both pages, e.g. a mode change or a chat update.                                                                                                                                                                                                                                                                                                                                                                               |
+| `before-quit` handler         | On quit: stops animations and any reply in progress, removes the tray icon, and waits (up to 2 seconds) for the draft to finish saving.                                                                                                                                                                                                                                                                                                                            |
+| `session-end` handler         | When Windows logs off or shuts down: saves the draft synchronously.                                                                                                                                                                                                                                                                                                                                                                                                |
+| `fail(error)`                 | If startup fails, shows an error box and exits.                                                                                                                                                                                                                                                                                                                                                                                                                    |
+
+### `claude/model.ts`: how Claude is called
+
+| Name                        | What it is                                                                                                                                                                                                                                                   |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `CLAUDE_MODEL`              | `claude-opus-5-5`, the model every request uses.                                                                                                                                                                                                             |
+| `FALLBACK_BETA`             | The beta header for **server-side refusal fallback** (`fallbacks: "default"`): if Claude's safety classifiers decline a request, Anthropic re-runs it on a fallback model instead of refusing.                                                               |
+| `MAX_TOKENS`                | 64,000. The most a reply may be. Replies stream, so a high ceiling costs nothing unless used.                                                                                                                                                                |
+| `API_BASE_URL`              | Anthropic's API address.                                                                                                                                                                                                                                     |
+| `MAX_TOOL_ROUNDS`           | A safety limit for the tool-use loop.                                                                                                                                                                                                                        |
+| `buildSystemPrompt(tenant)` | The instructions Claude gets for the whole conversation: who it is, that it lives in a small panel (so be concise), and that screenshots may be attached, plus the tenant's own `systemPrompt`. It's fixed per conversation so the prompt cache stays valid. |
+
+### `claude/AnthropicBackend.ts`: talking to the Claude API
+
+| Name                              | What it does                                                                                                                                                                                                                                                                                                                                                                            |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ReplyRequest`                    | Everything one request needs: the key, system prompt, conversation, tools, effort, a cancel signal, and a callback for each piece of streamed text.                                                                                                                                                                                                                                     |
+| `ChatBackend`                     | The interface the rest of the app uses. Milestone 3 can add a JumpCloud-backed version behind the same interface.                                                                                                                                                                                                                                                                       |
+| `AnthropicBackend.verifyKey(key)` | Checks a key by fetching the model's details (free). Throws the SDK's error if the key is bad, has no access, or Anthropic can't be reached.                                                                                                                                                                                                                                            |
+| `AnthropicBackend.reply(request)` | Streams one reply with `client.beta.messages.stream`: model, max tokens, fallbacks, effort, system prompt, **prompt caching** (`cache_control`, so resending a long conversation is cheaper and faster), the conversation, and tools if any. Passes each text chunk to `onText` and resolves with the complete message. Thinking is always on for this model; effort controls how much. |
+| `client(key)` _(private)_         | Creates the SDK client once per key. Passes `authToken: null` so a stray `ANTHROPIC_AUTH_TOKEN` environment variable can't be sent too.                                                                                                                                                                                                                                                 |
+
+### `claude/errors.ts`: what went wrong
+
+| Name                   | What it does                                                                                                                                                     |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ErrorKind`            | The kinds of failure the app distinguishes: aborted (Stop), auth, permission, billing, not-found, rate-limit, overloaded, network, bad-request, server, unknown. |
+| `classifyError(error)` | Maps the SDK's typed error classes (`AuthenticationError`, `RateLimitError`, `APIConnectionError`…) to an `ErrorKind`, most specific first.                      |
+| `isKeyProblem(kind)`   | Could a different key fix it? (auth, permission, billing, not-found)                                                                                             |
+| `isRetryable(kind)`    | Is it worth trying again? (rate limit, overloaded, network, server, unknown)                                                                                     |
+| `errorMessage(kind)`   | The plain-English message shown for each kind.                                                                                                                   |
+
+### `claude/ApiKeyStore.ts`: keeping the key safe
+
+| Name        | What it does                                                                                                                                |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Encryptor` | What's needed to encrypt the key. In the app it's Electron's `safeStorage` (Windows DPAPI, tied to your Windows account); tests use a fake. |
+| `load()`    | Reads and decrypts the key file. Returns `null` if there's no key or it can't be decrypted (e.g. the file came from another user).          |
+| `save(key)` | Encrypts and writes the key (atomically). Refuses if encryption isn't available, rather than storing it in plain text.                      |
+| `clear()`   | Deletes the key file.                                                                                                                       |
+
+### `claude/ApiKeyManager.ts`: is the key working?
+
+| Name                     | What it does                                                                                                                                                                                                                           |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `status`                 | The current `ApiKeyStatus`, broadcast to the page on every change.                                                                                                                                                                     |
+| `key`                    | The key to use for requests: only when it's `valid`, or `unreachable` (not yet checkable, so it's given the benefit of the doubt).                                                                                                     |
+| `checkSaved()`           | **Runs at every start.** Loads the saved key and tests it: no key → `missing`; rejected → `invalid` with "Your saved API key no longer works…"; offline → `unreachable` (key kept, chat still usable, Retry offered); works → `valid`. |
+| `submit(raw)`            | For the key form: trims the input, rejects obviously wrong input, tests the key with Anthropic and **saves it only if it works**. If Anthropic can't be reached, nothing is saved.                                                     |
+| `rejected(kind)`         | A chat request failed because of the key: switch to `invalid`, so the chat box asks for a new key.                                                                                                                                     |
+| `confirmed()`            | A chat reply worked, so a key that couldn't be checked earlier is fine after all.                                                                                                                                                      |
+| `forget()`               | Deletes the saved key (Settings → Change API key → Forget saved key).                                                                                                                                                                  |
+| `generation` _(private)_ | A counter bumped by every check or change, so a slow, older check can't overwrite a newer result (e.g. you enter a new key while the startup check is still running).                                                                  |
+
+### `claude/ChatSession.ts`: one conversation
+
+| Name                                    | What it does                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `OutgoingImage`                         | A screenshot ready to send (JPEG, base64).                                                                                                                                                                                                                                                                                                                                                                                          |
+| `ChatTool`                              | A tool Claude may call: its definition and a `run` function. None are registered yet; the loop is ready for them.                                                                                                                                                                                                                                                                                                                   |
+| `ChatSessionDeps`                       | What the session needs: the backend, the current key and effort, the system prompt, tools, and callbacks for message updates, resets, key problems and successful replies.                                                                                                                                                                                                                                                          |
+| `history` _(private)_                   | Exactly what is sent to the API. **Append-only:** turns are added, never edited or removed. Claude's thinking is tied to the exact conversation it happened in, and editing earlier turns would make the API reject it.                                                                                                                                                                                                             |
+| `messages` _(private)_                  | What the chat shows.                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `busy`                                  | Is a reply in progress?                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `list()`                                | Copies of the messages, for a page that has just loaded.                                                                                                                                                                                                                                                                                                                                                                            |
+| `send(text, images, attachments)`       | Adds your message (screenshots first, then text) and starts a reply. Returns immediately with `sent`, or `busy` / `empty` / `no-key`.                                                                                                                                                                                                                                                                                               |
+| `retry()`                               | Asks again after a failed reply, if nothing from it was kept and a key is available.                                                                                                                                                                                                                                                                                                                                                |
+| `stop()`                                | Cancels the reply in progress.                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `newConversation()`                     | Cancels any reply and empties the history and messages. A reply still finishing is ignored (via `generation`).                                                                                                                                                                                                                                                                                                                      |
+| `idle()`                                | Resolves when the current reply finishes (used by tests).                                                                                                                                                                                                                                                                                                                                                                           |
+| `runTurn()` _(private)_                 | One reply. Streams text into the chat message; appends the complete reply (every content block, thinking included) to the history; runs tools and loops if Claude asked for any; then marks it done, with a notice for a refusal or a reply cut off at the length limit. On Stop or an error, keeps any text that arrived as a plain-text reply, tells the key manager about key problems, and marks temporary errors as retryable. |
+| `scheduleEmit()` / `emit()` _(private)_ | Streamed text arrives in many small pieces; these batch updates to the page to at most one every 50 ms.                                                                                                                                                                                                                                                                                                                             |
+| `runTools()`                            | Runs each tool Claude asked for and builds the results to send back (an unknown tool or a failure is reported to Claude as an error).                                                                                                                                                                                                                                                                                               |
 
 ### `tenant.ts`
 
-| Name                 | What it does                                                                                                                                                                              |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `TenantSchema`       | Rules `tenant.json` must follow (lowercase id, `#RRGGBB` colour, known and non-repeated actions). A bad file stops the app at startup with a clear message, and `npm test` checks it too. |
-| `Tenant`             | The type of a valid tenant config.                                                                                                                                                        |
-| `brandingOf(tenant)` | Picks out the fields the pages need.                                                                                                                                                      |
+| Name                 | What it does                                                                                                                                                                                                         |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TenantSchema`       | Rules `tenant.json` must follow (lowercase id, `#RRGGBB` colour, known and non-repeated actions, optional `systemPrompt` up to 8,000 characters). A bad file stops the app at startup, and `npm test` checks it too. |
+| `Tenant`             | The type of a valid tenant config.                                                                                                                                                                                   |
+| `brandingOf(tenant)` | Picks out the fields the pages need.                                                                                                                                                                                 |
 
-### `bubble/BubbleController.ts`: the state machine
+### `bubble/BubbleController.ts`: the bubble's state machine
 
-The heart of the app. It owns the current `Mode` and the bubble's position, and shows, hides and
-moves the two windows to match. It talks to windows through the small `Surface` interface rather
-than to Electron directly, which is what lets the tests drive it with fake windows.
+It owns the current `Mode` and the bubble's position, and shows, hides and moves the two windows
+to match. It talks to windows through the small `Surface` interface rather than to Electron
+directly, which is what lets the tests drive it with fake windows.
 
-| Name                                              | What it does                                                                                                                                                                                                                                                                                 |
-| ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Surface`, `PanelSurface`                         | What the controller needs from a window: set bounds, show, hide (and focus, for the panel).                                                                                                                                                                                                  |
-| `BubbleControllerDeps`                            | What it's built with: the two surfaces, a function returning the screen's work area, the number of actions, a callback for mode changes, and (for tests) a clock and random-number source.                                                                                                   |
-| `PANEL_FADE_MS` (140)                             | How long the panel's fade-out takes before the window is actually hidden.                                                                                                                                                                                                                    |
-| `BLUR_CLICK_GRACE_MS` (300)                       | See `clickBubble()`.                                                                                                                                                                                                                                                                         |
-| `HIDE_SETTLE_MS` (150)                            | How long to wait after hiding the windows before taking a screenshot, so they aren't in it.                                                                                                                                                                                                  |
-| `currentMode`                                     | The current mode.                                                                                                                                                                                                                                                                            |
-| `bubblePosition`                                  | Where the bubble is (top-left of the circle).                                                                                                                                                                                                                                                |
-| `start()`                                         | Puts the bubble in its home corner, sizes both windows, shows the bubble.                                                                                                                                                                                                                    |
-| `clickBubble()`                                   | Decides what a bubble click means: **collapsed** → open the panel, **expanded** → close it, **bouncing** → glide home, **returning/capturing** → ignore. If the panel _just_ closed because it lost focus, a click arriving within 300 ms is part of the same gesture and doesn't reopen it. |
-| `expand()`                                        | Opens and focuses the panel. If the bubble is bouncing, glides home first and then opens (used by the tray's "Open" and by launching the app a second time).                                                                                                                                 |
-| `collapse()`                                      | Switches to collapsed, then hides the panel window once the fade-out has finished.                                                                                                                                                                                                           |
-| `panelBlurred()`                                  | Called when the panel loses focus (you clicked somewhere else): collapses and remembers when.                                                                                                                                                                                                |
-| `startBounce()`                                   | Hides the panel, picks a random direction and runs a 60 fps timer that moves the bubble with `step()`.                                                                                                                                                                                       |
-| `whileHidden(task)`                               | Hides both windows, waits for the screen to repaint, runs `task` (the screenshot), then always brings the windows back and reopens the panel, even if the task failed.                                                                                                                       |
-| `displayChanged()`                                | Resolution, taskbar or monitors changed: moves the bubble and panel to the new home corner. A bounce in progress carries on, since it re-reads the screen area every frame.                                                                                                                  |
-| `dispose()`                                       | Stops all timers (on quit).                                                                                                                                                                                                                                                                  |
-| `returnHome()` _(private)_                        | Animates the bubble back to its corner with `glidePosition()`, then switches to collapsed, and opens the panel if that was requested.                                                                                                                                                        |
-| `runTicker(onFrame)` / `stopTicker()` _(private)_ | Start and stop the 60 fps animation timer, passing each frame the time since the last one.                                                                                                                                                                                                   |
-| `moveBubble(position)` _(private)_                | Moves only the bubble window (used every frame while animating).                                                                                                                                                                                                                             |
-| `placeWindows()` _(private)_                      | Positions both windows around the current bubble position.                                                                                                                                                                                                                                   |
-| `cancelHide()` _(private)_                        | Cancels a pending "hide the panel after the fade" timer (e.g. you reopened it quickly).                                                                                                                                                                                                      |
-| `setMode(mode)` _(private)_                       | Changes mode and reports it (which broadcasts it to the pages).                                                                                                                                                                                                                              |
+| Name                                                                      | What it does                                                                                                                                                                                                                                                                             |
+| ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Surface`, `PanelSurface`                                                 | What the controller needs from a window: set bounds, show, hide (and focus, for the panel).                                                                                                                                                                                              |
+| `BubbleControllerDeps`                                                    | What it's built with: the two surfaces, a function returning the screen's work area, the number of actions, a callback for mode changes, and (for tests) a clock and random-number source.                                                                                               |
+| `PANEL_FADE_MS` (140)                                                     | How long the panel's fade-out takes before the window is actually hidden.                                                                                                                                                                                                                |
+| `BLUR_CLICK_GRACE_MS` (300)                                               | See `clickBubble()`.                                                                                                                                                                                                                                                                     |
+| `HIDE_SETTLE_MS` (150)                                                    | How long to wait after hiding the windows before taking a screenshot, so they aren't in it.                                                                                                                                                                                              |
+| `currentMode`, `bubblePosition`                                           | The current mode, and where the bubble is.                                                                                                                                                                                                                                               |
+| `start()`                                                                 | Puts the bubble in its home corner, sizes both windows, shows the bubble.                                                                                                                                                                                                                |
+| `clickBubble()`                                                           | Decides what a bubble click means: **collapsed** → open the panel, **expanded** → close it, **bouncing** → glide home, **returning/capturing** → ignore. A click arriving within 300 ms of the panel closing because it lost focus is treated as the same gesture and doesn't reopen it. |
+| `expand()`                                                                | Opens and focuses the panel. If the bubble is bouncing, glides home first and then opens.                                                                                                                                                                                                |
+| `collapse()`                                                              | Switches to collapsed, then hides the panel window once the fade-out has finished.                                                                                                                                                                                                       |
+| `panelBlurred()`                                                          | Called when the panel loses focus (you clicked somewhere else): collapses and remembers when.                                                                                                                                                                                            |
+| `startBounce()`                                                           | Hides the panel, picks a random direction and runs a 60 fps timer that moves the bubble with `step()`.                                                                                                                                                                                   |
+| `whileHidden(task)`                                                       | Hides both windows, waits for the screen to repaint, runs `task` (the screenshot), then always brings the windows back and reopens the panel, even if the task failed.                                                                                                                   |
+| `displayChanged()`                                                        | Resolution, taskbar or monitors changed: moves the bubble and panel to the new home corner. A bounce in progress carries on.                                                                                                                                                             |
+| `dispose()`                                                               | Stops all timers (on quit).                                                                                                                                                                                                                                                              |
+| `returnHome()` _(private)_                                                | Animates the bubble back to its corner, then switches to collapsed (and opens the panel if that was requested).                                                                                                                                                                          |
+| `runTicker()` / `stopTicker()` _(private)_                                | Start and stop the 60 fps animation timer.                                                                                                                                                                                                                                               |
+| `moveBubble()`, `placeWindows()`, `cancelHide()`, `setMode()` _(private)_ | Move just the bubble; position both windows; cancel a pending hide; change and report the mode.                                                                                                                                                                                          |
 
 ### `bubble/layout.ts`: where windows go
 
@@ -255,125 +356,117 @@ Pure maths, no Electron.
 | `TravelBox`                    | The range of positions the bubble can be in.                                                                      |
 | `homePosition(workArea)`       | The bubble's resting place: bottom-right of the work area (the screen minus the taskbar), 16px in from the edges. |
 | `travelBox(workArea)`          | Every position where the bubble is fully on screen. Bounce stays inside this.                                     |
-| `bubbleWindowBounds(bubble)`   | The bubble window's rectangle for a given bubble position (adds the padding and rounds to whole pixels).          |
+| `bubbleWindowBounds(bubble)`   | The bubble window's rectangle for a given bubble position.                                                        |
 | `panelWindowBounds(bubble, n)` | The panel window's rectangle: its bottom-right corner is the same as the bubble window's.                         |
 
 ### `bubble/bounce.ts`: bounce physics
 
 Pure maths, no Electron.
 
-| Name                         | What it does                                                                                                                                                                      |
-| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Motion`                     | Position (x, y) and velocity (vx, vy, in pixels per second).                                                                                                                      |
-| `BOUNCE_SPEED` (280)         | How fast the bubble moves.                                                                                                                                                        |
-| `launch(from, random)`       | Starting motion: heads up and to the left (away from the corner) at a random angle between 25° and 65°.                                                                           |
-| `step(motion, dtMs, box)`    | Moves the bubble forward by `dtMs` milliseconds and bounces it off any edge it crosses. Gaps over 100 ms (e.g. the PC was asleep) count as one short step, so it never teleports. |
-| `reflect()` _(private)_      | One axis of a bounce: if the position went past an edge, mirror it back inside and reverse the velocity.                                                                          |
-| `glideDuration(from, to)`    | How long the glide home should take: longer for further distances, but always between 0.3 s and 0.9 s.                                                                            |
-| `glidePosition(from, to, t)` | Where the bubble is at progress `t` (0 to 1) along the glide. Uses an "ease-out" curve, so it slows as it settles into the corner.                                                |
+| Name                         | What it does                                                                                                                      |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `Motion`                     | Position and velocity (pixels per second).                                                                                        |
+| `BOUNCE_SPEED` (280)         | How fast the bubble moves.                                                                                                        |
+| `launch(from, random)`       | Starting motion: up and to the left at a random angle between 25° and 65°.                                                        |
+| `step(motion, dtMs, box)`    | Moves the bubble forward and bounces it off any edge it crosses. Gaps over 100 ms count as one short step, so it never teleports. |
+| `reflect()` _(private)_      | One axis of a bounce.                                                                                                             |
+| `glideDuration(from, to)`    | How long the glide home takes: 0.3–0.9 s depending on distance.                                                                   |
+| `glidePosition(from, to, t)` | Where the bubble is at progress `t` along the glide, easing out as it settles.                                                    |
 
 ### `bubble/windows.ts`: creating the Electron windows
 
-| Name                                      | What it does                                                                                                                                                                                                                                                                                                                                                                  |
-| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `View`                                    | `'bubble'` or `'panel'`.                                                                                                                                                                                                                                                                                                                                                      |
-| `createOverlayWindow(view, size)`         | Creates one overlay window: frameless, transparent, always on top, no taskbar or Alt+Tab entry, starting click-through. The bubble window can't take focus, so clicking it doesn't steal focus from the panel. Security options are on (sandboxed page, no Node access). Loads the page from the Vite dev server in dev, or from the built file otherwise, with `?view=` set. |
-| `bubbleSurface(win)`, `panelSurface(win)` | Adapt a real window to the controller's `Surface` interface. The bubble is shown _without_ activating it, and the panel is shown _and_ focused.                                                                                                                                                                                                                               |
-| `lockDown(win)` _(private)_               | Stops the page opening new windows or navigating away. If a page crashes, makes the window click-through (so a dead page can't block your clicks) and reloads it.                                                                                                                                                                                                             |
-| `addEditContextMenu(win)` _(private)_     | The right-click menu in the text box: spelling suggestions, then undo, redo, cut, copy, paste and select all.                                                                                                                                                                                                                                                                 |
+| Name                                      | What it does                                                                                                                                                                                                                                                                                            |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `View`                                    | `'bubble'` or `'panel'`.                                                                                                                                                                                                                                                                                |
+| `createOverlayWindow(view, size)`         | Creates one overlay window: frameless, transparent, always on top, no taskbar or Alt+Tab entry, starting click-through. The bubble window can't take focus. Security options are on (sandboxed page, no Node access). Loads the page from the Vite dev server in dev, or from the built file otherwise. |
+| `bubbleSurface(win)`, `panelSurface(win)` | Adapt a real window to the controller's `Surface` interface.                                                                                                                                                                                                                                            |
+| `lockDown(win)` _(private)_               | Stops the page opening new windows or navigating away. If a page crashes, makes the window click-through and reloads it.                                                                                                                                                                                |
+| `addEditContextMenu(win)` _(private)_     | The right-click menu in text fields: spelling suggestions, undo, redo, cut, copy, paste, select all.                                                                                                                                                                                                    |
 
 ### `actions.ts`: what the command icons do
 
-| Name                         | What it does                                                                                                                                                                 |
-| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ActionHandlers`             | One function per command action.                                                                                                                                             |
-| `createActionHandlers(deps)` | Builds them: **screenshot** captures while the windows are hidden and returns "Screenshot saved" (or an error message); **bounce** starts bouncing; **close** quits the app. |
+| Name                         | What it does                                                                                               |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `ActionHandlers`             | One function per command action.                                                                           |
+| `createActionHandlers(deps)` | **screenshot** captures while the windows are hidden; **bounce** starts bouncing; **close** quits the app. |
 
 ### `ipc.ts`: handling requests from the pages
 
-| Name                                     | What it does                                                                                                                                                                                                      |
-| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `IpcContext`                             | Everything the handlers need: the windows, controller, notes, screenshots, settings, action handlers and a way to get the current state.                                                                          |
-| `registerIpc(ctx)`                       | Connects every channel in `IPC` to the right code. Each incoming value is checked with a zod schema (right type, sensible length) before use. Requests from anything other than our own two windows are rejected. |
-| `trusted(sender)` _(inner)_              | Is this message from one of our windows?                                                                                                                                                                          |
-| `handle(channel, schema, run)` _(inner)_ | Registers a request/reply channel (for example, "attach the latest screenshot" returns the updated notes).                                                                                                        |
-| `on(channel, schema, run)` _(inner)_     | Registers a fire-and-forget channel (for example, the bubble was clicked).                                                                                                                                        |
+| Name                                      | What it does                                                                                                                                                                            |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `IpcContext`                              | Everything the handlers need.                                                                                                                                                           |
+| `registerIpc(ctx)`                        | Connects every channel in `IPC` to the right code. Each incoming value is checked with a zod schema before use, and requests from anything other than our own two windows are rejected. |
+| `trusted()`, `handle()`, `on()` _(inner)_ | Sender check; request/reply channels; fire-and-forget channels.                                                                                                                         |
+| `WebUrl`                                  | Only `http`/`https` links may be opened from the chat.                                                                                                                                  |
+| `chat-send` handler                       | Collects the draft's screenshots (each must be inside the screenshots folder), prepares them for Claude, sends, and clears the draft.                                                   |
+| `api-key-submit` handler                  | The only place the key enters the main process. It goes straight to `ApiKeyManager.submit()` and is never sent back to a page.                                                          |
 
 The `setInteractive` handler is where click-through happens: it calls `setIgnoreMouseEvents` on
 the window that sent the message.
 
-### `notes/NotesStore.ts`: saving the text box
+### `notes/NotesStore.ts`: saving the draft
 
-| Name                                | What it does                                                                                                                                                                    |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `MAX_NOTE_LENGTH`                   | Text longer than 200,000 characters is cut off (a safety limit).                                                                                                                |
-| `NotesFileSchema` _(private)_       | The expected shape of `notes.json`, with a `version` number for future format changes.                                                                                          |
-| `emptyNotes()`                      | A blank text box.                                                                                                                                                               |
-| `NotesStoreOptions`                 | How long to wait before saving (default 500 ms), plus callbacks for "saved" and "error".                                                                                        |
-| `load()`                            | Reads `notes.json`. A missing file means an empty text box. A damaged file is renamed to `notes.json.corrupt-<time>` (so nothing is lost) and the app starts with an empty box. |
-| `get()`                             | A copy of the current notes (a copy, so callers can't change the stored ones by accident).                                                                                      |
-| `setText(text)`                     | Updates the text and schedules a save.                                                                                                                                          |
-| `addAttachment(path)`               | Attaches a screenshot, or returns `null` if that file is already attached.                                                                                                      |
-| `removeAttachment(id)`              | Removes one attachment (the image file itself is kept).                                                                                                                         |
-| `clear()`                           | Empties the text and attachments.                                                                                                                                               |
-| `flush()`                           | Saves now instead of waiting, and resolves once everything is on disk. Used when quitting.                                                                                      |
-| `flushSync()`                       | Saves immediately and blocks until done. Only for Windows shutdown or log-off.                                                                                                  |
-| `update(patch)` _(private)_         | Applies a change, stamps the time and restarts the save timer. This is the "debounce": saving waits until you pause typing.                                                     |
-| `write(snapshot, seq)` _(private)_  | Writes one snapshot. Each write has a sequence number, and an older write that finishes after a newer one is thrown away, so the file always ends up with the latest text.      |
-| `toFile()` _(private)_              | The notes plus the file format version.                                                                                                                                         |
-| `setAsideCorruptFile()` _(private)_ | Renames a damaged `notes.json` out of the way.                                                                                                                                  |
-| `clearTimer()`, `now()` _(private)_ | Small helpers.                                                                                                                                                                  |
-| `samePath(a, b)` _(private)_        | Compares file paths ignoring upper/lower case (Windows paths aren't case-sensitive).                                                                                            |
+| Name                                           | What it does                                                                                                         |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `MAX_NOTE_LENGTH`                              | Text longer than 200,000 characters is cut off (a safety limit).                                                     |
+| `emptyNotes()`                                 | A blank draft.                                                                                                       |
+| `load()`                                       | Reads `notes.json`. A missing file means an empty draft; a damaged file is set aside as `notes.json.corrupt-<time>`. |
+| `get()`                                        | A copy of the current draft.                                                                                         |
+| `setText(text)`                                | Updates the text and schedules a save.                                                                               |
+| `addAttachment(path)` / `removeAttachment(id)` | Attach a screenshot (once only) or remove one.                                                                       |
+| `clear()`                                      | Empties the draft (after it's sent).                                                                                 |
+| `flush()` / `flushSync()`                      | Save now (on quit), or save immediately and block (on Windows shutdown).                                             |
+| `update()`, `write()` _(private)_              | Apply a change and restart the save timer; write a snapshot, dropping it if a newer write already finished.          |
 
-### `storage/jsonFile.ts`: safe JSON files
+### `storage/jsonFile.ts`: safe files
 
-| Name                                       | What it does                                                                                                                                                                                                                                       |
-| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ReadResult`                               | What reading returns: `ok` with the value, `missing`, or `invalid`.                                                                                                                                                                                |
-| `readJsonFile(path, schema)`               | Reads a JSON file and checks it against a schema.                                                                                                                                                                                                  |
-| `writeJsonFile(path, value, shouldCommit)` | Saves safely: writes a temporary file first, then renames it over the real one, so a crash mid-save can never leave a half-written file. `shouldCommit` lets the caller cancel at the last moment (used by `NotesStore` to drop overtaken writes). |
-| `writeJsonFileSync(path, value)`           | The same, but blocking (for shutdown).                                                                                                                                                                                                             |
-| `renameWithRetry()` _(private)_            | Retries the rename a few times if Windows reports the file as briefly locked (antivirus and the search indexer do this).                                                                                                                           |
-| `isErrno(err, code)`                       | Checks whether an error has a particular code, e.g. `ENOENT` (file not found).                                                                                                                                                                     |
+| Name                             | What it does                                                                                                                                                  |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `readJsonFile(path, schema)`     | Reads a JSON file and checks it against a schema: `ok`, `missing` or `invalid`.                                                                               |
+| `writeJsonFile(path, value)`     | Saves JSON safely via `writeFileAtomic`.                                                                                                                      |
+| `writeFileAtomic(path, data)`    | Writes a temporary file, then renames it over the real one, so a crash mid-save can never leave a half-written file. Used for JSON and for the encrypted key. |
+| `writeJsonFileSync(path, value)` | The same, blocking (for shutdown).                                                                                                                            |
+| `isErrno(err, code)`             | Checks an error's code, e.g. `ENOENT` (file not found).                                                                                                       |
 
 ### `screenshots/ScreenshotService.ts`: capturing and serving screenshots
 
-| Name                     | What it does                                                                                                                                                                     |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `capture()`              | Finds the display the bubble is on, captures it at full resolution with Electron's `desktopCapturer`, and saves it as a PNG in `Pictures\Desktop Assist`. Returns the file path. |
-| `latest()`               | The newest screenshot in the folder (for "Attach latest").                                                                                                                       |
-| `thumbnail(path)`        | A small preview image (as a data URL) for a chip, or `null` if the file is gone. Previews are cached (up to 50), and the cache notices if the file has changed.                  |
-| `open(path)`             | Opens a screenshot in your default image viewer. Returns `false` if it no longer exists.                                                                                         |
-| `openFolder()`           | Opens the screenshots folder in Explorer (creating it if needed).                                                                                                                |
-| `owns(path)` _(private)_ | Security check: pages may only ask about files inside the screenshots folder.                                                                                                    |
+| Name                          | What it does                                                                                                                                        |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `capture()`                   | Captures the display the bubble is on at full resolution and saves it in `Pictures\Desktop Assist`.                                                 |
+| `latest()`                    | The newest screenshot (for "Attach latest").                                                                                                        |
+| `thumbnail(path)`             | A small preview for chips and sent messages (cached, up to 50).                                                                                     |
+| `forClaude(path)`             | The screenshot prepared for Claude: scaled so its longest side is at most 1,568 pixels and re-encoded as JPEG, which keeps requests small and fast. |
+| `open(path)` / `openFolder()` | Open a screenshot in your image viewer, or the folder in Explorer.                                                                                  |
+| `owns(path)` _(private)_      | Security check: pages may only ask about files inside the screenshots folder.                                                                       |
 
-### `screenshots/files.ts`: screenshot file handling
+### `screenshots/files.ts` and `screenshots/imageSize.ts`
 
-No Electron, so it's unit-tested.
+| Name                                     | What it does                                                                                    |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `screenshotFileName(date, copy)`         | `Screenshot 2026-10-02 140311.png`, or `… (2).png` for a second capture in the same second.     |
+| `isScreenshotFileName(name)`             | Is this one of our screenshot names?                                                            |
+| `saveScreenshot(dir, png, date)`         | Saves without ever overwriting an existing file.                                                |
+| `findLatestScreenshot(dir)`              | The most recently written screenshot.                                                           |
+| `isInsideDir(dir, file)`                 | Is `file` really inside `dir`? Blocks `..\..\` tricks.                                          |
+| `MAX_IMAGE_EDGE`, `fitWithin(size, max)` | Scale a size down (never up) to fit within 1,568 pixels on its longest side, keeping its shape. |
 
-| Name                             | What it does                                                                                                                    |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `screenshotFileName(date, copy)` | `Screenshot 2026-10-02 140311.png` (no characters Windows forbids), or `… (2).png` for a second capture within the same second. |
-| `isScreenshotFileName(name)`     | Is this one of our screenshot names? (Other files in the folder are ignored.)                                                   |
-| `saveScreenshot(dir, png, date)` | Saves the image without ever overwriting an existing file.                                                                      |
-| `findLatestScreenshot(dir)`      | The most recently written screenshot, or `null` if there are none.                                                              |
-| `isInsideDir(dir, file)`         | Is `file` really inside `dir`? Blocks tricks like `..\..\somewhere-else`.                                                       |
+### `settings.ts`: preferences
 
-### `settings.ts`: the Settings menu's options
-
-| Name                     | What it does                                                                                                                                                                             |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `SettingsService.init()` | The first time an _installed_ copy runs, turns on Start with Windows and records that it did (in `preferences.json`), so it never overrides your choice later. Does nothing in dev runs. |
-| `get()`                  | The current settings. Start with Windows is read live from Windows, so changes made in Windows Settings → Apps → Startup show up too.                                                    |
-| `setAutoStart(enabled)`  | Turns Start with Windows on or off (installed builds only).                                                                                                                              |
+| Name                    | What it does                                                                                  |
+| ----------------------- | --------------------------------------------------------------------------------------------- |
+| `DEFAULT_EFFORT`        | `low` (Fast).                                                                                 |
+| `init()`                | Loads `preferences.json`. The first time an installed copy runs, turns on Start with Windows. |
+| `get()`                 | The current settings (Start with Windows is read live from Windows).                          |
+| `setAutoStart(enabled)` | Turns Start with Windows on or off (installed builds only).                                   |
+| `setEffort(effort)`     | Saves the response style.                                                                     |
 
 ### `tray.ts` and `trayIcon.ts`: the tray icon
 
-| Name                         | What it does                                                                                                                                              |
-| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `createTray(options)`        | Adds the tray icon with a tooltip and a menu (Open, Quit). Clicking the icon opens the panel.                                                             |
-| `circleBitmap(size, colour)` | Draws a smooth filled circle in the accent colour, pixel by pixel, in the raw format Electron expects. Used as the tray icon until a tenant provides one. |
-| `parseHexColor(hex)`         | Turns `#1B6AC9` into red, green and blue numbers.                                                                                                         |
+| Name                         | What it does                                                       |
+| ---------------------------- | ------------------------------------------------------------------ |
+| `createTray(options)`        | Adds the tray icon with a tooltip and a menu (Open, Quit).         |
+| `circleBitmap(size, colour)` | Draws a smooth circle in the accent colour, used as the tray icon. |
+| `parseHexColor(hex)`         | `#1B6AC9` → red, green and blue numbers.                           |
 
 ---
 
@@ -381,11 +474,11 @@ No Electron, so it's unit-tested.
 
 ### `index.ts`
 
-| Name                                             | What it does                                                                                                                                                   |
-| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `subscribe(channel, callback)`                   | Listens for a message from the main process and returns a function that stops listening.                                                                       |
-| `api`                                            | The `AssistApi` implementation. Each function sends the matching IPC message.                                                                                  |
-| `contextBridge.exposeInMainWorld('assist', api)` | Makes `api` available to the page as `window.assist`. This is the **only** way the page can reach the main process; it can't load Node modules or touch files. |
+| Name                                             | What it does                                                                                                |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| `subscribe(channel, callback)`                   | Listens for a message from the main process and returns a function that stops listening.                    |
+| `api`                                            | The `AssistApi` implementation. Each function sends the matching IPC message.                               |
+| `contextBridge.exposeInMainWorld('assist', api)` | Makes `api` available to the page as `window.assist`, the **only** way the page can reach the main process. |
 
 ---
 
@@ -395,66 +488,76 @@ The UI, written in React and styled with Tailwind CSS.
 
 ### Entry files
 
-| File                        | Purpose                                                                                                                                                       |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `index.html`                | The page both windows load. Its Content-Security-Policy only allows the app's own scripts and styles and inline images, so nothing from the internet can run. |
-| `src/main.tsx`              | Reads `?view=` from the URL and renders either `BubbleView` or `PanelView`.                                                                                   |
-| `src/styles.css`            | Loads Tailwind, defines the `accent` colour and font, and makes the page background transparent.                                                              |
-| `src/env.d.ts`              | Tells TypeScript that `window.assist` exists and what it looks like.                                                                                          |
-| `src/lib/cn.ts` → `cn(...)` | Joins CSS class names, skipping empty ones.                                                                                                                   |
+| File                        | Purpose                                                                                                                                                                  |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `index.html`                | The page both windows load. Its Content-Security-Policy only allows the app's own scripts and styles and inline images.                                                  |
+| `src/main.tsx`              | Reads `?view=` from the URL and renders either `BubbleView` or `PanelView`.                                                                                              |
+| `src/styles.css`            | Tailwind, the accent colour and font, transparent page background, slim scrollbars, and the styles for Claude's Markdown replies and code highlighting (light and dark). |
+| `src/env.d.ts`              | Tells TypeScript that `window.assist` exists.                                                                                                                            |
+| `src/lib/cn.ts` → `cn(...)` | Joins CSS class names, skipping empty ones.                                                                                                                              |
 
 ### Hooks (`src/hooks`)
 
-React _hooks_ are reusable pieces of component logic.
-
-| Name                     | What it does                                                                                                                                                                                                                                                                                                                                                      |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `useAssistState()`       | Fetches the app state when the page loads and keeps `mode` up to date as it changes. Returns `null` until loaded.                                                                                                                                                                                                                                                 |
-| `useAccentColor(colour)` | Applies the tenant's accent colour to the page.                                                                                                                                                                                                                                                                                                                   |
-| `useClickThrough()`      | The page half of click-through: on every pointer move, checks whether the pointer is over a `data-hit` element and tells the main process (only when that changes). Re-checks after clicks, since a menu closing can change what's under a still pointer. On load, it resets the window to click-through in case a previous copy of the page left it interactive. |
-| `useToast()`             | Shows one short message for 2.6 seconds; a new message replaces the old.                                                                                                                                                                                                                                                                                          |
-| `useThumbnail(path)`     | Loads a screenshot preview: `undefined` while loading, `null` if the file is missing.                                                                                                                                                                                                                                                                             |
+| Name                     | What it does                                                                                                                                                                                                                           |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `useAssistState()`       | Fetches the app state when the page loads and keeps the mode, API key status and chat up to date as the main process changes them (`upsert` replaces a message by id, or adds it). Subscribes before fetching, so no update is missed. |
+| `useAccentColor(colour)` | Applies the tenant's accent colour.                                                                                                                                                                                                    |
+| `useClickThrough()`      | The page half of click-through (see section 1).                                                                                                                                                                                        |
+| `useToast()`             | One short message at a time, for 2.6 seconds.                                                                                                                                                                                          |
+| `useThumbnail(path)`     | Loads a screenshot preview: `undefined` while loading, `null` if missing.                                                                                                                                                              |
 
 ### Views (`src/views`)
 
-| Name                                          | What it does                                                                                                                                                                      |
-| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `BubbleView`                                  | The round logo button. Finds the tenant's logo (`logo.png` if present, otherwise `logo.svg`), draws an accent ring while the panel is open, and sends clicks to the main process. |
-| `PanelView`                                   | Waits for the app state, then renders `Panel`.                                                                                                                                    |
-| `Panel`                                       | Everything around the bubble. Holds the text, attachments, save status, settings and whether the menu is open, and fades in or out with the mode. Its functions:                  |
-| ↳ `runAction(id)`                             | Settings toggles the menu (refreshing the settings first); anything else is sent to the main process, and any message comes back as a toast.                                      |
-| ↳ `changeText(text)`                          | Updates the box, shows "Saving…" and sends the text to be saved.                                                                                                                  |
-| ↳ `attachLatest()`                            | Asks for the newest screenshot to be attached, or shows why it couldn't be.                                                                                                       |
-| ↳ `removeAttachment(a)` / `openAttachment(a)` | The chip's × and click actions.                                                                                                                                                   |
-| ↳ `clearTextBox()`                            | Clears everything after the menu's double-click confirmation.                                                                                                                     |
-| ↳ `closeSettingsOnOutsideClick(e)`            | Closes the menu when you click elsewhere in the panel.                                                                                                                            |
-| ↳ Esc key handler                             | Esc closes the menu if it's open, otherwise the panel.                                                                                                                            |
+| Name                                                         | What it does                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `BubbleView`                                                 | The round logo button. Finds the tenant's logo (`logo.png` if present, otherwise `logo.svg`) and sends clicks to the main process.                                                                                                                                                                                                                                                                                            |
+| `PanelView`                                                  | Waits for the app state, then renders `Panel`.                                                                                                                                                                                                                                                                                                                                                                                |
+| `Panel`                                                      | Everything around the bubble. Holds the draft, its attachments, settings, whether the settings menu or the "change key" form is open, and toasts. **Decides what the chat card shows:** the key form when the key is missing or rejected (or you chose Change API key); "Checking your Claude API key…" while it's being tested; an offline banner with Retry when it couldn't be checked; otherwise the chat. Its functions: |
+| ↳ `runAction(id)`                                            | Settings toggles the menu; anything else goes to the main process.                                                                                                                                                                                                                                                                                                                                                            |
+| ↳ `changeDraft(text)`                                        | Updates the box and saves the draft.                                                                                                                                                                                                                                                                                                                                                                                          |
+| ↳ `send()`                                                   | Sends the draft and clears it, or explains why it couldn't be sent.                                                                                                                                                                                                                                                                                                                                                           |
+| ↳ `attachLatest()`, `removeAttachment()`, `openAttachment()` | Draft screenshot chips.                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ↳ `copy(text)`                                               | Copies a reply to the clipboard.                                                                                                                                                                                                                                                                                                                                                                                              |
+| ↳ `submitKey(key)`, `forgetKey()`                            | The key form's Save and Forget.                                                                                                                                                                                                                                                                                                                                                                                               |
+| ↳ `newConversation()`, `setEffort()`                         | Settings menu actions.                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ↳ `closeSettingsOnOutsideClick(e)`, Esc handler              | Close the menu, or the panel.                                                                                                                                                                                                                                                                                                                                                                                                 |
 
 ### Components (`src/components`)
 
-| Name              | What it does                                                                                                                                                                                                                            |
-| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ActionStack`     | The icon buttons above the bubble, in the tenant's order, popping out one after another when the panel opens. The Close icon turns red on hover, and the active one (Settings while its menu is open) is filled with the accent colour. |
-| `SettingsMenu`    | The menu beside the gear: the Start with Windows switch (greyed out with an explanation in dev runs), Open screenshots folder, Clear text box (needs a second click within 3 seconds), and the app version.                             |
-| ↳ `MenuItem`      | One menu row with an icon.                                                                                                                                                                                                              |
-| ↳ `Switch`        | The on/off toggle graphic.                                                                                                                                                                                                              |
-| `NotesBox`        | The text box: attachment chips along the top, the auto-growing text area, and a footer with "Attach latest screenshot" and the save status. Also shows toasts just above itself. Focuses the text area whenever the panel opens.        |
-| ↳ `SaveIndicator` | "Saving…" or "✓ Saved".                                                                                                                                                                                                                 |
-| `AttachmentChip`  | One attached screenshot: a thumbnail, a label like `Screenshot 14:03` (or "File missing"), click to open, × to remove.                                                                                                                  |
+| Name                   | What it does                                                                                                                                                                                                           |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ActionStack`          | The icon buttons above the bubble, popping out one after another when the panel opens.                                                                                                                                 |
+| `ChatBox`              | The card to the left of the bubble, anchored at the bottom so it grows upward. Shows a toast above itself, then either the key form or the conversation, an optional banner, and the composer.                         |
+| ↳ `Composer`           | The text box: draft screenshot chips, the auto-growing text area (Enter sends, Shift+Enter adds a line), "Attach latest screenshot", and Send (or Stop while Claude is replying). Focuses itself when the panel opens. |
+| ↳ `Banner`             | A one-line status above the text box, with an optional spinner and action.                                                                                                                                             |
+| `MessageList`          | The conversation. Follows new text as it streams in, unless you've scrolled up.                                                                                                                                        |
+| ↳ `UserMessage`        | Your message: screenshot thumbnails and a blue bubble.                                                                                                                                                                 |
+| ↳ `SentScreenshot`     | A sent screenshot's thumbnail (click to open).                                                                                                                                                                         |
+| ↳ `AssistantMessage`   | Claude's reply as Markdown, "Thinking…" before text arrives, any notice (stopped, error, refusal, length limit), Retry for a failed reply, and Copy on hover.                                                          |
+| ↳ `Thinking`           | The animated "Thinking…" indicator.                                                                                                                                                                                    |
+| `Markdown`             | Renders Claude's reply (GitHub-flavoured Markdown with highlighted code). Raw HTML is never rendered, and links open in your browser.                                                                                  |
+| `ApiKeyForm`           | "Connect to Claude": a password field, Save key (checks the key first), the error if it fails, a link to the Claude Console, and Cancel / Forget saved key when changing a working key.                                |
+| `SettingsMenu`         | Start with Windows, Response style (Fast / Balanced / Thorough), Change API key, Open screenshots folder, New conversation (needs a second click), and the app version.                                                |
+| ↳ `MenuItem`, `Switch` | A menu row; the on/off toggle graphic.                                                                                                                                                                                 |
+| `AttachmentChip`       | A screenshot attached to the draft: thumbnail, label, click to open, × to remove.                                                                                                                                      |
 
 ---
 
 ## 10. Tests (`tests`)
 
-Run with `npm test`. Each file tests code that doesn't need a real window.
+Run with `npm test`. Each file tests code that doesn't need a real window or a real API.
 
-| File                       | What it checks                                                                                                                                                                                                                                              |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `layout.test.ts`           | Home position (including a taskbar on the top or left), window sizes, and that the panel window lines up with the bubble and fits on screen.                                                                                                                |
-| `bounce.test.ts`           | Launch direction and speed, bouncing off every edge, never leaving the screen over 5,000 random steps, long pauses not teleporting, and the glide timing and curve.                                                                                         |
-| `bubbleController.test.ts` | The state machine with fake windows and a fake clock: open and close, fading, the blur-and-click gesture, bouncing and gliding home, opening from the tray mid-bounce, screenshot hide and restore (including when the capture fails), and display changes. |
-| `notesStore.test.ts`       | Saving after a pause, reloading, immediate flush, overtaken writes, damaged files set aside, duplicate attachments, clear, and the length limit.                                                                                                            |
-| `screenshotFiles.test.ts`  | File names, never overwriting, finding the newest screenshot while ignoring other files, and the inside-the-folder security check.                                                                                                                          |
-| `format.test.ts`           | Chip labels for today, other days and unknown names.                                                                                                                                                                                                        |
-| `tenants.test.ts`          | Every tenant folder has a valid `tenant.json` and a logo, and bad configs are rejected.                                                                                                                                                                     |
-| `trayIcon.test.ts`         | The tray circle's colour, transparency and smooth edges.                                                                                                                                                                                                    |
+| File                       | What it checks                                                                                                                                                                                                                                                                          |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `layout.test.ts`           | Home position, window sizes, and that the panel window lines up with the bubble.                                                                                                                                                                                                        |
+| `bounce.test.ts`           | Launch direction and speed, bouncing off every edge, never leaving the screen, and the glide.                                                                                                                                                                                           |
+| `bubbleController.test.ts` | The bubble state machine with fake windows and a fake clock.                                                                                                                                                                                                                            |
+| `notesStore.test.ts`       | Saving the draft, reloading, overtaken writes, damaged files, attachments.                                                                                                                                                                                                              |
+| `screenshotFiles.test.ts`  | Screenshot names, never overwriting, finding the newest, the inside-the-folder check.                                                                                                                                                                                                   |
+| `format.test.ts`           | Chip labels.                                                                                                                                                                                                                                                                            |
+| `tenants.test.ts`          | Every tenant folder has a valid `tenant.json` and a logo.                                                                                                                                                                                                                               |
+| `trayIcon.test.ts`         | The tray circle.                                                                                                                                                                                                                                                                        |
+| `chatSession.test.ts`      | The conversation with a scripted fake backend: streaming, images before text, replaying replies unchanged (thinking included), busy/empty/no-key, Stop with and without text, Retry, key errors, refusals and length limits, the tool loop, and New conversation ignoring a late reply. |
+| `apiKeyManager.test.ts`    | The key lifecycle: missing, valid, rejected, offline, saving only working keys, a slow startup check not undoing a new key, revoked mid-session, Forget.                                                                                                                                |
+| `apiKeyStore.test.ts`      | Encrypted save and load, unreadable files, refusing to save without encryption, clear.                                                                                                                                                                                                  |
+| `claudeHelpers.test.ts`    | Error classification, the system prompt, and image scaling.                                                                                                                                                                                                                             |

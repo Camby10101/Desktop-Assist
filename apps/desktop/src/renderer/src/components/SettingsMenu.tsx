@@ -1,10 +1,16 @@
-import { Eraser, FolderOpen, type LucideIcon } from 'lucide-react'
+import { FolderOpen, KeyRound, MessageSquarePlus, type LucideIcon } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { PANEL_LAYOUT, UI } from '@shared/geometry'
-import type { Branding, Settings } from '@shared/types'
+import type { Branding, Effort, Settings } from '@shared/types'
 import { cn } from '../lib/cn'
 
 const CONFIRM_MS = 3000
+
+const EFFORTS: { value: Effort; label: string; hint: string }[] = [
+  { value: 'low', label: 'Fast', hint: 'Quick answers' },
+  { value: 'medium', label: 'Balanced', hint: 'Thinks a little longer' },
+  { value: 'high', label: 'Thorough', hint: 'Thinks hardest; slower' },
+]
 
 /** The menu that opens beside the gear icon. */
 export function SettingsMenu(props: {
@@ -14,16 +20,18 @@ export function SettingsMenu(props: {
   branding: Branding
   version: string
   onToggleAutoStart: () => void
+  onSetEffort: (effort: Effort) => void
+  onChangeApiKey: () => void
   onOpenScreenshotsFolder: () => void
-  onClearTextBox: () => void
+  onNewConversation: () => void
 }) {
-  // "Clear text box" needs a second click within a few seconds.
-  const [confirmingClear, setConfirmingClear] = useState(false)
+  // "New conversation" needs a second click within a few seconds.
+  const [confirmingNew, setConfirmingNew] = useState(false)
   useEffect(() => {
-    if (!confirmingClear) return
-    const timer = setTimeout(() => setConfirmingClear(false), CONFIRM_MS)
+    if (!confirmingNew) return
+    const timer = setTimeout(() => setConfirmingNew(false), CONFIRM_MS)
     return () => clearTimeout(timer)
-  }, [confirmingClear])
+  }, [confirmingNew])
 
   const { settings, branding } = props
 
@@ -65,20 +73,52 @@ export function SettingsMenu(props: {
         <Switch on={settings.autoStart} />
       </button>
 
+      <div className="px-2.5 pt-1.5 pb-2">
+        <p className="mb-1.5 text-sm">Response style</p>
+        <div
+          role="radiogroup"
+          aria-label="Response style"
+          className="flex rounded-lg bg-zinc-100 p-0.5 dark:bg-zinc-800"
+        >
+          {EFFORTS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              role="radio"
+              aria-checked={settings.effort === option.value}
+              title={option.hint}
+              onClick={() => props.onSetEffort(option.value)}
+              className={cn(
+                'flex-1 rounded-md py-1 text-xs font-medium',
+                settings.effort === option.value
+                  ? 'bg-white text-zinc-900 shadow-sm dark:bg-zinc-600 dark:text-white'
+                  : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200',
+              )}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <MenuItem icon={KeyRound} onClick={props.onChangeApiKey}>
+        Change API key
+      </MenuItem>
+
       <MenuItem icon={FolderOpen} onClick={props.onOpenScreenshotsFolder}>
         Open screenshots folder
       </MenuItem>
 
       <MenuItem
-        icon={Eraser}
-        danger={confirmingClear}
+        icon={MessageSquarePlus}
+        danger={confirmingNew}
         onClick={() => {
-          if (!confirmingClear) return setConfirmingClear(true)
-          setConfirmingClear(false)
-          props.onClearTextBox()
+          if (!confirmingNew) return setConfirmingNew(true)
+          setConfirmingNew(false)
+          props.onNewConversation()
         }}
       >
-        {confirmingClear ? 'Click again to clear' : 'Clear text box'}
+        {confirmingNew ? 'Click again to clear the chat' : 'New conversation'}
       </MenuItem>
 
       <div className="mt-1 border-t border-black/10 px-2.5 pt-1.5 pb-0.5 text-[11px] text-zinc-500 dark:border-white/10">
