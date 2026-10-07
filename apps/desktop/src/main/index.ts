@@ -5,7 +5,7 @@ import { BUBBLE_BOX, panelWindowSize } from '@shared/geometry'
 import { IPC } from '@shared/ipc'
 import tenantConfig from '@tenant/tenant.json'
 import { createActionHandlers } from './actions'
-import { BubbleController } from './bubble/BubbleController'
+import { BubbleController, type DisplayArea, type Displays } from './bubble/BubbleController'
 import { bubbleSurface, createOverlayWindow, panelSurface } from './bubble/windows'
 import { AnthropicBackend } from './claude/AnthropicBackend'
 import { ApiKeyManager } from './claude/ApiKeyManager'
@@ -67,9 +67,14 @@ async function start(): Promise<void> {
   const bubble = new BubbleController({
     bubble: bubbleSurface(bubbleWindow),
     panel: panelSurface(panelWindow),
-    getWorkArea: () => screen.getPrimaryDisplay().workArea,
+    displays: electronDisplays,
     actionCount,
+    initialAnchor: settings.bubbleAnchor,
     onModeChange: (mode) => broadcast(IPC.modeChanged, mode),
+    onAnchorChange: (anchor) => {
+      broadcast(IPC.cornerChanged, anchor.corner)
+      void settings.setBubbleAnchor(anchor) // remembered for next time
+    },
   })
   controller = bubble
   panelWindow.on('blur', () => bubble.panelBlurred())
@@ -114,6 +119,7 @@ async function start(): Promise<void> {
     actions: createActionHandlers({ controller: bubble, screenshots, quit: () => app.quit() }),
     getState: () => ({
       mode: bubble.currentMode,
+      corner: bubble.corner,
       notes: notes.get(),
       settings: settings.get(),
       branding: brandingOf(tenant),
@@ -152,6 +158,22 @@ async function start(): Promise<void> {
 
   await windowsReady
   bubble.start()
+}
+
+/** Electron's `screen`, in the shape the bubble controller uses. All coordinates are DIPs. */
+const toArea = (display: Electron.Display): DisplayArea => ({
+  id: display.id,
+  workArea: display.workArea,
+})
+const electronDisplays: Displays = {
+  primary: () => toArea(screen.getPrimaryDisplay()),
+  byId: (id) => {
+    const display = screen.getAllDisplays().find((d) => d.id === id)
+    return display && toArea(display)
+  },
+  nearest: (point) =>
+    toArea(screen.getDisplayNearestPoint({ x: Math.round(point.x), y: Math.round(point.y) })),
+  cursor: () => screen.getCursorScreenPoint(),
 }
 
 function fail(error: unknown): void {

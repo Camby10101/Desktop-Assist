@@ -3,7 +3,7 @@ import type { AppState, ChatMessage } from '@shared/types'
 
 /**
  * The app state, kept live for the parts the main process changes on its own: the mode, the
- * API key status and the chat. (Notes and settings only change through this window's own
+ * bubble's corner, the API key status and the chat. (Notes and settings only change through this window's own
  * requests, so the panel tracks their results itself.)
  *
  * Subscriptions start before the state is fetched. Events that arrive before the reply are
@@ -18,6 +18,7 @@ export function useAssistState(): AppState | null {
       setState((current) => (current ? change(current) : current))
     const unsubscribe = [
       window.assist.onModeChanged((mode) => update((s) => ({ ...s, mode }))),
+      window.assist.onCornerChanged((corner) => update((s) => ({ ...s, corner }))),
       window.assist.onApiKeyStatus((apiKey) => update((s) => ({ ...s, apiKey }))),
       window.assist.onChatMessage((message) =>
         update((s) => ({ ...s, chat: upsert(s.chat, message) })),

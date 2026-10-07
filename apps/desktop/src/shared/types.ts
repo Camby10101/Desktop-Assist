@@ -1,11 +1,13 @@
 import type { ActionId } from './actions'
+import type { Corner } from './geometry'
 
 /**
  * What the bubble is doing. The main process owns this; renderers only display it.
- * - `returning`: gliding back to the corner after a bounce.
+ * - `dragging`: following the mouse while the user drags it.
+ * - `returning`: gliding into its corner after a bounce or a drag.
  * - `capturing`: windows are hidden while a screenshot is taken.
  */
-export type Mode = 'collapsed' | 'expanded' | 'bouncing' | 'returning' | 'capturing'
+export type Mode = 'collapsed' | 'expanded' | 'dragging' | 'bouncing' | 'returning' | 'capturing'
 
 export interface Attachment {
   id: string
@@ -76,6 +78,8 @@ export type SendResult =
 
 export interface AppState {
   mode: Mode
+  /** The screen corner the bubble rests in; the panel lays itself out to open away from it. */
+  corner: Corner
   notes: Notes
   settings: Settings
   branding: Branding

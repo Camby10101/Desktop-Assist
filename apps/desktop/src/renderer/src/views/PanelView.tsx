@@ -1,6 +1,6 @@
 import { useEffect, useState, type PointerEvent } from 'react'
 import type { ActionId } from '@shared/actions'
-import { actionBottom } from '@shared/geometry'
+import { actionOffset } from '@shared/geometry'
 import type { AppState, Attachment, Effort } from '@shared/types'
 import { ActionStack } from '../components/ActionStack'
 import { ApiKeyForm } from '../components/ApiKeyForm'
@@ -182,6 +182,7 @@ function Panel({ state }: { state: AppState }) {
       onPointerDown={closeSettingsOnOutsideClick}
     >
       <ChatBox
+        corner={state.corner}
         open={open}
         toast={toast}
         keyPrompt={keyPrompt}
@@ -201,6 +202,7 @@ function Panel({ state }: { state: AppState }) {
         onRemoveAttachment={(attachment) => void removeAttachment(attachment)}
       />
       <ActionStack
+        corner={state.corner}
         actions={branding.actions}
         open={open}
         activeId={settingsOpen ? 'settings' : null}
@@ -208,7 +210,8 @@ function Panel({ state }: { state: AppState }) {
       />
       {open && settingsOpen && settingsIndex >= 0 && (
         <SettingsMenu
-          bottom={actionBottom(settingsIndex)}
+          corner={state.corner}
+          offset={actionOffset(settingsIndex)}
           settings={settings}
           branding={branding}
           version={state.version}

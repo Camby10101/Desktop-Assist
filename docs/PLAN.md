@@ -37,7 +37,9 @@ Micro first, with branding kept in config so another business can use it later. 
 - **Collapsed**: a 56px circular logo, always on top, 16px in from the bottom-right corner of the
   primary display's work area (above the taskbar). It has no taskbar button and doesn't appear in
   Alt+Tab. The tray icon has Open and Quit.
-- **Click the bubble** to expand. The text box opens to its **left**, aligned to its bottom edge,
+- **Click the bubble** to expand. (Shown here in its default bottom-right corner; since M1 it can
+  be dragged to any corner, and everything mirrors to open toward the middle of the screen.)
+  The text box opens to its **left**, aligned to its bottom edge,
   and **grows upward** as you type. Action icons stack **above** the bubble.
 - **Collapse** by clicking the bubble again, pressing Esc, or clicking anywhere else.
 - Only one copy runs at a time. Launching it again just opens the panel.
@@ -182,19 +184,22 @@ Desktop-Assist/
 | **Request shape** | `claude-opus-5-5`, streaming, adaptive thinking (always on), effort as chosen, server-side refusal fallback (`fallbacks: "default"`), prompt caching, a fixed system prompt plus the tenant's `systemPrompt`. History is append-only, with every reply's content (including thinking) sent back unchanged. A tool-use loop is in place, with no tools registered yet.                                                                                                                                                                                                                                                                                                                                          |
 | **History**       | Kept for the current session; New conversation or quitting clears it. The unsent draft still survives restarts.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 
-Tested with unit tests (112) and an end-to-end run of the real app against a local mock of the
-Claude API (38 checks), so no real key was needed.
+| **Drag & snap** | Drag the bubble anywhere, including onto another monitor. On release it glides to the nearest corner of the display it was dropped on. A short press is still a click. The panel mirrors itself so it always opens toward the middle of the screen: in a left corner the chat opens to the right, and in a top corner the icons drop below the bubble and the chat grows downward. The corner and display are remembered across restarts. If that display is unplugged, the bubble moves to the same corner of the main display. Bounce starts from, stays on, and returns to the bubble's current display and corner. |
+
+Tested with unit tests (128) and end-to-end runs of the real app: against a local mock of the
+Claude API (38 checks), so no real key was needed, and dragging to each corner and onto a second
+monitor at different scaling (21 checks).
 
 ## 8. Milestones
 
-| #        | Milestone            | Done when                                                                                                                                                                 |
-| -------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **0** ✅ | **Foundation**       | Everything in §7 works in `npm run dev` and in the unsigned installer. Unit tests and lint pass.                                                                          |
-| **1** ✅ | **Chat with Claude** | See §7b.                                                                                                                                                                  |
-| 2        | JumpCloud sign-in    | PKCE login, encrypted refresh token, silent refresh, signed-out state, Log out in Settings                                                                                |
-| 3        | Backend              | Gateway (A) or direct WIF (B) wired to the JumpCloud identity, replacing personal API keys                                                                                |
-| 4        | Ship                 | Code signing, MSI, auto-update, CI (GitHub Actions), pilot deployment through JumpCloud                                                                                   |
-| later    |                      | Claude-requested screenshots (as a tool), dragging the bubble, hiding during full-screen apps, saved history, company integrations, tenant config from the gateway, macOS |
+| #        | Milestone            | Done when                                                                                                                                            |
+| -------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **0** ✅ | **Foundation**       | Everything in §7 works in `npm run dev` and in the unsigned installer. Unit tests and lint pass.                                                     |
+| **1** ✅ | **Chat with Claude** | See §7b.                                                                                                                                             |
+| 2        | JumpCloud sign-in    | PKCE login, encrypted refresh token, silent refresh, signed-out state, Log out in Settings                                                           |
+| 3        | Backend              | Gateway (A) or direct WIF (B) wired to the JumpCloud identity, replacing personal API keys                                                           |
+| 4        | Ship                 | Code signing, MSI, auto-update, CI (GitHub Actions), pilot deployment through JumpCloud                                                              |
+| later    |                      | Claude-requested screenshots (as a tool), hiding during full-screen apps, saved history, company integrations, tenant config from the gateway, macOS |
 
 ## 9. What we need from admins (blocks M2–M4 only)
 

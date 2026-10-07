@@ -76,6 +76,8 @@ export function registerIpc(ctx: IpcContext): void {
   handle(IPC.getState, NoArgs, () => ctx.getState())
 
   on(IPC.bubbleClick, NoArgs, () => ctx.controller.clickBubble())
+  on(IPC.bubbleDragStart, NoArgs, () => ctx.controller.startDrag())
+  on(IPC.bubbleDragEnd, NoArgs, () => ctx.controller.endDrag())
   on(IPC.collapse, NoArgs, () => ctx.controller.collapse())
   on(IPC.setInteractive, z.boolean(), (interactive, event) => {
     BrowserWindow.fromWebContents(event.sender)?.setIgnoreMouseEvents(!interactive, {

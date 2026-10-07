@@ -1,18 +1,21 @@
 import { ArrowUp, LoaderCircle, Paperclip, Square } from 'lucide-react'
 import { useEffect, useRef, type KeyboardEvent, type ReactNode } from 'react'
-import { PANEL_LAYOUT, UI } from '@shared/geometry'
+import { PANEL_LAYOUT, UI, isLeftCorner, isTopCorner, type Corner } from '@shared/geometry'
 import type { Attachment, ChatMessage } from '@shared/types'
 import type { ToastMessage } from '../hooks/useToast'
+import { anchored, originClass } from '../lib/anchor'
 import { cn } from '../lib/cn'
 import { AttachmentChip } from './AttachmentChip'
 import { MessageList } from './MessageList'
 
 /**
- * The card to the left of the bubble. It's anchored at the bottom, so it starts as just the text
- * box and grows upward as the conversation gets longer, then scrolls. When there's no working API
- * key, `keyPrompt` is shown instead of the chat.
+ * The card beside the bubble, on the side facing the middle of the screen. It's anchored at the
+ * bubble's edge (bottom in a bottom corner, top in a top corner), so it starts as just the text
+ * box and grows away from that edge as the conversation gets longer, then scrolls. When there's
+ * no working API key, `keyPrompt` is shown instead of the chat.
  */
 export function ChatBox(props: {
+  corner: Corner
   open: boolean
   toast: ToastMessage | null
   /** Replaces the chat (the API key form), or null to show the chat. */
@@ -39,13 +42,13 @@ export function ChatBox(props: {
       className={cn(
         'absolute flex flex-col rounded-2xl border shadow-xl',
         'border-black/10 bg-white text-zinc-900 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100',
-        'origin-bottom-right translate-x-2 scale-95 opacity-0 transition duration-150 ease-out',
-        'group-data-open:translate-x-0 group-data-open:scale-100 group-data-open:opacity-100',
+        originClass(props.corner),
+        'scale-95 opacity-0 transition duration-150 ease-out',
+        'group-data-open:scale-100 group-data-open:opacity-100',
         'motion-reduce:transition-none',
       )}
       style={{
-        right: PANEL_LAYOUT.notesRight,
-        bottom: PANEL_LAYOUT.notesBottom,
+        ...anchored(props.corner, PANEL_LAYOUT.chatX, PANEL_LAYOUT.chatY),
         width: UI.panelWidth,
         maxHeight: UI.panelMaxHeight,
       }}
@@ -55,7 +58,10 @@ export function ChatBox(props: {
           key={props.toast.id}
           role="status"
           className={cn(
-            'absolute right-0 bottom-full mb-2 rounded-full px-3 py-1.5 text-xs font-medium shadow-lg',
+            'absolute rounded-full px-3 py-1.5 text-xs font-medium shadow-lg',
+            // Just outside the card, on the side away from the screen edge.
+            isTopCorner(props.corner) ? 'top-full mt-2' : 'bottom-full mb-2',
+            isLeftCorner(props.corner) ? 'left-0' : 'right-0',
             props.toast.tone === 'error'
               ? 'bg-red-600 text-white'
               : 'bg-zinc-900 text-white dark:bg-white dark:text-zinc-900',

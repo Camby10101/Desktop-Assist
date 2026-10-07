@@ -20,6 +20,9 @@ export function useClickThrough(): void {
 
     const onMove = (event: MouseEvent) => {
       pointer = { x: event.clientX, y: event.clientY }
+      // While a button is held (dragging the bubble, selecting text) keep mouse input on, so
+      // the window doesn't lose the release when the pointer briefly runs outside it.
+      if (event.buttons !== 0) return
       set(hitAt(pointer.x, pointer.y))
     }
     // Content can change under a still pointer (a menu closes, the text box shrinks).

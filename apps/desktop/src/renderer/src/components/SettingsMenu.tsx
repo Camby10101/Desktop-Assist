@@ -1,7 +1,8 @@
 import { FolderOpen, KeyRound, MessageSquarePlus, type LucideIcon } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
-import { PANEL_LAYOUT, UI } from '@shared/geometry'
+import { PANEL_LAYOUT, UI, type Corner } from '@shared/geometry'
 import type { Branding, Effort, Settings } from '@shared/types'
+import { anchored } from '../lib/anchor'
 import { cn } from '../lib/cn'
 
 const CONFIRM_MS = 3000
@@ -12,10 +13,11 @@ const EFFORTS: { value: Effort; label: string; hint: string }[] = [
   { value: 'high', label: 'Thorough', hint: 'Thinks hardest; slower' },
 ]
 
-/** The menu that opens beside the gear icon. */
+/** The menu that opens beside the gear icon, on the side facing the middle of the screen. */
 export function SettingsMenu(props: {
-  /** Distance from the window's bottom edge, so the menu lines up with the gear. */
-  bottom: number
+  corner: Corner
+  /** Distance from the bubble's edge of the window to the gear, so the menu lines up with it. */
+  offset: number
   settings: Settings
   branding: Branding
   version: string
@@ -46,8 +48,7 @@ export function SettingsMenu(props: {
         'border-black/10 bg-white text-zinc-800 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100',
       )}
       style={{
-        right: PANEL_LAYOUT.settingsRight,
-        bottom: props.bottom,
+        ...anchored(props.corner, PANEL_LAYOUT.settingsX, props.offset),
         width: UI.settingsMenuWidth,
       }}
     >

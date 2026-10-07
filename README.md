@@ -14,8 +14,10 @@ Milestone 2: JumpCloud sign-in.
 
 - **Bubble**: always on top, hidden from the taskbar and Alt+Tab. Click it to open or close the
   panel; Esc or clicking elsewhere also closes it.
-- **Chat with Claude** (Claude Opus 5.5) in the card to the left of the bubble, which grows
-  upward. Replies stream in with formatting and highlighted code; Stop, Retry and Copy are
+- **Drag it anywhere**, even onto another monitor. Let go and it snaps to the nearest corner of
+  that screen, and the panel flips to open toward the middle. It remembers the spot next time.
+- **Chat with Claude** (Claude Opus 5.5) in the card beside the bubble, which grows
+  as the conversation does. Replies stream in with formatting and highlighted code; Stop, Retry and Copy are
   built in. Enter sends, Shift+Enter adds a line. An unsent message is saved automatically.
 - **Your Claude API key**: on first run, or if the saved key stops working, the chat box asks
   for one. Every start re-tests the saved key. Keys are checked with Anthropic before being

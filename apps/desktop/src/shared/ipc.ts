@@ -1,4 +1,5 @@
 import type { CommandActionId } from './actions'
+import type { Corner } from './geometry'
 import type {
   ActionResult,
   ApiKeyStatus,
@@ -17,6 +18,8 @@ import type {
 export const IPC = {
   getState: 'assist:get-state',
   bubbleClick: 'assist:bubble-click',
+  bubbleDragStart: 'assist:bubble-drag-start',
+  bubbleDragEnd: 'assist:bubble-drag-end',
   collapse: 'assist:collapse',
   setInteractive: 'assist:set-interactive',
   invokeAction: 'assist:invoke-action',
@@ -40,6 +43,7 @@ export const IPC = {
   chatNew: 'assist:chat-new',
   // main → renderer
   modeChanged: 'assist:mode-changed',
+  cornerChanged: 'assist:corner-changed',
   apiKeyStatus: 'assist:api-key-status',
   chatMessage: 'assist:chat-message',
   chatReset: 'assist:chat-reset',
@@ -49,6 +53,10 @@ export const IPC = {
 export interface AssistApi {
   getState(): Promise<AppState>
   bubbleClick(): void
+  /** The bubble was pressed and moved: the main process makes it follow the mouse. */
+  bubbleDragStart(): void
+  /** Released: the bubble snaps to the nearest corner of the display it's on. */
+  bubbleDragEnd(): void
   collapse(): void
   /** Tell the main process whether the pointer is over real UI (true) or a see-through area. */
   setInteractive(interactive: boolean): void
@@ -86,6 +94,7 @@ export interface AssistApi {
     newConversation(): Promise<void>
   }
   onModeChanged(callback: (mode: Mode) => void): () => void
+  onCornerChanged(callback: (corner: Corner) => void): () => void
   onApiKeyStatus(callback: (status: ApiKeyStatus) => void): () => void
   /** A message was added or changed (streamed text arrives this way). */
   onChatMessage(callback: (message: ChatMessage) => void): () => void

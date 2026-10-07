@@ -12,6 +12,8 @@ function subscribe<T>(channel: string, callback: (payload: T) => void): () => vo
 const api: AssistApi = {
   getState: () => ipcRenderer.invoke(IPC.getState),
   bubbleClick: () => ipcRenderer.send(IPC.bubbleClick),
+  bubbleDragStart: () => ipcRenderer.send(IPC.bubbleDragStart),
+  bubbleDragEnd: () => ipcRenderer.send(IPC.bubbleDragEnd),
   collapse: () => ipcRenderer.send(IPC.collapse),
   setInteractive: (interactive) => ipcRenderer.send(IPC.setInteractive, interactive),
   invokeAction: (id) => ipcRenderer.invoke(IPC.invokeAction, id),
@@ -44,6 +46,7 @@ const api: AssistApi = {
     newConversation: () => ipcRenderer.invoke(IPC.chatNew),
   },
   onModeChanged: (callback) => subscribe(IPC.modeChanged, callback),
+  onCornerChanged: (callback) => subscribe(IPC.cornerChanged, callback),
   onApiKeyStatus: (callback) => subscribe(IPC.apiKeyStatus, callback),
   onChatMessage: (callback) => subscribe(IPC.chatMessage, callback),
   onChatReset: (callback) => subscribe(IPC.chatReset, () => callback()),
