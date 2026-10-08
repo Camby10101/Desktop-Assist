@@ -163,7 +163,7 @@ function Panel({ state }: { state: AppState }) {
           <button
             type="button"
             onClick={() => void window.assist.apiKey.recheck()}
-            className="rounded-md px-1.5 py-0.5 font-medium text-accent hover:bg-zinc-100 dark:hover:bg-zinc-800"
+            className="rounded-md px-1.5 py-0.5 font-medium text-accent hover:bg-zinc-100 dark:text-accent-soft dark:hover:bg-zinc-800"
           >
             Retry
           </button>

@@ -2,6 +2,6 @@
   "id": "morse-micro",
   "companyName": "Morse Micro",
   "appName": "Desktop Assist",
-  "accentColor": "#1B6AC9",
+  "accentColor": "#9333EA",
   "actions": ["screenshot", "settings", "bounce", "close"]
 }

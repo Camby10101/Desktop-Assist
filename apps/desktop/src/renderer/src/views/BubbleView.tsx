@@ -89,7 +89,7 @@ export function BubbleView() {
           mode === 'dragging' ? 'scale-105' : 'hover:scale-105 active:scale-95',
           // Always a 2px white border; while the panel is open, a purple one outside it.
           'ring-2',
-          mode === 'expanded' ? 'ring-bubble-active ring-offset-2 ring-offset-white' : 'ring-white',
+          mode === 'expanded' ? 'ring-accent ring-offset-2 ring-offset-white' : 'ring-white',
         )}
       >
         <img
