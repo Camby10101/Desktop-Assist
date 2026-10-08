@@ -22,7 +22,7 @@ conversation (for example, house style or company-specific context). Up to 8,000
 Sign-in settings (none of them secret):
 
 - `signIn`: the company's OpenID Connect sign-in: `issuer` (JumpCloud's is
-  `https://oauth.id.jumpcloud.com/`), the app's `clientId`, and `redirectPort` (the local port the
+  `https://oauth.id.jumpcloud.com/` in the US region; see the setup guide for EU and India), the app's `clientId`, and `redirectPort` (the local port the
   browser returns to after sign-in, `47621` unless something else on the PCs uses it).
 - `claudeAccess`: the Claude Console `organizationId`, `federationRuleId` and `serviceAccountId`
   (and `workspaceId` if the rule covers several workspaces).
