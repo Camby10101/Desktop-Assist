@@ -2,10 +2,9 @@ import type { CommandActionId } from './actions'
 import type { Corner, Point } from './geometry'
 import type {
   ActionResult,
-  ApiKeyStatus,
-  ApiKeySubmitResult,
   AppState,
   AttachResult,
+  AuthStatus,
   ChatMessage,
   Effort,
   Mode,
@@ -34,9 +33,10 @@ export const IPC = {
   settingsGet: 'assist:settings-get',
   settingsSetAutoStart: 'assist:settings-set-auto-start',
   settingsSetEffort: 'assist:settings-set-effort',
-  apiKeySubmit: 'assist:api-key-submit',
-  apiKeyRecheck: 'assist:api-key-recheck',
-  apiKeyForget: 'assist:api-key-forget',
+  authSignIn: 'assist:auth-sign-in',
+  authCancel: 'assist:auth-cancel',
+  authSignOut: 'assist:auth-sign-out',
+  authRetry: 'assist:auth-retry',
   chatSend: 'assist:chat-send',
   chatStop: 'assist:chat-stop',
   chatRetry: 'assist:chat-retry',
@@ -45,7 +45,7 @@ export const IPC = {
   modeChanged: 'assist:mode-changed',
   cornerChanged: 'assist:corner-changed',
   clickThroughReset: 'assist:click-through-reset',
-  apiKeyStatus: 'assist:api-key-status',
+  authStatus: 'assist:auth-status',
   chatMessage: 'assist:chat-message',
   chatReset: 'assist:chat-reset',
 } as const
@@ -62,7 +62,7 @@ export interface AssistApi {
   /** Tell the main process whether the pointer is over real UI (true) or a see-through area. */
   setInteractive(interactive: boolean): void
   invokeAction(id: CommandActionId): Promise<ActionResult>
-  /** Opens an http(s) link in the default browser. */
+  /** Opens a web (http/https) or email (mailto) link in the default app. */
   openExternal(url: string): Promise<void>
   copyText(text: string): Promise<void>
   notes: {
@@ -81,11 +81,14 @@ export interface AssistApi {
     setAutoStart(enabled: boolean): Promise<Settings>
     setEffort(effort: Effort): Promise<Settings>
   }
-  apiKey: {
-    /** Checks the key with Anthropic and stores it only if it works. */
-    submit(key: string): Promise<ApiKeySubmitResult>
-    recheck(): Promise<void>
-    forget(): Promise<void>
+  auth: {
+    /** Opens JumpCloud in the browser; progress arrives through `onAuthStatus`. */
+    signIn(): Promise<void>
+    /** Stops waiting for a sign-in started in the browser. */
+    cancel(): Promise<void>
+    signOut(): Promise<void>
+    /** Tries again to renew a saved sign-in that couldn't reach JumpCloud. */
+    retry(): Promise<void>
   }
   chat: {
     /** Sends the draft text plus the draft's attached screenshots. */
@@ -98,7 +101,7 @@ export interface AssistApi {
   onCornerChanged(callback: (corner: Corner) => void): () => void
   /** The panel was just shown with click-through reset; `pointer` is where the mouse is now. */
   onClickThroughReset(callback: (pointer: Point) => void): () => void
-  onApiKeyStatus(callback: (status: ApiKeyStatus) => void): () => void
+  onAuthStatus(callback: (status: AuthStatus) => void): () => void
   /** A message was added or changed (streamed text arrives this way). */
   onChatMessage(callback: (message: ChatMessage) => void): () => void
   onChatReset(callback: () => void): () => void

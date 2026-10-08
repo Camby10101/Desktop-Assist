@@ -12,8 +12,8 @@ import { COMMAND_ACTION_IDS } from '@shared/actions'
 import { IPC } from '@shared/ipc'
 import type { AppState, AttachResult, SendResult } from '@shared/types'
 import type { ActionHandlers } from './actions'
+import type { AuthManager } from './auth/AuthManager'
 import type { BubbleController } from './bubble/BubbleController'
-import type { ApiKeyManager } from './claude/ApiKeyManager'
 import type { ChatSession, OutgoingImage } from './claude/ChatSession'
 import { MAX_NOTE_LENGTH, type NotesStore } from './notes/NotesStore'
 import type { ScreenshotService } from './screenshots/ScreenshotService'
@@ -26,7 +26,7 @@ export interface IpcContext {
   notes: NotesStore
   screenshots: ScreenshotService
   settings: SettingsService
-  apiKeys: ApiKeyManager
+  auth: AuthManager
   chat: ChatSession
   actions: ActionHandlers
   getState(): AppState
@@ -34,13 +34,13 @@ export interface IpcContext {
 
 const NoArgs = z.undefined()
 const FilePath = z.string().min(1).max(1024)
-/** Only web links may be opened from the chat (no file:, javascript: and so on). */
-const WebUrl = z
+/** Only web and email links may be opened from the chat (no file:, javascript: and so on). */
+const ExternalUrl = z
   .string()
   .max(4096)
   .refine((value) => {
     try {
-      return ['http:', 'https:'].includes(new URL(value).protocol)
+      return ['http:', 'https:', 'mailto:'].includes(new URL(value).protocol)
     } catch {
       return false
     }
@@ -86,7 +86,7 @@ export function registerIpc(ctx: IpcContext): void {
   })
 
   handle(IPC.invokeAction, z.enum(COMMAND_ACTION_IDS), (id) => ctx.actions[id]())
-  handle(IPC.openExternal, WebUrl, (url) => shell.openExternal(url))
+  handle(IPC.openExternal, ExternalUrl, (url) => shell.openExternal(url))
   handle(IPC.copyText, z.string().max(1_000_000), (text) => clipboard.writeText(text))
 
   on(IPC.notesSetText, z.string().max(MAX_NOTE_LENGTH), (text) => ctx.notes.setText(text))
@@ -110,10 +110,12 @@ export function registerIpc(ctx: IpcContext): void {
     ctx.settings.setEffort(effort),
   )
 
-  // The key comes in once, goes straight to Anthropic to be checked, and is stored encrypted.
-  handle(IPC.apiKeySubmit, z.string().max(1000), (key) => ctx.apiKeys.submit(key))
-  handle(IPC.apiKeyRecheck, NoArgs, () => ctx.apiKeys.checkSaved())
-  handle(IPC.apiKeyForget, NoArgs, () => ctx.apiKeys.forget())
+  // Sign-in happens in the browser and can take minutes, so these return straight away;
+  // progress is broadcast on IPC.authStatus. No tokens ever reach the renderer.
+  handle(IPC.authSignIn, NoArgs, () => void ctx.auth.signIn())
+  handle(IPC.authCancel, NoArgs, () => ctx.auth.cancelSignIn())
+  handle(IPC.authSignOut, NoArgs, () => ctx.auth.signOut())
+  handle(IPC.authRetry, NoArgs, () => void ctx.auth.retry())
 
   // Sends the draft: the text from the box plus the screenshots attached to it.
   handle(IPC.chatSend, z.string().max(MAX_NOTE_LENGTH), (text): SendResult => {

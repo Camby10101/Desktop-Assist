@@ -1,7 +1,7 @@
-import { FolderOpen, KeyRound, MessageSquarePlus, type LucideIcon } from 'lucide-react'
+import { FolderOpen, LogOut, MessageSquarePlus, type LucideIcon } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { PANEL_LAYOUT, UI, type Corner } from '@shared/geometry'
-import type { Branding, Effort, Settings } from '@shared/types'
+import type { Branding, Effort, Settings, SignedInUser } from '@shared/types'
 import { anchored } from '../lib/anchor'
 import { cn } from '../lib/cn'
 
@@ -21,9 +21,11 @@ export function SettingsMenu(props: {
   settings: Settings
   branding: Branding
   version: string
+  /** Who's signed in, or null when nobody is. */
+  user: SignedInUser | null
   onToggleAutoStart: () => void
   onSetEffort: (effort: Effort) => void
-  onChangeApiKey: () => void
+  onSignOut: () => void
   onOpenScreenshotsFolder: () => void
   onNewConversation: () => void
 }) {
@@ -102,10 +104,6 @@ export function SettingsMenu(props: {
         </div>
       </div>
 
-      <MenuItem icon={KeyRound} onClick={props.onChangeApiKey}>
-        Change API key
-      </MenuItem>
-
       <MenuItem icon={FolderOpen} onClick={props.onOpenScreenshotsFolder}>
         Open screenshots folder
       </MenuItem>
@@ -121,6 +119,17 @@ export function SettingsMenu(props: {
       >
         {confirmingNew ? 'Click again to clear the chat' : 'New conversation'}
       </MenuItem>
+
+      {props.user && (
+        <div className="mt-1 border-t border-black/10 pt-1 dark:border-white/10">
+          <p className="truncate px-2.5 pt-1 text-[11px] text-zinc-500" title={props.user.email}>
+            Signed in as {props.user.name ?? props.user.email ?? 'you'}
+          </p>
+          <MenuItem icon={LogOut} onClick={props.onSignOut}>
+            Log out
+          </MenuItem>
+        </div>
+      )}
 
       <div className="mt-1 border-t border-black/10 px-2.5 pt-1.5 pb-0.5 text-[11px] text-zinc-500 dark:border-white/10">
         {branding.appName} {props.version} · {branding.companyName}

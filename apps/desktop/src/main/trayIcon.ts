@@ -1,7 +1,6 @@
 /**
  * A filled, anti-aliased circle as raw premultiplied BGRA pixels: the format
- * nativeImage.createFromBitmap expects on Windows. Used as the tray icon until a tenant ships
- * its own.
+ * nativeImage.createFromBitmap expects on Windows. The tray icon for a tenant without logo.png.
  */
 export function circleBitmap(size: number, hexColor: string): Buffer {
   const [r, g, b] = parseHexColor(hexColor)

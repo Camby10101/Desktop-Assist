@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import type Anthropic from '@anthropic-ai/sdk'
 import type { Attachment, ChatMessage, Effort } from '@shared/types'
 import type { ChatBackend } from './AnthropicBackend'
-import { classifyError, errorMessage, isKeyProblem, isRetryable, type ErrorKind } from './errors'
+import { classifyError, errorMessage, errorReference, isRetryable } from './errors'
 import { MAX_TOOL_ROUNDS } from './model'
 
 type MessageParam = Anthropic.Beta.BetaMessageParam
@@ -22,7 +22,8 @@ export interface ChatTool {
 
 export interface ChatSessionDeps {
   backend: ChatBackend
-  getApiKey(): string | null
+  /** Whether someone is signed in, so a request can be made. */
+  canChat(): boolean
   getEffort(): Effort
   /** Fixed for the session, so the cached prompt prefix stays valid. */
   system: string
@@ -30,15 +31,13 @@ export interface ChatSessionDeps {
   /** A message was added or changed. */
   onMessage(message: ChatMessage): void
   onReset(): void
-  /** A request failed because of the API key. */
-  onKeyProblem(kind: ErrorKind): void
-  /** A reply came back, so the key works. */
-  onReplied(): void
+  /** A reply failed; gets the full error, for the log (the chat shows a plain-English message). */
+  onError?(error: unknown): void
   /** Streamed text is sent to the UI at most this often. */
   emitIntervalMs?: number
 }
 
-export type SendStatus = 'sent' | 'busy' | 'empty' | 'no-key'
+export type SendStatus = 'sent' | 'busy' | 'empty' | 'signed-out'
 
 /**
  * One conversation with Claude.
@@ -46,8 +45,9 @@ export type SendStatus = 'sent' | 'busy' | 'empty' | 'no-key'
  * It keeps two lists: `history`, exactly what is sent to the API, and `messages`, what the chat
  * shows. History is append-only: earlier turns are never edited or removed, because Claude's
  * thinking is tied to the exact conversation it was produced in. Every reply is appended with all
- * of its content blocks (thinking included) unchanged; a reply cut short by Stop or an error is
- * appended as plain text.
+ * of its content blocks (thinking included) unchanged, except what the API says to drop after a
+ * server-side fallback (`replayContent()`); a reply cut short by Stop or an error is appended as
+ * plain text.
  */
 export class ChatSession {
   private history: MessageParam[] = []
@@ -72,7 +72,7 @@ export class ChatSession {
   send(text: string, images: OutgoingImage[], attachments: Attachment[]): SendStatus {
     if (this.busy) return 'busy'
     if (!text.trim() && images.length === 0) return 'empty'
-    if (!this.deps.getApiKey()) return 'no-key'
+    if (!this.deps.canChat()) return 'signed-out'
 
     const content: Anthropic.Beta.BetaContentBlockParam[] = images.map((image) => ({
       type: 'image',
@@ -89,7 +89,7 @@ export class ChatSession {
   /** Asks again after a failed reply (only if nothing from it was kept). */
   retry(): void {
     const last = this.messages.at(-1)
-    if (this.busy || !last?.retryable || !this.deps.getApiKey()) return
+    if (this.busy || !last?.retryable || !this.deps.canChat()) return
     Object.assign(last, { text: '', status: 'streaming', notice: undefined, retryable: undefined })
     this.emit(last)
     this.startTurn(last)
@@ -126,17 +126,14 @@ export class ChatSession {
   private async runTurn(reply: ChatMessage, controller: AbortController): Promise<void> {
     const generation = this.generation
     const current = () => generation === this.generation
-    const apiKey = this.deps.getApiKey()
     const tools = this.deps.tools ?? []
     let roundText = ''
     let keptPartial = false
 
     try {
-      if (!apiKey) throw new Error('No API key')
       for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
         roundText = ''
         const message = await this.deps.backend.reply({
-          apiKey,
           system: this.deps.system,
           messages: this.history,
           tools: tools.map((t) => t.definition),
@@ -150,15 +147,15 @@ export class ChatSession {
           },
         })
         if (!current()) return
-        this.history.push({ role: 'assistant', content: message.content })
+        const content = replayContent(message.content)
+        this.history.push({ role: 'assistant', content })
 
         if (message.stop_reason === 'tool_use') {
-          this.history.push({ role: 'user', content: await runTools(message.content, tools) })
+          this.history.push({ role: 'user', content: await runTools(content, tools) })
           continue
         }
         if (message.stop_reason === 'pause_turn') continue // the API asks us to send it back to resume
 
-        this.deps.onReplied()
         return this.finish(reply, 'done', stopNotice(message.stop_reason))
       }
       this.finish(reply, 'done', 'Claude stopped after too many steps.')
@@ -177,9 +174,13 @@ export class ChatSession {
           reply.text ? 'Stopped.' : 'Stopped before Claude replied.',
         )
       }
-      if (isKeyProblem(kind)) this.deps.onKeyProblem(kind)
+      this.deps.onError?.(error)
       const retryable = !keptPartial && isRetryable(kind)
-      this.finish(reply, 'error', errorMessage(kind), retryable)
+      const reference = errorReference(error)
+      const notice = reference
+        ? `${errorMessage(kind)} (Reference: ${reference})`
+        : errorMessage(kind)
+      this.finish(reply, 'error', notice, retryable)
     }
   }
 
@@ -226,6 +227,30 @@ function stopNotice(stopReason: string | null): string | undefined {
   if (stopReason === 'refusal') return 'Claude declined to answer this.'
   if (stopReason === 'max_tokens') return 'This reply hit the length limit and was cut short.'
   return undefined
+}
+
+/** Reasoning that belongs to a model that declined, so it isn't sent back after a fallback. */
+const DECLINED_REASONING = new Set(['thinking', 'redacted_thinking', 'connector_text'])
+
+/**
+ * A reply's content as it must be sent back on the next turn: normally every block, unchanged.
+ * After a server-side fallback (another model took over partway through), the API requires
+ * dropping what the declining model produced before the last `fallback` block: its reasoning,
+ * its client-side tool calls, and server tool calls that got no result. The `fallback` block
+ * itself stays exactly where it was; the API checks the blocks around it.
+ */
+export function replayContent(content: ContentBlock[]): ContentBlock[] {
+  const lastFallback = content.findLastIndex((block) => block.type === 'fallback')
+  if (lastFallback === -1) return content
+  const answered = new Set(
+    content.flatMap((block) => ('tool_use_id' in block ? [block.tool_use_id] : [])),
+  )
+  return content.filter((block, index) => {
+    if (index >= lastFallback) return true
+    if (DECLINED_REASONING.has(block.type) || block.type === 'tool_use') return false
+    if (block.type === 'server_tool_use') return answered.has(block.id)
+    return true
+  })
 }
 
 /** Runs every tool call in a reply and returns the results to send back. */

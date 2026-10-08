@@ -10,19 +10,28 @@ const STICK_THRESHOLD = 40
 
 /**
  * The conversation. It follows new text as it streams in, unless you've scrolled up to read
- * something earlier.
+ * something earlier. Sending a message always brings it back to the bottom.
  */
 export function MessageList(props: {
   messages: ChatMessage[]
   onRetry: () => void
   onCopy: (text: string) => void
+  onOpenScreenshot: (attachment: Attachment) => void
 }) {
   const scroller = useRef<HTMLDivElement>(null)
   const stickToBottom = useRef(true)
+  const lastSentId = useRef<string | undefined>(undefined)
 
   useLayoutEffect(() => {
     const el = scroller.current
-    if (el && stickToBottom.current) el.scrollTop = el.scrollHeight
+    if (!el) return
+    // A message you've just sent: follow it and the reply, even if you'd scrolled up.
+    const sentId = props.messages.findLast((m) => m.role === 'user')?.id
+    if (sentId !== lastSentId.current) {
+      lastSentId.current = sentId
+      stickToBottom.current = true
+    }
+    if (stickToBottom.current) el.scrollTop = el.scrollHeight
   }, [props.messages])
 
   return (
@@ -37,7 +46,11 @@ export function MessageList(props: {
     >
       {props.messages.map((message, index) =>
         message.role === 'user' ? (
-          <UserMessage key={message.id} message={message} />
+          <UserMessage
+            key={message.id}
+            message={message}
+            onOpenScreenshot={props.onOpenScreenshot}
+          />
         ) : (
           <AssistantMessage
             key={message.id}
@@ -52,13 +65,23 @@ export function MessageList(props: {
   )
 }
 
-function UserMessage({ message }: { message: ChatMessage }) {
+function UserMessage({
+  message,
+  onOpenScreenshot,
+}: {
+  message: ChatMessage
+  onOpenScreenshot: (attachment: Attachment) => void
+}) {
   return (
     <div className="ml-auto flex max-w-[85%] flex-col items-end gap-1.5">
       {message.attachments.length > 0 && (
         <div className="flex flex-wrap justify-end gap-1.5">
           {message.attachments.map((attachment) => (
-            <SentScreenshot key={attachment.id} attachment={attachment} />
+            <SentScreenshot
+              key={attachment.id}
+              attachment={attachment}
+              onOpen={() => onOpenScreenshot(attachment)}
+            />
           ))}
         </div>
       )}
@@ -71,13 +94,14 @@ function UserMessage({ message }: { message: ChatMessage }) {
   )
 }
 
-function SentScreenshot({ attachment }: { attachment: Attachment }) {
+/** A sent screenshot's thumbnail. Opening it goes through the panel, which says if it's gone. */
+function SentScreenshot({ attachment, onOpen }: { attachment: Attachment; onOpen: () => void }) {
   const thumbnail = useThumbnail(attachment.path)
   return (
     <button
       type="button"
       title={attachment.fileName}
-      onClick={() => void window.assist.screenshots.open(attachment.path)}
+      onClick={onOpen}
       className="h-12 w-20 overflow-hidden rounded-lg border border-black/10 bg-zinc-200 dark:border-white/10 dark:bg-zinc-700"
     >
       {thumbnail && <img src={thumbnail} alt="" className="size-full object-cover" />}

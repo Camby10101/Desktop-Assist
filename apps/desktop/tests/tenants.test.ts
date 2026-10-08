@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { TenantSchema } from '../src/main/tenant'
+import { missingSettings, TenantSchema } from '../src/main/tenant'
 
 const tenantsDir = resolve(__dirname, '../../../tenants')
 const tenantIds = readdirSync(tenantsDir, { withFileTypes: true })
@@ -26,10 +26,35 @@ describe('tenants', () => {
     })
   })
 
+  const signIn = { issuer: 'https://oauth.id.jumpcloud.com/', clientId: '', redirectPort: 47621 }
+  const claudeAccess = { organizationId: '', federationRuleId: '', serviceAccountId: '' }
+
   it('rejects unknown or repeated actions', () => {
-    const base = { id: 'x', companyName: 'X', appName: 'X', accentColor: '#000000' }
+    const base = {
+      id: 'x',
+      companyName: 'X',
+      appName: 'X',
+      accentColor: '#000000',
+      signIn,
+      claudeAccess,
+    }
     expect(TenantSchema.safeParse({ ...base, actions: ['teleport'] }).success).toBe(false)
     expect(TenantSchema.safeParse({ ...base, actions: ['close', 'close'] }).success).toBe(false)
     expect(TenantSchema.safeParse({ ...base, actions: ['close'] }).success).toBe(true)
+  })
+
+  it('lists the sign-in settings still to fill in', () => {
+    expect(missingSettings(signIn, claudeAccess)).toEqual([
+      'signIn.clientId',
+      'claudeAccess.organizationId',
+      'claudeAccess.federationRuleId',
+      'claudeAccess.serviceAccountId',
+    ])
+    expect(
+      missingSettings(
+        { ...signIn, clientId: 'abc' },
+        { organizationId: 'o', federationRuleId: 'r', serviceAccountId: 's' },
+      ),
+    ).toEqual([])
   })
 })

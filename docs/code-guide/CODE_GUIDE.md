@@ -1,0 +1,252 @@
+# Desktop Assist: Code Guide
+
+A walk through the whole project: what every file is for, and the actual code of every function
+and method with an explanation of what it does and why. Covers Milestones 0 (Foundation), 1
+(Chat with Claude), 2.1 (bubble fixes) and 3 (JumpCloud sign-in).
+
+This page is the overview. The code itself is in the [code walkthrough](#6-code-walkthrough),
+one page per area of the app.
+
+Contents:
+
+1. [Background: how an Electron app is put together](#1-background-how-an-electron-app-is-put-together)
+2. [How the pieces work together](#2-how-the-pieces-work-together)
+3. [Repository root](#3-repository-root)
+4. [Tenants (branding)](#4-tenants-branding)
+5. [Desktop app configuration](#5-desktop-app-configuration)
+6. [Code walkthrough](#6-code-walkthrough)
+7. [Tests (`tests`)](#7-tests-tests)
+
+---
+
+## 1. Background: how an Electron app is put together
+
+An Electron app is a Chromium browser and Node.js bundled together. It runs as several
+processes, and the code is split the same way:
+
+- **Main process** (`apps/desktop/src/main`): Node.js, one per app. Creates the windows, reads
+  and writes files, owns the tray icon and screen capture, and talks to JumpCloud and Claude.
+- **Renderer** (`apps/desktop/src/renderer`): Chromium, one per window. Draws the UI with
+  HTML, CSS and React. It **cannot** touch files, the network or the operating system.
+- **Preload** (`apps/desktop/src/preload`): runs inside each renderer before the page loads,
+  and hands the page a small, safe set of functions (`window.assist`).
+- **Shared** (`apps/desktop/src/shared`): bundled into all three. Types and constants every
+  side must agree on.
+
+The renderer and the main process talk over **IPC** (inter-process communication): the
+renderer sends a named message (a _channel_), and the main process handles it and optionally
+replies. The main process can also push messages to the renderer, for example each chunk of a
+streaming Claude reply. Every channel is listed in `src/shared/ipc.ts`.
+
+**Why two windows?** The bubble and the panel are separate, transparent, always-on-top windows.
+Both load the same web page; the URL's `?view=bubble` or `?view=panel` decides which UI it
+shows. Keeping the bubble in its own tiny window means it never resizes (no flicker when the
+panel opens), and only a 72×72 window moves around during Bounce.
+
+**Click-through.** The panel window is a large rectangle, but most of it is transparent. So
+that you can still click whatever is underneath those empty areas, the panel window starts out
+_ignoring the mouse_. Windows still forwards pointer movement to the page, and while the pointer
+is over a real piece of UI (anything marked `data-hit`), the page asks the main process to switch
+mouse input back on. Each time the panel is shown, this is reset from the pointer's actual
+position. The bubble window is **not** click-through: it's barely bigger than the bubble, and
+depending on Windows' mouse forwarding there made clicks occasionally fall through the bubble
+to the window behind it.
+
+**Where Claude is called, and how you're signed in.** Only the main process talks to JumpCloud
+and to Claude. You sign in with JumpCloud in your browser; the app keeps the resulting _refresh
+token_ (a long-lived "stay signed in" pass) encrypted on disk. To call Claude it swaps a JumpCloud
+_ID token_ (a short-lived, signed statement of who you are) for a short-lived Claude token, using
+Anthropic's Workload Identity Federation. There is no API key. The pages only ever learn whether
+you're signed in and your name, never a token.
+
+---
+
+## 2. How the pieces work together
+
+**Starting up** (`src/main/index.ts` → `start()`)
+
+1. Validate `tenant.json`, create the bubble and panel windows (both hidden), load the saved
+   draft from disk, and load preferences.
+2. Create the `BubbleController` (the bubble's state machine), the `ScreenshotService`, the
+   Claude backend, the `ChatSession` and the `AuthManager`, then the IPC handlers and tray.
+3. **Renew the saved sign-in** (`auth.init()`): if there isn't one, or JumpCloud refuses it, the
+   chat box shows **Sign in with JumpCloud** instead of the chat. If JumpCloud can't be reached,
+   the sign-in is kept and a banner offers Retry.
+4. Once both pages have painted, `controller.start()` shows the bubble in its saved corner (bottom-right of the main display the first time).
+
+**Signing in**
+
+1. **Sign in with JumpCloud** (`SignInPanel`) → `window.assist.auth.signIn()` → IPC
+   `assist:auth-sign-in` → `AuthManager.signIn()`. The status becomes `signing-in` and the panel
+   says to finish in the browser.
+2. `listenForRedirect()` starts a tiny web server on `127.0.0.1:47621`, only on this PC.
+   `createOidc().begin()` builds the JumpCloud sign-in address, with a fresh PKCE code, `state`
+   and `nonce`, and the app opens it in your default browser.
+3. You sign in at JumpCloud (or you already are), and JumpCloud sends the browser back to
+   `http://127.0.0.1:47621/callback?code=…`. The little server answers "You can close this tab"
+   and shuts down.
+4. `finish()` swaps the code (plus the PKCE secret that only this app knows) for tokens, and
+   checks the ID token. The refresh token and your name are saved encrypted
+   (`SecretStore`, Windows DPAPI). The status becomes `signed-in` and the chat box reopens.
+
+**Getting Claude access** (happens inside the Anthropic SDK, the first time you send a message
+and then roughly hourly)
+
+1. The SDK needs a Claude token, so it asks `AnthropicBackend`'s identity-token function, which
+   calls `AuthManager.freshIdToken()`.
+2. That returns the unused ID token from signing in or starting up, or, if it has been used,
+   refreshes with JumpCloud for a new one (saving JumpCloud's replacement refresh token).
+3. The SDK posts the ID token to Anthropic's `/v1/oauth/token`. Anthropic checks it against the
+   federation rule set up in the Claude Console and returns a short-lived Claude token, which the
+   SDK uses for chat requests until shortly before it expires.
+
+**Sending a message**
+
+1. Enter in the text box → `Panel.send()` → IPC `assist:chat-send` with the text.
+2. The main process collects the draft's attached screenshots, shrinks each one for Claude
+   (`ScreenshotService.forClaude()`), and calls `ChatSession.send()`, then clears the draft.
+3. `ChatSession` appends your message to the conversation history and starts a reply:
+   `AnthropicBackend.reply()` streams it from the Claude API.
+4. As text arrives, `ChatSession` updates the reply and broadcasts it (`assist:chat-message`,
+   batched to at most one update every 50 ms). The page re-renders it as Markdown.
+5. When the reply finishes, the whole reply (including Claude's hidden thinking blocks) is
+   appended to the history unchanged, ready to be sent back with the next message.
+
+**Stop, errors and Retry**
+
+- **Stop** aborts the request. Text that already arrived stays on screen and is added to the
+  history as a plain-text reply (the history is only ever added to, never edited; see
+  `ChatSession`).
+- **A temporary error** (offline, overloaded) before any text arrived shows the reason and a
+  **Retry** button, which sends the same conversation again.
+- **The sign-in has expired** (JumpCloud refuses the refresh): `AuthManager` signs out, and the
+  chat box shows Sign in with JumpCloud with an explanation. The conversation is kept, and the
+  failed message offers Retry once you're signed back in.
+- **Anthropic refuses the swap** (the federation rule doesn't accept you): the message explains
+  that IT needs to set you up.
+
+**Typing in the text box**
+
+`Composer` textarea → `Panel.changeDraft()` → `window.assist.notes.setText()` →
+`NotesStore.setText()`. The store keeps the draft in memory and writes `notes.json` about half a
+second after you stop typing, so an unsent message survives a restart.
+
+**Taking a screenshot**
+
+Camera icon → `Panel.runAction('screenshot')` → IPC `assist:invoke-action` → the `screenshot`
+handler in `src/main/actions.ts` → `BubbleController.whileHidden()` hides both windows, waits for
+Windows to repaint, then `ScreenshotService.capture()` saves the PNG. The windows come back and
+the page shows a "Screenshot saved" toast. **Attach latest screenshot** then adds it to the
+draft as a chip, and it's sent with your next message.
+
+**Bounce**
+
+Bounce icon → `BubbleController.startBounce()` hides the panel and runs a 60 fps timer that
+calls `bounce.step()` and moves the bubble window within its display. Clicking the bubble calls `glideHome()`,
+which animates it back to the corner with `bounce.glidePosition()`.
+
+**Dragging the bubble**
+
+1. `BubbleView` sees the mouse pressed on the bubble and moved more than 5 pixels → `window.assist.bubbleDragStart()` → `BubbleController.startDrag()`.
+2. The controller notes where the bubble was grabbed and, 60 times a second, moves the bubble window to follow the mouse pointer (it reads the real pointer from the main process, which keeps it smooth across monitors with different scaling).
+3. On release → `bubbleDragEnd()` → `endDrag()`: the display under the bubble is found, then the nearest of its four corners (`nearestCorner()`), and the bubble glides there.
+4. The new anchor (display + corner) is saved to `preferences.json` and broadcast to the panel, which re-lays itself out to open toward the middle of the screen: in a left corner the chat opens to the right, in a top corner the icons drop below the bubble and the chat grows downward.
+
+---
+
+## 3. Repository root
+
+- `package.json`: The npm _workspaces_ root. `apps/*` are the packages (only `apps/desktop` for now; a gateway service can be added beside it later). Its scripts (`dev`, `test`, `lint`, `typecheck`, `dist`) forward to the desktop app; `format` runs Prettier and `docs` refreshes the code walkthrough.
+- `package-lock.json`: Exact versions of every installed package, so every machine installs the same thing. Generated by npm; don't edit by hand.
+- `.gitignore`: Keeps `node_modules/`, build output (`out/`, `dist/`) and logs out of git.
+- `.gitattributes`: Keeps line endings as LF in git and on disk, matching Prettier.
+- `.prettierrc.json`: Code formatting rules (no semicolons, single quotes, 100-character lines). Run `npm run format` to apply. Code inside the docs' Markdown is left alone, because it's copied from the source.
+- `.prettierignore`: Files Prettier must not touch (build output, the lock file).
+- `README.md`: What the app does and how to run, test and build it.
+- `docs/PLAN.md`: The plan: tech stack, architecture, milestones, decisions and open questions.
+- `docs/code-guide/`: The Code Guide: this overview (`CODE_GUIDE.md`) and the code walkthrough pages (see section 6).
+- `docs/CODE_GUIDE.pdf`: The whole Code Guide as one PDF, built from these pages by `npm run docs:pdf`.
+- `scripts/code-guide.mjs`: Copies the real code into the walkthrough pages (`npm run docs`), and checks they're up to date (`npm run docs:check`, also run by `npm test`).
+- `scripts/code-guide-pdf.mjs`: Builds `docs/CODE_GUIDE.pdf` from the pages (`npm run docs:pdf`).
+- `docs/JUMPCLOUD_SETUP.md`: For IT: how to create the JumpCloud app and the Claude Console federation, and which IDs to put in `tenant.json`.
+
+---
+
+## 4. Tenants (branding)
+
+A _tenant_ is one business's branding. The build includes exactly one, chosen by the `TENANT`
+environment variable (default `morse-micro`). This is what makes the app easy to re-brand later.
+
+- `tenants/README.md`: How tenants work, and how to change the logo.
+- `tenants/morse-micro/tenant.json`: `id` (must match the folder name), `companyName`, `appName` (also the name of the screenshots folder), `accentColor` (the highlight colour), `actions` (which icons appear above the bubble, from the bubble upward), optionally `systemPrompt` (extra instructions for Claude), `signIn` (JumpCloud's address, the app's JumpCloud client ID and the sign-in port) and `claudeAccess` (the Claude Console organization, federation rule, service account and optional workspace IDs). None of these are secret. See `docs/JUMPCLOUD_SETUP.md`.
+- `tenants/morse-micro/logo.png`: The logo: the Morse Micro "Mμ" mark cut to a circle (512×512, transparent corners). It's the bubble, the tray icon and the `.exe` icon. A tenant can use `logo.svg` for the bubble instead (if both exist, the PNG wins), but then the tray falls back to a plain circle in the accent colour and the `.exe` gets Electron's default icon.
+
+---
+
+## 5. Desktop app configuration
+
+All in `apps/desktop/`.
+
+- `package.json`: The desktop app's own package. `productName` ("Desktop Assist") becomes the app's name and its `%APPDATA%` folder. `main` points Electron at the built main process. Scripts: `dev`, `build`, `typecheck`, `lint`, `test`, `dist` (build the installer). Every library is a `devDependency` because the build bundles them; the installer ships no `node_modules`. `electron` is pinned to an exact version because the installer builder requires it.
+- `electron.vite.config.ts`: Build config for electron-vite, which compiles the three parts (main, preload, renderer). Defines the import shortcuts `@shared` → `src/shared` and `@tenant` → `tenants/<TENANT>`, turns on React and Tailwind for the renderer, and minifies the renderer.
+- `electron-builder.cjs`: Installer config: app ID, product name, include only the built `out/` folder, use the tenant's `logo.png` as the `.exe` icon, and build a per-user one-click NSIS installer (`Desktop Assist-Setup-<version>.exe`) into `dist/`. It's JavaScript rather than YAML so the icon can follow `TENANT`. `extraMetadata.name` makes the install folder `desktop-assist` (otherwise it would be named after the npm workspace).
+- `tsconfig.json`: Points TypeScript at the two configs below.
+- `tsconfig.node.json`: TypeScript settings for code that runs in Node: main, preload, shared, tests and config files. Strict mode on.
+- `tsconfig.web.json`: TypeScript settings for the renderer (browser code with React/JSX).
+- `vitest.config.ts`: Test runner config: the same `@shared`/`@tenant` shortcuts, run `tests/**/*.test.ts` in Node.
+- `eslint.config.mjs`: Lint rules: recommended JavaScript and TypeScript rules everywhere, React Hooks rules for the renderer, and Prettier compatibility.
+
+---
+
+## 6. Code walkthrough
+
+Each page goes through its files in order. For every function, method, class and type it shows
+the real code, with a link to the exact lines on GitHub, then explains what it does and why,
+with notes on the lines that need them. Read them in order the first time; after that, jump to
+the area you're working on.
+
+1. [Shared code and the preload bridge](1-shared-and-preload.md):
+   `src/shared` (sizes and layout constants, the action list, data types, the IPC contract, chip labels) and `src/preload` (the `window.assist` bridge between the pages and the main process).
+2. [Main process: startup, IPC and app plumbing](2-main-startup.md):
+   `index.ts` (startup and shutdown), `ipc.ts` (handling requests from the pages), `actions.ts`, `tenant.ts`, `settings.ts`, the tray icon.
+3. [JumpCloud sign-in](3-sign-in.md):
+   `auth/` (`AuthManager`, OpenID Connect with JumpCloud, the loopback listener) and `storage/SecretStore.ts`.
+4. [Talking to Claude](4-claude.md):
+   `claude/` (the model settings, `AnthropicBackend`, error handling, `ChatSession`).
+5. [The bubble](5-bubble.md):
+   `bubble/` (`BubbleController`, the layout maths, bounce physics, creating the windows).
+6. [The draft, screenshots and safe files](6-drafts-and-screenshots.md):
+   `notes/NotesStore.ts`, `screenshots/`, `storage/jsonFile.ts`.
+7. [The pages: entry points, styles, hooks and views](7-renderer-pages.md):
+   `src/renderer`: `index.html`, `main.tsx`, `styles.css`, `lib/`, `hooks/`, `BubbleView`, `PanelView`.
+8. [The UI components](8-renderer-components.md):
+   `src/renderer/src/components`: the chat box, messages, Markdown, sign-in panel, settings menu, action icons, screenshot chips.
+
+**Keeping it current.** The code on these pages is not typed by hand: each block is a marker
+like `<!-- code: apps/desktop/src/main/ipc.ts#registerIpc -->` that `npm run docs` fills from the
+source. After changing code, run `npm run docs`; `npm test` fails if a page shows code that no
+longer matches. When you add a new function, add a marker and a short explanation for it on the
+right page. The explanations are written by hand, so check they still hold when behaviour
+changes. Then `npm run docs:pdf` rebuilds `docs/CODE_GUIDE.pdf`, the whole guide as one PDF.
+
+---
+
+## 7. Tests (`tests`)
+
+Run with `npm test`. Each file tests code that doesn't need a real window or a real API.
+
+- `layout.test.ts`: Home positions in all four corners (including displays not at the origin), nearest-corner snapping, window sizes, and that the panel window opens into the screen and fits on it in every corner.
+- `bounce.test.ts`: Launch direction (away from each corner) and speed, bouncing off every edge, never leaving the screen, and the glide.
+- `bubbleController.test.ts`: The bubble state machine with fake windows, a fake clock and two fake displays: open/close, blur, the saved corner, dragging (follows the mouse, snaps to the nearest corner, onto another display, panel re-placed), bouncing on the current display, screenshots, and display changes (including unplugging the bubble's display).
+- `notesStore.test.ts`: Saving the draft, reloading, overtaken writes, damaged files, attachments.
+- `screenshotFiles.test.ts`: Screenshot names, never overwriting, finding the newest, the inside-the-folder check.
+- `format.test.ts`: Chip labels.
+- `tenants.test.ts`: Every tenant folder has a valid `tenant.json` and a logo; the list of missing sign-in settings.
+- `trayIcon.test.ts`: The tray circle.
+- `chatSession.test.ts`: The conversation with a scripted fake backend: streaming, images before text, replaying replies unchanged (thinking included), busy/empty/signed-out, Stop with and without text, Retry, an expired sign-in, refusals and length limits, the tool loop, and New conversation ignoring a late reply.
+- `authManager.test.ts`: The sign-in with a fake JumpCloud (whose refresh tokens work once, like the real one): not set up, nothing saved, renewing at startup and saving the replacement token, offline and Retry, a refused sign-in, browser sign-in, Cancel, no refresh token, a port in use, handing out a different ID token each time, never refreshing twice at once, skipping an almost-expired ID token, Log out (revoking), and logging out during a renewal.
+- `loopback.test.ts`: The browser-return listener: catches `/callback` and stops, 404 for anything else, shows JumpCloud's error safely escaped, Cancel, timeout, and a port in use.
+- `secretStore.test.ts`: Encrypted save and load, unreadable files, refusing to save without encryption, clear.
+- `claudeHelpers.test.ts`: Error classification (including sign-in errors wrapped by the SDK and failed swaps), what can be retried, the system prompt, and image scaling.
+- `codeGuide.test.ts`: The code shown in the walkthrough pages matches the source (runs `npm run docs:check`).
+- `diagnostics.test.ts`: The ID token summary (the claims a federation rule checks, never the token), describing errors for the log, writing the log file and starting a new one when it gets large.

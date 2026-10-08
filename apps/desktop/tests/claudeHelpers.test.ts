@@ -1,10 +1,16 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { WorkloadIdentityError } from '@anthropic-ai/sdk/lib/credentials/types'
 import { describe, expect, it } from 'vitest'
-import { classifyError, isKeyProblem, isRetryable } from '../src/main/claude/errors'
+import { SignInRequiredError, SignInUnavailableError } from '../src/main/auth/AuthManager'
+import { classifyError, isRetryable } from '../src/main/claude/errors'
 import { buildSystemPrompt } from '../src/main/claude/model'
 import { fitWithin } from '../src/main/screenshots/imageSize'
 
 const status = (code: number) => Anthropic.APIError.generate(code, undefined, 'x', new Headers())
+const exchange = (code: number | null) => new WorkloadIdentityError('exchange failed', code)
+/** How the SDK passes on an error thrown while getting credentials. */
+const wrapped = (cause: Error) =>
+  Object.assign(new Anthropic.AnthropicError(cause.message), { cause })
 
 describe('classifyError', () => {
   it.each([
@@ -19,16 +25,24 @@ describe('classifyError', () => {
     [new Anthropic.APIConnectionError({ message: 'offline' }), 'network'],
     [new Anthropic.APIConnectionTimeoutError(), 'network'],
     [new Anthropic.APIUserAbortError(), 'aborted'],
+    [wrapped(new SignInRequiredError()), 'signed-out'],
+    [wrapped(new SignInUnavailableError(new Error('offline'))), 'sign-in-unreachable'],
+    [exchange(401), 'not-allowed'],
+    [exchange(403), 'not-allowed'],
+    [exchange(429), 'rate-limit'],
+    [exchange(503), 'server'],
+    [exchange(null), 'network'],
     [new Error('boom'), 'unknown'],
   ])('%s → %s', (error, kind) => {
     expect(classifyError(error)).toBe(kind)
   })
 
-  it('separates key problems from temporary ones', () => {
-    expect(isKeyProblem('auth')).toBe(true)
-    expect(isKeyProblem('network')).toBe(false)
+  it('offers Retry only for temporary problems', () => {
     expect(isRetryable('overloaded')).toBe(true)
+    expect(isRetryable('sign-in-unreachable')).toBe(true)
     expect(isRetryable('auth')).toBe(false)
+    expect(isRetryable('signed-out')).toBe(true) // once signed back in
+    expect(isRetryable('not-allowed')).toBe(false)
   })
 })
 

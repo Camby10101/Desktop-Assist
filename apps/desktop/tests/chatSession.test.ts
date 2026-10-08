@@ -1,8 +1,10 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { WorkloadIdentityError } from '@anthropic-ai/sdk/lib/credentials/types'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ChatMessage, Effort } from '@shared/types'
 import type { ChatBackend, ReplyRequest } from '../src/main/claude/AnthropicBackend'
-import { ChatSession, type ChatTool } from '../src/main/claude/ChatSession'
+import { SignInRequiredError } from '../src/main/auth/AuthManager'
+import { ChatSession, replayContent, type ChatTool } from '../src/main/claude/ChatSession'
 
 type Step = (request: ReplyRequest) => Promise<Anthropic.Beta.BetaMessage>
 
@@ -10,14 +12,14 @@ type Step = (request: ReplyRequest) => Promise<Anthropic.Beta.BetaMessage>
 class FakeBackend implements ChatBackend {
   steps: Step[] = []
   calls: Array<Omit<ReplyRequest, 'onText' | 'signal'>> = []
-  async verifyKey(): Promise<void> {}
   reply(request: ReplyRequest): Promise<Anthropic.Beta.BetaMessage> {
-    const { apiKey, system, messages, tools, effort } = request
-    this.calls.push(structuredClone({ apiKey, system, messages, tools, effort }))
+    const { system, messages, tools, effort } = request
+    this.calls.push(structuredClone({ system, messages, tools, effort }))
     const step = this.steps.shift()
     if (!step) throw new Error('unexpected request')
     return step(request)
   }
+  reset(): void {}
 }
 
 const reply = (content: unknown[], stop_reason: string = 'end_turn'): Anthropic.Beta.BetaMessage =>
@@ -52,18 +54,16 @@ const apiError = (status: number) =>
   Anthropic.APIError.generate(status, undefined, 'x', new Headers())
 
 let backend: FakeBackend
-let key: string | null
+let signedIn: boolean
 let effort: Effort
 let shown: Map<string, ChatMessage>
 let resets: number
-let keyProblems: string[]
-let replied: number
 let session: ChatSession
 
 function makeSession(tools: ChatTool[] = []) {
   return new ChatSession({
     backend,
-    getApiKey: () => key,
+    canChat: () => signedIn,
     getEffort: () => effort,
     system: 'SYSTEM',
     tools,
@@ -72,27 +72,23 @@ function makeSession(tools: ChatTool[] = []) {
       resets++
       shown.clear()
     },
-    onKeyProblem: (kind) => keyProblems.push(kind),
-    onReplied: () => replied++,
     emitIntervalMs: 0,
   })
 }
 
 beforeEach(() => {
   backend = new FakeBackend()
-  key = 'sk-ant-test'
+  signedIn = true
   effort = 'low'
   shown = new Map()
   resets = 0
-  keyProblems = []
-  replied = 0
   session = makeSession()
 })
 
 const lastShown = () => [...shown.values()].at(-1)!
 
 describe('sending', () => {
-  it('streams the reply into the chat and sends the key, system prompt and effort', async () => {
+  it('streams the reply into the chat and sends the system prompt and effort', async () => {
     backend.steps.push(says('Hello there'))
     expect(session.send('Hi', [], [])).toBe('sent')
     expect(session.busy).toBe(true)
@@ -100,12 +96,7 @@ describe('sending', () => {
 
     expect(session.busy).toBe(false)
     expect(lastShown()).toMatchObject({ role: 'assistant', text: 'Hello there', status: 'done' })
-    expect(backend.calls[0]).toMatchObject({
-      apiKey: 'sk-ant-test',
-      system: 'SYSTEM',
-      effort: 'low',
-    })
-    expect(replied).toBe(1)
+    expect(backend.calls[0]).toMatchObject({ system: 'SYSTEM', effort: 'low' })
   })
 
   it('puts screenshots before the text in the user message', async () => {
@@ -138,15 +129,15 @@ describe('sending', () => {
     ])
   })
 
-  it('refuses while busy, when empty, and without a key', async () => {
+  it('refuses while busy, when empty, and when signed out', async () => {
     backend.steps.push(streamsUntilStopped(''))
     session.send('first', [], [])
     expect(session.send('second', [], [])).toBe('busy')
     session.stop()
     await session.idle()
     expect(session.send('   ', [], [])).toBe('empty')
-    key = null
-    expect(session.send('hello', [], [])).toBe('no-key')
+    signedIn = false
+    expect(session.send('hello', [], [])).toBe('signed-out')
   })
 })
 
@@ -209,12 +200,31 @@ describe('errors', () => {
     expect(lastShown().retryable).toBeUndefined()
   })
 
-  it('reports a rejected key so the chat box can ask for a new one', async () => {
-    backend.steps.push(fails(apiError(401)))
+  it('asks the user to sign in again when the sign-in has expired', async () => {
+    // The SDK wraps errors from the credentials provider and keeps the original as the cause.
+    const wrapped = new Anthropic.AnthropicError('Sign in with JumpCloud to use Claude')
+    wrapped.cause = new SignInRequiredError()
+    backend.steps.push(fails(wrapped))
     session.send('question', [], [])
     await session.idle()
-    expect(keyProblems).toEqual(['auth'])
-    expect(lastShown().retryable).toBeUndefined()
+    expect(lastShown()).toMatchObject({
+      status: 'error',
+      notice: 'Sign in with JumpCloud to keep chatting.',
+    })
+    expect(lastShown().retryable).toBe(true) // once signed back in
+  })
+
+  it("adds Anthropic's request ID when the sign-in swap is refused", async () => {
+    backend.steps.push(
+      fails(
+        new WorkloadIdentityError('Token exchange failed', 401, 'Authentication failed', 'req_9'),
+      ),
+    )
+    session.send('question', [], [])
+    await session.idle()
+    expect(lastShown().notice).toBe(
+      "Your JumpCloud account isn't set up to use Claude yet. Contact IT. (Reference: req_9)",
+    )
   })
 
   it('explains refusals and replies cut off at the length limit', async () => {
@@ -225,6 +235,50 @@ describe('errors', () => {
     session.send('b', [], [])
     await session.idle()
     expect(lastShown().notice).toContain('length limit')
+  })
+})
+
+describe('after a server-side fallback', () => {
+  const thinking = (signature: string) => ({ type: 'thinking', thinking: '', signature })
+  const text = (t: string) => ({ type: 'text', text: t })
+  const fallback = { type: 'fallback', from: { model: 'claude-opus-5-5' }, to: { model: 'other' } }
+
+  it("sends back the reply without the declining model's reasoning", async () => {
+    backend.steps.push(
+      async () => reply([thinking('a'), text('Par'), fallback, thinking('b'), text('Answer')]),
+      says('ok'),
+    )
+    session.send('question', [], [])
+    await session.idle()
+    session.send('next', [], [])
+    await session.idle()
+    expect(backend.calls[1]!.messages[1]).toEqual({
+      role: 'assistant',
+      content: [text('Par'), fallback, thinking('b'), text('Answer')],
+    })
+  })
+
+  it('drops tool calls before the last fallback, keeping server tool calls that got a result', () => {
+    const content = [
+      { type: 'tool_use', id: 't1', name: 'x', input: {} },
+      { type: 'server_tool_use', id: 's1', name: 'web_search', input: {} },
+      { type: 'web_search_tool_result', tool_use_id: 's1', content: [] },
+      { type: 'server_tool_use', id: 's2', name: 'web_search', input: {} },
+      { type: 'redacted_thinking', data: 'x' },
+      fallback,
+      { type: 'tool_use', id: 't2', name: 'x', input: {} },
+    ] as unknown as Anthropic.Beta.BetaContentBlock[]
+    expect(replayContent(content).map((b) => ('id' in b ? b.id : b.type))).toEqual([
+      's1',
+      'web_search_tool_result',
+      'fallback',
+      't2',
+    ])
+  })
+
+  it('leaves a reply without a fallback unchanged', () => {
+    const content = [thinking('a'), text('Hi')] as unknown as Anthropic.Beta.BetaContentBlock[]
+    expect(replayContent(content)).toBe(content)
   })
 })
 
