@@ -36,8 +36,9 @@ sign-in status and your name and email (`AuthStatus` in `src/shared/types.ts`), 
 **Getting Claude access**
 
 1. On the first chat request, the Anthropic SDK inside `AnthropicBackend` needs a Claude token. Its
-   `oidcFederationProvider` calls the `identityToken()` option, which is
-   `AuthManager.freshIdToken()`.
+   `oidcFederationProvider` calls the `identityToken()` option. `index.ts` set that to a small
+   function that calls `AuthManager.freshIdToken()` and notes a summary of the token for the log
+   (`summarizeIdToken()` in `idToken.ts`).
 2. `freshIdToken()` returns the spare ID token if it has more than a minute left, otherwise gets a
    new one with `refresh()`.
 3. The SDK posts the ID token to Anthropic's `/v1/oauth/token`. Anthropic checks it against the
@@ -57,9 +58,9 @@ file, and `Oidc.revoke()` asks JumpCloud to cancel the refresh token. Through `o
 `AuthManager` decides whether someone is signed in, keeps the refresh token, and hands out ID tokens
 for Claude. `start()` in `src/main/index.ts` creates the one instance. The IPC handlers in
 `src/main/ipc.ts` call `signIn()`, `cancelSignIn()`, `signOut()` and `retry()`; `ChatSession` asks
-`canChat` before sending; `AnthropicBackend` calls `freshIdToken()`. It never touches JumpCloud, the
-disk or the browser itself: those arrive through `AuthManagerDeps`, so `tests/authManager.test.ts`
-can drive it with fakes.
+`canChat` before sending; `AnthropicBackend` calls `freshIdToken()` (through a small wrapper in
+`index.ts`). It never touches JumpCloud, the disk or the browser itself: those arrive through
+`AuthManagerDeps`, so `tests/authManager.test.ts` can drive it with fakes.
 
 The ideas it is built around:
 
@@ -527,8 +528,9 @@ freshIdToken(): Promise<string> {
 
 <!-- /code -->
 
-Gives the Anthropic SDK one new, never-swapped ID token. `AnthropicBackend` passes it to the SDK as
-`identityToken`, and the SDK calls it whenever it needs a new Claude token.
+Gives the Anthropic SDK one new, never-swapped ID token. `index.ts` hands `AnthropicBackend` an
+`identityToken` function that calls it (and summarizes the token for the log, see `idToken.ts`), and
+the SDK calls that whenever it needs a new Claude token.
 
 - `this.queue.then(() => this.takeIdToken())`: runs after every refresh already queued, so two
   requests at once never refresh with the same refresh token in parallel.
@@ -1438,6 +1440,174 @@ The small page the browser shows after the redirect.
   the user they can close it.
 - ``text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)``: replaces each character that means
   something in HTML with its numeric code, for example `<` with `&#60;`.
+
+---
+
+## `src/main/auth/idToken.ts`: describing an ID token for the log
+
+When Anthropic refuses to swap an ID token, the app only gets a short error back, and the token
+itself must never go in a log file: until it expires, it proves who the user is. This file reads
+what the token says (the same things a federation rule checks) so the log can show those instead. It
+only decodes the token and never verifies it, which is fine because nothing trusts the result: it's
+only for a person reading the log.
+
+It's used only by `start()` in `index.ts`. The `identityToken` function given to `AnthropicBackend`
+summarizes every ID token before handing it over, and keeps the latest summary in `lastIdToken`.
+When a chat request fails and `classifyError()` (in `src/main/claude/errors.ts`) says `not-allowed`,
+meaning Anthropic's token exchange refused the swap (a status such as 400, 401 or 403),
+`ChatSession`'s `onError` writes that summary to the app's log (`logs\desktop-assist.log` in the
+app's data folder).
+
+The case it was written for, and what to look for:
+
+- **Audience.** JumpCloud's ID token has `aud` as a list that contains the JumpCloud client ID. The
+  federation rule's _Expected audience_ in the Claude Console must be set to that client ID. When
+  it's left blank, Anthropic instead requires the token's `aud` to be `https://api.anthropic.com`,
+  which a JumpCloud token never is, and refuses with the deny reason `jwt_audience_mismatch` (shown
+  in the Console's authentication history).
+- **Organization ID.** If the organization ID in tenant.json's `claudeAccess` is wrong (for example
+  the claude.ai organization ID rather than the Claude Console's, from **Settings → Organization**),
+  Anthropic can't find the rule at all and records no authentication event. So when the summary
+  looks right but the Console shows nothing, check the IDs in tenant.json rather than the token.
+
+A JWT is three parts joined by dots: a _header_ (how it was signed), a _payload_ (the claims) and
+the _signature_. The first two are JSON encoded with base64url, so anyone can read them; only the
+signature needs JumpCloud's key to check.
+
+### `IdTokenSummary`
+
+<!-- code: apps/desktop/src/main/auth/idToken.ts#IdTokenSummary -->
+
+[`src/main/auth/idToken.ts`, lines 1–19](../../apps/desktop/src/main/auth/idToken.ts#L1-L19)
+
+```ts
+/**
+ * What an ID token says, for the log, without the token itself (which could be swapped for
+ * Claude access) or its signature. These are the things an Anthropic federation rule checks.
+ */
+export interface IdTokenSummary {
+  alg?: string
+  kid?: string
+  iss?: string
+  aud?: string | string[]
+  sub?: string
+  email?: string
+  issuedAt?: string
+  expiresAt?: string
+  /** `exp` minus `iat`: Anthropic refuses tokens that live longer than the issuer allows. */
+  lifetimeSeconds?: number
+  hasJti: boolean
+  /** Every claim name in the token, to see what a rule could match on. */
+  claims: string[]
+}
+```
+
+<!-- /code -->
+
+What gets logged. Every field is optional except `hasJti` and `claims`, because a token may lack any
+claim.
+
+- `alg?: string`: the signing algorithm from the header (for example RS256), which Anthropic uses to
+  check the signature.
+- `kid?: string`: the key ID from the header: which of JumpCloud's published keys signed the token.
+- `iss?: string`: the issuer. It must match the issuer URL in the Claude Console exactly, including
+  the trailing slash.
+- `aud?: string | string[]`: the audience. JWTs allow either one string or a list, and JumpCloud
+  sends a list.
+- `issuedAt?: string`, `expiresAt?: string`: the `iat` and `exp` claims as readable dates rather
+  than Unix seconds.
+- `hasJti: boolean`: only whether the token has a `jti` (the ID Anthropic uses to refuse a second
+  swap of the same token), not its value.
+- `claims: string[]`: the names of every claim, not their values, so it's clear what a rule's
+  condition could test (for example whether there's an `email` claim).
+
+### `summarizeIdToken()`
+
+<!-- code: apps/desktop/src/main/auth/idToken.ts#summarizeIdToken -->
+
+[`src/main/auth/idToken.ts`, lines 21–46](../../apps/desktop/src/main/auth/idToken.ts#L21-L46)
+
+```ts
+/** Decodes (without verifying) a JWT's header and claims into a summary. */
+export function summarizeIdToken(jwt: string): IdTokenSummary | { error: string } {
+  const parts = jwt.split('.')
+  if (parts.length !== 3) return { error: 'not a JWT' }
+  try {
+    const [header, payload] = parts.slice(0, 2).map(decodePart)
+    if (!header || !payload) return { error: 'not a JWT' }
+    const iat = typeof payload.iat === 'number' ? payload.iat : undefined
+    const exp = typeof payload.exp === 'number' ? payload.exp : undefined
+    return {
+      alg: text(header.alg),
+      kid: text(header.kid),
+      iss: text(payload.iss),
+      aud: Array.isArray(payload.aud) ? payload.aud.map(String) : text(payload.aud),
+      sub: text(payload.sub),
+      email: text(payload.email),
+      issuedAt: iat === undefined ? undefined : new Date(iat * 1000).toISOString(),
+      expiresAt: exp === undefined ? undefined : new Date(exp * 1000).toISOString(),
+      lifetimeSeconds: iat === undefined || exp === undefined ? undefined : exp - iat,
+      hasJti: typeof payload.jti === 'string',
+      claims: Object.keys(payload).sort(),
+    }
+  } catch (error) {
+    return { error: `couldn't decode: ${error instanceof Error ? error.message : String(error)}` }
+  }
+}
+```
+
+<!-- /code -->
+
+Turns a raw ID token into an `IdTokenSummary`, or `{ error }` with a short reason if it can't be
+read.
+
+- `if (parts.length !== 3) return { error: 'not a JWT' }`: a signed JWT always has exactly three
+  parts.
+- `parts.slice(0, 2).map(decodePart)`: decodes only the header and the payload. The signature (the
+  third part) is never decoded or logged.
+- `if (!header || !payload)`: a part decoded to something other than a JSON object.
+- `typeof payload.iat === 'number' ? payload.iat : undefined`: the claims are untyped JSON, so each
+  one is checked before use.
+- `Array.isArray(payload.aud) ? payload.aud.map(String) : text(payload.aud)`: keeps a list of
+  audiences as a list. This is what showed that JumpCloud sends `aud` as a list.
+- `new Date(iat * 1000).toISOString()`: JWT times are Unix seconds and `Date` wants milliseconds;
+  the result looks like `2026-10-08T05:12:00.000Z` (UTC).
+- `lifetimeSeconds: iat === undefined || exp === undefined ? undefined : exp - iat`: how long the
+  token is valid for in total. Anthropic refuses a token that lives longer than the issuer's maximum
+  (1 hour by default).
+- `Object.keys(payload).sort()`: the claim names in alphabetical order, easy to scan.
+- `catch (error)`: a part that isn't valid base64url JSON gives `{ error: "couldn't decode: …" }`.
+  The function never throws, which matters because it runs on every token before it goes to
+  Anthropic: an exception here would break chat.
+
+### `decodePart()`, `text()`
+
+<!-- code: apps/desktop/src/main/auth/idToken.ts#decodePart,text -->
+
+[`src/main/auth/idToken.ts`, lines 48–56](../../apps/desktop/src/main/auth/idToken.ts#L48-L56)
+
+```ts
+function decodePart(part: string | undefined): Record<string, unknown> | null {
+  if (!part) return null
+  const value: unknown = JSON.parse(Buffer.from(part, 'base64url').toString('utf8'))
+  return value && typeof value === 'object' ? (value as Record<string, unknown>) : null
+}
+
+function text(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined
+}
+```
+
+<!-- /code -->
+
+- `JSON.parse(Buffer.from(part, 'base64url').toString('utf8'))`: base64url is base64 with `-` and
+  `_` in place of `+` and `/` and no `=` padding, so it's safe in URLs. Node's `Buffer` decodes it
+  directly, `toString('utf8')` turns the bytes into text, and `JSON.parse` reads that. Text that
+  isn't JSON makes `JSON.parse` throw, which `summarizeIdToken()` catches.
+- `value && typeof value === 'object'`: valid JSON could also be a number, a string or `null`, none
+  of which can hold claims.
+- `text`: returns the value only if it's a string, so a claim of an unexpected type is left out of
+  the summary.
 
 ---
 

@@ -5,8 +5,8 @@
 The _main process_ is the Node.js side of an Electron app: the single process that owns the
 windows, the files, the tray icon and the network. This page covers how it starts and how the
 pages talk to it. `index.ts` creates every service and wires them together, `ipc.ts` answers the
-pages' requests, and the smaller files hold the tenant config, the user's preferences, the
-commands behind the action icons and the tray icon. The services themselves (sign-in, Claude, the
+pages' requests, and the smaller files hold the problem log, the tenant config, the user's
+preferences, the commands behind the action icons and the tray icon. The services themselves (sign-in, Claude, the
 bubble, the draft and screenshots) each have their own page.
 
 ## `src/main/index.ts`: startup and shutdown
@@ -29,7 +29,7 @@ tests can drive them with fakes. `index.ts` is the only file that knows about al
 
 <!-- code: apps/desktop/src/main/index.ts#SHUTDOWN_TIMEOUT_MS,controller,tray -->
 
-[`src/main/index.ts`, lines 33–47](../../apps/desktop/src/main/index.ts#L33-L47)
+[`src/main/index.ts`, lines 36–50](../../apps/desktop/src/main/index.ts#L36-L50)
 
 ```ts
 const SHUTDOWN_TIMEOUT_MS = 2000
@@ -84,7 +84,7 @@ The link above each piece opens the full source.
 
 <!-- code: apps/desktop/src/main/index.ts#start.tenant -->
 
-[`src/main/index.ts`, line 59](../../apps/desktop/src/main/index.ts#L59)
+[`src/main/index.ts`, line 62](../../apps/desktop/src/main/index.ts#L62)
 
 ```ts
 const tenant = TenantSchema.parse(tenantConfig)
@@ -108,9 +108,9 @@ const tenant = TenantSchema.parse(tenantConfig)
 
 #### Folders, the draft and preferences
 
-<!-- code: apps/desktop/src/main/index.ts#start.userData,screenshotsDir,actionCount,notes,settings -->
+<!-- code: apps/desktop/src/main/index.ts#start.userData,screenshotsDir,actionCount,log,notes,settings -->
 
-[`src/main/index.ts`, lines 64–73](../../apps/desktop/src/main/index.ts#L64-L73)
+[`src/main/index.ts`, lines 67–78](../../apps/desktop/src/main/index.ts#L67-L78)
 
 ```ts
 const userData = app.getPath('userData')
@@ -119,8 +119,11 @@ const screenshotsDir = join(app.getPath('pictures'), tenant.appName)
 
 const actionCount = tenant.actions.length
 
+// Problems go to %APPDATA%\Desktop Assist\logs, so an installed copy can be diagnosed too.
+const log = createLog(join(userData, 'logs', 'desktop-assist.log'))
+
 const notes = new NotesStore(join(userData, 'notes.json'), {
-  onError: (error) => console.error('Saving the text box failed', error),
+  onError: (error) => log('Saving the text box failed:', error),
 })
 
 const settings = new SettingsService(join(userData, 'preferences.json'), screenshotsDir)
@@ -130,6 +133,10 @@ const settings = new SettingsService(join(userData, 'preferences.json'), screens
 
 - `app.getPath('pictures')`: the user's Pictures folder. Screenshots go in a subfolder named
   after the app (`appName` in `tenant.json`).
+- `createLog(join(userData, 'logs', 'desktop-assist.log'))`: the problem log (see
+  [`src/main/log.ts`](#srcmainlogts-the-problem-log)). `log` is a function: `log(message, detail)`
+  appends a line to `%APPDATA%\Desktop Assist\logs\desktop-assist.log` and prints it to the
+  terminal. An installed copy has no terminal, so this file is the only record of what went wrong.
 - `new NotesStore(join(userData, 'notes.json'), ...)`: the unsent draft in the text box. It's
   followed by `await notes.load()`, which reads the saved draft before anything can ask for it.
   `onError` only logs: a failed save shouldn't interrupt the user (see
@@ -142,7 +149,7 @@ const settings = new SettingsService(join(userData, 'preferences.json'), screens
 
 <!-- code: apps/desktop/src/main/index.ts#start.bubbleWindow,panelWindow,windows,windowsReady,broadcast -->
 
-[`src/main/index.ts`, lines 76–85](../../apps/desktop/src/main/index.ts#L76-L85)
+[`src/main/index.ts`, lines 81–90](../../apps/desktop/src/main/index.ts#L81-L90)
 
 ```ts
 // The windows are created after the last `await`: from here to registerIpc() below nothing
@@ -186,7 +193,7 @@ page's request is handled, its handler has been registered.
 
 <!-- code: apps/desktop/src/main/index.ts#start.bubble -->
 
-[`src/main/index.ts`, lines 87–98](../../apps/desktop/src/main/index.ts#L87-L98)
+[`src/main/index.ts`, lines 92–103](../../apps/desktop/src/main/index.ts#L92-L103)
 
 ```ts
 const bubble = new BubbleController({
@@ -229,9 +236,9 @@ touches Electron directly; everything it needs is passed in here.
 
 #### Screenshots and Claude
 
-<!-- code: apps/desktop/src/main/index.ts#start.screenshots,devBaseUrl,backend,chat -->
+<!-- code: apps/desktop/src/main/index.ts#start.screenshots,devBaseUrl,lastIdToken,backend,chat -->
 
-[`src/main/index.ts`, lines 102–122](../../apps/desktop/src/main/index.ts#L102-L122)
+[`src/main/index.ts`, lines 107–135](../../apps/desktop/src/main/index.ts#L107-L135)
 
 ```ts
 const screenshots = new ScreenshotService(screenshotsDir, () =>
@@ -241,10 +248,16 @@ const screenshots = new ScreenshotService(screenshotsDir, () =>
 // Dev runs may point at a local test server; an installed app always talks to Anthropic.
 const devBaseUrl = !app.isPackaged ? process.env['ANTHROPIC_BASE_URL'] : undefined
 
+let lastIdToken: IdTokenSummary | { error: string } | null = null
+
 const backend = new AnthropicBackend({
   baseURL: devBaseUrl || API_BASE_URL,
   access: claudeAccess,
-  identityToken: () => auth.freshIdToken(),
+  identityToken: async () => {
+    const token = await auth.freshIdToken()
+    lastIdToken = summarizeIdToken(token) // what the token says, never the token itself
+    return token
+  },
 })
 
 const chat = new ChatSession({
@@ -254,8 +267,11 @@ const chat = new ChatSession({
   system: buildSystemPrompt(tenant),
   onMessage: (message) => broadcast(IPC.chatMessage, message),
   onReset: () => broadcast(IPC.chatReset),
-  // The details (status codes, request IDs) go to the terminal in dev runs.
-  onError: (error) => console.error('Claude request failed:', error),
+  onError: (error) => {
+    log('Claude request failed:', error)
+    // Anthropic refused to swap the sign-in: log what the token said, to compare with the rule.
+    if (classifyError(error) === 'not-allowed') log('The JumpCloud ID token sent:', lastIdToken)
+  },
 })
 ```
 
@@ -266,10 +282,19 @@ const chat = new ChatSession({
   that moment.
 - `devBaseUrl`: lets a dev run send Claude requests to a local mock server named in
   `ANTHROPIC_BASE_URL`. An installed build ignores the variable, so it can't be redirected.
-- `identityToken: () => auth.freshIdToken()`: how `AnthropicBackend` gets a JumpCloud ID token to
-  swap for Claude access (see [Talking to Claude](4-claude.md)). `auth` is only declared further
-  down; that's fine because this arrow function only runs later, when the first message is sent,
-  by which time `auth` exists. Calling it any earlier would throw.
+- `let lastIdToken`: a summary of the last JumpCloud ID token handed to Anthropic, kept only so it
+  can be logged if Anthropic refuses it. It's `null` until the first message is sent, and
+  `{ error: string }` if the token couldn't be decoded.
+- `identityToken: async () => {`: how `AnthropicBackend` gets a JumpCloud ID token to swap for
+  Claude access (see [Talking to Claude](4-claude.md)). It gets a new token from
+  `auth.freshIdToken()` and hands it on unchanged.
+- `const token = await auth.freshIdToken()`: `auth` is only declared further down. That's fine
+  because this function only runs later, when the first message is sent, by which time `auth`
+  exists. Calling it any earlier would throw.
+- `lastIdToken = summarizeIdToken(token)`: records what the token says (who issued it, its
+  audience, its lifetime, which claims it has) without the token itself, which could be swapped
+  for Claude access. `summarizeIdToken()` is in `auth/idToken.ts` (see
+  [JumpCloud sign-in](3-sign-in.md)).
 - `canChat: () => auth.canChat`, `getEffort: () => settings.get().effort`: functions rather than
   values, so `ChatSession` reads the current sign-in and the current Fast/Balanced/Thorough choice
   each time it sends.
@@ -277,12 +302,23 @@ const chat = new ChatSession({
   once from the app name, company name and any extra `systemPrompt` in `tenant.json`.
 - `onMessage`, `onReset`: each new or changed chat message, and "New conversation", are broadcast
   to the pages.
+- `log('Claude request failed:', error)`: the chat itself shows a plain-English message; the log
+  gets the full error, including the status code and request ID.
+- `if (classifyError(error) === 'not-allowed')`: `classifyError()` (in `claude/errors.ts`) sorts
+  errors by what they mean for the user. `not-allowed` means Anthropic refused to swap the
+  JumpCloud token for Claude access. The token summary is then logged too, so it can be compared
+  with the federation rule in the Claude Console.
+- This logging was added to track down a real refusal. It had two causes: `tenant.json` held the
+  claude.ai organization ID instead of the Claude Console one, and the federation rule had no
+  expected audience. Without one, Anthropic requires the token's audience (`aud`) to be
+  `https://api.anthropic.com`, which JumpCloud ID tokens never have; the rule's audience must be
+  the JumpCloud client ID.
 
 #### Sign-in
 
 <!-- code: apps/desktop/src/main/index.ts#start.missing,localIssuer,authState,auth -->
 
-[`src/main/index.ts`, lines 124–148](../../apps/desktop/src/main/index.ts#L124-L148)
+[`src/main/index.ts`, lines 137–161](../../apps/desktop/src/main/index.ts#L137-L161)
 
 ```ts
 const missing = missingSettings(signIn, claudeAccess)
@@ -311,7 +347,7 @@ const auth = new AuthManager({
     // the user can carry on (Retry resends a message that failed).
     if (reason === 'logout') chat.newConversation()
   },
-  onError: (error) => console.error('JumpCloud sign-in failed:', error),
+  onError: (error) => log('JumpCloud sign-in failed:', error),
 })
 ```
 
@@ -343,6 +379,8 @@ company's identity service in the browser.
   client and the Claude token it holds, so nothing from the old sign-in is reused.
 - `if (reason === 'logout') chat.newConversation()`: Log out clears the chat. If the sign-in
   merely expired, the conversation stays so the user can sign back in and press Retry.
+- `onError: (error) => log('JumpCloud sign-in failed:', error)`: a failed sign-in or renewal goes
+  to the problem log; the chat box shows its own short message.
 
 Two statements follow:
 
@@ -357,7 +395,7 @@ Two statements follow:
 
 <!-- code: apps/desktop/src/main/index.ts#start.onDisplayChange -->
 
-[`src/main/index.ts`, line 182](../../apps/desktop/src/main/index.ts#L182)
+[`src/main/index.ts`, line 195](../../apps/desktop/src/main/index.ts#L195)
 
 ```ts
 const onDisplayChange = () => bubble.displayChanged()
@@ -387,7 +425,7 @@ Everything else in this part of `start()` is plain statements:
 
 <!-- code: apps/desktop/src/main/index.ts#start.shuttingDown -->
 
-[`src/main/index.ts`, lines 187–188](../../apps/desktop/src/main/index.ts#L187-L188)
+[`src/main/index.ts`, lines 200–201](../../apps/desktop/src/main/index.ts#L200-L201)
 
 ```ts
 // Save the text box before quitting. before-quit fires again after the second app.quit().
@@ -423,7 +461,7 @@ anything.
 
 <!-- code: apps/desktop/src/main/index.ts#safeStorageEncryptor -->
 
-[`src/main/index.ts`, lines 206–211](../../apps/desktop/src/main/index.ts#L206-L211)
+[`src/main/index.ts`, lines 219–224](../../apps/desktop/src/main/index.ts#L219-L224)
 
 ```ts
 /** Windows DPAPI through Electron: only this Windows user can decrypt what it encrypts. */
@@ -450,7 +488,7 @@ The encryption `SecretStore` uses for the saved sign-in. `SecretStore` only know
 
 <!-- code: apps/desktop/src/main/index.ts#withDevOverrides -->
 
-[`src/main/index.ts`, lines 213–225](../../apps/desktop/src/main/index.ts#L213-L225)
+[`src/main/index.ts`, lines 226–238](../../apps/desktop/src/main/index.ts#L226-L238)
 
 ```ts
 /**
@@ -488,7 +526,7 @@ test identity provider, without editing `tenant.json`.
 
 <!-- code: apps/desktop/src/main/index.ts#isLoopback -->
 
-[`src/main/index.ts`, lines 227–229](../../apps/desktop/src/main/index.ts#L227-L229)
+[`src/main/index.ts`, lines 240–242](../../apps/desktop/src/main/index.ts#L240-L242)
 
 ```ts
 function isLoopback(url: URL): boolean {
@@ -506,7 +544,7 @@ in `hostname`. Used only to decide whether plain `http` is allowed for a dev ide
 
 <!-- code: apps/desktop/src/main/index.ts#toArea,electronDisplays -->
 
-[`src/main/index.ts`, lines 231–245](../../apps/desktop/src/main/index.ts#L231-L245)
+[`src/main/index.ts`, lines 244–258](../../apps/desktop/src/main/index.ts#L244-L258)
 
 ```ts
 /** Electron's `screen`, in the shape the bubble controller uses. All coordinates are DIPs. */
@@ -551,7 +589,7 @@ method is called, which happens after `start()` has begun.
 
 <!-- code: apps/desktop/src/main/index.ts#fail -->
 
-[`src/main/index.ts`, lines 247–251](../../apps/desktop/src/main/index.ts#L247-L251)
+[`src/main/index.ts`, lines 260–264](../../apps/desktop/src/main/index.ts#L260-L264)
 
 ```ts
 function fail(error: unknown): void {
@@ -572,6 +610,163 @@ preferences file, and so on. Errors after `start()` has finished don't come here
 - `app.exit(1)`: quits immediately with exit code 1, closing any windows already created and
   without firing `before-quit`. There's nothing to save yet, and an app that half-started would
   otherwise keep running with nothing on screen.
+
+## `src/main/log.ts`: the problem log
+
+A small log of problems, written to `%APPDATA%\Desktop Assist\logs\desktop-assist.log` (in a dev
+run, the `Desktop Assist (Dev)` folder) and printed to the terminal as well. An installed copy has
+no terminal, so without this file there would be no way to see why something failed on a user's
+PC, for example why Anthropic refused their sign-in. `start()` in `index.ts` creates the one log
+and gives it to the error callbacks of `NotesStore`, `ChatSession` and `AuthManager`. It's never
+given tokens, only errors and summaries such as the ID token summary.
+
+### `MAX_LOG_BYTES` and `Log`
+
+<!-- code: apps/desktop/src/main/log.ts#MAX_LOG_BYTES,Log -->
+
+[`src/main/log.ts`, lines 4–7](../../apps/desktop/src/main/log.ts#L4-L7)
+
+```ts
+/** When the log passes this size it's moved to `<name>.old` and a new one is started. */
+const MAX_LOG_BYTES = 1_000_000
+
+export type Log = (message: string, detail?: unknown) => void
+```
+
+<!-- /code -->
+
+- `MAX_LOG_BYTES = 1_000_000`: about 1 MB. Past that, the file is renamed to
+  `desktop-assist.log.old` (replacing any older one) and a new log is started, so the two files
+  together stay around 2 MB at most.
+- `type Log = (message: string, detail?: unknown) => void`: the type of a function. Callers pass a
+  short message and, optionally, the thing that went wrong (usually an error).
+
+### `createLog()`
+
+<!-- code: apps/desktop/src/main/log.ts#createLog -->
+
+[`src/main/log.ts`, lines 9–25](../../apps/desktop/src/main/log.ts#L9-L25)
+
+```ts
+/**
+ * A small log file for problems (and the terminal, in dev runs), so an installed copy, which has
+ * no terminal, can still be diagnosed. Never pass it tokens: only errors and summaries.
+ */
+export function createLog(path: string): Log {
+  return (message, detail) => {
+    const line = `${new Date().toISOString()} ${message}${detail === undefined ? '' : ` ${describe(detail)}`}`
+    console.error(line)
+    try {
+      mkdirSync(dirname(path), { recursive: true })
+      if (sizeOf(path) > MAX_LOG_BYTES) renameSync(path, `${path}.old`)
+      appendFileSync(path, `${line}\n`)
+    } catch {
+      // Logging must never break the app.
+    }
+  }
+}
+```
+
+<!-- /code -->
+
+Returns the logging function for one file. The returned function remembers `path` (a _closure_),
+so callers only ever pass the message and detail.
+
+- `new Date().toISOString()`: each line starts with the time, in UTC (for example
+  `2026-10-08T09:15:00.000Z`), then the message, then the detail as described by
+  [`describe()`](#describe).
+- `console.error(line)`: the same line in the terminal, for dev runs.
+- `mkdirSync(dirname(path), { recursive: true })`: creates the `logs` folder if it isn't there.
+  The file calls are synchronous (the `...Sync` versions), which keeps this simple; the log is
+  only written when something goes wrong, so the short pause doesn't matter.
+- `if (sizeOf(path) > MAX_LOG_BYTES) renameSync(path, ...)`: checked before every line. Renaming
+  onto an existing `.old` file replaces it.
+- `catch`: as the comment says, logging must never break the app. If the disk is full or the file
+  is locked, that line is simply lost (it was still printed to the terminal).
+
+### `sizeOf()`
+
+<!-- code: apps/desktop/src/main/log.ts#sizeOf -->
+
+[`src/main/log.ts`, lines 27–33](../../apps/desktop/src/main/log.ts#L27-L33)
+
+```ts
+function sizeOf(path: string): number {
+  try {
+    return statSync(path).size
+  } catch {
+    return 0
+  }
+}
+```
+
+<!-- /code -->
+
+The log file's size in bytes. `statSync` throws if the file doesn't exist yet, which counts as 0.
+
+### `describe()`
+
+<!-- code: apps/desktop/src/main/log.ts#describe -->
+
+[`src/main/log.ts`, lines 35–63](../../apps/desktop/src/main/log.ts#L35-L63)
+
+```ts
+/** An error with the details that matter (status, request ID, response body, cause), or JSON. */
+export function describe(detail: unknown): string {
+  if (detail instanceof Error) {
+    const extra = detail as Error & {
+      status?: unknown
+      statusCode?: unknown
+      requestID?: unknown
+      requestId?: unknown
+      body?: unknown
+      error?: unknown
+    }
+    const fields = {
+      status: extra.status ?? extra.statusCode,
+      requestId: extra.requestID ?? extra.requestId,
+      // A refused sign-in swap keeps Anthropic's answer in `body`; other API errors in `error`.
+      body: extra.body ?? extra.error,
+    }
+    const known = Object.entries(fields).filter(([, value]) => value != null)
+    const parts = [`${detail.name}: ${detail.message}`]
+    if (known.length) parts.push(JSON.stringify(Object.fromEntries(known)))
+    if (detail.cause !== undefined) parts.push(`(cause: ${describe(detail.cause)})`)
+    return parts.join(' ')
+  }
+  try {
+    return JSON.stringify(detail)
+  } catch {
+    return String(detail)
+  }
+}
+```
+
+<!-- /code -->
+
+Turns the `detail` into one line of text. Errors need special handling: `JSON.stringify` of an
+`Error` gives `{}`, because its message and name aren't the kind of property JSON includes.
+
+- `detail as Error & {`: tells TypeScript the error may also have these extra fields, so they can
+  be read. `&` combines two types.
+- `extra.status ?? extra.statusCode`, `extra.requestID ?? extra.requestId`: libraries name these
+  differently. The Anthropic SDK's API errors have `status` and `requestID`. Its error for a
+  refused token swap has `statusCode`, `requestId` and `body` (Anthropic's response, which says
+  why it refused). Taking whichever exists covers both. The request ID is what Anthropic support
+  needs to find a request.
+- `body: extra.body ?? extra.error`: Anthropic's response to the failed request. The refused-swap
+  error keeps it in `body`; the SDK's other API errors keep it in `error` (for example
+  `{"type":"error","error":{"type":"rate_limit_error",…}}`), so either is logged.
+- `value != null`: `!=` (rather than `!==`) is false for both `null` and `undefined`, so fields
+  the error doesn't have are left out.
+- `JSON.stringify(Object.fromEntries(known))`: the fields found, as JSON, for example
+  `{"status":401,"requestId":"req_…"}`.
+- `describe(detail.cause)`: an error can carry the error that caused it in `cause`. The Anthropic
+  SDK wraps sign-in errors this way, so the cause is described too (and its cause, and so on,
+  since `describe()` calls itself).
+- `return JSON.stringify(detail)`: anything that isn't an error, such as the ID token summary, is
+  written as JSON. `JSON.stringify` throws for some values (an object that refers to itself, for
+  example), and `String(detail)` is used instead.
 
 ## `src/main/ipc.ts`: handling requests from the pages
 
@@ -971,7 +1166,8 @@ How a signed-in user reaches Claude. There's no API key: Anthropic's _Workload I
 Federation_ accepts the user's JumpCloud ID token and returns a short-lived Claude token for the
 company's service account, if the federation rule set up in the Claude Console allows it (see
 [Talking to Claude](4-claude.md) and `docs/JUMPCLOUD_SETUP.md`). These are the IDs that exchange
-needs.
+needs. `organizationId` must be the Claude Console organization's ID: the claude.ai organization
+has a different one, and using it makes Anthropic refuse every sign-in.
 
 ### `SignInConfig` and `ClaudeAccessConfig`
 

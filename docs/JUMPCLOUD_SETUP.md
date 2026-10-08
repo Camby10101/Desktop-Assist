@@ -98,21 +98,26 @@ Everything below is under **Settings** in the Console.
      Any Morse Micro account that signs in through JumpCloud is accepted. Who can sign in is
      controlled in JumpCloud, by the groups assigned to the app.
 
+   - **Expected audience:** the JumpCloud **Client ID** from step 1. **This is required.** When
+     it's left blank, Anthropic only accepts tokens whose audience is `https://api.anthropic.com`,
+     and a JumpCloud sign-in token's audience is always the app's client ID, so every sign-in is
+     refused (`jwt_audience_mismatch` in Authentication events).
    - **Scope:** `workspace:developer` (`workspace:inference`, chat only, isn't offered in the
      Console; never choose `org:admin`)
    - **Workspace:** just the Desktop Assist workspace (leave **All workspaces** off)
    - **Service account:** `desktop-assist`
    - **Token lifetime:** leave the default
 5. Copy:
-   - the **organization ID** (a UUID, under Settings → Organization),
+   - the **organization ID**: the UUID under **Settings → Organization in the Console**. It is
+     not the same as the claude.ai organization ID; with the wrong one, Anthropic can't find the
+     rule and refuses every sign-in without recording anything in Authentication events,
    - the **federation rule ID** (`fdrl_...`, on the rule's page),
    - the **service account ID** (`svac_...`, on the service account's page),
    - the **workspace ID** (`wrkspc_...`), only if the rule covers more than one workspace.
 
-**Optional, stricter:** to accept only sign-ins made for Desktop Assist (not for other JumpCloud
-apps), also check the audience. Add `&& claims.aud == "<Client ID>"` to the expression, or fill
-in the rule's Audience field if it has one. This doesn't change who can use the app; it stops a
-sign-in token issued to another JumpCloud app from being swapped for Claude access.
+The expected audience doesn't change who can use the app (the email condition and JumpCloud's
+group assignments decide that); it means only sign-ins made for the Desktop Assist JumpCloud app
+are accepted, not ones made for other JumpCloud apps.
 
 ## 3. Desktop Assist: fill in tenant.json
 
@@ -156,11 +161,15 @@ way to sign in silently, so the one browser step stays.
 
 1. Open Desktop Assist and click **Sign in with JumpCloud**. Your browser opens JumpCloud, then
    says you can close the tab, and the chat box reopens.
-2. Send a message. In the Claude Console, **Settings → Workload identity → Authentication history**
+2. Send a message. In the Claude Console, **Settings → Workload identity → Authentication events**
    should show a successful exchange.
 3. Quit and reopen the app: it should go straight to the chat without asking you to sign in.
 
-In `npm run dev`, the terminal also prints the full details of any sign-in or Claude error.
+When something fails, the app shows Anthropic's request reference with the error, and writes the
+full details to `%APPDATA%\Desktop Assist\logs\desktop-assist.log`. That includes, for a refused
+swap, a summary of the sign-in token that was sent (issuer, audience, email, lifetime, signing key),
+to compare with the federation rule. It never contains a token. In `npm run dev` the same lines
+also appear in the terminal.
 
 ## Troubleshooting
 
@@ -175,11 +184,17 @@ What the user sees, and the likely cause:
   the JumpCloud app.
 - **"Port 47621 is in use by another program":** change the port (the JumpCloud redirect URI and
   `redirectPort`).
-- **"Your JumpCloud account isn't set up to use Claude yet. Contact IT.":** Anthropic refused
-  the swap. **Authentication history** in the Claude Console gives the reason. Common ones: the
-  issuer URL doesn't match exactly (trailing slash), the expression doesn't match the user's
-  email (or audience, if you added it), the service account isn't in the rule's workspace, or the
-  ID token lives longer than the issuer's maximum (1 hour by default).
+- **"Your JumpCloud account isn't set up to use Claude yet. Contact IT. (Reference: req\_…)":**
+  Anthropic refused the swap. Look for that reference's attempt under **Settings → Workload
+  identity → Authentication events** in the Console, which gives the reason, and compare with the
+  token summary in the log file:
+  - **No attempt recorded at all:** the organization ID (or rule ID) in `tenant.json` is wrong.
+    Use the organization ID from the Console's Settings → Organization, not claude.ai's.
+  - **`jwt_audience_mismatch`:** the rule's Expected audience is blank or isn't the JumpCloud
+    client ID.
+  - **Other reasons:** the issuer URL doesn't match exactly (trailing slash), the expression
+    doesn't match the user's email, the service account isn't in the rule's workspace, or the ID
+    token lives longer than the issuer's maximum (1 hour by default).
 - **"Your organisation's Claude account has run out of credit":** billing, or the workspace's
   spend limit.
 - **"Your JumpCloud sign-in has expired":** JumpCloud ended the session (the refresh token

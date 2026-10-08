@@ -29,7 +29,8 @@ sign-in for a short-lived Claude token (see `AnthropicBackend.getClient()`).
    another request. Otherwise `finish()` marks the reply done, with a notice from `stopNotice()`
    if it was refused or cut short.
 7. If anything fails, `classifyError()`, `errorMessage()` and `isRetryable()` decide what the chat
-   shows and whether it offers Retry.
+   shows and whether it offers Retry, and `errorReference()` adds Anthropic's request ID when there
+   is one.
 
 ## `src/main/claude/model.ts`: what every request uses
 
@@ -480,9 +481,9 @@ Any error from steps 3 or 4 fails the chat request before it is sent and comes o
 ## `src/main/claude/errors.ts`: what went wrong
 
 Turns any error from a chat request into one of a fixed set of kinds, and each kind into a message
-for the chat. Only `ChatSession.runTurn()` uses it. The full error still goes to the log through
-`onError` (printed in the terminal in dev runs, see `index.ts`); the user sees only the plain
-English.
+for the chat, plus Anthropic's request ID when the error has one. Only `ChatSession.runTurn()` uses
+it. The full error still goes to the log through `onError` (printed in the terminal in dev runs,
+see `index.ts`); the user sees only the plain English and the reference.
 
 By the time an error gets here, the SDK has already retried temporary failures that happened before
 the reply started arriving (no connection, and statuses 408, 409, 429 and 5xx), twice by default.
@@ -607,8 +608,14 @@ Sorts a failed token swap by the HTTP status Anthropic returned.
 - `if (status === null) return 'network'`: No status means the swap never got an answer (it's also
   how the SDK reports a problem it finds before sending, such as an address that isn't `https`).
 - `return 'not-allowed'`: A 400, 401 or 403: Anthropic got the ID token and said no, usually
-  because the federation rule doesn't accept this user. Only IT can fix that, so the message says
-  to contact them.
+  because the federation rule doesn't accept it. Only IT can fix that, so the message says to
+  contact them, and it carries the request ID (see `errorReference()`).
+
+In practice, `'not-allowed'` has appeared because the Console's federation rule had no **Expected
+audience**. An ID token's `aud` (audience) claim names who the token is for, and a JumpCloud ID
+token's audience is the app's JumpCloud client ID. With no Expected audience set, Anthropic requires
+`aud` to be `https://api.anthropic.com`, so every swap is refused. The fix is to set the rule's
+Expected audience to the JumpCloud client ID.
 
 ### `isRetryable()`
 
@@ -680,6 +687,43 @@ The text shown under a failed reply, one per kind.
   notice that depends on whether any text arrived. It's here because the `Record` needs every kind.
 - `'not-found'`: The model is the only thing a chat request names that could be missing, so the
   message names it (`CLAUDE_MODEL_NAME`).
+- `'not-allowed'`: Shown when Anthropic refuses the swap. `runTurn()` adds the request ID after
+  it, so IT can look up the refused attempt.
+
+### `errorReference()`
+
+<!-- code: apps/desktop/src/main/claude/errors.ts#errorReference -->
+
+[`src/main/claude/errors.ts`, lines 90–98](../../apps/desktop/src/main/claude/errors.ts#L90-L98)
+
+```ts
+/**
+ * Anthropic's ID for the failed request, if it has one. Shown with the error so IT can find the
+ * attempt (for a refused sign-in swap, in the Claude Console's Authentication history).
+ */
+export function errorReference(error: unknown): string | undefined {
+  if (error instanceof WorkloadIdentityError) return error.requestId ?? undefined
+  if (error instanceof Anthropic.APIError) return error.requestID ?? undefined
+  return undefined
+}
+```
+
+<!-- /code -->
+
+Anthropic's ID for the failed request, if the error carries one. `ChatSession.runTurn()` shows it
+after the message, as "(Reference: …)". The user can pass it to IT, who can find that exact attempt
+on Anthropic's side: for a refused token swap, in the Claude Console's Authentication history,
+which has more detail on why it was refused.
+
+- `error.requestId ?? undefined`: A failed token swap (`WorkloadIdentityError`) keeps the
+  `Request-Id` header from Anthropic's answer. It is `null` when there was no answer, and `??` turns
+  that into `undefined` so the function has one "none" value.
+- `error.requestID ?? undefined`: Any error the Claude API answered (`APIError`) keeps its
+  `request-id` header. The two SDK classes spell the field differently (`requestId` and
+  `requestID`).
+- `return undefined`: Everything else never reached Anthropic, for example the sign-in errors
+  (which arrive wrapped in a plain `AnthropicError`). A connection failure is an `APIError` with no
+  ID, so the line above returns `undefined` for it.
 
 ## `src/main/claude/ChatSession.ts`: one conversation
 
@@ -1066,7 +1110,7 @@ private startTurn(reply: ChatMessage): void {
 
 <!-- code: apps/desktop/src/main/claude/ChatSession.ts#ChatSession.runTurn -->
 
-[`src/main/claude/ChatSession.ts`, lines 126–181](../../apps/desktop/src/main/claude/ChatSession.ts#L126-L181)
+[`src/main/claude/ChatSession.ts`, lines 126–185](../../apps/desktop/src/main/claude/ChatSession.ts#L126-L185)
 
 ```ts
 private async runTurn(reply: ChatMessage, controller: AbortController): Promise<void> {
@@ -1122,7 +1166,11 @@ private async runTurn(reply: ChatMessage, controller: AbortController): Promise<
     }
     this.deps.onError?.(error)
     const retryable = !keptPartial && isRetryable(kind)
-    this.finish(reply, 'error', errorMessage(kind), retryable)
+    const reference = errorReference(error)
+    const notice = reference
+      ? `${errorMessage(kind)} (Reference: ${reference})`
+      : errorMessage(kind)
+    this.finish(reply, 'error', notice, retryable)
   }
 }
 ```
@@ -1175,12 +1223,16 @@ throws; every failure becomes a status and a notice on the reply.
 - `this.deps.onError?.(error)`: The full error goes to the log. `?.` calls it only if it was given.
 - `const retryable = !keptPartial && isRetryable(kind)`: Retry is offered only when nothing from
   this reply went into the history and the problem may be temporary.
+- `const reference = errorReference(error)`: Anthropic's request ID for the failed request, if
+  there is one (see `errorReference()`).
+- `const notice = reference`: The notice is the plain-English message from `errorMessage()`, with
+  "(Reference: …)" and the ID added after it when there is one, so the user can pass it to IT.
 
 ### `ChatSession.add()` and `ChatSession.finish()`
 
 <!-- code: apps/desktop/src/main/claude/ChatSession.ts#ChatSession.add,finish -->
 
-[`src/main/claude/ChatSession.ts`, lines 183–198](../../apps/desktop/src/main/claude/ChatSession.ts#L183-L198)
+[`src/main/claude/ChatSession.ts`, lines 187–202](../../apps/desktop/src/main/claude/ChatSession.ts#L187-L202)
 
 ```ts
 private add(fields: Omit<ChatMessage, 'id'>): ChatMessage {
@@ -1216,7 +1268,7 @@ private finish(
 
 <!-- code: apps/desktop/src/main/claude/ChatSession.ts#ChatSession.scheduleEmit,emit -->
 
-[`src/main/claude/ChatSession.ts`, lines 200–219](../../apps/desktop/src/main/claude/ChatSession.ts#L200-L219)
+[`src/main/claude/ChatSession.ts`, lines 204–223](../../apps/desktop/src/main/claude/ChatSession.ts#L204-L223)
 
 ```ts
 /** Streamed text arrives in many small pieces; batch them into fewer UI updates. */
@@ -1259,7 +1311,7 @@ ms.
 
 <!-- code: apps/desktop/src/main/claude/ChatSession.ts#stopNotice -->
 
-[`src/main/claude/ChatSession.ts`, lines 222–226](../../apps/desktop/src/main/claude/ChatSession.ts#L222-L226)
+[`src/main/claude/ChatSession.ts`, lines 226–230](../../apps/desktop/src/main/claude/ChatSession.ts#L226-L230)
 
 ```ts
 function stopNotice(stopReason: string | null): string | undefined {
@@ -1283,7 +1335,7 @@ gets no notice.
 
 <!-- code: apps/desktop/src/main/claude/ChatSession.ts#DECLINED_REASONING,replayContent -->
 
-[`src/main/claude/ChatSession.ts`, lines 228–250](../../apps/desktop/src/main/claude/ChatSession.ts#L228-L250)
+[`src/main/claude/ChatSession.ts`, lines 232–254](../../apps/desktop/src/main/claude/ChatSession.ts#L232-L254)
 
 ```ts
 /** Reasoning that belongs to a model that declined, so it isn't sent back after a fallback. */
@@ -1349,7 +1401,7 @@ first, so nothing comes before it and nothing is dropped.
 
 <!-- code: apps/desktop/src/main/claude/ChatSession.ts#runTools -->
 
-[`src/main/claude/ChatSession.ts`, lines 252–274](../../apps/desktop/src/main/claude/ChatSession.ts#L252-L274)
+[`src/main/claude/ChatSession.ts`, lines 256–278](../../apps/desktop/src/main/claude/ChatSession.ts#L256-L278)
 
 ```ts
 /** Runs every tool call in a reply and returns the results to send back. */

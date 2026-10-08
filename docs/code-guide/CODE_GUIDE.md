@@ -189,7 +189,7 @@ All in `apps/desktop/`.
 
 - `package.json`: The desktop app's own package. `productName` ("Desktop Assist") becomes the app's name and its `%APPDATA%` folder. `main` points Electron at the built main process. Scripts: `dev`, `build`, `typecheck`, `lint`, `test`, `dist` (build the installer). Every library is a `devDependency` because the build bundles them; the installer ships no `node_modules`. `electron` is pinned to an exact version because the installer builder requires it.
 - `electron.vite.config.ts`: Build config for electron-vite, which compiles the three parts (main, preload, renderer). Defines the import shortcuts `@shared` → `src/shared` and `@tenant` → `tenants/<TENANT>`, turns on React and Tailwind for the renderer, and minifies the renderer.
-- `electron-builder.cjs`: Installer config: app ID, product name, include only the built `out/` folder, use the tenant's `logo.png` as the `.exe` icon, and build a per-user one-click NSIS installer (`Desktop Assist-Setup-<version>.exe`) into `dist/`. It's JavaScript rather than YAML so the icon can follow `TENANT`.
+- `electron-builder.cjs`: Installer config: app ID, product name, include only the built `out/` folder, use the tenant's `logo.png` as the `.exe` icon, and build a per-user one-click NSIS installer (`Desktop Assist-Setup-<version>.exe`) into `dist/`. It's JavaScript rather than YAML so the icon can follow `TENANT`. `extraMetadata.name` makes the install folder `desktop-assist` (otherwise it would be named after the npm workspace).
 - `tsconfig.json`: Points TypeScript at the two configs below.
 - `tsconfig.node.json`: TypeScript settings for code that runs in Node: main, preload, shared, tests and config files. Strict mode on.
 - `tsconfig.web.json`: TypeScript settings for the renderer (browser code with React/JSX).
@@ -249,3 +249,4 @@ Run with `npm test`. Each file tests code that doesn't need a real window or a r
 - `secretStore.test.ts`: Encrypted save and load, unreadable files, refusing to save without encryption, clear.
 - `claudeHelpers.test.ts`: Error classification (including sign-in errors wrapped by the SDK and failed swaps), what can be retried, the system prompt, and image scaling.
 - `codeGuide.test.ts`: The code shown in the walkthrough pages matches the source (runs `npm run docs:check`).
+- `diagnostics.test.ts`: The ID token summary (the claims a federation rule checks, never the token), describing errors for the log, writing the log file and starting a new one when it gets large.

@@ -242,21 +242,27 @@ Federation (§4, §5).
 - **Config**: `tenant.json` gains `signIn` (issuer, client ID, redirect port) and `claudeAccess` (organization, federation rule, service account and optional workspace IDs). None of them are secret. Dev runs can override them from a file named by `DESKTOP_ASSIST_DEV_CONFIG`.
 - **Focus ring**: Keyboard focus is now purple everywhere, instead of following the Windows accent colour.
 - **Icons**: The tray icon and the `.exe` icon (also used for the Start menu shortcut and the installer) are the bubble's logo.
-- **Diagnostics**: In `npm run dev`, the terminal prints the full details of any sign-in or Claude error (status codes, request IDs).
+- **Diagnostics**: Errors show Anthropic's request reference, and the full details go to `%APPDATA%\Desktop Assist\logs\desktop-assist.log` (and the terminal in dev runs). When Anthropic refuses the sign-in swap, the log also records a summary of the ID token that was sent (issuer, audience, email, lifetime, signing key; never the token), to compare with the federation rule.
 
-Tested with unit tests (153, including the sign-in manager, the loopback listener and the fallback rule) and an
+Tested with unit tests (159, including the sign-in manager, the loopback listener and the fallback rule) and an
 end-to-end run of the real app (47 checks) against a local mock JumpCloud and a mock Anthropic
 token exchange. The mock JumpCloud does PKCE, rotating refresh tokens, and RS256 ID tokens with a
 single-use `jti`. The mock exchange checks signatures, audience and replays. The run covers first
 sign-in, chat, token renewal after a rejection, restart, starting offline and Retry, IT revoking
 the sign-in, Log out, a refused sign-in and Cancel.
 
-Checked against the real services, up to the sign-in itself: JumpCloud's discovery document,
-JumpCloud accepting the client ID and the exact redirect URI (and rejecting a wrong one), the app
-building a sign-in address that reaches JumpCloud's login page, and Anthropic's token endpoint
-recognising the organization, rule and service account IDs (a fake token gets the expected
-"Authentication failed", a malformed rule ID a 400). The real sign-in needs a person at the
-browser, so it's the last step left to try.
+Working end to end with the real services: signed in with JumpCloud, and the installed app
+answers through Claude (tested with the mouse and keyboard on the installed build). Getting there
+needed two setup fixes, now in `JUMPCLOUD_SETUP.md`:
+
+- `tenant.json` had the claude.ai organization ID; it must be the Console's (Settings →
+  Organization). With the wrong one, Anthropic can't find the rule and records nothing.
+- The federation rule had no Expected audience. Anthropic then only accepts tokens whose audience
+  is `https://api.anthropic.com`, which a JumpCloud ID token never has; it's now set to the
+  JumpCloud client ID (deny reason `jwt_audience_mismatch`).
+
+The installer now installs to `AppData\Local\Programs\desktop-assist` instead of
+`@desktop-assistdesktop` (an upgrade stays in the folder of the version it replaces).
 
 Fixed while writing the code walkthrough: replies are sent back the way the API requires after a
 server-side fallback; the panel knew the saved corner only after start-up finished, so it could lay
