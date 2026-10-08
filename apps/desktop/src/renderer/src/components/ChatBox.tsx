@@ -11,16 +11,16 @@ import { MessageList } from './MessageList'
 /**
  * The card beside the bubble, on the side facing the middle of the screen. It's anchored at the
  * bubble's edge (bottom in a bottom corner, top in a top corner), so it starts as just the text
- * box and grows away from that edge as the conversation gets longer, then scrolls. When there's
- * no working API key, `keyPrompt` is shown instead of the chat.
+ * box and grows away from that edge as the conversation gets longer, then scrolls. When nobody is
+ * signed in, `signInPrompt` is shown instead of the chat.
  */
 export function ChatBox(props: {
   corner: Corner
   open: boolean
   toast: ToastMessage | null
-  /** Replaces the chat (the API key form), or null to show the chat. */
-  keyPrompt: ReactNode
-  /** A line above the text box, e.g. "Checking your API key…". */
+  /** Replaces the chat (the JumpCloud sign-in), or null to show the chat. */
+  signInPrompt: ReactNode
+  /** A line above the text box, e.g. "Checking your sign-in…". */
   banner: ReactNode
   messages: ChatMessage[]
   busy: boolean
@@ -71,7 +71,7 @@ export function ChatBox(props: {
         </div>
       )}
 
-      {props.keyPrompt ?? (
+      {props.signInPrompt ?? (
         <>
           {props.messages.length > 0 && (
             <MessageList messages={props.messages} onRetry={props.onRetry} onCopy={props.onCopy} />

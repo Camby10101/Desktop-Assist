@@ -1,12 +1,14 @@
 # Desktop Assist: Plan & Tech Stack
 
-Status: **Milestones 0 (Foundation), 1 (Chat with Claude) and 2.1 (bubble fixes) complete**. Next up: M2 (JumpCloud sign-in).
-Last updated 2026-10-08.
+Status: **Milestones 0 (Foundation), 1 (Chat with Claude), 2.1 (bubble fixes) and 3 (JumpCloud
+sign-in) complete**. M3 works end to end against test servers; it needs the JumpCloud app and the
+Claude Console set up (see [JUMPCLOUD_SETUP.md](JUMPCLOUD_SETUP.md)) before real users can sign in.
+Next up: M4 (Ship). Last updated 2026-10-08.
 
 A Windows desktop assistant that runs in the background, shows a small circular company logo
 in the bottom-right corner of the screen, and opens a panel when clicked. It's built for Morse
 Micro first, with branding kept in config so another business can use it later. Claude chat
-(M1) and JumpCloud sign-in (M2) build on top of the foundation laid in M0.
+(M1) and JumpCloud sign-in (M3) build on top of the foundation laid in M0.
 
 ---
 
@@ -48,33 +50,34 @@ Micro first, with branding kept in config so another business can use it later. 
 
 There are two separate Claude products, and a custom app can only use one of them:
 
-|                          | claude.ai (the chat app, Enterprise/Team seats)                                                                                                             | Claude API (Claude Console / Platform)      |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
-| SSO via JumpCloud        | Yes, for the claude.ai website and desktop app                                                                                                              | Yes, but through _our_ app's login (see §5) |
-| Usable from a custom app | **No.** There is no public API to drive a user's claude.ai account, and Anthropic does not allow third-party apps to use claude.ai logins without approval. | **Yes.** This is what it's for.             |
-| Billing                  | Per-seat subscription                                                                                                                                       | Per token, usually separate from seats      |
+|                          | claude.ai (the chat app, Enterprise/Team seats)                                                                                                             | Claude API (Claude Console / Platform)    |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| SSO via JumpCloud        | Yes, for the claude.ai website and desktop app                                                                                                              | Yes, through _our_ app's sign-in (see §5) |
+| Usable from a custom app | **No.** There is no public API to drive a user's claude.ai account, and Anthropic does not allow third-party apps to use claude.ai logins without approval. | **Yes.** This is what it's for.           |
+| Billing                  | Per-seat subscription                                                                                                                                       | Per token, usually separate from seats    |
 
-**So Desktop Assist will use the Claude API.** The user's "own Claude" means their JumpCloud
-identity is checked on every request. Their claude.ai chat history and projects are **not**
-available to the app.
+**So Desktop Assist uses the Claude API.** The user's "own Claude" means their JumpCloud
+identity is checked every time the app gets Claude access (see §5). Their claude.ai chat history
+and projects are **not** available to the app.
 
 ## 3. Tech stack
 
-| Layer           | Choice                                                         | Notes                                                                               |
-| --------------- | -------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| Language        | **TypeScript 6**                                               | TS 7 (the native compiler) isn't supported by typescript-eslint yet                 |
-| Desktop shell   | **Electron 44**                                                | Transparent, frameless, always-on-top windows; tray; login items; `desktopCapturer` |
-| Build / dev     | **electron-vite 5** + **Vite 7**                               | Hot-reload dev loop. electron-vite 5 doesn't support Vite 8 yet                     |
-| Packaging       | **electron-builder**                                           | Unsigned NSIS installer in M0. MSI, signing and auto-update come in M4              |
-| UI              | **React 19** + **Tailwind CSS 4** + **lucide-react** icons     | Follows Windows light/dark mode                                                     |
-| Validation      | **zod 4**                                                      | Every IPC payload, saved file and tenant config is checked at runtime               |
-| Tests           | **Vitest**                                                     | Pure logic (layout, bounce physics, autosave, screenshot files, tenant config)      |
-| Quality         | ESLint 10 + typescript-eslint + Prettier                       |                                                                                     |
-| Repo            | npm workspaces (`apps/*`)                                      | `apps/gateway` and `packages/shared` are added when the backend arrives             |
-| _M1:_ Claude    | `@anthropic-ai/sdk`, streaming Messages API, `claude-opus-5-5` | Effort set explicitly; server-side refusal fallbacks; prompt caching                |
-| _M1:_ rendering | react-markdown + remark-gfm + Shiki                            |                                                                                     |
-| _M2:_ sign-in   | openid-client (JumpCloud OIDC, PKCE) + Electron `safeStorage`  |                                                                                     |
-| _M3:_ gateway   | Hono + jose, in a container                                    | Recommended backend (§4)                                                            |
+| Layer               | Choice                                                                | Notes                                                                               |
+| ------------------- | --------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Language            | **TypeScript 6**                                                      | TS 7 (the native compiler) isn't supported by typescript-eslint yet                 |
+| Desktop shell       | **Electron 44**                                                       | Transparent, frameless, always-on-top windows; tray; login items; `desktopCapturer` |
+| Build / dev         | **electron-vite 5** + **Vite 7**                                      | Hot-reload dev loop. electron-vite 5 doesn't support Vite 8 yet                     |
+| Packaging           | **electron-builder**                                                  | Unsigned NSIS installer for now. MSI, signing and auto-update come in M4            |
+| UI                  | **React 19** + **Tailwind CSS 4** + **lucide-react** icons            | Follows Windows light/dark mode                                                     |
+| Validation          | **zod 4**                                                             | Every IPC payload, saved file and tenant config is checked at runtime               |
+| Tests               | **Vitest**                                                            | Pure logic (layout, bounce physics, autosave, screenshot files, tenant config)      |
+| Quality             | ESLint 10 + typescript-eslint + Prettier                              |                                                                                     |
+| Repo                | npm workspaces (`apps/*`)                                             | `apps/gateway` and `packages/shared` are added when the backend arrives             |
+| _M1:_ Claude        | `@anthropic-ai/sdk`, streaming Messages API, `claude-opus-5-5`        | Effort set explicitly; server-side refusal fallbacks; prompt caching                |
+| _M1:_ rendering     | react-markdown + remark-gfm + Shiki                                   |                                                                                     |
+| _M3:_ sign-in       | openid-client 6 (JumpCloud OIDC, PKCE) + Electron `safeStorage`       | Refresh token encrypted with Windows DPAPI                                          |
+| _M3:_ Claude access | Anthropic SDK `oidcFederationProvider` (Workload Identity Federation) | Swaps the JumpCloud ID token for a short-lived Claude token; no API key             |
+| _Later:_ gateway    | Hono + jose, in a container                                           | Optional, for per-user audit and quotas (§4)                                        |
 
 Considered and rejected: **Tauri**, which has no official Anthropic SDK, needs a Rust toolchain,
 and has rougher transparent-window behaviour on WebView2. **.NET WinUI** is Windows-only.
@@ -111,27 +114,51 @@ and has rougher transparent-window behaviour on WebView2. **.NET WinUI** is Wind
   `window.open` blocked. Every file path from a renderer is checked to be inside the screenshots
   folder before it's opened.
 
-### Later: Claude backend (M3)
+### Claude access (M3): direct, no server
 
-**Option A: Gateway (recommended).** The desktop sends a JumpCloud token to a small Morse-hosted
-Hono service. The service verifies the token and calls Claude using Workload Identity Federation
-(no static key). No Anthropic credential is ever on a laptop. It enables per-user usage, quotas,
-an audit log and multi-tenant support. It's a policy proxy for the Messages API, and the tool loop
-stays on the desktop.
-**Option B: Direct.** The desktop exchanges the JumpCloud ID token for a Claude API token via
-WIF. No infrastructure, but every user shares one service-account identity. Needs a spike first.
-The desktop talks to a `ChatBackend` interface, so it can switch between the two.
+Two designs were considered:
 
-## 5. Sign-in design (M2): "log in once, stay logged in"
+- **Option A: Gateway.** The desktop sends a JumpCloud token to a small Morse-hosted service,
+  which checks it and calls Claude. Allows per-user usage, quotas and an audit log, but needs
+  hosting.
+- **Option B: Direct (built in M3).** The desktop swaps the user's JumpCloud ID token for a
+  short-lived Claude API token using Anthropic's **Workload Identity Federation** (WIF), then
+  calls Claude itself. No server to run and no API key anywhere. Anthropic checks the ID token
+  against a federation rule (issuer, audience, an email condition) on every swap. The trade-off:
+  at Anthropic, all usage shows as one service account, so per-user reporting would need the
+  gateway.
 
-1. OIDC **Authorization Code + PKCE** as a JumpCloud _public client_ ("Public (None PKCE)"). It
-   uses the **system browser** with a loopback or custom-scheme redirect (RFC 8252). The PC is
-   already signed in to JumpCloud, so this is near-instant.
-2. Refresh token (`offline_access`) encrypted with `safeStorage` (Windows DPAPI). Access tokens
-   stay in memory only. Refresh silently at launch and before expiry. JumpCloud refresh tokens
-   last up to 90 days.
-3. If refresh fails, the panel shows _Sign in with JumpCloud_. **Log out** is added to Settings at
-   this milestone. It revokes the token and deletes local tokens.
+```
+ Desktop Assist ── 1. sign in (browser, PKCE) ──────────▶ JumpCloud
+                ◀─ refresh token (saved, DPAPI) + ID token
+                ── 2. POST /v1/oauth/token (ID token) ──▶ Anthropic: the federation
+                ◀─ Claude access token (short-lived)        rule checks the ID token
+                ── 3. /v1/messages, Bearer token ───────▶ Claude
+```
+
+The desktop talks to a `ChatBackend` interface, so a gateway can still be added later.
+
+## 5. Sign-in design (M3): "log in once, stay logged in"
+
+1. OIDC **Authorization Code + PKCE** as a JumpCloud _public client_ ("Public (None PKCE)"), so
+   there's no client secret in the app. It uses the **system browser** and a **loopback redirect**
+   (RFC 8252): the app listens on `http://127.0.0.1:47621/callback` only while a sign-in is in
+   progress. The PC is usually already signed in to JumpCloud in the browser, so this is
+   near-instant. State and nonce are checked, and openid-client validates the ID token.
+2. The **refresh token** (`offline_access`) is saved encrypted with `safeStorage` (Windows DPAPI)
+   in `%APPDATA%\Desktop Assist\jumpcloud-session.bin`. Nothing else is saved. At every start the
+   app renews it silently. JumpCloud may hand back a new refresh token each time; the newest is
+   saved.
+3. **Claude access.** Anthropic accepts each ID token only once (its `jti` is single-use), so
+   every swap uses a new one: the unused ID token from signing in or starting up first, then one
+   from a refresh. Refreshes run one at a time, so a refresh token is never used twice. The
+   Anthropic SDK keeps the Claude token, gets a new one shortly before it expires, and retries once
+   if Anthropic rejects it. No token ever reaches the UI.
+4. If JumpCloud refuses the saved sign-in (expired, revoked, user removed), the panel shows
+   _Sign in with JumpCloud_ with an explanation. The conversation is kept, so Retry works after
+   signing back in. If JumpCloud can't be reached, the sign-in is kept and a banner offers Retry.
+   **Log out** in Settings revokes the refresh token with JumpCloud, deletes the saved file and
+   clears the chat.
 
 ## 6. Repo layout
 
@@ -142,13 +169,14 @@ Desktop-Assist/
 │  ├─ electron.vite.config.ts   TENANT=<id> picks tenants/<id> at build time
 │  ├─ electron-builder.yml
 │  ├─ src/main/                 index (lifecycle), bubble/ (windows, layout, bounce, controller),
-│  │                            actions, notes/, screenshots/, settings, tray, ipc
+│  │                            auth/ (JumpCloud sign-in), claude/ (chat), storage/, actions,
+│  │                            notes/, screenshots/, settings, tray, ipc
 │  ├─ src/preload/              typed contextBridge API (window.assist)
 │  ├─ src/renderer/             React views: BubbleView, PanelView (+ components)
 │  ├─ src/shared/               IPC contract, action registry, UI geometry constants, types
 │  └─ tests/                    Vitest unit tests
-├─ tenants/morse-micro/         tenant.json (names, colours, enabled actions) + logo.png
-└─ docs/PLAN.md
+├─ tenants/morse-micro/         tenant.json (names, colours, actions, sign-in IDs) + logo.png
+└─ docs/                        PLAN.md, CODE_GUIDE.md, JUMPCLOUD_SETUP.md (for IT)
 ```
 
 ## 7. Milestone 0 spec
@@ -175,15 +203,15 @@ Desktop-Assist/
 
 ## 7b. Milestone 1 spec: Chat with Claude
 
-| Feature           | Behaviour                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **API key**       | Uses the user's own Claude API key until JumpCloud sign-in (M2/M3) replaces it. **Every time the app starts it tests the saved key** (a free call that fetches the model's details). If there's no key, or Anthropic rejects it, the chat box asks for one before anything else. A new key is checked with Anthropic first and saved only if it works, encrypted with Windows DPAPI (`%APPDATA%\Desktop Assist\claude-api-key.bin`). It never reaches the UI. If Anthropic can't be reached at startup, the key is kept, chat stays available, and a banner offers Retry. A key revoked mid-conversation brings the key form back with an explanation. Settings → Change API key also offers Forget saved key. |
-| **Chat**          | The text box becomes the chat input. Enter sends; Shift+Enter adds a line. Replies stream in as Markdown with highlighted code; links open in the browser. "Thinking…" shows until text arrives. Stop cancels a reply and keeps what arrived. Each reply has Copy. The card grows upward to 520px, then scrolls.                                                                                                                                                                                                                                                                                                                                                                                               |
-| **Screenshots**   | Attached screenshots are sent with the next message, scaled to at most 1568px and JPEG-encoded, and shown as thumbnails on the sent message.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| **Errors**        | Plain-English messages for offline, busy, rate limits, no credit, a declined request, and a reply cut off at the length limit. Temporary errors get Retry.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| **Settings**      | Response style: Fast (default) / Balanced / Thorough (the API's `effort`). New conversation replaces Clear text box.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| **Request shape** | `claude-opus-5-5`, streaming, adaptive thinking (always on), effort as chosen, server-side refusal fallback (`fallbacks: "default"`), prompt caching, a fixed system prompt plus the tenant's `systemPrompt`. History is append-only, with every reply's content (including thinking) sent back unchanged. A tool-use loop is in place, with no tools registered yet.                                                                                                                                                                                                                                                                                                                                          |
-| **History**       | Kept for the current session; New conversation or quitting clears it. The unsent draft still survives restarts.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Feature           | Behaviour                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **API key**       | _Replaced by JumpCloud sign-in in M3, which also deletes the saved key file._ Used the user's own Claude API key. **Every time the app starts it tests the saved key** (a free call that fetches the model's details). If there's no key, or Anthropic rejects it, the chat box asks for one before anything else. A new key is checked with Anthropic first and saved only if it works, encrypted with Windows DPAPI (`%APPDATA%\Desktop Assist\claude-api-key.bin`). It never reaches the UI. If Anthropic can't be reached at startup, the key is kept, chat stays available, and a banner offers Retry. A key revoked mid-conversation brings the key form back with an explanation. Settings → Change API key also offers Forget saved key. |
+| **Chat**          | The text box becomes the chat input. Enter sends; Shift+Enter adds a line. Replies stream in as Markdown with highlighted code; links open in the browser. "Thinking…" shows until text arrives. Stop cancels a reply and keeps what arrived. Each reply has Copy. The card grows upward to 520px, then scrolls.                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| **Screenshots**   | Attached screenshots are sent with the next message, scaled to at most 1568px and JPEG-encoded, and shown as thumbnails on the sent message.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| **Errors**        | Plain-English messages for offline, busy, rate limits, no credit, a declined request, and a reply cut off at the length limit. Temporary errors get Retry.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| **Settings**      | Response style: Fast (default) / Balanced / Thorough (the API's `effort`). New conversation replaces Clear text box.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| **Request shape** | `claude-opus-5-5`, streaming, adaptive thinking (always on), effort as chosen, server-side refusal fallback (`fallbacks: "default"`), prompt caching, a fixed system prompt plus the tenant's `systemPrompt`. History is append-only, with every reply's content (including thinking) sent back unchanged. A tool-use loop is in place, with no tools registered yet.                                                                                                                                                                                                                                                                                                                                                                            |
+| **History**       | Kept for the current session; New conversation or quitting clears it. The unsent draft still survives restarts.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 
 | **Drag & snap** | Drag the bubble anywhere, including onto another monitor. On release it glides to the nearest corner of the display it was dropped on. A short press is still a click. The panel mirrors itself so it always opens toward the middle of the screen: in a left corner the chat opens to the right, and in a top corner the icons drop below the bubble and the chat grows downward. The corner and display are remembered across restarts. If that display is unplugged, the bubble moves to the same corner of the main display. Bounce starts from, stays on, and returns to the bubble's current display and corner. |
 
@@ -201,27 +229,54 @@ monitor at different scaling (21 checks).
 Checked with real mouse input (hovering 6/6, the screenshot → folder → bubble sequence), plus the
 unit tests, the drag test and screen captures of the borders.
 
+## 7d. Milestone 3 spec: JumpCloud sign-in
+
+The API key is gone. Users sign in with JumpCloud, and Claude is reached through Workload Identity
+Federation (§4, §5).
+
+| Feature               | Behaviour                                                                                                                                                                                                                                                                                            |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Sign in**           | While nobody is signed in, the chat box shows **Sign in with JumpCloud**. It opens JumpCloud in the default browser. When the browser comes back, the chat box reopens, ready to chat. While waiting it says "Finish signing in in your browser", with **Cancel**. Sign-in gives up after 5 minutes. |
+| **Stay signed in**    | The sign-in is saved encrypted and renewed silently at every start ("Checking your JumpCloud sign-in…"). There's nothing to do until JumpCloud ends it.                                                                                                                                              |
+| **Offline**           | If JumpCloud can't be reached at start, the sign-in is kept, the chat stays usable (sending tries again) and a banner offers **Retry**.                                                                                                                                                              |
+| **Expired / revoked** | The chat box shows the sign-in again with "Your JumpCloud sign-in has expired". The conversation is kept; after signing back in, **Retry** resends the message that failed.                                                                                                                          |
+| **Refused**           | If JumpCloud refuses (e.g. the user isn't assigned to the app), its reason is shown. If Anthropic's federation rule refuses the user: "Your JumpCloud account isn't set up to use Claude yet. Contact IT."                                                                                           |
+| **Settings**          | "Signed in as _name_" and **Log out**, which revokes the sign-in with JumpCloud, deletes it from this PC and clears the chat. Change API key is gone.                                                                                                                                                |
+| **Not set up**        | Until IT fills in `tenant.json`, the chat box says sign-in isn't set up and lists the missing settings. Nothing is contacted.                                                                                                                                                                        |
+| **Config**            | `tenant.json` gains `signIn` (issuer, client ID, redirect port) and `claudeAccess` (organization, federation rule, service account and optional workspace IDs). None of them are secret. Dev runs can override them from a file named by `DESKTOP_ASSIST_DEV_CONFIG`.                                |
+| **Focus ring**        | Keyboard focus is now purple everywhere, instead of following the Windows accent colour.                                                                                                                                                                                                             |
+
+Tested with unit tests (147, including the sign-in manager and the loopback listener) and an
+end-to-end run of the real app (47 checks) against a local mock JumpCloud and a mock Anthropic
+token exchange. The mock JumpCloud does PKCE, rotating refresh tokens, and RS256 ID tokens with a
+single-use `jti`. The mock exchange checks signatures, audience and replays. The run covers first
+sign-in, chat, token renewal after a rejection, restart, starting offline and Retry, IT revoking
+the sign-in, Log out, a refused sign-in and Cancel. No real JumpCloud or Anthropic account was used.
+
 ## 8. Milestones
 
-| #          | Milestone            | Done when                                                                                                                                            |
-| ---------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **0** ✅   | **Foundation**       | Everything in §7 works in `npm run dev` and in the unsigned installer. Unit tests and lint pass.                                                     |
-| **1** ✅   | **Chat with Claude** | See §7b.                                                                                                                                             |
-| **2.1** ✅ | **Bubble fixes**     | See §7c.                                                                                                                                             |
-| 2          | JumpCloud sign-in    | PKCE login, encrypted refresh token, silent refresh, signed-out state, Log out in Settings                                                           |
-| 3          | Backend              | Gateway (A) or direct WIF (B) wired to the JumpCloud identity, replacing personal API keys                                                           |
-| 4          | Ship                 | Code signing, MSI, auto-update, CI (GitHub Actions), pilot deployment through JumpCloud                                                              |
-| later      |                      | Claude-requested screenshots (as a tool), hiding during full-screen apps, saved history, company integrations, tenant config from the gateway, macOS |
+| #          | Milestone             | Done when                                                                                                                                          |
+| ---------- | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **0** ✅   | **Foundation**        | Everything in §7 works in `npm run dev` and in the unsigned installer. Unit tests and lint pass.                                                   |
+| **1** ✅   | **Chat with Claude**  | See §7b.                                                                                                                                           |
+| **2.1** ✅ | **Bubble fixes**      | See §7c.                                                                                                                                           |
+| **3** ✅   | **JumpCloud sign-in** | See §7d. Combines the earlier plan's M2 (sign-in) and M3 (backend), using the direct option (B).                                                   |
+| 4          | Ship                  | Code signing, MSI, auto-update, CI (GitHub Actions), pilot deployment through JumpCloud                                                            |
+| later      |                       | Claude-requested screenshots (as a tool), hiding during full-screen apps, saved history, company integrations, a gateway for per-user audit, macOS |
 
-## 9. What we need from admins (blocks M2–M4 only)
+## 9. What we need from admins
 
-- **JumpCloud admin:** a Custom OIDC app. Client authentication **Public (None PKCE)**; grant types
-  Authorization Code + Refresh Token; a loopback or custom-scheme redirect URI; scopes
-  `openid email profile offline_access` plus a groups claim; assigned to a user group. For the
-  gateway option, access token format **JWT**.
-- **Claude / Anthropic Console admin:** a workspace for Desktop Assist, plus a service account and
-  federation rule (for the gateway's cloud identity, or for the JumpCloud issuer under option B).
-- **Code-signing certificate** (e.g. Azure Trusted Signing). Unsigned installers trigger SmartScreen.
+Step-by-step instructions are in [JUMPCLOUD_SETUP.md](JUMPCLOUD_SETUP.md).
+
+- **JumpCloud admin (needed before M3 works for real):** a Custom OIDC app. Client authentication
+  **Public (None PKCE)**; grant types Authorization Code + Refresh Token; redirect URI
+  `http://127.0.0.1:47621/callback`; scopes `openid email profile offline_access`; assigned to the
+  user groups who should have Desktop Assist. It gives the **client ID**.
+- **Claude Console admin (needed before M3 works for real):** a workspace for Desktop Assist, a
+  service account with access to it, the JumpCloud issuer, and a federation rule for it. They
+  give the **organization, federation rule and service account IDs**.
+- **Code-signing certificate (M4)** (e.g. Azure Trusted Signing). Unsigned installers trigger
+  SmartScreen.
 
 ## 10. Decisions
 
@@ -233,15 +288,19 @@ unit tests, the drag test and screen captures of the borders.
 - Settings (M0) → Start with Windows, Open screenshots folder, Clear text box
 - Bounce → glides back to the corner when stopped
 - Close → quits immediately
-- M1 credentials → the user's own API key, tested at every start and asked for in the chat box
-  when missing or rejected
+- M1 credentials → the user's own API key (replaced in M3)
+- M3 credentials → JumpCloud sign-in, with Claude reached through Workload Identity Federation
+  directly from the app (option B, no server)
+- Expired sign-in → keep the conversation; Log out → clear it
 - Default response style → Fast (`low` effort)
 - Chat history → current session only (for now)
 
-**Open (needed before M3)**
+**Open**
 
-1. Gateway (A) vs direct (B). Can Morse host a small container service, and where?
-2. Does Morse have a Claude Console org/workspace for shared API usage?
+1. Does Morse have a Claude Console organization and workspace for Desktop Assist? (Needed to
+   finish the M3 setup.)
+2. Is one shared service account at Anthropic enough, or is per-user usage reporting needed
+   (which would mean adding the gateway)?
 3. Should chat history be saved across restarts later?
 
 ## 11. Notes

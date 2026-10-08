@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs'
-import { isErrno, writeFileAtomic } from '../storage/jsonFile'
+import { isErrno, writeFileAtomic } from './jsonFile'
 
-/** Encrypts the key at rest. In the app this is Electron's safeStorage (Windows DPAPI). */
+/** Encrypts secrets at rest. In the app this is Electron's safeStorage (Windows DPAPI). */
 export interface Encryptor {
   isAvailable(): boolean
   encrypt(text: string): Buffer
@@ -9,16 +9,16 @@ export interface Encryptor {
 }
 
 /**
- * Keeps the Claude API key in a file, encrypted so only the signed-in Windows user can read it.
- * The key never goes to the renderer; the UI only ever sees whether it works.
+ * Keeps one secret in a file, encrypted so only the signed-in Windows user can read it. Used for
+ * the JumpCloud sign-in (its refresh token), which never leaves the main process.
  */
-export class ApiKeyStore {
+export class SecretStore {
   constructor(
     private readonly filePath: string,
     private readonly encryptor: Encryptor,
   ) {}
 
-  /** The saved key, or null if there is none or it can't be decrypted (e.g. another user's file). */
+  /** The saved secret, or null if there is none or it can't be decrypted (e.g. another user's). */
   async load(): Promise<string | null> {
     let data: Buffer
     try {
@@ -34,11 +34,11 @@ export class ApiKeyStore {
     }
   }
 
-  async save(key: string): Promise<void> {
+  async save(secret: string): Promise<void> {
     if (!this.encryptor.isAvailable()) {
-      throw new Error("Windows can't encrypt the key on this PC, so it wasn't saved.")
+      throw new Error("Windows can't encrypt data on this PC, so the sign-in wasn't saved.")
     }
-    await writeFileAtomic(this.filePath, this.encryptor.encrypt(key))
+    await writeFileAtomic(this.filePath, this.encryptor.encrypt(secret))
   }
 
   async clear(): Promise<void> {

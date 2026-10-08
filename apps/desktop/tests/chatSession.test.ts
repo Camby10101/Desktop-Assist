@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ChatMessage, Effort } from '@shared/types'
 import type { ChatBackend, ReplyRequest } from '../src/main/claude/AnthropicBackend'
+import { SignInRequiredError } from '../src/main/auth/AuthManager'
 import { ChatSession, type ChatTool } from '../src/main/claude/ChatSession'
 
 type Step = (request: ReplyRequest) => Promise<Anthropic.Beta.BetaMessage>
@@ -10,14 +11,14 @@ type Step = (request: ReplyRequest) => Promise<Anthropic.Beta.BetaMessage>
 class FakeBackend implements ChatBackend {
   steps: Step[] = []
   calls: Array<Omit<ReplyRequest, 'onText' | 'signal'>> = []
-  async verifyKey(): Promise<void> {}
   reply(request: ReplyRequest): Promise<Anthropic.Beta.BetaMessage> {
-    const { apiKey, system, messages, tools, effort } = request
-    this.calls.push(structuredClone({ apiKey, system, messages, tools, effort }))
+    const { system, messages, tools, effort } = request
+    this.calls.push(structuredClone({ system, messages, tools, effort }))
     const step = this.steps.shift()
     if (!step) throw new Error('unexpected request')
     return step(request)
   }
+  reset(): void {}
 }
 
 const reply = (content: unknown[], stop_reason: string = 'end_turn'): Anthropic.Beta.BetaMessage =>
@@ -52,18 +53,16 @@ const apiError = (status: number) =>
   Anthropic.APIError.generate(status, undefined, 'x', new Headers())
 
 let backend: FakeBackend
-let key: string | null
+let signedIn: boolean
 let effort: Effort
 let shown: Map<string, ChatMessage>
 let resets: number
-let keyProblems: string[]
-let replied: number
 let session: ChatSession
 
 function makeSession(tools: ChatTool[] = []) {
   return new ChatSession({
     backend,
-    getApiKey: () => key,
+    canChat: () => signedIn,
     getEffort: () => effort,
     system: 'SYSTEM',
     tools,
@@ -72,27 +71,23 @@ function makeSession(tools: ChatTool[] = []) {
       resets++
       shown.clear()
     },
-    onKeyProblem: (kind) => keyProblems.push(kind),
-    onReplied: () => replied++,
     emitIntervalMs: 0,
   })
 }
 
 beforeEach(() => {
   backend = new FakeBackend()
-  key = 'sk-ant-test'
+  signedIn = true
   effort = 'low'
   shown = new Map()
   resets = 0
-  keyProblems = []
-  replied = 0
   session = makeSession()
 })
 
 const lastShown = () => [...shown.values()].at(-1)!
 
 describe('sending', () => {
-  it('streams the reply into the chat and sends the key, system prompt and effort', async () => {
+  it('streams the reply into the chat and sends the system prompt and effort', async () => {
     backend.steps.push(says('Hello there'))
     expect(session.send('Hi', [], [])).toBe('sent')
     expect(session.busy).toBe(true)
@@ -100,12 +95,7 @@ describe('sending', () => {
 
     expect(session.busy).toBe(false)
     expect(lastShown()).toMatchObject({ role: 'assistant', text: 'Hello there', status: 'done' })
-    expect(backend.calls[0]).toMatchObject({
-      apiKey: 'sk-ant-test',
-      system: 'SYSTEM',
-      effort: 'low',
-    })
-    expect(replied).toBe(1)
+    expect(backend.calls[0]).toMatchObject({ system: 'SYSTEM', effort: 'low' })
   })
 
   it('puts screenshots before the text in the user message', async () => {
@@ -138,15 +128,15 @@ describe('sending', () => {
     ])
   })
 
-  it('refuses while busy, when empty, and without a key', async () => {
+  it('refuses while busy, when empty, and when signed out', async () => {
     backend.steps.push(streamsUntilStopped(''))
     session.send('first', [], [])
     expect(session.send('second', [], [])).toBe('busy')
     session.stop()
     await session.idle()
     expect(session.send('   ', [], [])).toBe('empty')
-    key = null
-    expect(session.send('hello', [], [])).toBe('no-key')
+    signedIn = false
+    expect(session.send('hello', [], [])).toBe('signed-out')
   })
 })
 
@@ -209,12 +199,18 @@ describe('errors', () => {
     expect(lastShown().retryable).toBeUndefined()
   })
 
-  it('reports a rejected key so the chat box can ask for a new one', async () => {
-    backend.steps.push(fails(apiError(401)))
+  it('asks the user to sign in again when the sign-in has expired', async () => {
+    // The SDK wraps errors from the credentials provider and keeps the original as the cause.
+    const wrapped = new Anthropic.AnthropicError('Sign in with JumpCloud to use Claude')
+    wrapped.cause = new SignInRequiredError()
+    backend.steps.push(fails(wrapped))
     session.send('question', [], [])
     await session.idle()
-    expect(keyProblems).toEqual(['auth'])
-    expect(lastShown().retryable).toBeUndefined()
+    expect(lastShown()).toMatchObject({
+      status: 'error',
+      notice: 'Sign in with JumpCloud to keep chatting.',
+    })
+    expect(lastShown().retryable).toBe(true) // once signed back in
   })
 
   it('explains refusals and replies cut off at the length limit', async () => {

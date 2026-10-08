@@ -34,10 +34,11 @@ const api: AssistApi = {
     setAutoStart: (enabled) => ipcRenderer.invoke(IPC.settingsSetAutoStart, enabled),
     setEffort: (effort) => ipcRenderer.invoke(IPC.settingsSetEffort, effort),
   },
-  apiKey: {
-    submit: (key) => ipcRenderer.invoke(IPC.apiKeySubmit, key),
-    recheck: () => ipcRenderer.invoke(IPC.apiKeyRecheck),
-    forget: () => ipcRenderer.invoke(IPC.apiKeyForget),
+  auth: {
+    signIn: () => ipcRenderer.invoke(IPC.authSignIn),
+    cancel: () => ipcRenderer.invoke(IPC.authCancel),
+    signOut: () => ipcRenderer.invoke(IPC.authSignOut),
+    retry: () => ipcRenderer.invoke(IPC.authRetry),
   },
   chat: {
     send: (text) => ipcRenderer.invoke(IPC.chatSend, text),
@@ -48,7 +49,7 @@ const api: AssistApi = {
   onModeChanged: (callback) => subscribe(IPC.modeChanged, callback),
   onCornerChanged: (callback) => subscribe(IPC.cornerChanged, callback),
   onClickThroughReset: (callback) => subscribe(IPC.clickThroughReset, callback),
-  onApiKeyStatus: (callback) => subscribe(IPC.apiKeyStatus, callback),
+  onAuthStatus: (callback) => subscribe(IPC.authStatus, callback),
   onChatMessage: (callback) => subscribe(IPC.chatMessage, callback),
   onChatReset: (callback) => subscribe(IPC.chatReset, () => callback()),
 }

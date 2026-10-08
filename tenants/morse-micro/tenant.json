@@ -3,5 +3,15 @@
   "companyName": "Morse Micro",
   "appName": "Desktop Assist",
   "accentColor": "#9333EA",
-  "actions": ["screenshot", "settings", "bounce", "close"]
+  "actions": ["screenshot", "settings", "bounce", "close"],
+  "signIn": {
+    "issuer": "https://oauth.id.jumpcloud.com/",
+    "clientId": "",
+    "redirectPort": 47621
+  },
+  "claudeAccess": {
+    "organizationId": "",
+    "federationRuleId": "",
+    "serviceAccountId": ""
+  }
 }

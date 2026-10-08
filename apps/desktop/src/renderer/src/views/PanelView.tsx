@@ -3,9 +3,9 @@ import type { ActionId } from '@shared/actions'
 import { actionOffset } from '@shared/geometry'
 import type { AppState, Attachment, Effort } from '@shared/types'
 import { ActionStack } from '../components/ActionStack'
-import { ApiKeyForm } from '../components/ApiKeyForm'
 import { Banner, ChatBox } from '../components/ChatBox'
 import { SettingsMenu } from '../components/SettingsMenu'
+import { SignInPanel } from '../components/SignInPanel'
 import { useAccentColor, useAssistState } from '../hooks/useAssistState'
 import { useClickThrough } from '../hooks/useClickThrough'
 import { useToast } from '../hooks/useToast'
@@ -21,23 +21,19 @@ export function PanelView() {
 
 function Panel({ state }: { state: AppState }) {
   const open = state.mode === 'expanded'
-  const { branding, apiKey } = state
+  const { branding, auth } = state
 
   // The draft is edited here and mirrored to the main process, which saves it.
   const [draft, setDraft] = useState(state.notes.text)
   const [attachments, setAttachments] = useState(state.notes.attachments)
   const [settings, setSettings] = useState(state.settings)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [changingKey, setChangingKey] = useState(false)
   const [toast, showToast] = useToast()
 
   useEffect(
     () =>
       window.assist.onModeChanged((mode) => {
-        if (mode !== 'expanded') {
-          setSettingsOpen(false)
-          setChangingKey(false)
-        }
+        if (mode !== 'expanded') setSettingsOpen(false)
       }),
     [],
   )
@@ -51,11 +47,11 @@ function Panel({ state }: { state: AppState }) {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [settingsOpen])
 
-  // No key, or the saved one stopped working: the chat box asks for one before anything else.
-  const needsKey = apiKey.state === 'missing' || apiKey.state === 'invalid'
-  const keyUsable = apiKey.state === 'valid' || apiKey.state === 'unreachable'
+  // Not signed in: the chat box shows the sign-in instead of the chat. While a saved sign-in is
+  // being renewed, or JumpCloud can't be reached, the chat stays (sending tries JumpCloud again).
+  const signedIn = auth.state === 'signed-in' || auth.state === 'offline'
   const busy = state.chat.some((message) => message.status === 'streaming')
-  const canSend = keyUsable && !busy && (draft.trim() !== '' || attachments.length > 0)
+  const canSend = signedIn && !busy && (draft.trim() !== '' || attachments.length > 0)
 
   async function runAction(id: ActionId) {
     if (id === 'settings') {
@@ -82,8 +78,8 @@ function Panel({ state }: { state: AppState }) {
       setAttachments(result.notes.attachments)
     } else if (result.reason === 'missing-screenshot') {
       showToast('An attached screenshot is missing. Remove it and try again.', 'error')
-    } else if (result.reason === 'no-key') {
-      showToast('Add your Claude API key first.', 'error')
+    } else if (result.reason === 'signed-out') {
+      showToast('Sign in with JumpCloud first.', 'error')
     }
   }
 
@@ -110,18 +106,10 @@ function Panel({ state }: { state: AppState }) {
     showToast('Copied')
   }
 
-  async function submitKey(key: string) {
-    const result = await window.assist.apiKey.submit(key)
-    if (result.ok) {
-      setChangingKey(false)
-      showToast('API key saved')
-    }
-    return result
-  }
-
-  async function forgetKey() {
-    await window.assist.apiKey.forget()
-    setChangingKey(false)
+  async function signOut() {
+    setSettingsOpen(false)
+    await window.assist.auth.signOut()
+    showToast('Logged out')
   }
 
   async function newConversation() {
@@ -142,34 +130,33 @@ function Panel({ state }: { state: AppState }) {
     }
   }
 
-  const keyPrompt =
-    needsKey || changingKey ? (
-      <ApiKeyForm
+  const signInPrompt =
+    auth.state === 'unconfigured' || auth.state === 'signed-out' || auth.state === 'signing-in' ? (
+      <SignInPanel
         open={open}
-        status={apiKey}
-        changing={changingKey && !needsKey}
-        onSubmit={submitKey}
-        onCancel={() => setChangingKey(false)}
-        onForget={() => void forgetKey()}
+        status={auth}
+        appName={branding.appName}
+        onSignIn={() => void window.assist.auth.signIn()}
+        onCancel={() => void window.assist.auth.cancel()}
       />
     ) : null
 
   const banner =
-    apiKey.state === 'checking' ? (
-      <Banner spinner>Checking your Claude API key…</Banner>
-    ) : apiKey.state === 'unreachable' ? (
+    auth.state === 'checking' ? (
+      <Banner spinner>Checking your JumpCloud sign-in…</Banner>
+    ) : auth.state === 'offline' ? (
       <Banner
         action={
           <button
             type="button"
-            onClick={() => void window.assist.apiKey.recheck()}
+            onClick={() => void window.assist.auth.retry()}
             className="rounded-md px-1.5 py-0.5 font-medium text-accent hover:bg-zinc-100 dark:text-accent-soft dark:hover:bg-zinc-800"
           >
             Retry
           </button>
         }
       >
-        {apiKey.message}
+        {auth.message}
       </Banner>
     ) : null
 
@@ -185,7 +172,7 @@ function Panel({ state }: { state: AppState }) {
         corner={state.corner}
         open={open}
         toast={toast}
-        keyPrompt={keyPrompt}
+        signInPrompt={signInPrompt}
         banner={banner}
         messages={state.chat}
         busy={busy}
@@ -215,14 +202,12 @@ function Panel({ state }: { state: AppState }) {
           settings={settings}
           branding={branding}
           version={state.version}
+          user={signedIn ? auth.user : null}
           onToggleAutoStart={async () =>
             setSettings(await window.assist.settings.setAutoStart(!settings.autoStart))
           }
           onSetEffort={(effort) => void setEffort(effort)}
-          onChangeApiKey={() => {
-            setSettingsOpen(false)
-            setChangingKey(true)
-          }}
+          onSignOut={() => void signOut()}
           onOpenScreenshotsFolder={() => void window.assist.screenshots.openFolder()}
           onNewConversation={() => void newConversation()}
         />

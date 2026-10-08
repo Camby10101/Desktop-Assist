@@ -44,19 +44,26 @@ export interface Branding {
   actions: ActionId[]
 }
 
-/**
- * Whether the saved Claude API key works.
- * - `invalid`: Anthropic rejected it; the chat box asks for a new one.
- * - `unreachable`: it couldn't be checked (offline); it's kept and chat stays available.
- */
-export type ApiKeyStatus =
-  | { state: 'missing' }
-  | { state: 'checking' }
-  | { state: 'valid' }
-  | { state: 'invalid'; message: string }
-  | { state: 'unreachable'; message: string }
+export interface SignedInUser {
+  name?: string
+  email?: string
+}
 
-export type ApiKeySubmitResult = { ok: true } | { ok: false; message: string }
+/**
+ * Whether the user is signed in with JumpCloud.
+ * - `unconfigured`: the JumpCloud or Claude access settings in tenant.json aren't filled in yet.
+ * - `checking`: renewing a saved sign-in at startup.
+ * - `signing-in`: waiting for the user to finish in their browser.
+ * - `offline`: a saved sign-in couldn't be renewed because JumpCloud couldn't be reached. It's
+ *   kept, and Retry tries again.
+ */
+export type AuthStatus =
+  | { state: 'unconfigured'; missing: string[] }
+  | { state: 'checking' }
+  | { state: 'signed-out'; message?: string }
+  | { state: 'signing-in' }
+  | { state: 'signed-in'; user: SignedInUser }
+  | { state: 'offline'; user: SignedInUser; message: string }
 
 /** One message as the chat shows it. */
 export interface ChatMessage {
@@ -74,7 +81,7 @@ export interface ChatMessage {
 
 export type SendResult =
   | { ok: true; notes: Notes }
-  | { ok: false; reason: 'busy' | 'empty' | 'no-key' | 'missing-screenshot' }
+  | { ok: false; reason: 'busy' | 'empty' | 'signed-out' | 'missing-screenshot' }
 
 export interface AppState {
   mode: Mode
@@ -84,7 +91,7 @@ export interface AppState {
   settings: Settings
   branding: Branding
   version: string
-  apiKey: ApiKeyStatus
+  auth: AuthStatus
   chat: ChatMessage[]
 }
 

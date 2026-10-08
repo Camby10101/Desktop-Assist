@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import type Anthropic from '@anthropic-ai/sdk'
 import type { Attachment, ChatMessage, Effort } from '@shared/types'
 import type { ChatBackend } from './AnthropicBackend'
-import { classifyError, errorMessage, isKeyProblem, isRetryable, type ErrorKind } from './errors'
+import { classifyError, errorMessage, isRetryable } from './errors'
 import { MAX_TOOL_ROUNDS } from './model'
 
 type MessageParam = Anthropic.Beta.BetaMessageParam
@@ -22,7 +22,8 @@ export interface ChatTool {
 
 export interface ChatSessionDeps {
   backend: ChatBackend
-  getApiKey(): string | null
+  /** Whether someone is signed in, so a request can be made. */
+  canChat(): boolean
   getEffort(): Effort
   /** Fixed for the session, so the cached prompt prefix stays valid. */
   system: string
@@ -30,15 +31,11 @@ export interface ChatSessionDeps {
   /** A message was added or changed. */
   onMessage(message: ChatMessage): void
   onReset(): void
-  /** A request failed because of the API key. */
-  onKeyProblem(kind: ErrorKind): void
-  /** A reply came back, so the key works. */
-  onReplied(): void
   /** Streamed text is sent to the UI at most this often. */
   emitIntervalMs?: number
 }
 
-export type SendStatus = 'sent' | 'busy' | 'empty' | 'no-key'
+export type SendStatus = 'sent' | 'busy' | 'empty' | 'signed-out'
 
 /**
  * One conversation with Claude.
@@ -72,7 +69,7 @@ export class ChatSession {
   send(text: string, images: OutgoingImage[], attachments: Attachment[]): SendStatus {
     if (this.busy) return 'busy'
     if (!text.trim() && images.length === 0) return 'empty'
-    if (!this.deps.getApiKey()) return 'no-key'
+    if (!this.deps.canChat()) return 'signed-out'
 
     const content: Anthropic.Beta.BetaContentBlockParam[] = images.map((image) => ({
       type: 'image',
@@ -89,7 +86,7 @@ export class ChatSession {
   /** Asks again after a failed reply (only if nothing from it was kept). */
   retry(): void {
     const last = this.messages.at(-1)
-    if (this.busy || !last?.retryable || !this.deps.getApiKey()) return
+    if (this.busy || !last?.retryable || !this.deps.canChat()) return
     Object.assign(last, { text: '', status: 'streaming', notice: undefined, retryable: undefined })
     this.emit(last)
     this.startTurn(last)
@@ -126,17 +123,14 @@ export class ChatSession {
   private async runTurn(reply: ChatMessage, controller: AbortController): Promise<void> {
     const generation = this.generation
     const current = () => generation === this.generation
-    const apiKey = this.deps.getApiKey()
     const tools = this.deps.tools ?? []
     let roundText = ''
     let keptPartial = false
 
     try {
-      if (!apiKey) throw new Error('No API key')
       for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
         roundText = ''
         const message = await this.deps.backend.reply({
-          apiKey,
           system: this.deps.system,
           messages: this.history,
           tools: tools.map((t) => t.definition),
@@ -158,7 +152,6 @@ export class ChatSession {
         }
         if (message.stop_reason === 'pause_turn') continue // the API asks us to send it back to resume
 
-        this.deps.onReplied()
         return this.finish(reply, 'done', stopNotice(message.stop_reason))
       }
       this.finish(reply, 'done', 'Claude stopped after too many steps.')
@@ -177,7 +170,6 @@ export class ChatSession {
           reply.text ? 'Stopped.' : 'Stopped before Claude replied.',
         )
       }
-      if (isKeyProblem(kind)) this.deps.onKeyProblem(kind)
       const retryable = !keptPartial && isRetryable(kind)
       this.finish(reply, 'error', errorMessage(kind), retryable)
     }
