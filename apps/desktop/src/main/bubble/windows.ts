@@ -1,14 +1,20 @@
-import { app, BrowserWindow, Menu, type MenuItemConstructorOptions } from 'electron'
+import { app, BrowserWindow, Menu, screen, type MenuItemConstructorOptions } from 'electron'
 import { join } from 'node:path'
 import type { Size } from '@shared/geometry'
+import { IPC } from '@shared/ipc'
 import type { PanelSurface, Surface } from './BubbleController'
 
 export type View = 'bubble' | 'panel'
 
 /**
  * Creates one of the two overlay windows. Both are frameless, transparent, always on top and
- * hidden from the taskbar and Alt+Tab. They start click-through; the renderer turns mouse input
- * back on while the pointer is over real UI (see useClickThrough).
+ * hidden from the taskbar and Alt+Tab.
+ *
+ * The panel window is mostly see-through, so it's click-through: clicks on its empty areas go to
+ * whatever is underneath, and the renderer turns mouse input back on while the pointer is over
+ * real UI (see useClickThrough). The bubble window is never click-through: it's barely larger
+ * than the bubble, and relying on Windows' mouse forwarding there made clicks occasionally fall
+ * through the bubble to the window behind it.
  */
 export function createOverlayWindow(view: View, size: Size): BrowserWindow {
   const win = new BrowserWindow({
@@ -37,9 +43,11 @@ export function createOverlayWindow(view: View, size: Size): BrowserWindow {
       spellcheck: view === 'panel',
     },
   })
-  win.setIgnoreMouseEvents(true, { forward: true })
-  lockDown(win)
-  if (view === 'panel') addEditContextMenu(win)
+  lockDown(win, view)
+  if (view === 'panel') {
+    win.setIgnoreMouseEvents(true, { forward: true })
+    addEditContextMenu(win)
+  }
 
   const devServer = process.env['ELECTRON_RENDERER_URL']
   if (!app.isPackaged && devServer) {
@@ -61,19 +69,36 @@ export function bubbleSurface(win: BrowserWindow): Surface {
 export function panelSurface(win: BrowserWindow): PanelSurface {
   return {
     setBounds: (bounds) => win.setBounds(bounds),
-    show: () => win.show(),
+    show: () => {
+      resetClickThrough(win)
+      win.show()
+    },
     hide: () => win.hide(),
     focus: () => win.focus(),
   }
 }
 
-function lockDown(win: BrowserWindow): void {
+/**
+ * Starts the panel's click-through afresh each time it's shown. While hidden, the page can't
+ * follow the pointer, so its idea of whether the pointer is over real UI is out of date (and
+ * Windows may have dropped the mouse forwarding). Switching forwarding off and on re-installs it,
+ * and the page is told exactly where the pointer is now, so it can decide straight away.
+ */
+function resetClickThrough(win: BrowserWindow): void {
+  win.setIgnoreMouseEvents(false)
+  win.setIgnoreMouseEvents(true, { forward: true })
+  const cursor = screen.getCursorScreenPoint()
+  const bounds = win.getBounds()
+  win.webContents.send(IPC.clickThroughReset, { x: cursor.x - bounds.x, y: cursor.y - bounds.y })
+}
+
+function lockDown(win: BrowserWindow, view: View): void {
   const contents = win.webContents
   contents.setWindowOpenHandler(() => ({ action: 'deny' }))
   contents.on('will-navigate', (event) => event.preventDefault())
-  // A crashed renderer can't report the pointer, so make the window click-through and reload.
   contents.on('render-process-gone', () => {
-    win.setIgnoreMouseEvents(true, { forward: true })
+    // A crashed panel can't report the pointer, so let clicks through until it has reloaded.
+    if (view === 'panel') win.setIgnoreMouseEvents(true, { forward: true })
     contents.reload()
   })
 }

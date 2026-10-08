@@ -2,7 +2,6 @@ import { useRef, type PointerEvent } from 'react'
 import { UI } from '@shared/geometry'
 import type { Mode } from '@shared/types'
 import { useAccentColor, useAssistState } from '../hooks/useAssistState'
-import { useClickThrough } from '../hooks/useClickThrough'
 import { cn } from '../lib/cn'
 
 // The tenant's logo: logo.png, or logo.svg (if a tenant has both, the PNG wins).
@@ -32,7 +31,7 @@ const DRAG_THRESHOLD = 5
  * to the nearest corner of whichever display it's on.
  */
 export function BubbleView() {
-  useClickThrough()
+  // No useClickThrough here: the bubble window always takes the mouse (see bubble/windows.ts).
   const state = useAssistState()
   useAccentColor(state?.branding.accentColor)
   const mode = state?.mode ?? 'collapsed'

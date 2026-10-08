@@ -103,7 +103,8 @@ and has rougher transparent-window behaviour on WebView2. **.NET WinUI** is Wind
   tiny, can't take focus and never resizes. That means no flicker on open/close and nothing large
   moving during Bounce. The panel window has a fixed size and its empty areas pass clicks through
   to whatever is underneath (`setIgnoreMouseEvents` with forwarding, toggled whenever the pointer
-  is over real UI).
+  is over real UI, and reset each time the panel is shown). The bubble window is never
+  click-through: relying on mouse forwarding there let clicks occasionally fall through it.
 - The **main process owns all state** (mode, notes, settings). Renderers display it and send
   intents. Neither renderer can reach Node or the filesystem directly.
 - **Hardening:** `contextIsolation`, `sandbox`, no `nodeIntegration`, strict CSP, navigation and
