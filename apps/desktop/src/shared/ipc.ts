@@ -1,5 +1,5 @@
 import type { CommandActionId } from './actions'
-import type { Corner } from './geometry'
+import type { Corner, Point } from './geometry'
 import type {
   ActionResult,
   ApiKeyStatus,
@@ -44,6 +44,7 @@ export const IPC = {
   // main → renderer
   modeChanged: 'assist:mode-changed',
   cornerChanged: 'assist:corner-changed',
+  clickThroughReset: 'assist:click-through-reset',
   apiKeyStatus: 'assist:api-key-status',
   chatMessage: 'assist:chat-message',
   chatReset: 'assist:chat-reset',
@@ -95,6 +96,8 @@ export interface AssistApi {
   }
   onModeChanged(callback: (mode: Mode) => void): () => void
   onCornerChanged(callback: (corner: Corner) => void): () => void
+  /** The panel was just shown with click-through reset; `pointer` is where the mouse is now. */
+  onClickThroughReset(callback: (pointer: Point) => void): () => void
   onApiKeyStatus(callback: (status: ApiKeyStatus) => void): () => void
   /** A message was added or changed (streamed text arrives this way). */
   onChatMessage(callback: (message: ChatMessage) => void): () => void
