@@ -31,6 +31,8 @@ export interface ChatSessionDeps {
   /** A message was added or changed. */
   onMessage(message: ChatMessage): void
   onReset(): void
+  /** A reply failed; gets the full error, for the log (the chat shows a plain-English message). */
+  onError?(error: unknown): void
   /** Streamed text is sent to the UI at most this often. */
   emitIntervalMs?: number
 }
@@ -43,8 +45,9 @@ export type SendStatus = 'sent' | 'busy' | 'empty' | 'signed-out'
  * It keeps two lists: `history`, exactly what is sent to the API, and `messages`, what the chat
  * shows. History is append-only: earlier turns are never edited or removed, because Claude's
  * thinking is tied to the exact conversation it was produced in. Every reply is appended with all
- * of its content blocks (thinking included) unchanged; a reply cut short by Stop or an error is
- * appended as plain text.
+ * of its content blocks (thinking included) unchanged, except what the API says to drop after a
+ * server-side fallback (`replayContent()`); a reply cut short by Stop or an error is appended as
+ * plain text.
  */
 export class ChatSession {
   private history: MessageParam[] = []
@@ -144,10 +147,11 @@ export class ChatSession {
           },
         })
         if (!current()) return
-        this.history.push({ role: 'assistant', content: message.content })
+        const content = replayContent(message.content)
+        this.history.push({ role: 'assistant', content })
 
         if (message.stop_reason === 'tool_use') {
-          this.history.push({ role: 'user', content: await runTools(message.content, tools) })
+          this.history.push({ role: 'user', content: await runTools(content, tools) })
           continue
         }
         if (message.stop_reason === 'pause_turn') continue // the API asks us to send it back to resume
@@ -170,6 +174,7 @@ export class ChatSession {
           reply.text ? 'Stopped.' : 'Stopped before Claude replied.',
         )
       }
+      this.deps.onError?.(error)
       const retryable = !keptPartial && isRetryable(kind)
       this.finish(reply, 'error', errorMessage(kind), retryable)
     }
@@ -218,6 +223,30 @@ function stopNotice(stopReason: string | null): string | undefined {
   if (stopReason === 'refusal') return 'Claude declined to answer this.'
   if (stopReason === 'max_tokens') return 'This reply hit the length limit and was cut short.'
   return undefined
+}
+
+/** Reasoning that belongs to a model that declined, so it isn't sent back after a fallback. */
+const DECLINED_REASONING = new Set(['thinking', 'redacted_thinking', 'connector_text'])
+
+/**
+ * A reply's content as it must be sent back on the next turn: normally every block, unchanged.
+ * After a server-side fallback (another model took over partway through), the API requires
+ * dropping what the declining model produced before the last `fallback` block: its reasoning,
+ * its client-side tool calls, and server tool calls that got no result. The `fallback` block
+ * itself stays exactly where it was; the API checks the blocks around it.
+ */
+export function replayContent(content: ContentBlock[]): ContentBlock[] {
+  const lastFallback = content.findLastIndex((block) => block.type === 'fallback')
+  if (lastFallback === -1) return content
+  const answered = new Set(
+    content.flatMap((block) => ('tool_use_id' in block ? [block.tool_use_id] : [])),
+  )
+  return content.filter((block, index) => {
+    if (index >= lastFallback) return true
+    if (DECLINED_REASONING.has(block.type) || block.type === 'tool_use') return false
+    if (block.type === 'server_tool_use') return answered.has(block.id)
+    return true
+  })
 }
 
 /** Runs every tool call in a reply and returns the results to send back. */

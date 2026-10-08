@@ -59,7 +59,7 @@ export interface BubbleControllerDeps {
 const FRAME_MS = 16
 const DEFAULT_CORNER: Corner = 'bottom-right'
 /** Matches the panel's fade-out in the renderer, so the window hides once it's invisible. */
-export const PANEL_FADE_MS = 140
+export const PANEL_FADE_MS = 150
 /**
  * Clicking the bubble while the panel is open can blur the panel just before the click lands.
  * A click this soon after a blur-collapse belongs to the same gesture and must not reopen it.
@@ -80,7 +80,7 @@ export const HIDE_SETTLE_MS = 150
 export class BubbleController {
   private mode: Mode = 'collapsed'
   private position: Point = { x: 0, y: 0 }
-  private anchor: BubbleAnchor = { displayId: 0, corner: DEFAULT_CORNER }
+  private anchor: BubbleAnchor
   private motion: Motion | null = null
   private ticker: ReturnType<typeof setInterval> | null = null
   private hideTimer: ReturnType<typeof setTimeout> | null = null
@@ -92,6 +92,13 @@ export class BubbleController {
   constructor(private readonly deps: BubbleControllerDeps) {
     this.now = deps.now ?? (() => performance.now())
     this.random = deps.random ?? Math.random
+    // Set now, not in start(): the pages ask for the corner as soon as they load, which can be
+    // before start() runs.
+    const saved = deps.initialAnchor
+    this.anchor =
+      saved && deps.displays.byId(saved.displayId)
+        ? { ...saved }
+        : { displayId: deps.displays.primary().id, corner: saved?.corner ?? DEFAULT_CORNER }
   }
 
   get currentMode(): Mode {
@@ -108,11 +115,6 @@ export class BubbleController {
 
   /** Puts the bubble in its saved corner (or bottom-right of the main display) and shows it. */
   start(): void {
-    const saved = this.deps.initialAnchor
-    this.anchor =
-      saved && this.deps.displays.byId(saved.displayId)
-        ? { ...saved }
-        : { displayId: this.deps.displays.primary().id, corner: saved?.corner ?? DEFAULT_CORNER }
     this.position = this.home()
     this.placeWindows()
     this.deps.bubble.show()

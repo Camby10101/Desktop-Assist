@@ -113,6 +113,12 @@ describe('start', () => {
     expect(controller.corner).toBe('top-left')
   })
 
+  it('knows the saved corner before start(), for pages that load first', () => {
+    controller.dispose()
+    controller = makeController({ displayId: 2, corner: 'top-left' })
+    expect(controller.corner).toBe('top-left')
+  })
+
   it("uses the same corner of the main display if the saved display isn't connected", () => {
     controller.dispose()
     controller = makeController({ displayId: 99, corner: 'top-right' })

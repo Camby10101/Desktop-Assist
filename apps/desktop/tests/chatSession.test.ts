@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ChatMessage, Effort } from '@shared/types'
 import type { ChatBackend, ReplyRequest } from '../src/main/claude/AnthropicBackend'
 import { SignInRequiredError } from '../src/main/auth/AuthManager'
-import { ChatSession, type ChatTool } from '../src/main/claude/ChatSession'
+import { ChatSession, replayContent, type ChatTool } from '../src/main/claude/ChatSession'
 
 type Step = (request: ReplyRequest) => Promise<Anthropic.Beta.BetaMessage>
 
@@ -221,6 +221,50 @@ describe('errors', () => {
     session.send('b', [], [])
     await session.idle()
     expect(lastShown().notice).toContain('length limit')
+  })
+})
+
+describe('after a server-side fallback', () => {
+  const thinking = (signature: string) => ({ type: 'thinking', thinking: '', signature })
+  const text = (t: string) => ({ type: 'text', text: t })
+  const fallback = { type: 'fallback', from: { model: 'claude-opus-5-5' }, to: { model: 'other' } }
+
+  it("sends back the reply without the declining model's reasoning", async () => {
+    backend.steps.push(
+      async () => reply([thinking('a'), text('Par'), fallback, thinking('b'), text('Answer')]),
+      says('ok'),
+    )
+    session.send('question', [], [])
+    await session.idle()
+    session.send('next', [], [])
+    await session.idle()
+    expect(backend.calls[1]!.messages[1]).toEqual({
+      role: 'assistant',
+      content: [text('Par'), fallback, thinking('b'), text('Answer')],
+    })
+  })
+
+  it('drops tool calls before the last fallback, keeping server tool calls that got a result', () => {
+    const content = [
+      { type: 'tool_use', id: 't1', name: 'x', input: {} },
+      { type: 'server_tool_use', id: 's1', name: 'web_search', input: {} },
+      { type: 'web_search_tool_result', tool_use_id: 's1', content: [] },
+      { type: 'server_tool_use', id: 's2', name: 'web_search', input: {} },
+      { type: 'redacted_thinking', data: 'x' },
+      fallback,
+      { type: 'tool_use', id: 't2', name: 'x', input: {} },
+    ] as unknown as Anthropic.Beta.BetaContentBlock[]
+    expect(replayContent(content).map((b) => ('id' in b ? b.id : b.type))).toEqual([
+      's1',
+      'web_search_tool_result',
+      'fallback',
+      't2',
+    ])
+  })
+
+  it('leaves a reply without a fallback unchanged', () => {
+    const content = [thinking('a'), text('Hi')] as unknown as Anthropic.Beta.BetaContentBlock[]
+    expect(replayContent(content)).toBe(content)
   })
 })
 

@@ -6,12 +6,12 @@
   "actions": ["screenshot", "settings", "bounce", "close"],
   "signIn": {
     "issuer": "https://oauth.id.jumpcloud.com/",
-    "clientId": "",
+    "clientId": "43ae891c-6cf4-43b5-bde5-585a3ecc792f",
     "redirectPort": 47621
   },
   "claudeAccess": {
-    "organizationId": "",
-    "federationRuleId": "",
-    "serviceAccountId": ""
+    "organizationId": "d898864d-b7a6-402e-a416-85ab719ed6ac",
+    "federationRuleId": "fdrl_01GzsvhpvtAUQXTEKd92eRe8",
+    "serviceAccountId": "svac_015Apb43Vhn5HWUYWHNJJqtc"
   }
 }

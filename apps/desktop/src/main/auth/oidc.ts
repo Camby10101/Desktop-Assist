@@ -44,8 +44,10 @@ export class SessionExpiredError extends Error {
 /**
  * OpenID Connect with JumpCloud, using openid-client: Authorization Code flow with PKCE as a
  * public client (no client secret; the code verifier proves the app that started the sign-in is
- * the one finishing it), plus state and nonce checks. The ID token's signature, issuer, audience
- * and expiry are verified by openid-client.
+ * the one finishing it), plus state and nonce checks. openid-client checks the ID token's issuer,
+ * audience, expiry and nonce. It doesn't check the signature: the token comes straight from
+ * JumpCloud over HTTPS, which OpenID Connect allows, and Anthropic verifies the signature when
+ * the token is swapped for Claude access.
  */
 export function createOidc(config: SignInConfig, options: { allowInsecure?: boolean } = {}): Oidc {
   // Discovery reads the issuer's endpoints once; a failed attempt is retried next time.
@@ -132,7 +134,9 @@ export function describeSignInError(error: unknown): string {
   if (error instanceof client.AuthorizationResponseError) {
     return error.error_description ?? `JumpCloud said "${error.error}".`
   }
-  if (error instanceof TypeError || (error instanceof Error && error.name === 'TimeoutError')) {
+  // fetch failures are TypeErrors; openid-client reports its timeouts with code OAUTH_TIMEOUT.
+  const timedOut = error instanceof client.ClientError && error.code === 'OAUTH_TIMEOUT'
+  if (error instanceof TypeError || timedOut) {
     return "Couldn't reach JumpCloud. Check your connection."
   }
   return error instanceof Error ? error.message : String(error)

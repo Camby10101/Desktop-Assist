@@ -229,6 +229,24 @@ describe('signing in', () => {
     expect(store.value).toBeNull()
   })
 
+  it("doesn't open the browser if cancelled while JumpCloud's settings are loading", async () => {
+    let settingsLoaded!: () => void
+    const begin = oidc.begin.bind(oidc)
+    oidc.begin = async (redirectUri) => {
+      await new Promise<void>((resolve) => (settingsLoaded = resolve))
+      return begin(redirectUri)
+    }
+    const auth = makeAuth()
+    await auth.init()
+    const signingIn = auth.signIn()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    auth.cancelSignIn()
+    settingsLoaded()
+    await signingIn
+    expect(opened).toEqual([])
+    expect(auth.status).toEqual({ state: 'signed-out', message: undefined })
+  })
+
   it('explains when JumpCloud does not allow staying signed in', async () => {
     oidc.giveRefreshToken = false
     const auth = makeAuth()

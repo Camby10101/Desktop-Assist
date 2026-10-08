@@ -22,6 +22,7 @@ type Preferences = z.infer<typeof PreferencesSchema>
 
 export class SettingsService {
   private prefs: Preferences = {}
+  private saving: Promise<unknown> = Promise.resolve()
 
   constructor(
     private readonly preferencesPath: string,
@@ -69,6 +70,10 @@ export class SettingsService {
 
   private async save(changes: Preferences): Promise<void> {
     this.prefs = { ...this.prefs, ...changes }
-    await writeJsonFile(this.preferencesPath, this.prefs)
+    // One write at a time, in order, so an older save can't finish last and overwrite a newer one.
+    const snapshot = this.prefs
+    const write = this.saving.then(() => writeJsonFile(this.preferencesPath, snapshot))
+    this.saving = write.catch(() => {})
+    await write
   }
 }

@@ -51,7 +51,8 @@ if (!app.requestSingleInstanceLock()) {
 } else {
   // Launching it again just opens the panel of the copy that's already running.
   app.on('second-instance', () => controller?.expand())
-  app.whenReady().then(start, fail)
+  // .catch(fail) after .then(start): a failure inside start() must also show the error box.
+  app.whenReady().then(start).catch(fail)
 }
 
 async function start(): Promise<void> {
@@ -64,15 +65,6 @@ async function start(): Promise<void> {
   const screenshotsDir = join(app.getPath('pictures'), tenant.appName)
   const actionCount = tenant.actions.length
 
-  const bubbleWindow = createOverlayWindow('bubble', { width: BUBBLE_BOX, height: BUBBLE_BOX })
-  const panelWindow = createOverlayWindow('panel', panelWindowSize(actionCount))
-  const windows = [bubbleWindow, panelWindow]
-  // Listen now: the pages may finish loading while notes and settings are read below.
-  const windowsReady = Promise.all(windows.map((win) => once(win, 'ready-to-show')))
-  const broadcast = (channel: string, payload?: unknown) => {
-    for (const win of windows) if (!win.isDestroyed()) win.webContents.send(channel, payload)
-  }
-
   const notes = new NotesStore(join(userData, 'notes.json'), {
     onError: (error) => console.error('Saving the text box failed', error),
   })
@@ -80,6 +72,17 @@ async function start(): Promise<void> {
 
   const settings = new SettingsService(join(userData, 'preferences.json'), screenshotsDir)
   await settings.init()
+
+  // The windows are created after the last `await`: from here to registerIpc() below nothing
+  // waits, so the pages can't ask for the app state before there's anything to answer them.
+  const bubbleWindow = createOverlayWindow('bubble', { width: BUBBLE_BOX, height: BUBBLE_BOX })
+  const panelWindow = createOverlayWindow('panel', panelWindowSize(actionCount))
+  const windows = [bubbleWindow, panelWindow]
+  // Listen straight away, so a page that finishes loading quickly isn't missed.
+  const windowsReady = Promise.all(windows.map((win) => once(win, 'ready-to-show')))
+  const broadcast = (channel: string, payload?: unknown) => {
+    for (const win of windows) if (!win.isDestroyed()) win.webContents.send(channel, payload)
+  }
 
   const bubble = new BubbleController({
     bubble: bubbleSurface(bubbleWindow),
@@ -114,6 +117,8 @@ async function start(): Promise<void> {
     system: buildSystemPrompt(tenant),
     onMessage: (message) => broadcast(IPC.chatMessage, message),
     onReset: () => broadcast(IPC.chatReset),
+    // The details (status codes, request IDs) go to the terminal in dev runs.
+    onError: (error) => console.error('Claude request failed:', error),
   })
 
   const missing = missingSettings(signIn, claudeAccess)
@@ -139,6 +144,7 @@ async function start(): Promise<void> {
       // the user can carry on (Retry resends a message that failed).
       if (reason === 'logout') chat.newConversation()
     },
+    onError: (error) => console.error('JumpCloud sign-in failed:', error),
   })
   // Renew the saved sign-in at every start; if there isn't one, the chat box offers to sign in.
   void auth.init()

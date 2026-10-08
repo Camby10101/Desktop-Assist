@@ -45,6 +45,8 @@ export interface AuthManagerDeps {
    * usually sign straight back in, so the conversation can be kept for them).
    */
   onSignedOut(reason: 'logout' | 'expired'): void
+  /** Signing in or renewing failed; gets the full error, for the log. */
+  onError?(error: unknown): void
   now?: () => number
 }
 
@@ -68,6 +70,8 @@ export class AuthManager {
   /** An ID token not yet exchanged for Claude access. */
   private spare: { token: string; exp: number } | null = null
   private listener: RedirectListener | null = null
+  /** Cancel was pressed during the current sign-in (possibly before the browser opened). */
+  private signInCancelled = false
   /** Refreshes run one at a time, since each may replace the refresh token. */
   private queue: Promise<unknown> = Promise.resolve()
   /** Bumped by sign-in and sign-out, so a slow refresh can't bring back a session that ended. */
@@ -107,6 +111,7 @@ export class AuthManager {
     const oidc = this.deps.oidc
     if (!oidc || this.state.state === 'signing-in') return
     const generation = ++this.generation
+    this.signInCancelled = false
     this.setStatus({ state: 'signing-in' })
 
     let listener: RedirectListener | null = null
@@ -114,6 +119,8 @@ export class AuthManager {
       listener = await this.deps.listen(this.deps.redirectPort)
       this.listener = listener
       const pending = await oidc.begin(listener.redirectUri)
+      // Cancel may have been pressed while JumpCloud's settings were being fetched.
+      if (this.signInCancelled) throw new SignInCancelledError()
       await this.deps.openBrowser(pending.url)
       const tokens = await pending.finish(await listener.result)
       if (!tokens.refreshToken) {
@@ -127,6 +134,7 @@ export class AuthManager {
       this.setStatus({ state: 'signed-in', user: userOf(tokens.claims) })
     } catch (error) {
       if (generation !== this.generation) return
+      if (!(error instanceof SignInCancelledError)) this.deps.onError?.(error)
       this.setStatus({ state: 'signed-out', message: signInFailure(error) })
     } finally {
       listener?.close()
@@ -136,6 +144,7 @@ export class AuthManager {
 
   /** Stops waiting for a sign-in started in the browser. */
   cancelSignIn(): void {
+    if (this.state.state === 'signing-in') this.signInCancelled = true
     this.listener?.close()
   }
 
@@ -203,6 +212,7 @@ export class AuthManager {
       tokens = await this.deps.oidc.refresh(session.refreshToken)
     } catch (error) {
       if (generation !== this.generation) throw new SignInRequiredError()
+      this.deps.onError?.(error)
       if (error instanceof SessionExpiredError) {
         await this.endSession(
           'expired',
