@@ -38,21 +38,20 @@ In the JumpCloud Admin Portal:
 2. Choose **Manage Single Sign-On (SSO)** → **Configure SSO with OIDC**, and name it
    `Desktop Assist`. Upload the logo if you like (`tenants/morse-micro/logo.png`).
 3. On the **SSO** tab:
-
-   | Setting                        | Value                                                                              |
-   | ------------------------------ | ---------------------------------------------------------------------------------- |
-   | **Redirect URIs**              | `http://127.0.0.1:47621/callback`                                                  |
-   | **Client Authentication Type** | **Public (None PKCE)**                                                             |
-   | **Login URL**                  | Any URL; it isn't used (for example `https://www.morsemicro.com`)                  |
-   | **Grant types**                | **Authorization Code** (always on) **and Refresh Token**                           |
-   | **Refresh token lifetime**     | The maximum, 90 days (129,600 minutes; the default is 30 days)                     |
-   | **Standard scopes**            | **Email** and **Profile** (the app asks for `openid email profile offline_access`) |
+   - **Redirect URIs:** `http://127.0.0.1:47621/callback`
+   - **Client Authentication Type:** **Public (None PKCE)**
+   - **Login URL:** any URL; it isn't used (for example `https://www.morsemicro.com`)
+   - **Grant types:** **Authorization Code** (always on) **and Refresh Token**
+   - **Refresh token lifetime:** the maximum, 90 days (129,600 minutes; the default is 30 days)
+   - **Standard scopes:** **Email** and **Profile** (the app asks for
+     `openid email profile offline_access`)
 
    Without the **Refresh Token** grant, users can't stay signed in and the app shows an error
    saying so. The refresh token lifetime is the longest anyone could go without signing in
    again; the app renews the sign-in at every start and while it's in use.
 
-4. On the **User Groups** tab, assign the groups who should have Desktop Assist.
+4. On the **User Groups** tab, assign the groups who should have Desktop Assist (for everyone,
+   the all-users group).
 5. **Activate** the app and copy the **Client ID**.
 
 Notes:
@@ -69,43 +68,51 @@ Notes:
 
 ## 2. Claude Console: trust JumpCloud
 
-You need the admin or owner role in the Anthropic organization that will pay for Desktop Assist.
-Anthropic's guide is [Workload Identity Federation](https://platform.claude.com/docs/en/manage-claude/workload-identity-federation).
+This is the **Claude Console** at [platform.claude.com](https://platform.claude.com), not the
+claude.ai admin settings. You need the organization **Admin** role (or Owner) there. If Morse's
+Anthropic account requires single sign-on, open Claude from the JumpCloud User Portal first, then
+go to platform.claude.com in the same browser. Anthropic's own guide is
+[Workload Identity Federation](https://platform.claude.com/docs/en/manage-claude/workload-identity-federation).
 
-1. **Workspace.** Create (or pick) a workspace for Desktop Assist, for example `desktop-assist`, so
-   its usage, rate limits and spend limits are separate.
-2. Go to **Settings → Workload identity** and select **Connect workload**, then **Custom OIDC**.
-   The wizard creates the three pieces below in one go. (You can also create them one at a time
-   on that page.)
+Everything below is under **Settings** in the Console.
 
-   **Issuer**
+1. **Workspace** (Settings → Workspaces). Create one for Desktop Assist, for example
+   `desktop-assist`, so its usage, rate limits and spend limits are separate. An existing
+   workspace also works.
+2. **Service account** (Settings → Service accounts). Create `desktop-assist` and add it as a
+   member of that workspace.
+3. **Issuer** (Settings → Workload identity, Issuers):
+   - **Issuer URL:** `https://oauth.id.jumpcloud.com/`, exactly, **with** the trailing slash (see
+     Region above)
+   - **JWKS source:** Discovery
+4. **Federation rule** (Settings → Workload identity, Rules). Create it here rather than with the
+   **Connect workload** wizard: the wizard insists on a subject, and JumpCloud's subject is a
+   different ID for every person, so there's nothing to put there.
+   - **Name:** `desktop-assist-jumpcloud`
+   - **Match:** choose **CEL expression**, not a pattern match, and enter:
 
-   | Field       | Value                                                                                      |
-   | ----------- | ------------------------------------------------------------------------------------------ |
-   | Issuer URL  | `https://oauth.id.jumpcloud.com/` (exactly, **with** the trailing slash; see Region above) |
-   | JWKS source | Discovery                                                                                  |
+     ```
+     has(claims.email) && claims.email.endsWith("@morsemicro.com")
+     ```
 
-   **Service account**: for example `desktop-assist`. Make sure it is a **member of the Desktop
-   Assist workspace**.
+     Any Morse Micro account that signs in through JumpCloud is accepted. Who can sign in is
+     controlled in JumpCloud, by the groups assigned to the app.
 
-   **Federation rule**
+   - **Scope:** `workspace:developer` (`workspace:inference`, chat only, isn't offered in the
+     Console; never choose `org:admin`)
+   - **Workspace:** just the Desktop Assist workspace (leave **All workspaces** off)
+   - **Service account:** `desktop-assist`
+   - **Token lifetime:** leave the default
+5. Copy:
+   - the **organization ID** (a UUID, under Settings → Organization),
+   - the **federation rule ID** (`fdrl_...`, on the rule's page),
+   - the **service account ID** (`svac_...`, on the service account's page),
+   - the **workspace ID** (`wrkspc_...`), only if the rule covers more than one workspace.
 
-   | Field           | Value                                                                                       |
-   | --------------- | ------------------------------------------------------------------------------------------- |
-   | Workspace       | The Desktop Assist workspace (just this one)                                                |
-   | Audience        | The JumpCloud **Client ID** from step 1                                                     |
-   | Condition (CEL) | `claims.email.endsWith("@morsemicro.com")`                                                  |
-   | Scope           | **`workspace:inference`** (chat only; the wizard suggests `workspace:developer`, change it) |
-   | Token lifetime  | Leave the default                                                                           |
-
-   The audience ties the rule to this JumpCloud app, and the condition makes sure only company
-   accounts get through. Anthropic insists on at least one matcher besides the audience.
-
-3. Copy:
-   - the **organization ID** (a UUID, under **Settings → Organization**),
-   - the **federation rule ID** (`fdrl_...`),
-   - the **service account ID** (`svac_...`),
-   - the **workspace ID** (`wrkspc_...`), only needed if the rule covers more than one workspace.
+**Optional, stricter:** to accept only sign-ins made for Desktop Assist (not for other JumpCloud
+apps), also check the audience. Add `&& claims.aud == "<Client ID>"` to the expression, or fill
+in the rule's Audience field if it has one. This doesn't change who can use the app; it stops a
+sign-in token issued to another JumpCloud app from being swapped for Claude access.
 
 ## 3. Desktop Assist: fill in tenant.json
 
@@ -153,18 +160,30 @@ way to sign in silently, so the one browser step stays.
    should show a successful exchange.
 3. Quit and reopen the app: it should go straight to the chat without asking you to sign in.
 
+In `npm run dev`, the terminal also prints the full details of any sign-in or Claude error.
+
 ## Troubleshooting
 
-| What the user sees                                                   | Likely cause                                                                                                                                                                                                                                                                                                                                         |
-| -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| "Sign-in isn't set up yet"                                           | `tenant.json` is missing values (listed on screen).                                                                                                                                                                                                                                                                                                  |
-| The browser shows a JumpCloud error about the redirect URI           | The redirect URI in JumpCloud doesn't exactly match `http://127.0.0.1:<redirectPort>/callback`.                                                                                                                                                                                                                                                      |
-| "Sign-in didn't work" with a reason from JumpCloud                   | Usually the user isn't in a group assigned to the app.                                                                                                                                                                                                                                                                                               |
-| "JumpCloud didn't allow staying signed in"                           | The **Refresh Token** grant isn't enabled on the JumpCloud app.                                                                                                                                                                                                                                                                                      |
-| "Port 47621 is in use by another program"                            | Change the port (JumpCloud redirect URI and `redirectPort`).                                                                                                                                                                                                                                                                                         |
-| "Your JumpCloud account isn't set up to use Claude yet. Contact IT." | Anthropic refused the swap. Check **Authentication history** in the Claude Console for the reason: issuer URL not matching exactly (trailing slash), audience not the client ID, the condition not matching the user's email, the service account not in the workspace, or the ID token living longer than the issuer's maximum (1 hour by default). |
-| "Your organisation's Claude account has run out of credit"           | Billing or the workspace spend limit.                                                                                                                                                                                                                                                                                                                |
-| "Your JumpCloud sign-in has expired"                                 | JumpCloud ended the session (refresh token expired or revoked, or the user was removed). Signing in again fixes it.                                                                                                                                                                                                                                  |
+What the user sees, and the likely cause:
+
+- **"Sign-in isn't set up yet":** `tenant.json` is missing values (they're listed on screen).
+- **A JumpCloud error page about the redirect URI:** the redirect URI in JumpCloud doesn't
+  exactly match `http://127.0.0.1:<redirectPort>/callback`.
+- **"Sign-in didn't work" with a reason from JumpCloud:** usually the user isn't in a group
+  assigned to the app.
+- **"JumpCloud didn't allow staying signed in":** the **Refresh Token** grant isn't enabled on
+  the JumpCloud app.
+- **"Port 47621 is in use by another program":** change the port (the JumpCloud redirect URI and
+  `redirectPort`).
+- **"Your JumpCloud account isn't set up to use Claude yet. Contact IT.":** Anthropic refused
+  the swap. **Authentication history** in the Claude Console gives the reason. Common ones: the
+  issuer URL doesn't match exactly (trailing slash), the expression doesn't match the user's
+  email (or audience, if you added it), the service account isn't in the rule's workspace, or the
+  ID token lives longer than the issuer's maximum (1 hour by default).
+- **"Your organisation's Claude account has run out of credit":** billing, or the workspace's
+  spend limit.
+- **"Your JumpCloud sign-in has expired":** JumpCloud ended the session (the refresh token
+  expired or was revoked, or the user was removed). Signing in again fixes it.
 
 ## Removing access
 

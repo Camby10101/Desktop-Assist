@@ -50,11 +50,17 @@ Micro first, with branding kept in config so another business can use it later. 
 
 There are two separate Claude products, and a custom app can only use one of them:
 
-|                          | claude.ai (the chat app, Enterprise/Team seats)                                                                                                             | Claude API (Claude Console / Platform)    |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
-| SSO via JumpCloud        | Yes, for the claude.ai website and desktop app                                                                                                              | Yes, through _our_ app's sign-in (see §5) |
-| Usable from a custom app | **No.** There is no public API to drive a user's claude.ai account, and Anthropic does not allow third-party apps to use claude.ai logins without approval. | **Yes.** This is what it's for.           |
-| Billing                  | Per-seat subscription                                                                                                                                       | Per token, usually separate from seats    |
+**claude.ai (the chat app, Enterprise/Team seats)**
+
+- SSO via JumpCloud: Yes, for the claude.ai website and desktop app
+- Usable from a custom app: **No.** There is no public API to drive a user's claude.ai account, and Anthropic does not allow third-party apps to use claude.ai logins without approval.
+- Billing: Per-seat subscription
+
+**Claude API (Claude Console / Platform)**
+
+- SSO via JumpCloud: Yes, through _our_ app's sign-in (see §5)
+- Usable from a custom app: **Yes.** This is what it's for.
+- Billing: Per token, usually separate from seats
 
 **So Desktop Assist uses the Claude API.** The user's "own Claude" means their JumpCloud
 identity is checked every time the app gets Claude access (see §5). Their claude.ai chat history
@@ -62,22 +68,20 @@ and projects are **not** available to the app.
 
 ## 3. Tech stack
 
-| Layer               | Choice                                                                | Notes                                                                               |
-| ------------------- | --------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| Language            | **TypeScript 6**                                                      | TS 7 (the native compiler) isn't supported by typescript-eslint yet                 |
-| Desktop shell       | **Electron 44**                                                       | Transparent, frameless, always-on-top windows; tray; login items; `desktopCapturer` |
-| Build / dev         | **electron-vite 5** + **Vite 7**                                      | Hot-reload dev loop. electron-vite 5 doesn't support Vite 8 yet                     |
-| Packaging           | **electron-builder**                                                  | Unsigned NSIS installer for now. MSI, signing and auto-update come in M4            |
-| UI                  | **React 19** + **Tailwind CSS 4** + **lucide-react** icons            | Follows Windows light/dark mode                                                     |
-| Validation          | **zod 4**                                                             | Every IPC payload, saved file and tenant config is checked at runtime               |
-| Tests               | **Vitest**                                                            | Pure logic (layout, bounce physics, autosave, screenshot files, tenant config)      |
-| Quality             | ESLint 10 + typescript-eslint + Prettier                              |                                                                                     |
-| Repo                | npm workspaces (`apps/*`)                                             | `apps/gateway` and `packages/shared` are added when the backend arrives             |
-| _M1:_ Claude        | `@anthropic-ai/sdk`, streaming Messages API, `claude-opus-5-5`        | Effort set explicitly; server-side refusal fallbacks; prompt caching                |
-| _M1:_ rendering     | react-markdown + remark-gfm + Shiki                                   |                                                                                     |
-| _M3:_ sign-in       | openid-client 6 (JumpCloud OIDC, PKCE) + Electron `safeStorage`       | Refresh token encrypted with Windows DPAPI                                          |
-| _M3:_ Claude access | Anthropic SDK `oidcFederationProvider` (Workload Identity Federation) | Swaps the JumpCloud ID token for a short-lived Claude token; no API key             |
-| _Later:_ gateway    | Hono + jose, in a container                                           | Optional, for per-user audit and quotas (§4)                                        |
+- **Language:** **TypeScript 6**. TS 7 (the native compiler) isn't supported by typescript-eslint yet
+- **Desktop shell:** **Electron 44**. Transparent, frameless, always-on-top windows; tray; login items; `desktopCapturer`
+- **Build / dev:** **electron-vite 5** + **Vite 7**. Hot-reload dev loop. electron-vite 5 doesn't support Vite 8 yet
+- **Packaging:** **electron-builder**. Unsigned NSIS installer for now. MSI, signing and auto-update come in M4
+- **UI:** **React 19** + **Tailwind CSS 4** + **lucide-react** icons. Follows Windows light/dark mode
+- **Validation:** **zod 4**. Every IPC payload, saved file and tenant config is checked at runtime
+- **Tests:** **Vitest**. Pure logic (layout, bounce physics, autosave, screenshot files, tenant config)
+- **Quality:** ESLint 10 + typescript-eslint + Prettier
+- **Repo:** npm workspaces (`apps/*`). `apps/gateway` and `packages/shared` are added when the backend arrives
+- **_M1:_ Claude:** `@anthropic-ai/sdk`, streaming Messages API, `claude-opus-5-5`. Effort set explicitly; server-side refusal fallbacks; prompt caching
+- **_M1:_ rendering:** react-markdown + remark-gfm + Shiki
+- **_M3:_ sign-in:** openid-client 6 (JumpCloud OIDC, PKCE) + Electron `safeStorage`. Refresh token encrypted with Windows DPAPI
+- **_M3:_ Claude access:** Anthropic SDK `oidcFederationProvider` (Workload Identity Federation). Swaps the JumpCloud ID token for a short-lived Claude token; no API key
+- **_Later:_ gateway:** Hono + jose, in a container. Optional, for per-user audit and quotas (§4)
 
 Considered and rejected: **Tauri**, which has no official Anthropic SDK, needs a Rust toolchain,
 and has rougher transparent-window behaviour on WebView2. **.NET WinUI** is Windows-only.
@@ -181,16 +185,14 @@ Desktop-Assist/
 
 ## 7. Milestone 0 spec
 
-| Feature            | Behaviour                                                                                                                                                                                                                                                                                                                                                    |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Bubble & shell** | As in §1. Re-anchors when the resolution, taskbar or monitors change. Tray icon with Open and Quit. Single instance.                                                                                                                                                                                                                                         |
-| **Action icons**   | Built from the action registry, stacking upward from the bubble: **Screenshot, Settings, Bounce, Close**. Order and visibility come from `tenant.json`.                                                                                                                                                                                                      |
-| **Settings**       | A menu next to the gear. **Start with Windows** is a toggle, turned on by default the first time an installed build runs. It's disabled in dev builds. **Open screenshots folder** opens Explorer. **Clear text box** asks you to click again to confirm, then clears the text and chips (the image files are kept). The app version is shown at the bottom. |
-| **Close**          | Quits immediately with no confirmation. It's the icon furthest from the bubble so it's hard to hit by accident. Pending text is saved first. Auto-start brings the app back at next login.                                                                                                                                                                   |
-| **Text box**       | A multi-line box. **Autosaves** about 0.5 s after you stop typing, and also when it closes and when the app quits. It's restored after a restart and shows a "Saved" indicator. Saved to `%APPDATA%\Desktop Assist\notes.json` with atomic writes. A corrupt file is backed up and replaced with an empty one. No Claude connection yet.                     |
-| **Screenshot**     | An action icon. It hides Desktop Assist's own windows, captures **the screen the bubble is on** at full resolution, saves `Pictures\Desktop Assist\Screenshot YYYY-MM-DD HHMMSS.png`, reopens the panel and shows a "Screenshot saved" toast. Files are never deleted automatically.                                                                         |
-| **Attach latest**  | A 📎 button in the text box. It adds the most recent screenshot as a **thumbnail chip** (no duplicates). Click the chip to open it full size, × to remove it. Chips are saved with the text. A chip whose file was deleted shows as missing.                                                                                                                 |
-| **Bounce**         | An action icon. The panel collapses and the bubble moves at a constant speed, bouncing off the edges of the work area. **Clicking the bubble stops it and it glides back to the corner.**                                                                                                                                                                    |
+- **Bubble & shell**: As in §1. Re-anchors when the resolution, taskbar or monitors change. Tray icon with Open and Quit. Single instance.
+- **Action icons**: Built from the action registry, stacking upward from the bubble: **Screenshot, Settings, Bounce, Close**. Order and visibility come from `tenant.json`.
+- **Settings**: A menu next to the gear. **Start with Windows** is a toggle, turned on by default the first time an installed build runs. It's disabled in dev builds. **Open screenshots folder** opens Explorer. **Clear text box** asks you to click again to confirm, then clears the text and chips (the image files are kept). The app version is shown at the bottom.
+- **Close**: Quits immediately with no confirmation. It's the icon furthest from the bubble so it's hard to hit by accident. Pending text is saved first. Auto-start brings the app back at next login.
+- **Text box**: A multi-line box. **Autosaves** about 0.5 s after you stop typing, and also when it closes and when the app quits. It's restored after a restart and shows a "Saved" indicator. Saved to `%APPDATA%\Desktop Assist\notes.json` with atomic writes. A corrupt file is backed up and replaced with an empty one. No Claude connection yet.
+- **Screenshot**: An action icon. It hides Desktop Assist's own windows, captures **the screen the bubble is on** at full resolution, saves `Pictures\Desktop Assist\Screenshot YYYY-MM-DD HHMMSS.png`, reopens the panel and shows a "Screenshot saved" toast. Files are never deleted automatically.
+- **Attach latest**: A 📎 button in the text box. It adds the most recent screenshot as a **thumbnail chip** (no duplicates). Click the chip to open it full size, × to remove it. Chips are saved with the text. A chip whose file was deleted shows as missing.
+- **Bounce**: An action icon. The panel collapses and the bubble moves at a constant speed, bouncing off the edges of the work area. **Clicking the bubble stops it and it glides back to the corner.**
 
 **Extension points built in M0 (so later features are small additions):**
 
@@ -203,17 +205,14 @@ Desktop-Assist/
 
 ## 7b. Milestone 1 spec: Chat with Claude
 
-| Feature           | Behaviour                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **API key**       | _Replaced by JumpCloud sign-in in M3, which also deletes the saved key file._ Used the user's own Claude API key. **Every time the app starts it tests the saved key** (a free call that fetches the model's details). If there's no key, or Anthropic rejects it, the chat box asks for one before anything else. A new key is checked with Anthropic first and saved only if it works, encrypted with Windows DPAPI (`%APPDATA%\Desktop Assist\claude-api-key.bin`). It never reaches the UI. If Anthropic can't be reached at startup, the key is kept, chat stays available, and a banner offers Retry. A key revoked mid-conversation brings the key form back with an explanation. Settings → Change API key also offers Forget saved key. |
-| **Chat**          | The text box becomes the chat input. Enter sends; Shift+Enter adds a line. Replies stream in as Markdown with highlighted code; links open in the browser. "Thinking…" shows until text arrives. Stop cancels a reply and keeps what arrived. Each reply has Copy. The card grows upward to 520px, then scrolls.                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| **Screenshots**   | Attached screenshots are sent with the next message, scaled to at most 1568px and JPEG-encoded, and shown as thumbnails on the sent message.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| **Errors**        | Plain-English messages for offline, busy, rate limits, no credit, a declined request, and a reply cut off at the length limit. Temporary errors get Retry.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| **Settings**      | Response style: Fast (default) / Balanced / Thorough (the API's `effort`). New conversation replaces Clear text box.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| **Request shape** | `claude-opus-5-5`, streaming, adaptive thinking (always on), effort as chosen, server-side refusal fallback (`fallbacks: "default"`), prompt caching, a fixed system prompt plus the tenant's `systemPrompt`. History is append-only, with every reply's content (including thinking) sent back unchanged. A tool-use loop is in place, with no tools registered yet.                                                                                                                                                                                                                                                                                                                                                                            |
-| **History**       | Kept for the current session; New conversation or quitting clears it. The unsent draft still survives restarts.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-
-| **Drag & snap** | Drag the bubble anywhere, including onto another monitor. On release it glides to the nearest corner of the display it was dropped on. A short press is still a click. The panel mirrors itself so it always opens toward the middle of the screen: in a left corner the chat opens to the right, and in a top corner the icons drop below the bubble and the chat grows downward. The corner and display are remembered across restarts. If that display is unplugged, the bubble moves to the same corner of the main display. Bounce starts from, stays on, and returns to the bubble's current display and corner. |
+- **API key**: _Replaced by JumpCloud sign-in in M3, which also deletes the saved key file._ Used the user's own Claude API key. **Every time the app starts it tests the saved key** (a free call that fetches the model's details). If there's no key, or Anthropic rejects it, the chat box asks for one before anything else. A new key is checked with Anthropic first and saved only if it works, encrypted with Windows DPAPI (`%APPDATA%\Desktop Assist\claude-api-key.bin`). It never reaches the UI. If Anthropic can't be reached at startup, the key is kept, chat stays available, and a banner offers Retry. A key revoked mid-conversation brings the key form back with an explanation. Settings → Change API key also offers Forget saved key.
+- **Chat**: The text box becomes the chat input. Enter sends; Shift+Enter adds a line. Replies stream in as Markdown with highlighted code; links open in the browser. "Thinking…" shows until text arrives. Stop cancels a reply and keeps what arrived. Each reply has Copy. The card grows upward to 520px, then scrolls.
+- **Screenshots**: Attached screenshots are sent with the next message, scaled to at most 1568px and JPEG-encoded, and shown as thumbnails on the sent message.
+- **Errors**: Plain-English messages for offline, busy, rate limits, no credit, a declined request, and a reply cut off at the length limit. Temporary errors get Retry.
+- **Settings**: Response style: Fast (default) / Balanced / Thorough (the API's `effort`). New conversation replaces Clear text box.
+- **Request shape**: `claude-opus-5-5`, streaming, adaptive thinking (always on), effort as chosen, server-side refusal fallback (`fallbacks: "default"`), prompt caching, a fixed system prompt plus the tenant's `systemPrompt`. History is append-only, with every reply's content (including thinking) sent back unchanged. A tool-use loop is in place, with no tools registered yet.
+- **History**: Kept for the current session; New conversation or quitting clears it. The unsent draft still survives restarts.
+- **Drag & snap**: Drag the bubble anywhere, including onto another monitor. On release it glides to the nearest corner of the display it was dropped on. A short press is still a click. The panel mirrors itself so it always opens toward the middle of the screen: in a left corner the chat opens to the right, and in a top corner the icons drop below the bubble and the chat grows downward. The corner and display are remembered across restarts. If that display is unplugged, the bubble moves to the same corner of the main display. Bounce starts from, stays on, and returns to the bubble's current display and corner.
 
 Tested with unit tests (128) and end-to-end runs of the real app: against a local mock of the
 Claude API (38 checks), so no real key was needed, and dragging to each corner and onto a second
@@ -221,10 +220,8 @@ monitor at different scaling (21 checks).
 
 ## 7c. Milestone 2.1: Bubble fixes
 
-| Change                                       | Behaviour                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Clicks no longer fall through the bubble** | Clicking the bubble could do nothing, because the click went to the window behind it (found after taking a screenshot and opening the screenshots folder, but it could happen at any time: about 1 hover in 6). The bubble window is no longer click-through at all. The panel keeps click-through for its empty areas, ignores the stale "mouse left" message that caused the problem, and resets click-through from the real pointer position each time it opens. |
-| **Bubble borders and purple accent**         | A 2px white border is always around the bubble. While the panel is open, a 2px purple border sits outside the white one. The tenant accent colour is now purple (`#9333EA`), so every former blue highlight matches: your messages, Send, links, switches, the response-style selector, the key form, the active gear, the tray icon, text selection, and the code highlighting (purple in place of blue).                                                          |
+- **Clicks no longer fall through the bubble**: Clicking the bubble could do nothing, because the click went to the window behind it (found after taking a screenshot and opening the screenshots folder, but it could happen at any time: about 1 hover in 6). The bubble window is no longer click-through at all. The panel keeps click-through for its empty areas, ignores the stale "mouse left" message that caused the problem, and resets click-through from the real pointer position each time it opens.
+- **Bubble borders and purple accent**: A 2px white border is always around the bubble. While the panel is open, a 2px purple border sits outside the white one. The tenant accent colour is now purple (`#9333EA`), so every former blue highlight matches: your messages, Send, links, switches, the response-style selector, the key form, the active gear, the tray icon, text selection, and the code highlighting (purple in place of blue).
 
 Checked with real mouse input (hovering 6/6, the screenshot → folder → bubble sequence), plus the
 unit tests, the drag test and screen captures of the borders.
@@ -234,35 +231,47 @@ unit tests, the drag test and screen captures of the borders.
 The API key is gone. Users sign in with JumpCloud, and Claude is reached through Workload Identity
 Federation (§4, §5).
 
-| Feature               | Behaviour                                                                                                                                                                                                                                                                                            |
-| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Sign in**           | While nobody is signed in, the chat box shows **Sign in with JumpCloud**. It opens JumpCloud in the default browser. When the browser comes back, the chat box reopens, ready to chat. While waiting it says "Finish signing in in your browser", with **Cancel**. Sign-in gives up after 5 minutes. |
-| **Stay signed in**    | The sign-in is saved encrypted and renewed silently at every start ("Checking your JumpCloud sign-in…"). There's nothing to do until JumpCloud ends it.                                                                                                                                              |
-| **Offline**           | If JumpCloud can't be reached at start, the sign-in is kept, the chat stays usable (sending tries again) and a banner offers **Retry**.                                                                                                                                                              |
-| **Expired / revoked** | The chat box shows the sign-in again with "Your JumpCloud sign-in has expired". The conversation is kept; after signing back in, **Retry** resends the message that failed.                                                                                                                          |
-| **Refused**           | If JumpCloud refuses (e.g. the user isn't assigned to the app), its reason is shown. If Anthropic's federation rule refuses the user: "Your JumpCloud account isn't set up to use Claude yet. Contact IT."                                                                                           |
-| **Settings**          | "Signed in as _name_" and **Log out**, which revokes the sign-in with JumpCloud, deletes it from this PC and clears the chat. Change API key is gone.                                                                                                                                                |
-| **Not set up**        | Until IT fills in `tenant.json`, the chat box says sign-in isn't set up and lists the missing settings. Nothing is contacted.                                                                                                                                                                        |
-| **Config**            | `tenant.json` gains `signIn` (issuer, client ID, redirect port) and `claudeAccess` (organization, federation rule, service account and optional workspace IDs). None of them are secret. Dev runs can override them from a file named by `DESKTOP_ASSIST_DEV_CONFIG`.                                |
-| **Focus ring**        | Keyboard focus is now purple everywhere, instead of following the Windows accent colour.                                                                                                                                                                                                             |
+- **Sign in**: While nobody is signed in, the chat box shows **Sign in with JumpCloud**. It opens JumpCloud in the default browser. When the browser comes back, the chat box reopens, ready to chat. While waiting it says "Finish signing in in your browser", with **Cancel**. Sign-in gives up after 5 minutes.
+- **Stay signed in**: The sign-in is saved encrypted and renewed silently at every start ("Checking your JumpCloud sign-in…"). There's nothing to do until JumpCloud ends it.
+- **Offline**: If JumpCloud can't be reached at start, the sign-in is kept, the chat stays usable (sending tries again) and a banner offers **Retry**.
+- **Expired / revoked**: The chat box shows the sign-in again with "Your JumpCloud sign-in has expired". The conversation is kept; after signing back in, **Retry** resends the message that failed.
+- **Refused**: If JumpCloud refuses (e.g. the user isn't assigned to the app), its reason is shown. If Anthropic's federation rule refuses the user: "Your JumpCloud account isn't set up to use Claude yet. Contact IT."
+- **Settings**: "Signed in as _name_" and **Log out**, which revokes the sign-in with JumpCloud, deletes it from this PC and clears the chat. Change API key is gone.
+- **Not set up**: Until IT fills in `tenant.json`, the chat box says sign-in isn't set up and lists the missing settings. Nothing is contacted.
+- **Config**: `tenant.json` gains `signIn` (issuer, client ID, redirect port) and `claudeAccess` (organization, federation rule, service account and optional workspace IDs). None of them are secret. Dev runs can override them from a file named by `DESKTOP_ASSIST_DEV_CONFIG`.
+- **Focus ring**: Keyboard focus is now purple everywhere, instead of following the Windows accent colour.
+- **Icons**: The tray icon and the `.exe` icon (also used for the Start menu shortcut and the installer) are the bubble's logo.
+- **Diagnostics**: In `npm run dev`, the terminal prints the full details of any sign-in or Claude error (status codes, request IDs).
 
-Tested with unit tests (147, including the sign-in manager and the loopback listener) and an
+Tested with unit tests (153, including the sign-in manager, the loopback listener and the fallback rule) and an
 end-to-end run of the real app (47 checks) against a local mock JumpCloud and a mock Anthropic
 token exchange. The mock JumpCloud does PKCE, rotating refresh tokens, and RS256 ID tokens with a
 single-use `jti`. The mock exchange checks signatures, audience and replays. The run covers first
 sign-in, chat, token renewal after a rejection, restart, starting offline and Retry, IT revoking
-the sign-in, Log out, a refused sign-in and Cancel. No real JumpCloud or Anthropic account was used.
+the sign-in, Log out, a refused sign-in and Cancel.
+
+Checked against the real services, up to the sign-in itself: JumpCloud's discovery document,
+JumpCloud accepting the client ID and the exact redirect URI (and rejecting a wrong one), the app
+building a sign-in address that reaches JumpCloud's login page, and Anthropic's token endpoint
+recognising the organization, rule and service account IDs (a fake token gets the expected
+"Authentication failed", a malformed rule ID a 400). The real sign-in needs a person at the
+browser, so it's the last step left to try.
+
+Fixed while writing the code walkthrough: replies are sent back the way the API requires after a
+server-side fallback; the panel knew the saved corner only after start-up finished, so it could lay
+itself out for the wrong corner; the pages could ask for their state before the main process was
+ready to answer; a failure during start-up didn't show the error box; Cancel pressed in the first
+moment of a sign-in still opened the browser; sign-in timeouts weren't reported as "Couldn't reach
+JumpCloud"; two preference saves at once could finish in the wrong order.
 
 ## 8. Milestones
 
-| #          | Milestone             | Done when                                                                                                                                          |
-| ---------- | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **0** ✅   | **Foundation**        | Everything in §7 works in `npm run dev` and in the unsigned installer. Unit tests and lint pass.                                                   |
-| **1** ✅   | **Chat with Claude**  | See §7b.                                                                                                                                           |
-| **2.1** ✅ | **Bubble fixes**      | See §7c.                                                                                                                                           |
-| **3** ✅   | **JumpCloud sign-in** | See §7d. Combines the earlier plan's M2 (sign-in) and M3 (backend), using the direct option (B).                                                   |
-| 4          | Ship                  | Code signing, MSI, auto-update, CI (GitHub Actions), pilot deployment through JumpCloud                                                            |
-| later      |                       | Claude-requested screenshots (as a tool), hiding during full-screen apps, saved history, company integrations, a gateway for per-user audit, macOS |
+- **0** ✅ **Foundation**: Everything in §7 works in `npm run dev` and in the unsigned installer. Unit tests and lint pass.
+- **1** ✅ **Chat with Claude**: See §7b.
+- **2.1** ✅ **Bubble fixes**: See §7c.
+- **3** ✅ **JumpCloud sign-in**: See §7d. Combines the earlier plan's M2 (sign-in) and M3 (backend), using the direct option (B).
+- 4 Ship: Code signing, MSI, auto-update, CI (GitHub Actions), pilot deployment through JumpCloud
+- later : Claude-requested screenshots (as a tool), hiding during full-screen apps, saved history, company integrations, a gateway for per-user audit, macOS
 
 ## 9. What we need from admins
 
@@ -306,6 +315,6 @@ Step-by-step instructions are in [JUMPCLOUD_SETUP.md](JUMPCLOUD_SETUP.md).
 ## 11. Notes
 
 - Keep the repo **outside OneDrive**. `node_modules` plus OneDrive sync locks break Electron builds.
-- The bubble logo is `tenants/morse-micro/logo.png`: the Morse Micro "Mμ" mark cut to a circle.
-  Replacing the file is all it takes to change it. The tray icon is still a plain accent-coloured
-  circle, and the installer still uses the default Electron icon (both to be branded in M4).
+- The logo is `tenants/morse-micro/logo.png`: the Morse Micro "Mμ" mark cut to a circle. It's
+  the bubble, the tray icon, and the icon of the `.exe`, its Start menu shortcut and the
+  installer. Replacing the file is all it takes to change them.

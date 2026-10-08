@@ -9,10 +9,8 @@ $env:TENANT = 'morse-micro'; npm run dev
 
 A tenant folder contains:
 
-| File                     | Purpose                                                                                                                                                                          |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `tenant.json`            | Company and app names, accent colour, the action icons shown above the bubble (listed from the bubble upward), and the sign-in settings. Validated at startup and by `npm test`. |
-| `logo.png` or `logo.svg` | The bubble logo. If both exist, `logo.png` is used.                                                                                                                              |
+- `tenant.json`: Company and app names, accent colour, the action icons shown above the bubble (listed from the bubble upward), and the sign-in settings. Validated at startup and by `npm test`.
+- `logo.png` or `logo.svg`: The logo. `logo.png` is also the tray icon and the `.exe` icon. If both exist, `logo.png` is used.
 
 Available actions: `screenshot`, `settings`, `bounce`, `close`.
 

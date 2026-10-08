@@ -5,7 +5,8 @@ screen and opens a panel when clicked. Built for Morse Micro first. Branding liv
 [`tenants/`](tenants/README.md), so another business can use it later.
 
 - [docs/PLAN.md](docs/PLAN.md): the plan, architecture, milestones and decisions.
-- [docs/CODE_GUIDE.md](docs/CODE_GUIDE.md): what every file and function does.
+- [docs/CODE_GUIDE.md](docs/CODE_GUIDE.md): how the code fits together, with the code of every
+  function shown and explained.
 - [docs/JUMPCLOUD_SETUP.md](docs/JUMPCLOUD_SETUP.md): for IT, setting up JumpCloud sign-in and
   Claude access.
 
@@ -33,7 +34,7 @@ sign-in) are complete. Sign-in needs a one-off setup by IT before it works for r
   - **Bounce** sends the bubble bouncing around the screen; click it to send it gliding home.
   - **Close** quits the app.
 - **Attach latest screenshot** adds the newest screenshot to your next message.
-- A tray icon with Open and Quit.
+- A tray icon (the same logo) with Open and Quit.
 
 Claude usage is billed to the company's Claude Console account, through the service account IT
 sets up.
@@ -73,6 +74,7 @@ npm test            # unit tests (Vitest)
 npm run lint
 npm run typecheck
 npm run dist        # unsigned installer → apps/desktop/dist/
+npm run docs        # refresh the code shown in docs/code-guide after changing code
 ```
 
 The first `npm run dev` downloads the Electron binary. Dev runs keep their data (including the
@@ -91,7 +93,8 @@ variables:
 To build for a different tenant: `$env:TENANT = '<folder name>'; npm run dev`.
 
 **Changing the logo:** replace `tenants/morse-micro/logo.png` (currently the Morse Micro "Mμ"
-mark, cut to a circle) and restart. See [tenants/README.md](tenants/README.md) for tips.
+mark, cut to a circle) and restart. The same image is also the tray icon and the installed app's
+icon. See [tenants/README.md](tenants/README.md) for tips.
 
 ## Layout
 
