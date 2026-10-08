@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { WorkloadIdentityError } from '@anthropic-ai/sdk/lib/credentials/types'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ChatMessage, Effort } from '@shared/types'
 import type { ChatBackend, ReplyRequest } from '../src/main/claude/AnthropicBackend'
@@ -211,6 +212,19 @@ describe('errors', () => {
       notice: 'Sign in with JumpCloud to keep chatting.',
     })
     expect(lastShown().retryable).toBe(true) // once signed back in
+  })
+
+  it("adds Anthropic's request ID when the sign-in swap is refused", async () => {
+    backend.steps.push(
+      fails(
+        new WorkloadIdentityError('Token exchange failed', 401, 'Authentication failed', 'req_9'),
+      ),
+    )
+    session.send('question', [], [])
+    await session.idle()
+    expect(lastShown().notice).toBe(
+      "Your JumpCloud account isn't set up to use Claude yet. Contact IT. (Reference: req_9)",
+    )
   })
 
   it('explains refusals and replies cut off at the length limit', async () => {

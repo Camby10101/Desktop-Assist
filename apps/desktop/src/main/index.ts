@@ -8,14 +8,17 @@ import type { AuthStatus } from '@shared/types'
 import tenantConfig from '@tenant/tenant.json'
 import { createActionHandlers } from './actions'
 import { AuthManager } from './auth/AuthManager'
+import { summarizeIdToken, type IdTokenSummary } from './auth/idToken'
 import { listenForRedirect } from './auth/loopback'
 import { createOidc } from './auth/oidc'
 import { BubbleController, type DisplayArea, type Displays } from './bubble/BubbleController'
 import { bubbleSurface, createOverlayWindow, panelSurface } from './bubble/windows'
 import { AnthropicBackend } from './claude/AnthropicBackend'
 import { ChatSession } from './claude/ChatSession'
+import { classifyError } from './claude/errors'
 import { API_BASE_URL, buildSystemPrompt } from './claude/model'
 import { registerIpc } from './ipc'
+import { createLog } from './log'
 import { NotesStore } from './notes/NotesStore'
 import { ScreenshotService } from './screenshots/ScreenshotService'
 import { SettingsService } from './settings'
@@ -64,9 +67,11 @@ async function start(): Promise<void> {
   const userData = app.getPath('userData')
   const screenshotsDir = join(app.getPath('pictures'), tenant.appName)
   const actionCount = tenant.actions.length
+  // Problems go to %APPDATA%\Desktop Assist\logs, so an installed copy can be diagnosed too.
+  const log = createLog(join(userData, 'logs', 'desktop-assist.log'))
 
   const notes = new NotesStore(join(userData, 'notes.json'), {
-    onError: (error) => console.error('Saving the text box failed', error),
+    onError: (error) => log('Saving the text box failed:', error),
   })
   await notes.load()
 
@@ -105,10 +110,15 @@ async function start(): Promise<void> {
 
   // Dev runs may point at a local test server; an installed app always talks to Anthropic.
   const devBaseUrl = !app.isPackaged ? process.env['ANTHROPIC_BASE_URL'] : undefined
+  let lastIdToken: IdTokenSummary | { error: string } | null = null
   const backend = new AnthropicBackend({
     baseURL: devBaseUrl || API_BASE_URL,
     access: claudeAccess,
-    identityToken: () => auth.freshIdToken(),
+    identityToken: async () => {
+      const token = await auth.freshIdToken()
+      lastIdToken = summarizeIdToken(token) // what the token says, never the token itself
+      return token
+    },
   })
   const chat = new ChatSession({
     backend,
@@ -117,8 +127,11 @@ async function start(): Promise<void> {
     system: buildSystemPrompt(tenant),
     onMessage: (message) => broadcast(IPC.chatMessage, message),
     onReset: () => broadcast(IPC.chatReset),
-    // The details (status codes, request IDs) go to the terminal in dev runs.
-    onError: (error) => console.error('Claude request failed:', error),
+    onError: (error) => {
+      log('Claude request failed:', error)
+      // Anthropic refused to swap the sign-in: log what the token said, to compare with the rule.
+      if (classifyError(error) === 'not-allowed') log('The JumpCloud ID token sent:', lastIdToken)
+    },
   })
 
   const missing = missingSettings(signIn, claudeAccess)
@@ -144,7 +157,7 @@ async function start(): Promise<void> {
       // the user can carry on (Retry resends a message that failed).
       if (reason === 'logout') chat.newConversation()
     },
-    onError: (error) => console.error('JumpCloud sign-in failed:', error),
+    onError: (error) => log('JumpCloud sign-in failed:', error),
   })
   // Renew the saved sign-in at every start; if there isn't one, the chat box offers to sign in.
   void auth.init()

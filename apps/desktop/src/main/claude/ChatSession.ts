@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import type Anthropic from '@anthropic-ai/sdk'
 import type { Attachment, ChatMessage, Effort } from '@shared/types'
 import type { ChatBackend } from './AnthropicBackend'
-import { classifyError, errorMessage, isRetryable } from './errors'
+import { classifyError, errorMessage, errorReference, isRetryable } from './errors'
 import { MAX_TOOL_ROUNDS } from './model'
 
 type MessageParam = Anthropic.Beta.BetaMessageParam
@@ -176,7 +176,11 @@ export class ChatSession {
       }
       this.deps.onError?.(error)
       const retryable = !keptPartial && isRetryable(kind)
-      this.finish(reply, 'error', errorMessage(kind), retryable)
+      const reference = errorReference(error)
+      const notice = reference
+        ? `${errorMessage(kind)} (Reference: ${reference})`
+        : errorMessage(kind)
+      this.finish(reply, 'error', notice, retryable)
     }
   }
 

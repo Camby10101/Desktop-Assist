@@ -12,6 +12,9 @@ module.exports = {
   productName: 'Desktop Assist',
   directories: { output: 'dist', buildResources: 'build' },
   files: ['out/**', 'package.json'],
+  // The install folder is named after the package; without this it would be the npm workspace
+  // name, "@desktop-assist/desktop", which becomes "@desktop-assistdesktop".
+  extraMetadata: { name: 'desktop-assist' },
   npmRebuild: false,
   win: {
     // The bubble's logo. electron-builder turns it into the .exe's icon, which Windows also shows

@@ -86,3 +86,13 @@ const MESSAGES: Record<ErrorKind, string> = {
 export function errorMessage(kind: ErrorKind): string {
   return MESSAGES[kind]
 }
+
+/**
+ * Anthropic's ID for the failed request, if it has one. Shown with the error so IT can find the
+ * attempt (for a refused sign-in swap, in the Claude Console's Authentication history).
+ */
+export function errorReference(error: unknown): string | undefined {
+  if (error instanceof WorkloadIdentityError) return error.requestId ?? undefined
+  if (error instanceof Anthropic.APIError) return error.requestID ?? undefined
+  return undefined
+}
