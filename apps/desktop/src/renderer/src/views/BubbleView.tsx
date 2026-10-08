@@ -2,7 +2,6 @@ import { useRef, type PointerEvent } from 'react'
 import { UI } from '@shared/geometry'
 import type { Mode } from '@shared/types'
 import { useAccentColor, useAssistState } from '../hooks/useAssistState'
-import { useClickThrough } from '../hooks/useClickThrough'
 import { cn } from '../lib/cn'
 
 // The tenant's logo: logo.png, or logo.svg (if a tenant has both, the PNG wins).
@@ -32,7 +31,7 @@ const DRAG_THRESHOLD = 5
  * to the nearest corner of whichever display it's on.
  */
 export function BubbleView() {
-  useClickThrough()
+  // No useClickThrough here: the bubble window always takes the mouse (see bubble/windows.ts).
   const state = useAssistState()
   useAccentColor(state?.branding.accentColor)
   const mode = state?.mode ?? 'collapsed'
@@ -86,10 +85,11 @@ export function BubbleView() {
         style={{ width: UI.bubbleSize, height: UI.bubbleSize }}
         className={cn(
           'overflow-hidden rounded-full shadow-[0_2px_6px_rgba(0,0,0,0.35)] outline-none',
-          'transition-transform duration-150 ease-out motion-reduce:transition-none',
+          'transition-[transform,box-shadow] duration-150 ease-out motion-reduce:transition-none',
           mode === 'dragging' ? 'scale-105' : 'hover:scale-105 active:scale-95',
-          mode === 'expanded' &&
-            'ring-2 ring-accent ring-offset-2 ring-offset-white dark:ring-offset-zinc-900',
+          // Always a 2px white border; while the panel is open, a purple one outside it.
+          'ring-2',
+          mode === 'expanded' ? 'ring-accent ring-offset-2 ring-offset-white' : 'ring-white',
         )}
       >
         <img

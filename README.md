@@ -7,8 +7,8 @@ screen and opens a panel when clicked. Built for Morse Micro first. Branding liv
 - [docs/PLAN.md](docs/PLAN.md): the plan, architecture, milestones and decisions.
 - [docs/CODE_GUIDE.md](docs/CODE_GUIDE.md): what every file and function does.
 
-**Status:** Milestones 0 (Foundation) and 1 (Chat with Claude) are complete. Next is
-Milestone 2: JumpCloud sign-in.
+**Status:** Milestones 0 (Foundation), 1 (Chat with Claude) and 2.1 (bubble fixes) are complete.
+Next is Milestone 2: JumpCloud sign-in.
 
 ## Features
 

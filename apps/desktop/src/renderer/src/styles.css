@@ -1,8 +1,10 @@
 @import 'tailwindcss';
 
 @theme {
-  /* Overridden at runtime with the tenant's colour (see useAccentColor). */
-  --color-accent: #1b6ac9;
+  /* Overridden at runtime with the tenant's colour (see useAccentColor). Every highlight uses it. */
+  --color-accent: #9333ea;
+  /* A lighter accent, for accent-coloured text on dark backgrounds. */
+  --color-accent-soft: color-mix(in srgb, var(--color-accent) 60%, white);
   --font-sans: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
 }
 
@@ -25,6 +27,11 @@
 
   textarea {
     user-select: text;
+  }
+
+  /* Selected text uses the accent instead of the system blue. */
+  ::selection {
+    background-color: color-mix(in srgb, var(--color-accent) 25%, transparent);
   }
 
   /* Slim scrollbars suit the small panel. */
@@ -124,6 +131,9 @@
   }
 
   @media (prefers-color-scheme: dark) {
+    .markdown a {
+      color: var(--color-accent-soft);
+    }
     .markdown blockquote {
       border-color: var(--color-zinc-600);
       color: var(--color-zinc-400);
@@ -138,7 +148,8 @@
     }
   }
 
-  /* Code highlighting (highlight.js classes), light then dark. */
+  /* Code highlighting (highlight.js classes), light then dark. Purple in place of the usual
+     blues, with names in orange so every kind of token still stands apart. */
   .hljs-comment,
   .hljs-quote {
     color: #6e7781;
@@ -153,18 +164,18 @@
   .hljs-string,
   .hljs-regexp,
   .hljs-addition {
-    color: #0a3069;
+    color: #6b21a8;
   }
   .hljs-number,
   .hljs-attr,
   .hljs-attribute,
   .hljs-variable {
-    color: #0550ae;
+    color: #9333ea;
   }
   .hljs-title,
   .hljs-section,
   .hljs-function {
-    color: #8250df;
+    color: #953800;
   }
   .hljs-type,
   .hljs-name,
@@ -189,18 +200,18 @@
     .hljs-string,
     .hljs-regexp,
     .hljs-addition {
-      color: #a5d6ff;
+      color: #e9d5ff;
     }
     .hljs-number,
     .hljs-attr,
     .hljs-attribute,
     .hljs-variable {
-      color: #79c0ff;
+      color: #c084fc;
     }
     .hljs-title,
     .hljs-section,
     .hljs-function {
-      color: #d2a8ff;
+      color: #ffa657;
     }
     .hljs-type,
     .hljs-name,

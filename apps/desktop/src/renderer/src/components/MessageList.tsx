@@ -113,7 +113,7 @@ function AssistantMessage(props: {
             <button
               type="button"
               onClick={props.onRetry}
-              className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-medium text-accent hover:bg-zinc-100 dark:hover:bg-zinc-800"
+              className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-medium text-accent hover:bg-zinc-100 dark:text-accent-soft dark:hover:bg-zinc-800"
             >
               <RotateCcw size={12} aria-hidden /> Retry
             </button>

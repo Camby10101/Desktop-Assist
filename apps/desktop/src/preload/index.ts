@@ -47,6 +47,7 @@ const api: AssistApi = {
   },
   onModeChanged: (callback) => subscribe(IPC.modeChanged, callback),
   onCornerChanged: (callback) => subscribe(IPC.cornerChanged, callback),
+  onClickThroughReset: (callback) => subscribe(IPC.clickThroughReset, callback),
   onApiKeyStatus: (callback) => subscribe(IPC.apiKeyStatus, callback),
   onChatMessage: (callback) => subscribe(IPC.chatMessage, callback),
   onChatReset: (callback) => subscribe(IPC.chatReset, () => callback()),

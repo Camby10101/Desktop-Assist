@@ -47,7 +47,7 @@ export function ApiKeyForm(props: {
   return (
     <div className="space-y-3 p-4">
       <div className="flex items-start gap-2.5">
-        <span className="grid size-8 shrink-0 place-items-center rounded-full bg-accent/10 text-accent">
+        <span className="grid size-8 shrink-0 place-items-center rounded-full bg-accent/10 text-accent dark:text-accent-soft">
           <KeyRound size={16} aria-hidden />
         </span>
         <div>
@@ -99,7 +99,7 @@ export function ApiKeyForm(props: {
             event.preventDefault()
             void window.assist.openExternal(CONSOLE_KEYS_URL)
           }}
-          className="text-accent underline"
+          className="text-accent underline dark:text-accent-soft"
         >
           Claude Console
         </a>
