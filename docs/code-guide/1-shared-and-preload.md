@@ -1,6 +1,6 @@
 # Shared code and the preload bridge
 
-[← Code Guide](../CODE_GUIDE.md)
+[← Code Guide](CODE_GUIDE.md)
 
 The app runs as two kinds of process: the **main process** (Node.js, which owns the windows,
 files, sign-in and Claude) and a **renderer** for each window (Chromium, which draws the React
@@ -779,7 +779,7 @@ export interface AssistApi {
   /** Tell the main process whether the pointer is over real UI (true) or a see-through area. */
   setInteractive(interactive: boolean): void
   invokeAction(id: CommandActionId): Promise<ActionResult>
-  /** Opens an http(s) link in the default browser. */
+  /** Opens a web (http/https) or email (mailto) link in the default app. */
   openExternal(url: string): Promise<void>
   copyText(text: string): Promise<void>
   notes: {
@@ -841,7 +841,8 @@ only for readability.
 - `invokeAction(id: CommandActionId): Promise<ActionResult>`: runs a command action; only command
   ids are allowed (see `CommandActionId`).
 - `openExternal(url: string): Promise<void>`: opens a link from one of Claude's replies. The main
-  process only accepts `http:` and `https:` addresses (`WebUrl` in `src/main/ipc.ts`).
+  process only accepts web (`http:`, `https:`) and email (`mailto:`) addresses (`ExternalUrl` in
+  `src/main/ipc.ts`).
 - `setText(text: string): void`: sent on every keystroke, so it doesn't wait for an answer.
   `NotesStore` saves the draft to disk about half a second after typing stops.
 - `thumbnail(path: string): Promise<string | null>`: returns the preview as a _data URL_, the

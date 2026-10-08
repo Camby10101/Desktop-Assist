@@ -1,6 +1,6 @@
 # JumpCloud sign-in
 
-[← Code Guide](../CODE_GUIDE.md)
+[← Code Guide](CODE_GUIDE.md)
 
 This part covers how Desktop Assist knows who you are, and how that turns into access to Claude
 without an API key. You sign in once with JumpCloud in your normal browser. The app keeps a

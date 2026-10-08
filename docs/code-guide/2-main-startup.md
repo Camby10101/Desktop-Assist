@@ -1,6 +1,6 @@
 # Main process: startup, IPC and app plumbing
 
-[← Code Guide](../CODE_GUIDE.md)
+[← Code Guide](CODE_GUIDE.md)
 
 The _main process_ is the Node.js side of an Electron app: the single process that owns the
 windows, the files, the tray icon and the network. This page covers how it starts and how the
@@ -619,9 +619,9 @@ are created there, so this file only needs their types, not how to build them.
 - `getState(): AppState`: builds the full snapshot a page asks for when it first loads (defined
   in `start()`).
 
-### `NoArgs`, `FilePath` and `WebUrl`
+### `NoArgs`, `FilePath` and `ExternalUrl`
 
-<!-- code: apps/desktop/src/main/ipc.ts#NoArgs,FilePath,WebUrl -->
+<!-- code: apps/desktop/src/main/ipc.ts#NoArgs,FilePath,ExternalUrl -->
 
 [`src/main/ipc.ts`, lines 35–47](../../apps/desktop/src/main/ipc.ts#L35-L47)
 
@@ -630,13 +630,13 @@ const NoArgs = z.undefined()
 
 const FilePath = z.string().min(1).max(1024)
 
-/** Only web links may be opened from the chat (no file:, javascript: and so on). */
-const WebUrl = z
+/** Only web and email links may be opened from the chat (no file:, javascript: and so on). */
+const ExternalUrl = z
   .string()
   .max(4096)
   .refine((value) => {
     try {
-      return ['http:', 'https:'].includes(new URL(value).protocol)
+      return ['http:', 'https:', 'mailto:'].includes(new URL(value).protocol)
     } catch {
       return false
     }
@@ -652,8 +652,9 @@ Schemas used by several channels.
 - `FilePath`: only checks for a sensible string. The real check, that the file is inside the
   screenshots folder, is done by `ScreenshotService` (`owns()`).
 - `.refine(...)`: adds a custom check to a schema. Here the string must parse as a URL and use
-  `http:` or `https:`, so a link in a Claude reply can't open a local file (`file:`), run script
-  (`javascript:`) or launch another program through its own URL scheme. `new URL()` throws for
+  `http:`, `https:` (opened in the browser) or `mailto:` (opened in the email app), so a link in a
+  Claude reply can't open a local file (`file:`), run script (`javascript:`) or launch another
+  program through its own URL scheme. `new URL()` throws for
   text that isn't a URL, hence the `try`/`catch`.
 
 ### `registerIpc()`
@@ -703,7 +704,7 @@ export function registerIpc(ctx: IpcContext): void {
   })
 
   handle(IPC.invokeAction, z.enum(COMMAND_ACTION_IDS), (id) => ctx.actions[id]())
-  handle(IPC.openExternal, WebUrl, (url) => shell.openExternal(url))
+  handle(IPC.openExternal, ExternalUrl, (url) => shell.openExternal(url))
   handle(IPC.copyText, z.string().max(1_000_000), (text) => clipboard.writeText(text))
 
   on(IPC.notesSetText, z.string().max(MAX_NOTE_LENGTH), (text) => ctx.notes.setText(text))
@@ -795,7 +796,7 @@ and two helpers; the rest is one line (or a few) per channel, grouped by area.
   result, which the panel shows as a toast. The Settings icon is a `popover` action that never
   leaves the page.
 - `shell.openExternal(url)`: opens a link from a Claude reply in the default browser, after
-  `WebUrl` has checked it.
+  `ExternalUrl` has checked it (an email link opens the email app instead).
 - `z.string().max(1_000_000)`: the text of a chat message whose Copy button was pressed, capped
   at a million characters (`_` is just a digit separator). `clipboard.writeText` puts it on the Windows clipboard.
 

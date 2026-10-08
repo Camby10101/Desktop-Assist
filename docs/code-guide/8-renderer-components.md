@@ -1,6 +1,6 @@
 # The UI components
 
-[← Code Guide](../CODE_GUIDE.md)
+[← Code Guide](CODE_GUIDE.md)
 
 These seven files draw everything that appears around the bubble when you click it. `Panel` in
 `PanelView.tsx` (see [The pages](7-renderer-pages.md)) renders three of them directly: the
@@ -24,7 +24,7 @@ card), `Composer` (the text box, private to this file) and `Banner` (exported, u
 
 <!-- code: apps/desktop/src/renderer/src/components/ChatBox.tsx#ChatBox -->
 
-[`src/renderer/src/components/ChatBox.tsx`, lines 11–85](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L11-L85)
+[`src/renderer/src/components/ChatBox.tsx`, lines 11–90](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L11-L90)
 
 ```tsx
 /**
@@ -93,7 +93,12 @@ export function ChatBox(props: {
       {props.signInPrompt ?? (
         <>
           {props.messages.length > 0 && (
-            <MessageList messages={props.messages} onRetry={props.onRetry} onCopy={props.onCopy} />
+            <MessageList
+              messages={props.messages}
+              onRetry={props.onRetry}
+              onCopy={props.onCopy}
+              onOpenScreenshot={props.onOpenAttachment}
+            />
           )}
           {props.banner}
           <Composer {...props} />
@@ -208,7 +213,7 @@ The parts of `ChatBox` itself:
 
 <!-- code: apps/desktop/src/renderer/src/components/ChatBox.tsx#Composer -->
 
-[`src/renderer/src/components/ChatBox.tsx`, lines 87–179](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L87-L179)
+[`src/renderer/src/components/ChatBox.tsx`, lines 92–184](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L92-L184)
 
 ```tsx
 /** The text box: attached screenshots, the text, and the attach / send / stop buttons. */
@@ -369,7 +374,7 @@ first appears. Effects are for work outside drawing the UI, such as moving the k
 
 <!-- code: apps/desktop/src/renderer/src/components/ChatBox.tsx#Banner -->
 
-[`src/renderer/src/components/ChatBox.tsx`, lines 181–190](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L181-L190)
+[`src/renderer/src/components/ChatBox.tsx`, lines 186–195](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L186-L195)
 
 ```tsx
 /** A one-line status above the text box, with an optional action. */
@@ -410,7 +415,7 @@ Your messages and Claude's are drawn by different components.
 
 <!-- code: apps/desktop/src/renderer/src/components/MessageList.tsx#STICK_THRESHOLD,MessageList -->
 
-[`src/renderer/src/components/MessageList.tsx`, lines 8–53](../../apps/desktop/src/renderer/src/components/MessageList.tsx#L8-L53)
+[`src/renderer/src/components/MessageList.tsx`, lines 8–66](../../apps/desktop/src/renderer/src/components/MessageList.tsx#L8-L66)
 
 ```tsx
 /** Within this many pixels of the bottom counts as "at the bottom". */
@@ -418,19 +423,28 @@ const STICK_THRESHOLD = 40
 
 /**
  * The conversation. It follows new text as it streams in, unless you've scrolled up to read
- * something earlier.
+ * something earlier. Sending a message always brings it back to the bottom.
  */
 export function MessageList(props: {
   messages: ChatMessage[]
   onRetry: () => void
   onCopy: (text: string) => void
+  onOpenScreenshot: (attachment: Attachment) => void
 }) {
   const scroller = useRef<HTMLDivElement>(null)
   const stickToBottom = useRef(true)
+  const lastSentId = useRef<string | undefined>(undefined)
 
   useLayoutEffect(() => {
     const el = scroller.current
-    if (el && stickToBottom.current) el.scrollTop = el.scrollHeight
+    if (!el) return
+    // A message you've just sent: follow it and the reply, even if you'd scrolled up.
+    const sentId = props.messages.findLast((m) => m.role === 'user')?.id
+    if (sentId !== lastSentId.current) {
+      lastSentId.current = sentId
+      stickToBottom.current = true
+    }
+    if (stickToBottom.current) el.scrollTop = el.scrollHeight
   }, [props.messages])
 
   return (
@@ -445,7 +459,11 @@ export function MessageList(props: {
     >
       {props.messages.map((message, index) =>
         message.role === 'user' ? (
-          <UserMessage key={message.id} message={message} />
+          <UserMessage
+            key={message.id}
+            message={message}
+            onOpenScreenshot={props.onOpenScreenshot}
+          />
         ) : (
           <AssistantMessage
             key={message.id}
@@ -464,23 +482,27 @@ export function MessageList(props: {
 <!-- /code -->
 
 Draws each message, and keeps the view scrolled to the bottom as a reply streams in. If you
-scroll up to read something earlier it stops following; scrolling back to the bottom turns
-following on again.
+scroll up to read something earlier it stops following; scrolling back to the bottom, or sending a
+message, turns following on again.
 
 - `const stickToBottom = useRef(true)`: whether to follow new text. It's a ref rather than state
   because changing it doesn't need anything redrawn.
+- `const lastSentId = useRef<string | undefined>(undefined)`: the id of the newest message you
+  sent, as of the last update, so the effect can tell when you've just sent another.
 - `useLayoutEffect(() => {`: like `useEffect`, but it runs after React has changed the page and
   before the browser paints it. Scrolling there means you never see a frame with the new text
   hidden below the visible area.
 - `}, [props.messages])`: runs whenever the list changes. `useAssistState` makes a new array for
   every update, including each batch of streamed text (at most one every 50 ms), so this runs as
   the reply grows.
+- `const sentId = props.messages.findLast((m) => m.role === 'user')?.id`: the newest message
+  you sent. When it differs from last time you've just sent one, so following is switched back on:
+  your message and Claude's reply come into view even if you'd scrolled up to read something.
 - `el.scrollTop = el.scrollHeight`: scrolls to the bottom. The browser clamps the value to the
   furthest it can actually scroll.
 - `onScroll={(event) => {`: on every scroll, works out how far the view is from the bottom
   (`scrollHeight - scrollTop - clientHeight`) and follows only if that's under `STICK_THRESHOLD`
-  (40 px). The effect's own scrolling lands at 0, so following stays on. Nothing else resets the
-  flag: if you've scrolled up and then send a message, the list stays where you are.
+  (40 px). The effect's own scrolling lands at 0, so following stays on.
 - `min-h-0 flex-1 overflow-y-auto`: the list takes whatever height the card has left after the
   text box, and scrolls. `min-h-0` matters because an item in a flex column normally refuses to
   shrink below its content's height, which would push the text box out of the card.
@@ -494,16 +516,26 @@ following on again.
 
 <!-- code: apps/desktop/src/renderer/src/components/MessageList.tsx#UserMessage -->
 
-[`src/renderer/src/components/MessageList.tsx`, lines 55–72](../../apps/desktop/src/renderer/src/components/MessageList.tsx#L55-L72)
+[`src/renderer/src/components/MessageList.tsx`, lines 68–95](../../apps/desktop/src/renderer/src/components/MessageList.tsx#L68-L95)
 
 ```tsx
-function UserMessage({ message }: { message: ChatMessage }) {
+function UserMessage({
+  message,
+  onOpenScreenshot,
+}: {
+  message: ChatMessage
+  onOpenScreenshot: (attachment: Attachment) => void
+}) {
   return (
     <div className="ml-auto flex max-w-[85%] flex-col items-end gap-1.5">
       {message.attachments.length > 0 && (
         <div className="flex flex-wrap justify-end gap-1.5">
           {message.attachments.map((attachment) => (
-            <SentScreenshot key={attachment.id} attachment={attachment} />
+            <SentScreenshot
+              key={attachment.id}
+              attachment={attachment}
+              onOpen={() => onOpenScreenshot(attachment)}
+            />
           ))}
         </div>
       )}
@@ -521,8 +553,8 @@ function UserMessage({ message }: { message: ChatMessage }) {
 
 Your own message, on the right: any screenshots, then the text in an accent-coloured bubble.
 
-- `function UserMessage({ message }: { message: ChatMessage })`: the braces in the parameter list
-  pull `message` straight out of the props object (_destructuring_).
+- `function UserMessage({`: the braces in the parameter list pull `message` and
+  `onOpenScreenshot` straight out of the props object (_destructuring_).
 - `ml-auto`: with `items-end`, pushes the message to the right. `max-w-[85%]` is Tailwind's
   syntax for a one-off value; it keeps the message from spanning the whole card.
 - `{message.text && (`: a message can be screenshots only, with no text.
@@ -536,16 +568,17 @@ Your own message, on the right: any screenshots, then the text in an accent-colo
 
 <!-- code: apps/desktop/src/renderer/src/components/MessageList.tsx#SentScreenshot -->
 
-[`src/renderer/src/components/MessageList.tsx`, lines 74–86](../../apps/desktop/src/renderer/src/components/MessageList.tsx#L74-L86)
+[`src/renderer/src/components/MessageList.tsx`, lines 97–110](../../apps/desktop/src/renderer/src/components/MessageList.tsx#L97-L110)
 
 ```tsx
-function SentScreenshot({ attachment }: { attachment: Attachment }) {
+/** A sent screenshot's thumbnail. Opening it goes through the panel, which says if it's gone. */
+function SentScreenshot({ attachment, onOpen }: { attachment: Attachment; onOpen: () => void }) {
   const thumbnail = useThumbnail(attachment.path)
   return (
     <button
       type="button"
       title={attachment.fileName}
-      onClick={() => void window.assist.screenshots.open(attachment.path)}
+      onClick={onOpen}
       className="h-12 w-20 overflow-hidden rounded-lg border border-black/10 bg-zinc-200 dark:border-white/10 dark:bg-zinc-700"
     >
       {thumbnail && <img src={thumbnail} alt="" className="size-full object-cover" />}
@@ -563,11 +596,9 @@ viewer.
   main process for a small preview. It returns `undefined` while loading, `null` if the file is
   gone, or a `data:` URL to use as the image. Until there's an image the button is an empty grey
   box.
-- `onClick={() => void window.assist.screenshots.open(attachment.path)}`: `window.assist` is the
-  set of functions the preload script gives the page, its only way to reach the main process (see
-  [Shared code and the preload bridge](1-shared-and-preload.md)). `open` returns a promise, and
-  `void` marks that the code deliberately doesn't wait for it. Unlike a draft chip, which goes
-  through `Panel.openAttachment`, a missing file here shows no toast.
+- `onClick={onOpen}`: opening goes through the panel. `ChatBox` passes the same handler the draft
+  chips use, `Panel.openAttachment` (see [The pages](7-renderer-pages.md)), which asks the main
+  process to open the file and shows "That screenshot can't be found" if it has been deleted.
 - `alt=""`: the image is decorative; the button's `title` tooltip shows the file name.
 - `object-cover`: fills the 80 × 48 px box, cropping the screenshot rather than squashing it.
 
@@ -575,7 +606,7 @@ viewer.
 
 <!-- code: apps/desktop/src/renderer/src/components/MessageList.tsx#AssistantMessage -->
 
-[`src/renderer/src/components/MessageList.tsx`, lines 88–136](../../apps/desktop/src/renderer/src/components/MessageList.tsx#L88-L136)
+[`src/renderer/src/components/MessageList.tsx`, lines 112–160](../../apps/desktop/src/renderer/src/components/MessageList.tsx#L112-L160)
 
 ```tsx
 function AssistantMessage(props: {
@@ -663,7 +694,7 @@ notice, a Retry button for a failed reply, and Copy.
 
 <!-- code: apps/desktop/src/renderer/src/components/MessageList.tsx#Thinking -->
 
-[`src/renderer/src/components/MessageList.tsx`, lines 138–153](../../apps/desktop/src/renderer/src/components/MessageList.tsx#L138-L153)
+[`src/renderer/src/components/MessageList.tsx`, lines 162–177](../../apps/desktop/src/renderer/src/components/MessageList.tsx#L162-L177)
 
 ```tsx
 function Thinking() {
@@ -735,8 +766,8 @@ Tells react-markdown how to draw particular HTML elements. Only links are change
 - `event.preventDefault()`: stops the click navigating the panel's own page to the link. The main
   process would refuse that navigation anyway (`lockDown` in `src/main/bubble/windows.ts`).
 - `if (href) void window.assist.openExternal(href)`: asks the main process to open the link in
-  your default browser. It accepts only `http` and `https` addresses (`WebUrl` in
-  `src/main/ipc.ts`), so other links, such as `mailto:`, do nothing.
+  your default browser, or an email link (`mailto:`) in your email app. Anything else, such as
+  `file:` or `javascript:`, is refused (`ExternalUrl` in `src/main/ipc.ts`).
 
 ### `Markdown`
 

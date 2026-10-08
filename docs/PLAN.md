@@ -180,7 +180,8 @@ Desktop-Assist/
 │  ├─ src/shared/               IPC contract, action registry, UI geometry constants, types
 │  └─ tests/                    Vitest unit tests
 ├─ tenants/morse-micro/         tenant.json (names, colours, actions, sign-in IDs) + logo.png
-└─ docs/                        PLAN.md, CODE_GUIDE.md, JUMPCLOUD_SETUP.md (for IT)
+└─ docs/                        PLAN.md, JUMPCLOUD_SETUP.md (for IT), code-guide/ (CODE_GUIDE.md
+                                 and the walkthrough pages), CODE_GUIDE.pdf
 ```
 
 ## 7. Milestone 0 spec
@@ -262,7 +263,11 @@ server-side fallback; the panel knew the saved corner only after start-up finish
 itself out for the wrong corner; the pages could ask for their state before the main process was
 ready to answer; a failure during start-up didn't show the error box; Cancel pressed in the first
 moment of a sign-in still opened the browser; sign-in timeouts weren't reported as "Couldn't reach
-JumpCloud"; two preference saves at once could finish in the wrong order.
+JumpCloud"; two preference saves at once could finish in the wrong order. Also fixed: sending a
+message while scrolled up now returns to the bottom, clicking a sent screenshot whose file was
+deleted says so, and `mailto:` links in replies open the email app.
+
+The Code Guide is also available as one PDF, `docs/CODE_GUIDE.pdf` (`npm run docs:pdf`).
 
 ## 8. Milestones
 

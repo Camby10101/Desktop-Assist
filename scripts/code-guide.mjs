@@ -1,6 +1,6 @@
 // Keeps the code shown in the Code Guide identical to the real source.
 //
-// In docs/CODE_GUIDE.md and docs/code-guide/*.md, a block like
+// In docs/code-guide/*.md, a block like
 //
 //   <!-- code: apps/desktop/src/main/auth/AuthManager.ts#AuthManager.signIn -->
 //   <!-- /code -->
@@ -39,10 +39,9 @@ const LANGUAGES = {
 /** The guide's Markdown files. */
 export function guideFiles() {
   const dir = join(ROOT, 'docs', 'code-guide')
-  const parts = readdirSync(dir)
+  return readdirSync(dir)
     .filter((name) => name.endsWith('.md'))
     .map((name) => join(dir, name))
-  return [join(ROOT, 'docs', 'CODE_GUIDE.md'), ...parts]
 }
 
 /**

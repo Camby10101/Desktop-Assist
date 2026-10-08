@@ -1,6 +1,6 @@
 # The pages: entry points, styles, hooks and views
 
-[← Code Guide](../CODE_GUIDE.md)
+[← Code Guide](CODE_GUIDE.md)
 
 This part covers the renderer's own files: the HTML page both windows load, the startup script,
 the stylesheet, two small helpers, the hooks that connect React to the main process, and the two
@@ -688,7 +688,7 @@ reach whatever is underneath, the main process makes the window ignore the mouse
 passing pointer movements to the page. This hook watches those movements and asks the main process
 to switch mouse input on only while the pointer is over real UI, which is any element marked
 `data-hit` (the chat card, each action icon and the settings menu). See
-[Code Guide section 1](../CODE_GUIDE.md#1-background-how-an-electron-app-is-put-together) for the
+[Code Guide section 1](CODE_GUIDE.md#1-background-how-an-electron-app-is-put-together) for the
 background. Only `PanelView` uses it; the bubble window always takes the mouse.
 
 ### `useClickThrough`

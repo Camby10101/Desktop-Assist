@@ -164,9 +164,10 @@ which animates it back to the corner with `bounce.glidePosition()`.
 - `.prettierignore`: Files Prettier must not touch (build output, the lock file).
 - `README.md`: What the app does and how to run, test and build it.
 - `docs/PLAN.md`: The plan: tech stack, architecture, milestones, decisions and open questions.
-- `docs/CODE_GUIDE.md`: This file: the overview of the code.
-- `docs/code-guide/`: The code walkthrough pages (see section 6).
+- `docs/code-guide/`: The Code Guide: this overview (`CODE_GUIDE.md`) and the code walkthrough pages (see section 6).
+- `docs/CODE_GUIDE.pdf`: The whole Code Guide as one PDF, built from these pages by `npm run docs:pdf`.
 - `scripts/code-guide.mjs`: Copies the real code into the walkthrough pages (`npm run docs`), and checks they're up to date (`npm run docs:check`, also run by `npm test`).
+- `scripts/code-guide-pdf.mjs`: Builds `docs/CODE_GUIDE.pdf` from the pages (`npm run docs:pdf`).
 - `docs/JUMPCLOUD_SETUP.md`: For IT: how to create the JumpCloud app and the Claude Console federation, and which IDs to put in `tenant.json`.
 
 ---
@@ -204,21 +205,21 @@ the real code, with a link to the exact lines on GitHub, then explains what it d
 with notes on the lines that need them. Read them in order the first time; after that, jump to
 the area you're working on.
 
-1. [Shared code and the preload bridge](code-guide/1-shared-and-preload.md):
+1. [Shared code and the preload bridge](1-shared-and-preload.md):
    `src/shared` (sizes and layout constants, the action list, data types, the IPC contract, chip labels) and `src/preload` (the `window.assist` bridge between the pages and the main process).
-2. [Main process: startup, IPC and app plumbing](code-guide/2-main-startup.md):
+2. [Main process: startup, IPC and app plumbing](2-main-startup.md):
    `index.ts` (startup and shutdown), `ipc.ts` (handling requests from the pages), `actions.ts`, `tenant.ts`, `settings.ts`, the tray icon.
-3. [JumpCloud sign-in](code-guide/3-sign-in.md):
+3. [JumpCloud sign-in](3-sign-in.md):
    `auth/` (`AuthManager`, OpenID Connect with JumpCloud, the loopback listener) and `storage/SecretStore.ts`.
-4. [Talking to Claude](code-guide/4-claude.md):
+4. [Talking to Claude](4-claude.md):
    `claude/` (the model settings, `AnthropicBackend`, error handling, `ChatSession`).
-5. [The bubble](code-guide/5-bubble.md):
+5. [The bubble](5-bubble.md):
    `bubble/` (`BubbleController`, the layout maths, bounce physics, creating the windows).
-6. [The draft, screenshots and safe files](code-guide/6-drafts-and-screenshots.md):
+6. [The draft, screenshots and safe files](6-drafts-and-screenshots.md):
    `notes/NotesStore.ts`, `screenshots/`, `storage/jsonFile.ts`.
-7. [The pages: entry points, styles, hooks and views](code-guide/7-renderer-pages.md):
+7. [The pages: entry points, styles, hooks and views](7-renderer-pages.md):
    `src/renderer`: `index.html`, `main.tsx`, `styles.css`, `lib/`, `hooks/`, `BubbleView`, `PanelView`.
-8. [The UI components](code-guide/8-renderer-components.md):
+8. [The UI components](8-renderer-components.md):
    `src/renderer/src/components`: the chat box, messages, Markdown, sign-in panel, settings menu, action icons, screenshot chips.
 
 **Keeping it current.** The code on these pages is not typed by hand: each block is a marker
@@ -226,7 +227,7 @@ like `<!-- code: apps/desktop/src/main/ipc.ts#registerIpc -->` that `npm run doc
 source. After changing code, run `npm run docs`; `npm test` fails if a page shows code that no
 longer matches. When you add a new function, add a marker and a short explanation for it on the
 right page. The explanations are written by hand, so check they still hold when behaviour
-changes.
+changes. Then `npm run docs:pdf` rebuilds `docs/CODE_GUIDE.pdf`, the whole guide as one PDF.
 
 ---
 

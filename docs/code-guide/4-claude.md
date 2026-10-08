@@ -1,6 +1,6 @@
 # Talking to Claude
 
-[← Code Guide](../CODE_GUIDE.md)
+[← Code Guide](CODE_GUIDE.md)
 
 Everything that talks to the Claude API lives in four files in `src/main/claude`, all in the main
 process. `model.ts` holds the settings every request uses, `AnthropicBackend.ts` sends one request

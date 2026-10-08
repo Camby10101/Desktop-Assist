@@ -13,7 +13,8 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "format": "prettier --write .",
     "docs": "node scripts/code-guide.mjs",
-    "docs:check": "node scripts/code-guide.mjs --check"
+    "docs:check": "node scripts/code-guide.mjs --check",
+    "docs:pdf": "electron scripts/code-guide-pdf.mjs"
   },
   "devDependencies": {
     "prettier": "^3.9.9"

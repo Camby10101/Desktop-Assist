@@ -1,6 +1,6 @@
 # The draft, screenshots and safe files
 
-[← Code Guide](../CODE_GUIDE.md)
+[← Code Guide](CODE_GUIDE.md)
 
 This part covers the main-process code that keeps things on disk. `NotesStore` saves the unsent
 draft so it survives a restart; `ScreenshotService` and its helpers take, preview and shrink

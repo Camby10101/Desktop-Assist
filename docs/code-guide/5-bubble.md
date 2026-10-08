@@ -1,6 +1,6 @@
 # The bubble: windows, layout, bounce and the state machine
 
-[← Code Guide](../CODE_GUIDE.md)
+[← Code Guide](CODE_GUIDE.md)
 
 The bubble is the always-on-top logo in a corner of the screen; clicking it opens the panel (the
 chat card and the action icons). Each lives in its own transparent, frameless _overlay window_,

@@ -5,7 +5,7 @@ screen and opens a panel when clicked. Built for Morse Micro first. Branding liv
 [`tenants/`](tenants/README.md), so another business can use it later.
 
 - [docs/PLAN.md](docs/PLAN.md): the plan, architecture, milestones and decisions.
-- [docs/CODE_GUIDE.md](docs/CODE_GUIDE.md): how the code fits together, with the code of every
+- [docs/code-guide/CODE_GUIDE.md](docs/code-guide/CODE_GUIDE.md): how the code fits together, with the code of every
   function shown and explained.
 - [docs/JUMPCLOUD_SETUP.md](docs/JUMPCLOUD_SETUP.md): for IT, setting up JumpCloud sign-in and
   Claude access.
@@ -75,6 +75,7 @@ npm run lint
 npm run typecheck
 npm run dist        # unsigned installer → apps/desktop/dist/
 npm run docs        # refresh the code shown in docs/code-guide after changing code
+npm run docs:pdf    # rebuild docs/CODE_GUIDE.pdf from those pages
 ```
 
 The first `npm run dev` downloads the Electron binary. Dev runs keep their data (including the
