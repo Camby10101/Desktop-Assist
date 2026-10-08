@@ -18,6 +18,15 @@ describe('launch', () => {
     expect(Math.hypot(motion.vx, motion.vy)).toBeCloseTo(BOUNCE_SPEED)
   })
 
+  it('heads away from whichever corner the bubble is in', () => {
+    const tl = launch({ x: 0, y: 0 }, () => 0.5, 'top-left')
+    const tr = launch({ x: 0, y: 0 }, () => 0.5, 'top-right')
+    const bl = launch({ x: 0, y: 0 }, () => 0.5, 'bottom-left')
+    expect([Math.sign(tl.vx), Math.sign(tl.vy)]).toEqual([1, 1])
+    expect([Math.sign(tr.vx), Math.sign(tr.vy)]).toEqual([-1, 1])
+    expect([Math.sign(bl.vx), Math.sign(bl.vy)]).toEqual([1, -1])
+  })
+
   it('picks an angle between 25° and 65°', () => {
     const angle = (m: Motion) => (Math.atan2(-m.vy, -m.vx) * 180) / Math.PI
     expect(angle(launch({ x: 0, y: 0 }, () => 0))).toBeCloseTo(25)
@@ -55,7 +64,7 @@ describe('step', () => {
   it('never leaves the box', () => {
     let seed = 42
     const random = () => (seed = (seed * 16807) % 2147483647) / 2147483647
-    let motion = launch({ x: 944, y: 444 }, random, 2000)
+    let motion = launch({ x: 944, y: 444 }, random, 'bottom-right', 2000)
     for (let i = 0; i < 5000; i++) {
       motion = step(motion, 16 + random() * 40, box)
       expect(motion.x).toBeGreaterThanOrEqual(box.minX)

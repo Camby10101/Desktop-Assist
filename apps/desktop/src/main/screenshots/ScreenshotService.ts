@@ -1,9 +1,12 @@
 import { desktopCapturer, nativeImage, shell, type Display } from 'electron'
 import { promises as fs } from 'node:fs'
+import type { OutgoingImage } from '../claude/ChatSession'
 import { findLatestScreenshot, isInsideDir, saveScreenshot } from './files'
+import { fitWithin } from './imageSize'
 
 const THUMBNAIL_HEIGHT = 112 // 2× the chip's 56px preview, for high-DPI screens
 const MAX_CACHED_THUMBNAILS = 50
+const JPEG_QUALITY = 85
 
 export class ScreenshotService {
   private readonly thumbnails = new Map<string, string>()
@@ -53,6 +56,21 @@ export class ScreenshotService {
       this.thumbnails.delete(this.thumbnails.keys().next().value!)
     }
     return url
+  }
+
+  /**
+   * A screenshot prepared for Claude: scaled down to a size the model reads well and re-encoded
+   * as JPEG, which keeps requests small. Null if the file is missing or not one of ours.
+   */
+  forClaude(path: string): OutgoingImage | null {
+    if (!this.owns(path)) return null
+    const image = nativeImage.createFromPath(path)
+    if (image.isEmpty()) return null
+    const original = image.getSize()
+    const size = fitWithin(original)
+    const scaled =
+      size.width === original.width ? image : image.resize({ ...size, quality: 'best' })
+    return { mediaType: 'image/jpeg', data: scaled.toJPEG(JPEG_QUALITY).toString('base64') }
   }
 
   /** Opens a screenshot in the default image viewer. Returns false if it no longer exists. */

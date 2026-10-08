@@ -1,6 +1,6 @@
 # Desktop Assist: Plan & Tech Stack
 
-Status: **Milestone 0 (Foundation) complete**. Next up: M1 (Claude chat).
+Status: **Milestones 0 (Foundation) and 1 (Chat with Claude) complete**. Next up: M2 (JumpCloud sign-in).
 Last updated 2026-10-08.
 
 A Windows desktop assistant that runs in the background, shows a small circular company logo
@@ -37,7 +37,9 @@ Micro first, with branding kept in config so another business can use it later. 
 - **Collapsed**: a 56px circular logo, always on top, 16px in from the bottom-right corner of the
   primary display's work area (above the taskbar). It has no taskbar button and doesn't appear in
   Alt+Tab. The tray icon has Open and Quit.
-- **Click the bubble** to expand. The text box opens to its **left**, aligned to its bottom edge,
+- **Click the bubble** to expand. (Shown here in its default bottom-right corner; since M1 it can
+  be dragged to any corner, and everything mirrors to open toward the middle of the screen.)
+  The text box opens to its **left**, aligned to its bottom edge,
   and **grows upward** as you type. Action icons stack **above** the bubble.
 - **Collapse** by clicking the bubble again, pressing Esc, or clicking anywhere else.
 - Only one copy runs at a time. Launching it again just opens the panel.
@@ -144,7 +146,7 @@ Desktop-Assist/
 │  ├─ src/renderer/             React views: BubbleView, PanelView (+ components)
 │  ├─ src/shared/               IPC contract, action registry, UI geometry constants, types
 │  └─ tests/                    Vitest unit tests
-├─ tenants/morse-micro/         tenant.json (names, colours, enabled actions) + logo.svg
+├─ tenants/morse-micro/         tenant.json (names, colours, enabled actions) + logo.png
 └─ docs/PLAN.md
 ```
 
@@ -170,16 +172,34 @@ Desktop-Assist/
 3. **Attachments are part of the saved text box.** In M1 the text box becomes the chat input and
    the chips are sent to Claude as image blocks.
 
+## 7b. Milestone 1 spec: Chat with Claude
+
+| Feature           | Behaviour                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **API key**       | Uses the user's own Claude API key until JumpCloud sign-in (M2/M3) replaces it. **Every time the app starts it tests the saved key** (a free call that fetches the model's details). If there's no key, or Anthropic rejects it, the chat box asks for one before anything else. A new key is checked with Anthropic first and saved only if it works, encrypted with Windows DPAPI (`%APPDATA%\Desktop Assist\claude-api-key.bin`). It never reaches the UI. If Anthropic can't be reached at startup, the key is kept, chat stays available, and a banner offers Retry. A key revoked mid-conversation brings the key form back with an explanation. Settings → Change API key also offers Forget saved key. |
+| **Chat**          | The text box becomes the chat input. Enter sends; Shift+Enter adds a line. Replies stream in as Markdown with highlighted code; links open in the browser. "Thinking…" shows until text arrives. Stop cancels a reply and keeps what arrived. Each reply has Copy. The card grows upward to 520px, then scrolls.                                                                                                                                                                                                                                                                                                                                                                                               |
+| **Screenshots**   | Attached screenshots are sent with the next message, scaled to at most 1568px and JPEG-encoded, and shown as thumbnails on the sent message.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| **Errors**        | Plain-English messages for offline, busy, rate limits, no credit, a declined request, and a reply cut off at the length limit. Temporary errors get Retry.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| **Settings**      | Response style: Fast (default) / Balanced / Thorough (the API's `effort`). New conversation replaces Clear text box.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| **Request shape** | `claude-opus-5-5`, streaming, adaptive thinking (always on), effort as chosen, server-side refusal fallback (`fallbacks: "default"`), prompt caching, a fixed system prompt plus the tenant's `systemPrompt`. History is append-only, with every reply's content (including thinking) sent back unchanged. A tool-use loop is in place, with no tools registered yet.                                                                                                                                                                                                                                                                                                                                          |
+| **History**       | Kept for the current session; New conversation or quitting clears it. The unsent draft still survives restarts.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+
+| **Drag & snap** | Drag the bubble anywhere, including onto another monitor. On release it glides to the nearest corner of the display it was dropped on. A short press is still a click. The panel mirrors itself so it always opens toward the middle of the screen: in a left corner the chat opens to the right, and in a top corner the icons drop below the bubble and the chat grows downward. The corner and display are remembered across restarts. If that display is unplugged, the bubble moves to the same corner of the main display. Bounce starts from, stays on, and returns to the bubble's current display and corner. |
+
+Tested with unit tests (128) and end-to-end runs of the real app: against a local mock of the
+Claude API (38 checks), so no real key was needed, and dragging to each corner and onto a second
+monitor at different scaling (21 checks).
+
 ## 8. Milestones
 
-| #     | Milestone         | Done when                                                                                                                                                                                                                                                              |
-| ----- | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **0** | **Foundation**    | Everything in §7 works in `npm run dev` and in the unsigned installer. Unit tests and lint pass.                                                                                                                                                                       |
-| 1     | Chat with Claude  | The text box becomes a chat with streaming Markdown replies, a stop button and error states. Attached screenshots are sent as images. Content-block messages and the tool loop are in place. Uses a local dev credential (`ant auth login` profile or a personal key). |
-| 2     | JumpCloud sign-in | PKCE login, encrypted refresh token, silent refresh, signed-out state, Log out in Settings                                                                                                                                                                             |
-| 3     | Backend           | Gateway (A) or direct WIF (B) wired to the JumpCloud identity. Dev credential removed from builds                                                                                                                                                                      |
-| 4     | Ship              | Code signing, MSI, auto-update, CI (GitHub Actions), pilot deployment through JumpCloud                                                                                                                                                                                |
-| later |                   | Claude-requested screenshots (as a tool), dragging the bubble, hiding during full-screen apps, saved history, company integrations, tenant config from the gateway, macOS                                                                                              |
+| #        | Milestone            | Done when                                                                                                                                            |
+| -------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **0** ✅ | **Foundation**       | Everything in §7 works in `npm run dev` and in the unsigned installer. Unit tests and lint pass.                                                     |
+| **1** ✅ | **Chat with Claude** | See §7b.                                                                                                                                             |
+| 2        | JumpCloud sign-in    | PKCE login, encrypted refresh token, silent refresh, signed-out state, Log out in Settings                                                           |
+| 3        | Backend              | Gateway (A) or direct WIF (B) wired to the JumpCloud identity, replacing personal API keys                                                           |
+| 4        | Ship                 | Code signing, MSI, auto-update, CI (GitHub Actions), pilot deployment through JumpCloud                                                              |
+| later    |                      | Claude-requested screenshots (as a tool), hiding during full-screen apps, saved history, company integrations, tenant config from the gateway, macOS |
 
 ## 9. What we need from admins (blocks M2–M4 only)
 
@@ -201,15 +221,20 @@ Desktop-Assist/
 - Settings (M0) → Start with Windows, Open screenshots folder, Clear text box
 - Bounce → glides back to the corner when stopped
 - Close → quits immediately
+- M1 credentials → the user's own API key, tested at every start and asked for in the chat box
+  when missing or rejected
+- Default response style → Fast (`low` effort)
+- Chat history → current session only (for now)
 
-**Open (needed before M1/M3)**
+**Open (needed before M3)**
 
 1. Gateway (A) vs direct (B). Can Morse host a small container service, and where?
-2. Does Morse already have a Claude Console org/workspace for API usage?
-3. Chat history: in memory only, or saved?
+2. Does Morse have a Claude Console org/workspace for shared API usage?
+3. Should chat history be saved across restarts later?
 
 ## 11. Notes
 
 - Keep the repo **outside OneDrive**. `node_modules` plus OneDrive sync locks break Electron builds.
-- The logo in `tenants/morse-micro/logo.svg` is a **placeholder**. Replace it with the real logo
-  (a square SVG with a transparent background is best) and no code changes are needed.
+- The bubble logo is `tenants/morse-micro/logo.png`: the Morse Micro "Mμ" mark cut to a circle.
+  Replacing the file is all it takes to change it. The tray icon is still a plain accent-coloured
+  circle, and the installer still uses the default Electron icon (both to be branded in M4).

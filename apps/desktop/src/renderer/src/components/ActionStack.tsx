@@ -1,6 +1,7 @@
 import { Camera, Power, Settings, Volleyball, type LucideIcon } from 'lucide-react'
 import { ACTIONS, type ActionId } from '@shared/actions'
-import { PANEL_LAYOUT, UI } from '@shared/geometry'
+import { PANEL_LAYOUT, UI, isTopCorner, type Corner } from '@shared/geometry'
+import { anchored } from '../lib/anchor'
 import { cn } from '../lib/cn'
 
 const ICONS: Record<ActionId, LucideIcon> = {
@@ -10,19 +11,23 @@ const ICONS: Record<ActionId, LucideIcon> = {
   close: Power,
 }
 
-/** The icons that pop out above the bubble, nearest-first in the tenant's order. */
+/**
+ * The icons that pop out of the bubble, nearest-first in the tenant's order: stacked above it in
+ * a bottom corner, below it in a top corner.
+ */
 export function ActionStack(props: {
+  corner: Corner
   actions: ActionId[]
   open: boolean
   activeId: ActionId | null
   onAction: (id: ActionId) => void
 }) {
+  const top = isTopCorner(props.corner)
   return (
     <div
-      className="absolute flex flex-col-reverse"
+      className={cn('absolute flex', top ? 'flex-col' : 'flex-col-reverse')}
       style={{
-        right: PANEL_LAYOUT.actionsRight,
-        bottom: PANEL_LAYOUT.actionsBottom,
+        ...anchored(props.corner, PANEL_LAYOUT.actionsX, PANEL_LAYOUT.actionsY),
         gap: UI.actionGap,
       }}
     >
@@ -50,7 +55,9 @@ export function ActionStack(props: {
               'grid place-items-center rounded-full border shadow-md outline-none',
               'transition duration-150 ease-out motion-reduce:transition-none',
               'focus-visible:ring-2 focus-visible:ring-accent',
-              'translate-y-3 scale-75 opacity-0',
+              // Hidden icons sit tucked toward the bubble, then slide out.
+              top ? '-translate-y-3' : 'translate-y-3',
+              'scale-75 opacity-0',
               'group-data-open:translate-y-0 group-data-open:scale-100 group-data-open:opacity-100',
               active
                 ? 'border-transparent bg-accent text-white'

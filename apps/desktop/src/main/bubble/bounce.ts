@@ -1,4 +1,4 @@
-import type { Point } from '@shared/geometry'
+import { isLeftCorner, isTopCorner, type Corner, type Point } from '@shared/geometry'
 import type { TravelBox } from './layout'
 
 /** Position (DIP) and velocity (DIP per second) of the bouncing bubble. */
@@ -13,14 +13,22 @@ export const BOUNCE_SPEED = 280
 /** Longer gaps (e.g. the machine was asleep) are treated as one short step. */
 const MAX_STEP_MS = 100
 
-/** Sets off up and to the left, away from the home corner, at a random 25°–65° angle. */
+/** Sets off away from the bubble's corner, into the screen, at a random 25°–65° angle. */
 export function launch(
   from: Point,
   random: () => number = Math.random,
+  corner: Corner = 'bottom-right',
   speed = BOUNCE_SPEED,
 ): Motion {
   const angle = ((25 + random() * 40) * Math.PI) / 180
-  return { x: from.x, y: from.y, vx: -speed * Math.cos(angle), vy: -speed * Math.sin(angle) }
+  const dx = isLeftCorner(corner) ? 1 : -1
+  const dy = isTopCorner(corner) ? 1 : -1
+  return {
+    x: from.x,
+    y: from.y,
+    vx: dx * speed * Math.cos(angle),
+    vy: dy * speed * Math.sin(angle),
+  }
 }
 
 /** Advances the motion by `dtMs`, reflecting off the edges of `box`. */

@@ -1,7 +1,13 @@
-import type { Point, Rect } from '@shared/geometry'
+import { UI, type Corner, type Point, type Rect } from '@shared/geometry'
 import type { Mode } from '@shared/types'
 import { glideDuration, glidePosition, launch, step, type Motion } from './bounce'
-import { bubbleWindowBounds, homePosition, panelWindowBounds, travelBox } from './layout'
+import {
+  bubbleWindowBounds,
+  homePosition,
+  nearestCorner,
+  panelWindowBounds,
+  travelBox,
+} from './layout'
 
 /** The parts of a window the controller drives. Electron windows are adapted in windows.ts. */
 export interface Surface {
@@ -14,18 +20,44 @@ export interface PanelSurface extends Surface {
   focus(): void
 }
 
+/** One display: its id and work area (the screen minus the taskbar). */
+export interface DisplayArea {
+  id: number
+  workArea: Rect
+}
+
+/** What the controller needs to know about the screens. Electron's `screen` is adapted in index.ts. */
+export interface Displays {
+  primary(): DisplayArea
+  byId(id: number): DisplayArea | undefined
+  /** The display containing `point`, or the closest one. */
+  nearest(point: Point): DisplayArea
+  /** Where the mouse pointer is. */
+  cursor(): Point
+}
+
+/** Where the bubble rests: a corner of a particular display. */
+export interface BubbleAnchor {
+  displayId: number
+  corner: Corner
+}
+
 export interface BubbleControllerDeps {
   bubble: Surface
   panel: PanelSurface
-  /** The area the bubble lives in: the primary display minus the taskbar. */
-  getWorkArea(): Rect
+  displays: Displays
   actionCount: number
+  /** Where the bubble was last time, if saved. */
+  initialAnchor?: BubbleAnchor | null
   onModeChange(mode: Mode): void
+  /** The bubble settled in a new corner or on a new display. */
+  onAnchorChange(anchor: BubbleAnchor): void
   now?: () => number
   random?: () => number
 }
 
 const FRAME_MS = 16
+const DEFAULT_CORNER: Corner = 'bottom-right'
 /** Matches the panel's fade-out in the renderer, so the window hides once it's invisible. */
 export const PANEL_FADE_MS = 140
 /**
@@ -37,16 +69,18 @@ export const BLUR_CLICK_GRACE_MS = 300
 export const HIDE_SETTLE_MS = 150
 
 /**
- * The bubble's state machine. Owns the mode and the bubble's position, and moves/shows/hides
- * the two windows to match:
+ * The bubble's state machine. Owns the mode, the bubble's position and its anchor (the display
+ * and corner it rests in), and moves/shows/hides the two windows to match:
  *
- *   collapsed ⇄ expanded        click, Esc, blur
+ *   collapsed ⇄ expanded                     click, Esc, blur
+ *   collapsed/expanded → dragging → returning → collapsed     drag, release (snaps to a corner)
  *   * → bouncing → returning → collapsed     Bounce action, then a click
  *   expanded → capturing → expanded          screenshot
  */
 export class BubbleController {
   private mode: Mode = 'collapsed'
   private position: Point = { x: 0, y: 0 }
+  private anchor: BubbleAnchor = { displayId: 0, corner: DEFAULT_CORNER }
   private motion: Motion | null = null
   private ticker: ReturnType<typeof setInterval> | null = null
   private hideTimer: ReturnType<typeof setTimeout> | null = null
@@ -68,9 +102,18 @@ export class BubbleController {
     return { ...this.position }
   }
 
-  /** Puts the bubble in its corner and shows it. */
+  get corner(): Corner {
+    return this.anchor.corner
+  }
+
+  /** Puts the bubble in its saved corner (or bottom-right of the main display) and shows it. */
   start(): void {
-    this.position = homePosition(this.deps.getWorkArea())
+    const saved = this.deps.initialAnchor
+    this.anchor =
+      saved && this.deps.displays.byId(saved.displayId)
+        ? { ...saved }
+        : { displayId: this.deps.displays.primary().id, corner: saved?.corner ?? DEFAULT_CORNER }
+    this.position = this.home()
     this.placeWindows()
     this.deps.bubble.show()
   }
@@ -84,8 +127,9 @@ export class BubbleController {
         this.collapse()
         return
       case 'bouncing':
-        this.returnHome()
+        this.glideHome()
         return
+      case 'dragging':
       case 'returning':
       case 'capturing':
         return
@@ -100,11 +144,12 @@ export class BubbleController {
         return
       case 'bouncing':
         this.expandAfterReturn = true
-        this.returnHome()
+        this.glideHome()
         return
       case 'returning':
         this.expandAfterReturn = true
         return
+      case 'dragging':
       case 'capturing':
         return
       case 'collapsed':
@@ -132,15 +177,45 @@ export class BubbleController {
     this.collapse()
   }
 
+  /** The mouse pressed on the bubble and moved: the bubble follows the pointer until released. */
+  startDrag(): void {
+    if (this.mode !== 'collapsed' && this.mode !== 'expanded') return
+    this.cancelHide()
+    this.deps.panel.hide()
+    const cursor = this.deps.displays.cursor()
+    const grab = { x: cursor.x - this.position.x, y: cursor.y - this.position.y }
+    this.setMode('dragging')
+    this.runTicker(() => {
+      const now = this.deps.displays.cursor()
+      this.moveBubble({ x: now.x - grab.x, y: now.y - grab.y })
+    })
+  }
+
+  /** Released: snap to the nearest corner of the display the bubble was dropped on. */
+  endDrag(): void {
+    if (this.mode !== 'dragging') return
+    this.stopTicker()
+    const centre = {
+      x: Math.round(this.position.x + UI.bubbleSize / 2),
+      y: Math.round(this.position.y + UI.bubbleSize / 2),
+    }
+    const display = this.deps.displays.nearest(centre)
+    this.setAnchor({
+      displayId: display.id,
+      corner: nearestCorner(display.workArea, this.position),
+    })
+    this.glideHome()
+  }
+
   startBounce(): void {
     if (this.mode !== 'collapsed' && this.mode !== 'expanded') return
     this.cancelHide()
     this.deps.panel.hide()
-    this.motion = launch(this.position, this.random)
+    this.motion = launch(this.position, this.random, this.anchor.corner)
     this.setMode('bouncing')
     this.runTicker((dtMs) => {
       if (!this.motion) return
-      this.motion = step(this.motion, dtMs, travelBox(this.deps.getWorkArea()))
+      this.motion = step(this.motion, dtMs, travelBox(this.display().workArea))
       this.moveBubble({ x: this.motion.x, y: this.motion.y })
     })
   }
@@ -162,10 +237,16 @@ export class BubbleController {
     }
   }
 
-  /** The resolution, taskbar or monitors changed: move home (bouncing re-reads it per frame). */
+  /**
+   * The resolution, taskbar or monitors changed. If the bubble's display was unplugged, it moves
+   * to the same corner of the main display. Moving bubbles re-read the display every frame.
+   */
   displayChanged(): void {
-    if (this.mode === 'bouncing' || this.mode === 'returning') return
-    this.position = homePosition(this.deps.getWorkArea())
+    if (!this.deps.displays.byId(this.anchor.displayId)) {
+      this.setAnchor({ displayId: this.deps.displays.primary().id, corner: this.anchor.corner })
+    }
+    if (this.mode === 'bouncing' || this.mode === 'returning' || this.mode === 'dragging') return
+    this.position = this.home()
     this.placeWindows()
   }
 
@@ -174,15 +255,25 @@ export class BubbleController {
     this.cancelHide()
   }
 
-  private returnHome(): void {
+  /** The anchor's display, or the main display if it's gone. */
+  private display(): DisplayArea {
+    return this.deps.displays.byId(this.anchor.displayId) ?? this.deps.displays.primary()
+  }
+
+  private home(): Point {
+    return homePosition(this.display().workArea, this.anchor.corner)
+  }
+
+  /** Glides the bubble into its anchor corner, then switches to collapsed. */
+  private glideHome(): void {
     this.motion = null
     const from = { ...this.position }
-    const duration = glideDuration(from, homePosition(this.deps.getWorkArea()))
+    const duration = glideDuration(from, this.home())
     const startedAt = this.now()
     this.setMode('returning')
     this.runTicker(() => {
       // Re-read home every frame in case the display changes mid-glide.
-      const home = homePosition(this.deps.getWorkArea())
+      const home = this.home()
       const t = (this.now() - startedAt) / duration
       if (t < 1) {
         this.moveBubble(glidePosition(from, home, t))
@@ -221,7 +312,15 @@ export class BubbleController {
 
   private placeWindows(): void {
     this.deps.bubble.setBounds(bubbleWindowBounds(this.position))
-    this.deps.panel.setBounds(panelWindowBounds(this.position, this.deps.actionCount))
+    this.deps.panel.setBounds(
+      panelWindowBounds(this.position, this.deps.actionCount, this.anchor.corner),
+    )
+  }
+
+  private setAnchor(anchor: BubbleAnchor): void {
+    if (anchor.displayId === this.anchor.displayId && anchor.corner === this.anchor.corner) return
+    this.anchor = anchor
+    this.deps.onAnchorChange({ ...anchor })
   }
 
   private cancelHide(): void {

@@ -1,23 +1,41 @@
 import { app } from 'electron'
 import { z } from 'zod'
-import type { Settings } from '@shared/types'
+import type { Effort, Settings } from '@shared/types'
+import type { BubbleAnchor } from './bubble/BubbleController'
 import { readJsonFile, writeJsonFile } from './storage/jsonFile'
 
-const PreferencesSchema = z.object({ autoStartInitialized: z.boolean() })
+/** Fast answers by default; Balanced and Thorough think longer. */
+export const DEFAULT_EFFORT: Effort = 'low'
+
+const PreferencesSchema = z.object({
+  autoStartInitialized: z.boolean().optional(),
+  effort: z.enum(['low', 'medium', 'high']).optional(),
+  /** Where the bubble was dragged to: a corner of a particular display. */
+  bubbleAnchor: z
+    .object({
+      displayId: z.number(),
+      corner: z.enum(['top-left', 'top-right', 'bottom-left', 'bottom-right']),
+    })
+    .optional(),
+})
+type Preferences = z.infer<typeof PreferencesSchema>
 
 export class SettingsService {
+  private prefs: Preferences = {}
+
   constructor(
     private readonly preferencesPath: string,
     private readonly screenshotsDir: string,
   ) {}
 
-  /** The first time an installed build runs, turn on "Start with Windows". */
+  /** Loads preferences. The first time an installed build runs, turns on "Start with Windows". */
   async init(): Promise<void> {
-    if (!app.isPackaged) return
-    const prefs = await readJsonFile(this.preferencesPath, PreferencesSchema)
-    if (prefs.status === 'ok' && prefs.value.autoStartInitialized) return
-    this.setAutoStart(true)
-    await writeJsonFile(this.preferencesPath, { autoStartInitialized: true })
+    const result = await readJsonFile(this.preferencesPath, PreferencesSchema)
+    this.prefs = result.status === 'ok' ? result.value : {}
+    if (app.isPackaged && !this.prefs.autoStartInitialized) {
+      this.setAutoStart(true)
+      await this.save({ autoStartInitialized: true })
+    }
   }
 
   get(): Settings {
@@ -27,11 +45,30 @@ export class SettingsService {
       autoStart: available && app.getLoginItemSettings().openAtLogin,
       autoStartAvailable: available,
       screenshotsDir: this.screenshotsDir,
+      effort: this.prefs.effort ?? DEFAULT_EFFORT,
     }
   }
 
   setAutoStart(enabled: boolean): Settings {
     if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: enabled })
     return this.get()
+  }
+
+  async setEffort(effort: Effort): Promise<Settings> {
+    await this.save({ effort })
+    return this.get()
+  }
+
+  get bubbleAnchor(): BubbleAnchor | null {
+    return this.prefs.bubbleAnchor ?? null
+  }
+
+  async setBubbleAnchor(anchor: BubbleAnchor): Promise<void> {
+    await this.save({ bubbleAnchor: anchor })
+  }
+
+  private async save(changes: Preferences): Promise<void> {
+    this.prefs = { ...this.prefs, ...changes }
+    await writeJsonFile(this.preferencesPath, this.prefs)
   }
 }

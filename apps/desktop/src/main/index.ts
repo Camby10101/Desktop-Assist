@@ -1,12 +1,17 @@
-import { app, dialog, Menu, screen, type Tray } from 'electron'
+import { app, dialog, Menu, safeStorage, screen, type Tray } from 'electron'
 import { once } from 'node:events'
 import { join } from 'node:path'
 import { BUBBLE_BOX, panelWindowSize } from '@shared/geometry'
 import { IPC } from '@shared/ipc'
 import tenantConfig from '@tenant/tenant.json'
 import { createActionHandlers } from './actions'
-import { BubbleController } from './bubble/BubbleController'
+import { BubbleController, type DisplayArea, type Displays } from './bubble/BubbleController'
 import { bubbleSurface, createOverlayWindow, panelSurface } from './bubble/windows'
+import { AnthropicBackend } from './claude/AnthropicBackend'
+import { ApiKeyManager } from './claude/ApiKeyManager'
+import { ApiKeyStore } from './claude/ApiKeyStore'
+import { ChatSession } from './claude/ChatSession'
+import { API_BASE_URL, buildSystemPrompt } from './claude/model'
 import { registerIpc } from './ipc'
 import { NotesStore } from './notes/NotesStore'
 import { ScreenshotService } from './screenshots/ScreenshotService'
@@ -52,7 +57,6 @@ async function start(): Promise<void> {
   }
 
   const notes = new NotesStore(join(userData, 'notes.json'), {
-    onSaved: () => broadcast(IPC.notesSaved),
     onError: (error) => console.error('Saving the text box failed', error),
   })
   await notes.load()
@@ -63,9 +67,14 @@ async function start(): Promise<void> {
   const bubble = new BubbleController({
     bubble: bubbleSurface(bubbleWindow),
     panel: panelSurface(panelWindow),
-    getWorkArea: () => screen.getPrimaryDisplay().workArea,
+    displays: electronDisplays,
     actionCount,
+    initialAnchor: settings.bubbleAnchor,
     onModeChange: (mode) => broadcast(IPC.modeChanged, mode),
+    onAnchorChange: (anchor) => {
+      broadcast(IPC.cornerChanged, anchor.corner)
+      void settings.setBubbleAnchor(anchor) // remembered for next time
+    },
   })
   controller = bubble
   panelWindow.on('blur', () => bubble.panelBlurred())
@@ -74,19 +83,49 @@ async function start(): Promise<void> {
     screen.getDisplayMatching(bubbleWindow.getBounds()),
   )
 
+  // Dev runs may point at a local test server; an installed app always talks to Anthropic.
+  const devBaseUrl = !app.isPackaged ? process.env['ANTHROPIC_BASE_URL'] : undefined
+  const backend = new AnthropicBackend(devBaseUrl || API_BASE_URL)
+  const apiKeys = new ApiKeyManager({
+    storage: new ApiKeyStore(join(userData, 'claude-api-key.bin'), {
+      isAvailable: () => safeStorage.isEncryptionAvailable(),
+      encrypt: (text) => safeStorage.encryptString(text),
+      decrypt: (data) => safeStorage.decryptString(data),
+    }),
+    verify: (key) => backend.verifyKey(key),
+    onStatus: (status) => broadcast(IPC.apiKeyStatus, status),
+  })
+  const chat = new ChatSession({
+    backend,
+    getApiKey: () => apiKeys.key,
+    getEffort: () => settings.get().effort,
+    system: buildSystemPrompt(tenant),
+    onMessage: (message) => broadcast(IPC.chatMessage, message),
+    onReset: () => broadcast(IPC.chatReset),
+    onKeyProblem: (kind) => apiKeys.rejected(kind),
+    onReplied: () => apiKeys.confirmed(),
+  })
+  // Test the saved key at every start; if it's missing or rejected, the chat box asks for one.
+  void apiKeys.checkSaved()
+
   registerIpc({
     windows,
     controller: bubble,
     notes,
     screenshots,
     settings,
+    apiKeys,
+    chat,
     actions: createActionHandlers({ controller: bubble, screenshots, quit: () => app.quit() }),
     getState: () => ({
       mode: bubble.currentMode,
+      corner: bubble.corner,
       notes: notes.get(),
       settings: settings.get(),
       branding: brandingOf(tenant),
       version: app.getVersion(),
+      apiKey: apiKeys.status,
+      chat: chat.list(),
     }),
   })
 
@@ -109,6 +148,7 @@ async function start(): Promise<void> {
     shuttingDown = true
     event.preventDefault()
     bubble.dispose()
+    chat.stop()
     tray?.destroy() // otherwise the icon lingers in the tray until hovered
     const timeout = new Promise((resolve) => setTimeout(resolve, SHUTDOWN_TIMEOUT_MS))
     void Promise.race([notes.flush(), timeout]).finally(() => app.quit())
@@ -118,6 +158,22 @@ async function start(): Promise<void> {
 
   await windowsReady
   bubble.start()
+}
+
+/** Electron's `screen`, in the shape the bubble controller uses. All coordinates are DIPs. */
+const toArea = (display: Electron.Display): DisplayArea => ({
+  id: display.id,
+  workArea: display.workArea,
+})
+const electronDisplays: Displays = {
+  primary: () => toArea(screen.getPrimaryDisplay()),
+  byId: (id) => {
+    const display = screen.getAllDisplays().find((d) => d.id === id)
+    return display && toArea(display)
+  },
+  nearest: (point) =>
+    toArea(screen.getDisplayNearestPoint({ x: Math.round(point.x), y: Math.round(point.y) })),
+  cursor: () => screen.getCursorScreenPoint(),
 }
 
 function fail(error: unknown): void {
