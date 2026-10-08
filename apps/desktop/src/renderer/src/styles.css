@@ -3,6 +3,8 @@
 @theme {
   /* Overridden at runtime with the tenant's colour (see useAccentColor). */
   --color-accent: #1b6ac9;
+  /* The ring around the bubble while the panel is open. */
+  --color-bubble-active: #9333ea;
   --font-sans: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
 }
 

@@ -1,6 +1,6 @@
 # Desktop Assist: Plan & Tech Stack
 
-Status: **Milestones 0 (Foundation) and 1 (Chat with Claude) complete**. Next up: M2 (JumpCloud sign-in).
+Status: **Milestones 0 (Foundation), 1 (Chat with Claude) and 2.1 (bubble fixes) complete**. Next up: M2 (JumpCloud sign-in).
 Last updated 2026-10-08.
 
 A Windows desktop assistant that runs in the background, shows a small circular company logo
@@ -191,16 +191,27 @@ Tested with unit tests (128) and end-to-end runs of the real app: against a loca
 Claude API (38 checks), so no real key was needed, and dragging to each corner and onto a second
 monitor at different scaling (21 checks).
 
+## 7c. Milestone 2.1: Bubble fixes
+
+| Change                                       | Behaviour                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Clicks no longer fall through the bubble** | Clicking the bubble could do nothing, because the click went to the window behind it (found after taking a screenshot and opening the screenshots folder, but it could happen at any time: about 1 hover in 6). The bubble window is no longer click-through at all. The panel keeps click-through for its empty areas, ignores the stale "mouse left" message that caused the problem, and resets click-through from the real pointer position each time it opens. |
+| **Bubble borders**                           | A 2px white border is always around the bubble. While the panel is open, a 2px purple border (`#9333ea`, `--color-bubble-active` in `styles.css`) sits outside the white one.                                                                                                                                                                                                                                                                                       |
+
+Checked with real mouse input (hovering 6/6, the screenshot → folder → bubble sequence), plus the
+unit tests, the drag test and screen captures of the borders.
+
 ## 8. Milestones
 
-| #        | Milestone            | Done when                                                                                                                                            |
-| -------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **0** ✅ | **Foundation**       | Everything in §7 works in `npm run dev` and in the unsigned installer. Unit tests and lint pass.                                                     |
-| **1** ✅ | **Chat with Claude** | See §7b.                                                                                                                                             |
-| 2        | JumpCloud sign-in    | PKCE login, encrypted refresh token, silent refresh, signed-out state, Log out in Settings                                                           |
-| 3        | Backend              | Gateway (A) or direct WIF (B) wired to the JumpCloud identity, replacing personal API keys                                                           |
-| 4        | Ship                 | Code signing, MSI, auto-update, CI (GitHub Actions), pilot deployment through JumpCloud                                                              |
-| later    |                      | Claude-requested screenshots (as a tool), hiding during full-screen apps, saved history, company integrations, tenant config from the gateway, macOS |
+| #          | Milestone            | Done when                                                                                                                                            |
+| ---------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **0** ✅   | **Foundation**       | Everything in §7 works in `npm run dev` and in the unsigned installer. Unit tests and lint pass.                                                     |
+| **1** ✅   | **Chat with Claude** | See §7b.                                                                                                                                             |
+| **2.1** ✅ | **Bubble fixes**     | See §7c.                                                                                                                                             |
+| 2          | JumpCloud sign-in    | PKCE login, encrypted refresh token, silent refresh, signed-out state, Log out in Settings                                                           |
+| 3          | Backend              | Gateway (A) or direct WIF (B) wired to the JumpCloud identity, replacing personal API keys                                                           |
+| 4          | Ship                 | Code signing, MSI, auto-update, CI (GitHub Actions), pilot deployment through JumpCloud                                                              |
+| later      |                      | Claude-requested screenshots (as a tool), hiding during full-screen apps, saved history, company integrations, tenant config from the gateway, macOS |
 
 ## 9. What we need from admins (blocks M2–M4 only)
 

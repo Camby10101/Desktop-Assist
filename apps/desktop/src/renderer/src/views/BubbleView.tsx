@@ -85,10 +85,11 @@ export function BubbleView() {
         style={{ width: UI.bubbleSize, height: UI.bubbleSize }}
         className={cn(
           'overflow-hidden rounded-full shadow-[0_2px_6px_rgba(0,0,0,0.35)] outline-none',
-          'transition-transform duration-150 ease-out motion-reduce:transition-none',
+          'transition-[transform,box-shadow] duration-150 ease-out motion-reduce:transition-none',
           mode === 'dragging' ? 'scale-105' : 'hover:scale-105 active:scale-95',
-          mode === 'expanded' &&
-            'ring-2 ring-accent ring-offset-2 ring-offset-white dark:ring-offset-zinc-900',
+          // Always a 2px white border; while the panel is open, a purple one outside it.
+          'ring-2',
+          mode === 'expanded' ? 'ring-bubble-active ring-offset-2 ring-offset-white' : 'ring-white',
         )}
       >
         <img
