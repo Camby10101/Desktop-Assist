@@ -74,7 +74,12 @@ export function ChatBox(props: {
       {props.signInPrompt ?? (
         <>
           {props.messages.length > 0 && (
-            <MessageList messages={props.messages} onRetry={props.onRetry} onCopy={props.onCopy} />
+            <MessageList
+              messages={props.messages}
+              onRetry={props.onRetry}
+              onCopy={props.onCopy}
+              onOpenScreenshot={props.onOpenAttachment}
+            />
           )}
           {props.banner}
           <Composer {...props} />

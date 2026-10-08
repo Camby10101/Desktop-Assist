@@ -34,13 +34,13 @@ export interface IpcContext {
 
 const NoArgs = z.undefined()
 const FilePath = z.string().min(1).max(1024)
-/** Only web links may be opened from the chat (no file:, javascript: and so on). */
-const WebUrl = z
+/** Only web and email links may be opened from the chat (no file:, javascript: and so on). */
+const ExternalUrl = z
   .string()
   .max(4096)
   .refine((value) => {
     try {
-      return ['http:', 'https:'].includes(new URL(value).protocol)
+      return ['http:', 'https:', 'mailto:'].includes(new URL(value).protocol)
     } catch {
       return false
     }
@@ -86,7 +86,7 @@ export function registerIpc(ctx: IpcContext): void {
   })
 
   handle(IPC.invokeAction, z.enum(COMMAND_ACTION_IDS), (id) => ctx.actions[id]())
-  handle(IPC.openExternal, WebUrl, (url) => shell.openExternal(url))
+  handle(IPC.openExternal, ExternalUrl, (url) => shell.openExternal(url))
   handle(IPC.copyText, z.string().max(1_000_000), (text) => clipboard.writeText(text))
 
   on(IPC.notesSetText, z.string().max(MAX_NOTE_LENGTH), (text) => ctx.notes.setText(text))

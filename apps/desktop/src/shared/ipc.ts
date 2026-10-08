@@ -62,7 +62,7 @@ export interface AssistApi {
   /** Tell the main process whether the pointer is over real UI (true) or a see-through area. */
   setInteractive(interactive: boolean): void
   invokeAction(id: CommandActionId): Promise<ActionResult>
-  /** Opens an http(s) link in the default browser. */
+  /** Opens a web (http/https) or email (mailto) link in the default app. */
   openExternal(url: string): Promise<void>
   copyText(text: string): Promise<void>
   notes: {
