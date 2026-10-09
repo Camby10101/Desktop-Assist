@@ -275,8 +275,8 @@ The icons that can appear in the stack beside the bubble (the _actions_), each w
 label and a _kind_. A tenant's `tenant.json` has an `actions` list that picks which ones appear
 and in what order, nearest the bubble first. There are two kinds:
 
-- `command` actions run in the main process: screenshot, bounce and close (handlers in
-  `createActionHandlers()`, `src/main/actions.ts`).
+- `command` actions run in the main process: the IT service desk, screenshot, bounce and close
+  (handlers in `createActionHandlers()`, `src/main/actions.ts`).
 - `popover` actions open some UI inside the panel and never leave the renderer: Settings (the
   settings menu), and Ask Claude and Your apps, which switch the card between the text box and
   the Apps list. `PanelView.runAction()` handles them.
@@ -290,7 +290,7 @@ is a `Record<ActionId, ...>` (it must have an icon for every action), and `Actio
 
 <!-- code: apps/desktop/src/shared/actions.ts#ACTION_IDS,ActionId -->
 
-[`src/shared/actions.ts`, lines 1–9](../../apps/desktop/src/shared/actions.ts#L1-L9)
+[`src/shared/actions.ts`, lines 1–17](../../apps/desktop/src/shared/actions.ts#L1-L17)
 
 ```ts
 // The action registry: every icon that can appear in the stack above the bubble. A tenant's
@@ -299,7 +299,15 @@ is a `Record<ActionId, ...>` (it must have an icon for every action), and `Actio
 // - `command` actions run in the main process (see src/main/actions.ts).
 // - `popover` actions open UI inside the panel and never reach the main process.
 
-export const ACTION_IDS = ['ask', 'apps', 'screenshot', 'settings', 'bounce', 'close'] as const
+export const ACTION_IDS = [
+  'ask',
+  'apps',
+  'servicedesk',
+  'screenshot',
+  'settings',
+  'bounce',
+  'close',
+] as const
 
 export type ActionId = (typeof ACTION_IDS)[number]
 ```
@@ -309,9 +317,9 @@ export type ActionId = (typeof ACTION_IDS)[number]
 The list of every action that exists, and the type of one of its entries.
 
 - `as const`: without it the array's type would be `string[]`. With it, the type is a read-only
-  list of these six exact strings, which is what lets the next line work.
+  list of these seven exact strings, which is what lets the next line work.
 - `(typeof ACTION_IDS)[number]`: "the type of whatever you get by indexing the array with a number",
-  which is the union `'ask' | 'apps' | 'screenshot' | 'settings' | 'bounce' | 'close'`. The type
+  which is the union of the seven, `'ask' | 'apps' | 'servicedesk' | ... | 'close'`. The type
   follows the list automatically.
 - The array also exists at runtime, which a type doesn't: `TenantSchema` in `src/main/tenant.ts`
   uses `z.enum(ACTION_IDS)` to reject a `tenant.json` that lists an unknown action. **zod** is a
@@ -323,12 +331,13 @@ The list of every action that exists, and the type of one of its entries.
 
 <!-- code: apps/desktop/src/shared/actions.ts#ACTIONS -->
 
-[`src/shared/actions.ts`, lines 11–18](../../apps/desktop/src/shared/actions.ts#L11-L18)
+[`src/shared/actions.ts`, lines 19–27](../../apps/desktop/src/shared/actions.ts#L19-L27)
 
 ```ts
 export const ACTIONS = {
   ask: { label: 'Ask Claude', kind: 'popover' },
   apps: { label: 'Your apps', kind: 'popover' },
+  servicedesk: { label: 'IT service desk', kind: 'command' },
   screenshot: { label: 'Take screenshot', kind: 'command' },
   settings: { label: 'Settings', kind: 'popover' },
   bounce: { label: 'Bounce', kind: 'command' },
@@ -354,7 +363,7 @@ announce whether the menu is open.
 
 <!-- code: apps/desktop/src/shared/actions.ts#CommandActionId -->
 
-[`src/shared/actions.ts`, lines 20–22](../../apps/desktop/src/shared/actions.ts#L20-L22)
+[`src/shared/actions.ts`, lines 29–31](../../apps/desktop/src/shared/actions.ts#L29-L31)
 
 ```ts
 export type CommandActionId = {
@@ -364,15 +373,16 @@ export type CommandActionId = {
 
 <!-- /code -->
 
-The type of just the command actions: `'screenshot' | 'bounce' | 'close'`. It's worked out from
+The type of just the command actions: `'servicedesk' | 'screenshot' | 'bounce' | 'close'`. It's
+worked out from
 `ACTIONS`, so it can't drift out of step with it.
 
 - `[K in ActionId]:`: a _mapped type_. It builds an object type with one property per action id.
   Each property's type is the id itself if that action's kind is `'command'`, or `never` (the
-  "impossible" type) if not, giving
-  `{ ask: never; apps: never; screenshot: 'screenshot'; settings: never; bounce: 'bounce'; close: 'close' }`.
+  "impossible" type) if not, giving (in part)
+  `{ ask: never; servicedesk: 'servicedesk'; settings: never; close: 'close' }`.
 - `}[ActionId]`: looking up every key at once gives the union of the property types. `never`
-  disappears from a union, leaving the three command ids.
+  disappears from a union, leaving the four command ids.
 - `AssistApi.invokeAction()` in `src/shared/ipc.ts` only accepts these, so a page can't even try
   to send `settings`, `ask` or `apps` to the main process. In `PanelView.runAction()`, the early
   returns for those narrow the id to exactly this type, which is why it can then be passed on.
@@ -381,7 +391,7 @@ The type of just the command actions: `'screenshot' | 'bounce' | 'close'`. It's 
 
 <!-- code: apps/desktop/src/shared/actions.ts#COMMAND_ACTION_IDS -->
 
-[`src/shared/actions.ts`, lines 24–26](../../apps/desktop/src/shared/actions.ts#L24-L26)
+[`src/shared/actions.ts`, lines 33–35](../../apps/desktop/src/shared/actions.ts#L33-L35)
 
 ```ts
 export const COMMAND_ACTION_IDS = ACTION_IDS.filter(
@@ -487,7 +497,7 @@ survives a restart.
 
 <!-- code: apps/desktop/src/shared/types.ts#Effort,Settings -->
 
-[`src/shared/types.ts`, lines 29–42](../../apps/desktop/src/shared/types.ts#L29-L42)
+[`src/shared/types.ts`, lines 29–44](../../apps/desktop/src/shared/types.ts#L29-L44)
 
 ```ts
 /** How hard Claude thinks before answering (the API's `effort`), shown as Fast/Balanced/Thorough. */
@@ -503,6 +513,8 @@ export interface Settings {
   autoSend: boolean
   /** Uninstalling from Settings only works for an installed build, not `npm run dev`. */
   canUninstall: boolean
+  /** IDs of the apps the user starred in the Apps list. */
+  favoriteApps: string[]
 }
 ```
 
@@ -525,12 +537,14 @@ Thorough. `Settings` is what the settings menu shows; `SettingsService.get()` in
   turns "Send in Claude automatically" off in the settings menu.
 - `canUninstall: boolean`: like `autoStartAvailable`, true only in the installed app, which is the
   only copy with an uninstaller. Under `npm run dev` the menu's Uninstall item is greyed out.
+- `favoriteApps: string[]`: the IDs of the apps the user starred in the Apps list, which it shows
+  first. They're kept with the other preferences, so they survive a restart.
 
 ### `ChatApp`
 
 <!-- code: apps/desktop/src/shared/types.ts#ChatApp -->
 
-[`src/shared/types.ts`, lines 44–48](../../apps/desktop/src/shared/types.ts#L44-L48)
+[`src/shared/types.ts`, lines 46–50](../../apps/desktop/src/shared/types.ts#L46-L50)
 
 ```ts
 /**
@@ -556,7 +570,7 @@ Where questions are answered, set per tenant (`chatApp` in `tenant.json`, checke
 
 <!-- code: apps/desktop/src/shared/types.ts#Branding,StartPage -->
 
-[`src/shared/types.ts`, lines 50–63](../../apps/desktop/src/shared/types.ts#L50-L63)
+[`src/shared/types.ts`, lines 52–65](../../apps/desktop/src/shared/types.ts#L52-L65)
 
 ```ts
 export interface Branding {
@@ -594,7 +608,7 @@ is showing right now).
 
 <!-- code: apps/desktop/src/shared/types.ts#SignedInUser,AuthStatus -->
 
-[`src/shared/types.ts`, lines 65–84](../../apps/desktop/src/shared/types.ts#L65-L84)
+[`src/shared/types.ts`, lines 67–86](../../apps/desktop/src/shared/types.ts#L67-L86)
 
 ```ts
 export interface SignedInUser {
@@ -643,7 +657,7 @@ token ever reaches them. With Claude Desktop there is no `AuthManager` and no st
 
 <!-- code: apps/desktop/src/shared/types.ts#ChatMessage,SendResult -->
 
-[`src/shared/types.ts`, lines 86–102](../../apps/desktop/src/shared/types.ts#L86-L102)
+[`src/shared/types.ts`, lines 88–104](../../apps/desktop/src/shared/types.ts#L88-L104)
 
 ```ts
 /** One message as the chat shows it. */
@@ -690,7 +704,7 @@ draft, which the panel shows. The reply itself arrives later, through `onChatMes
 
 <!-- code: apps/desktop/src/shared/types.ts#AskResult -->
 
-[`src/shared/types.ts`, lines 104–110](../../apps/desktop/src/shared/types.ts#L104-L110)
+[`src/shared/types.ts`, lines 106–112](../../apps/desktop/src/shared/types.ts#L106-L112)
 
 ```ts
 /**
@@ -725,7 +739,7 @@ Claude Desktop has opened with the question filled in. The failures come from
 
 <!-- code: apps/desktop/src/shared/types.ts#AppState -->
 
-[`src/shared/types.ts`, lines 112–123](../../apps/desktop/src/shared/types.ts#L112-L123)
+[`src/shared/types.ts`, lines 114–125](../../apps/desktop/src/shared/types.ts#L114-L125)
 
 ```ts
 export interface AppState {
@@ -762,7 +776,7 @@ The Apps list isn't in `AppState`: the panel asks for it whenever the list shows
 
 <!-- code: apps/desktop/src/shared/types.ts#PortalApp,AppsState -->
 
-[`src/shared/types.ts`, lines 125–144](../../apps/desktop/src/shared/types.ts#L125-L144)
+[`src/shared/types.ts`, lines 127–146](../../apps/desktop/src/shared/types.ts#L127-L146)
 
 ```ts
 /** One app from the user's JumpCloud User Portal, as the Apps list shows it. */
@@ -809,7 +823,7 @@ sets the state and broadcasts every change on `assist:apps-state`.
 
 <!-- code: apps/desktop/src/shared/types.ts#UninstallResult -->
 
-[`src/shared/types.ts`, lines 146–148](../../apps/desktop/src/shared/types.ts#L146-L148)
+[`src/shared/types.ts`, lines 148–150](../../apps/desktop/src/shared/types.ts#L148-L150)
 
 ```ts
 /** Settings → Uninstall. On success the app is already quitting. */
@@ -831,7 +845,7 @@ quitting, so the page has nothing more to do.
 
 <!-- code: apps/desktop/src/shared/types.ts#ActionResult,AttachResult -->
 
-[`src/shared/types.ts`, lines 150–153](../../apps/desktop/src/shared/types.ts#L150-L153)
+[`src/shared/types.ts`, lines 152–155](../../apps/desktop/src/shared/types.ts#L152-L155)
 
 ```ts
 export type ActionResult = { ok: true; message?: string } | { ok: false; message: string }
@@ -875,7 +889,7 @@ Messages come in three styles:
 
 <!-- code: apps/desktop/src/shared/ipc.ts#IPC -->
 
-[`src/shared/ipc.ts`, lines 19–65](../../apps/desktop/src/shared/ipc.ts#L19-L65)
+[`src/shared/ipc.ts`, lines 19–66](../../apps/desktop/src/shared/ipc.ts#L19-L66)
 
 ```ts
 /** IPC channel names. The preload maps them onto `window.assist`; src/main/ipc.ts handles them. */
@@ -900,6 +914,7 @@ export const IPC = {
   settingsSetAutoStart: 'assist:settings-set-auto-start',
   settingsSetEffort: 'assist:settings-set-effort',
   settingsSetAutoSend: 'assist:settings-set-auto-send',
+  settingsSetFavoriteApp: 'assist:settings-set-favorite-app',
   authSignIn: 'assist:auth-sign-in',
   authCancel: 'assist:auth-cancel',
   authSignOut: 'assist:auth-sign-out',
@@ -936,6 +951,7 @@ name: a typo is a compile error instead of a message nobody hears.
   Electron or a library might use.
 - `notesClear`: empties the draft, for "Clear text box" in the settings menu.
 - `settingsSetAutoSend`: the settings menu's "Send in Claude automatically" switch.
+- `settingsSetFavoriteApp`: a star on a tile in the Apps list.
 - `appUninstall`: Settings → Uninstall.
 - `appsGet` to `appsOpenPortal`: the Apps list. Like the two chats' channels, they're only
   answered when the tenant has a portal.
@@ -950,7 +966,7 @@ name: a typo is a compile error instead of a message nobody hears.
 
 <!-- code: apps/desktop/src/shared/ipc.ts#AssistApi -->
 
-[`src/shared/ipc.ts`, lines 67–149](../../apps/desktop/src/shared/ipc.ts#L67-L149)
+[`src/shared/ipc.ts`, lines 68–152](../../apps/desktop/src/shared/ipc.ts#L68-L152)
 
 ```ts
 /** The API the preload exposes to renderers as `window.assist`. */
@@ -986,6 +1002,8 @@ export interface AssistApi {
     setAutoStart(enabled: boolean): Promise<Settings>
     setEffort(effort: Effort): Promise<Settings>
     setAutoSend(autoSend: boolean): Promise<Settings>
+    /** Stars an app in the Apps list (it moves to the top), or takes its star away. */
+    setFavoriteApp(id: string, favorite: boolean): Promise<Settings>
   }
   auth: {
     /** Opens JumpCloud in the browser; progress arrives through `onAuthStatus`. */
@@ -1067,7 +1085,8 @@ only when the tenant has a portal; the panel checks `branding` to know which to 
   Content-Security-Policy (`index.html`) only allows images from the app or from data URLs.
 - `setEffort(effort: Effort)`, `setAutoSend(autoSend: boolean)`: save the response style (built-in
   chat) or "Send in Claude automatically" (Claude Desktop), and return the settings as they now
-  are, like the other `settings` calls.
+  are, like the other `settings` calls. `setFavoriteApp(id, favorite)` does the same for a star
+  in the Apps list.
 - `signIn(): Promise<void>`: resolves straight away, because signing in happens in the browser
   and can take minutes. Progress arrives through `onAuthStatus`.
 - `ask(text: string): Promise<AskResult>`: like `chat.send()`, only the text is passed; the main
@@ -1170,6 +1189,42 @@ installed, it shows a banner with a **Download** button that opens this page in 
 (`window.assist.openExternal()`, which allows `https:` links). On company PCs IT may install
 Claude Desktop instead, which is why the banner suggests asking IT first.
 
+## `src/shared/apps.ts`: the order of the Apps list
+
+One small function about the Apps list that doesn't need the main process. It's in `src/shared`
+so `tests/portalApps.test.ts` can test it without a page.
+
+### `orderApps()`
+
+<!-- code: apps/desktop/src/shared/apps.ts#orderApps -->
+
+[`src/shared/apps.ts`, lines 3–13](../../apps/desktop/src/shared/apps.ts#L3-L13)
+
+```ts
+/**
+ * The apps in the order the Apps list shows them: the starred ones first, then the rest, each
+ * keeping the order they came in (by name).
+ */
+export function orderApps(apps: PortalApp[], favorites: string[]): PortalApp[] {
+  const starred = new Set(favorites)
+  return [
+    ...apps.filter((app) => starred.has(app.id)),
+    ...apps.filter((app) => !starred.has(app.id)),
+  ]
+}
+```
+
+<!-- /code -->
+
+The order `AppsList` shows the apps in: the starred ones first, then the rest. The main process
+already sorts the list by name, and both groups keep that order, so the starred apps are
+alphabetical among themselves too.
+
+- `new Set(favorites)`: a `Set` answers "is this ID starred?" (`has`) without searching the whole
+  list each time.
+- `[...apps.filter(...), ...apps.filter(...)]`: the starred apps, then the others, joined into one
+  new list. The list it was given isn't changed.
+
 ## `src/preload/index.ts`: the bridge to the page
 
 A _preload script_ runs inside each window (bubble and panel) just before the page's own code. This
@@ -1222,7 +1277,7 @@ listening. Every `on...` method in `api` uses it.
 
 <!-- code: apps/desktop/src/preload/index.ts#api -->
 
-[`src/preload/index.ts`, lines 12–70](../../apps/desktop/src/preload/index.ts#L12-L70)
+[`src/preload/index.ts`, lines 12–72](../../apps/desktop/src/preload/index.ts#L12-L72)
 
 ```ts
 const api: AssistApi = {
@@ -1251,6 +1306,8 @@ const api: AssistApi = {
     setAutoStart: (enabled) => ipcRenderer.invoke(IPC.settingsSetAutoStart, enabled),
     setEffort: (effort) => ipcRenderer.invoke(IPC.settingsSetEffort, effort),
     setAutoSend: (autoSend) => ipcRenderer.invoke(IPC.settingsSetAutoSend, autoSend),
+    setFavoriteApp: (id, favorite) =>
+      ipcRenderer.invoke(IPC.settingsSetFavoriteApp, { id, favorite }),
   },
   auth: {
     signIn: () => ipcRenderer.invoke(IPC.authSignIn),
@@ -1303,6 +1360,8 @@ The implementation of `AssistApi`: one line per method, each sending its channel
 - `ipcRenderer.invoke(IPC.appsGet, refresh ?? false)`: `refresh` is optional for the page, but
   the main process's check for this channel wants a real `true` or `false`, so a missing one is
   sent as `false`.
+- `ipcRenderer.invoke(IPC.settingsSetFavoriteApp, { id, favorite })`: a request carries one
+  argument, checked by one schema in the main process, so the two values go as one object.
 
 ### `contextBridge.exposeInMainWorld()`
 

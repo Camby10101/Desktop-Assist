@@ -1,5 +1,6 @@
 import {
   Camera,
+  Headset,
   LayoutGrid,
   MessageCircle,
   Power,
@@ -15,6 +16,7 @@ import { cn } from '../lib/cn'
 const ICONS: Record<ActionId, LucideIcon> = {
   ask: MessageCircle,
   apps: LayoutGrid,
+  servicedesk: Headset,
   screenshot: Camera,
   settings: Settings,
   bounce: Volleyball,

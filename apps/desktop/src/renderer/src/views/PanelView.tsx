@@ -170,6 +170,10 @@ function Panel({ state }: { state: AppState }) {
     }
   }
 
+  async function toggleFavorite(app: PortalApp, favorite: boolean) {
+    setSettings(await window.assist.settings.setFavoriteApp(app.id, favorite))
+  }
+
   async function openApp(app: PortalApp) {
     // On success the main process closes the panel; the browser opens the app.
     if (!(await window.assist.apps.open(app.id))) {
@@ -311,6 +315,8 @@ function Panel({ state }: { state: AppState }) {
               state={apps}
               appName={branding.appName}
               portalName={branding.portalName}
+              favorites={settings.favoriteApps}
+              onToggleFavorite={(app, favorite) => void toggleFavorite(app, favorite)}
               onOpenApp={(app) => void openApp(app)}
               onOpenPortal={() => void window.assist.apps.openPortal()}
               onSignIn={() => void window.assist.apps.signIn()}

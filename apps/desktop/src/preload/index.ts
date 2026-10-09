@@ -35,6 +35,8 @@ const api: AssistApi = {
     setAutoStart: (enabled) => ipcRenderer.invoke(IPC.settingsSetAutoStart, enabled),
     setEffort: (effort) => ipcRenderer.invoke(IPC.settingsSetEffort, effort),
     setAutoSend: (autoSend) => ipcRenderer.invoke(IPC.settingsSetAutoSend, autoSend),
+    setFavoriteApp: (id, favorite) =>
+      ipcRenderer.invoke(IPC.settingsSetFavoriteApp, { id, favorite }),
   },
   auth: {
     signIn: () => ipcRenderer.invoke(IPC.authSignIn),

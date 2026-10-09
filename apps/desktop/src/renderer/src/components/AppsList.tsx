@@ -1,5 +1,6 @@
-import { ExternalLink, LayoutGrid, LoaderCircle, LogIn, RotateCw, Search } from 'lucide-react'
+import { ExternalLink, LayoutGrid, LoaderCircle, LogIn, RotateCw, Search, Star } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { orderApps } from '@shared/apps'
 import type { AppsState, PortalApp } from '@shared/types'
 import { cn } from '../lib/cn'
 
@@ -9,13 +10,16 @@ const SEARCH_FROM = 8
 /**
  * Shown in the card instead of the text box while the Apps icon is on: the apps in the user's
  * JumpCloud User Portal. Clicking one opens it in the default browser, signed in through
- * JumpCloud like it would be from the portal.
+ * JumpCloud like it would be from the portal. The star in a tile's corner puts it first.
  */
 export function AppsList(props: {
   open: boolean
   state: AppsState
   appName: string
   portalName: string
+  /** IDs of the starred apps, shown first. */
+  favorites: string[]
+  onToggleFavorite: (app: PortalApp, favorite: boolean) => void
   onOpenApp: (app: PortalApp) => void
   onOpenPortal: () => void
   onSignIn: () => void
@@ -25,7 +29,10 @@ export function AppsList(props: {
   const [query, setQuery] = useState('')
   const search = useRef<HTMLInputElement>(null)
   const { state } = props
-  const apps = useMemo(() => (state.status === 'ready' ? state.apps : []), [state])
+  const apps = useMemo(
+    () => (state.status === 'ready' ? orderApps(state.apps, props.favorites) : []),
+    [state, props.favorites],
+  )
 
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -124,19 +131,44 @@ export function AppsList(props: {
             <Message>No apps match “{query.trim()}”.</Message>
           ) : (
             <ul className="grid min-h-0 grid-cols-3 gap-1 overflow-y-auto px-2 pb-2">
-              {shown.map((app) => (
-                <li key={app.id}>
-                  <button
-                    type="button"
-                    onClick={() => props.onOpenApp(app)}
-                    title={`Open ${app.name}`}
-                    className="flex w-full flex-col items-center gap-1.5 rounded-xl px-1 py-2 text-center hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                  >
-                    <AppLogo app={app} />
-                    <span className="line-clamp-2 text-[11px] leading-tight">{app.name}</span>
-                  </button>
-                </li>
-              ))}
+              {shown.map((app) => {
+                const favorite = props.favorites.includes(app.id)
+                return (
+                  <li key={app.id} className="group/tile relative">
+                    <button
+                      type="button"
+                      onClick={() => props.onOpenApp(app)}
+                      title={`Open ${app.name}`}
+                      className="flex w-full flex-col items-center gap-1.5 rounded-xl px-1 py-2 text-center hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                    >
+                      <AppLogo app={app} />
+                      <span className="line-clamp-2 text-[11px] leading-tight">{app.name}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => props.onToggleFavorite(app, !favorite)}
+                      aria-pressed={favorite}
+                      aria-label={
+                        favorite
+                          ? `Remove ${app.name} from favourites`
+                          : `Add ${app.name} to favourites`
+                      }
+                      title={favorite ? 'Remove from favourites' : 'Add to favourites'}
+                      // On the logo's top-right corner (the 40px logo is centred in the tile).
+                      style={{ left: 'calc(50% + 9px)', top: 0 }}
+                      className={cn(
+                        'absolute grid size-6 place-items-center rounded-full',
+                        'hover:bg-zinc-200/70 dark:hover:bg-zinc-700',
+                        favorite
+                          ? 'text-amber-400'
+                          : 'text-zinc-300 opacity-60 group-hover/tile:opacity-100 hover:text-amber-400 focus-visible:opacity-100 dark:text-zinc-600',
+                      )}
+                    >
+                      <Star size={13} fill={favorite ? 'currentColor' : 'none'} aria-hidden />
+                    </button>
+                  </li>
+                )
+              })}
             </ul>
           )}
         </>

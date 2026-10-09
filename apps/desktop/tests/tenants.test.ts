@@ -95,6 +95,16 @@ describe('tenants', () => {
     ).toBe('ask')
   })
 
+  it('needs the service desk address for its icon, and only an https one', () => {
+    const base = { id: 'x', companyName: 'X', appName: 'X', accentColor: '#000000' }
+    const tenant = { ...base, chatApp: 'claude-desktop', actions: ['servicedesk'] }
+    expect(TenantSchema.safeParse(tenant).success).toBe(false)
+    const serviceDesk = { url: 'https://morsemicro.atlassian.net/servicedesk/customer/portals' }
+    expect(TenantSchema.safeParse({ ...tenant, serviceDesk }).success).toBe(true)
+    const insecure = { url: 'http://example.com/desk' }
+    expect(TenantSchema.safeParse({ ...tenant, serviceDesk: insecure }).success).toBe(false)
+  })
+
   it('lists the sign-in settings still to fill in', () => {
     expect(missingSettings(signIn, claudeAccess)).toEqual([
       'signIn.clientId',

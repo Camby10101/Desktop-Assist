@@ -431,8 +431,8 @@ icon (see [Your apps](10-apps.md)). It's only set up when the tenant has a `port
   goes through Chromium's network stack, so a proxy set up in Windows (common on company networks)
   is used, as it is in the browser. Node's own `fetch` would ignore it. `String(url)` because
   `net.fetch()` takes the address as text.
-- `const { portal } = tenant` (the line before `appsStatus`): the portal settings from
-  `tenant.json`, or `undefined`.
+- `const { portal, serviceDesk } = tenant` (the line before `appsStatus`): the portal and
+  service desk settings from `tenant.json`, each `undefined` if the tenant has none.
 - `let appsStatus`: the list's previous status, for the same reason as `authState` in the built-in
   chat's sign-in: inside `onState`, the new one has already arrived.
 - `mcpConnector({ serverUrl: portal.appsServer, ... })`: the real connection to JumpCloud's apps
@@ -461,7 +461,7 @@ icon (see [Your apps](10-apps.md)). It's only set up when the tenant has a `port
 
 <!-- code: apps/desktop/src/main/index.ts#start.onDisplayChange -->
 
-[`src/main/index.ts`, line 253](../../apps/desktop/src/main/index.ts#L253)
+[`src/main/index.ts`, line 258](../../apps/desktop/src/main/index.ts#L258)
 
 ```ts
 const onDisplayChange = () => bubble.displayChanged()
@@ -485,8 +485,10 @@ Everything else in this part of `start()` is plain statements:
   `spawn(path, [], { detached: true, stdio: 'ignore' }).unref()`. `detached` runs it as a process
   of its own, `stdio: 'ignore'` connects nothing to it, and `unref()` tells Node not to wait for
   it, so it carries on after Desktop Assist has quit.
-- `actions: createActionHandlers({ controller: bubble, screenshots, quit: () => app.quit() })`:
-  the commands behind the Screenshot, Bounce and Close icons (`actions.ts`).
+- `actions: createActionHandlers({`: the commands behind the service desk, Screenshot, Bounce
+  and Close icons (`actions.ts`).
+- `openServiceDesk: serviceDesk ? () => shell.openExternal(serviceDesk.url) : null`: opens the
+  service desk's address from `tenant.json` in the browser, or `null` when the tenant has none.
 - `getState: () => ({`: builds the snapshot a page asks for when it first loads: the bubble's mode
   and corner, the draft, the settings, the branding, the app version (`app.getVersion()`, from
   `package.json`), the sign-in status and the chat so far. After that the page keeps up through
@@ -506,7 +508,7 @@ Everything else in this part of `start()` is plain statements:
 
 <!-- code: apps/desktop/src/main/index.ts#start.shuttingDown -->
 
-[`src/main/index.ts`, lines 258–259](../../apps/desktop/src/main/index.ts#L258-L259)
+[`src/main/index.ts`, lines 263–264](../../apps/desktop/src/main/index.ts#L263-L264)
 
 ```ts
 // Save the text box before quitting. before-quit fires again after the second app.quit().
@@ -558,7 +560,7 @@ was part of `start()`. It returns a [`BuiltInChat`](#builtinchat): the `AuthMana
 
 <!-- code: apps/desktop/src/main/index.ts#startBuiltInChat.devBaseUrl,lastIdToken,backend,chat -->
 
-[`src/main/index.ts`, lines 294–318](../../apps/desktop/src/main/index.ts#L294-L318)
+[`src/main/index.ts`, lines 299–323](../../apps/desktop/src/main/index.ts#L299-L323)
 
 ```ts
 // Dev runs may point at a local test server; an installed app always talks to Anthropic.
@@ -631,7 +633,7 @@ const chat = new ChatSession({
 
 <!-- code: apps/desktop/src/main/index.ts#startBuiltInChat.missing,localIssuer,authState,auth -->
 
-[`src/main/index.ts`, lines 320–344](../../apps/desktop/src/main/index.ts#L320-L344)
+[`src/main/index.ts`, lines 325–349](../../apps/desktop/src/main/index.ts#L325-L349)
 
 ```ts
 const missing = missingSettings(signIn, claudeAccess)
@@ -708,7 +710,7 @@ Two statements end the function:
 
 <!-- code: apps/desktop/src/main/index.ts#safeStorageEncryptor -->
 
-[`src/main/index.ts`, lines 350–355](../../apps/desktop/src/main/index.ts#L350-L355)
+[`src/main/index.ts`, lines 355–360](../../apps/desktop/src/main/index.ts#L355-L360)
 
 ```ts
 /** Windows DPAPI through Electron: only this Windows user can decrypt what it encrypts. */
@@ -736,7 +738,7 @@ The encryption `SecretStore` uses for the saved sign-in. `SecretStore` only know
 
 <!-- code: apps/desktop/src/main/index.ts#withDevOverrides -->
 
-[`src/main/index.ts`, lines 357–376](../../apps/desktop/src/main/index.ts#L357-L376)
+[`src/main/index.ts`, lines 362–381](../../apps/desktop/src/main/index.ts#L362-L381)
 
 ```ts
 /**
@@ -786,7 +788,7 @@ example to try the built-in chat against a test identity provider, without editi
 
 <!-- code: apps/desktop/src/main/index.ts#isLoopback -->
 
-[`src/main/index.ts`, lines 378–380](../../apps/desktop/src/main/index.ts#L378-L380)
+[`src/main/index.ts`, lines 383–385](../../apps/desktop/src/main/index.ts#L383-L385)
 
 ```ts
 function isLoopback(url: URL): boolean {
@@ -804,7 +806,7 @@ in `hostname`. Used only to decide whether plain `http` is allowed for a dev ide
 
 <!-- code: apps/desktop/src/main/index.ts#toArea,electronDisplays -->
 
-[`src/main/index.ts`, lines 382–396](../../apps/desktop/src/main/index.ts#L382-L396)
+[`src/main/index.ts`, lines 387–401](../../apps/desktop/src/main/index.ts#L387-L401)
 
 ```ts
 /** Electron's `screen`, in the shape the bubble controller uses. All coordinates are DIPs. */
@@ -849,7 +851,7 @@ method is called, which happens after `start()` has begun.
 
 <!-- code: apps/desktop/src/main/index.ts#fail -->
 
-[`src/main/index.ts`, lines 398–402](../../apps/desktop/src/main/index.ts#L398-L402)
+[`src/main/index.ts`, lines 403–407](../../apps/desktop/src/main/index.ts#L403-L407)
 
 ```ts
 function fail(error: unknown): void {
@@ -1156,7 +1158,7 @@ Schemas used by several channels.
 
 <!-- code: apps/desktop/src/main/ipc.ts#registerIpc -->
 
-[`src/main/ipc.ts`, lines 63–194](../../apps/desktop/src/main/ipc.ts#L63-L194)
+[`src/main/ipc.ts`, lines 63–199](../../apps/desktop/src/main/ipc.ts#L63-L199)
 
 ```ts
 /** Wires every renderer request to the main process. All arguments are validated with zod. */
@@ -1225,6 +1227,11 @@ export function registerIpc(ctx: IpcContext): void {
     ctx.settings.setEffort(effort),
   )
   handle(IPC.settingsSetAutoSend, z.boolean(), (autoSend) => ctx.settings.setAutoSend(autoSend))
+  handle(
+    IPC.settingsSetFavoriteApp,
+    z.object({ id: z.string().min(1).max(200), favorite: z.boolean() }),
+    ({ id, favorite }) => ctx.settings.setFavoriteApp(id, favorite),
+  )
 
   if (ctx.claudeDesktop) registerClaudeDesktop(ctx.claudeDesktop)
   if (ctx.apps) registerApps(ctx.apps)
@@ -1331,8 +1338,8 @@ and `registerBuiltInChat()`, and only one of them runs.
 
 **Actions, links and the clipboard**
 
-- `z.enum(COMMAND_ACTION_IDS)`: only the `command` actions (Screenshot, Bounce, Close) are
-  accepted. `ctx.actions[id]()` runs the matching handler from `actions.ts` and returns its
+- `z.enum(COMMAND_ACTION_IDS)`: only the `command` actions (service desk, Screenshot, Bounce, Close)
+  are accepted. `ctx.actions[id]()` runs the matching handler from `actions.ts` and returns its
   result, which the panel shows as a toast. The Settings icon is a `popover` action that never
   leaves the page.
 - `shell.openExternal(url)`: opens a link from a Claude reply (or the Claude Desktop download
@@ -1361,6 +1368,9 @@ and `registerBuiltInChat()`, and only one of them runs.
   `IPC.settingsSetAutoSend`: the Settings menu. Each returns the full, current settings, so the
   menu always shows what actually took effect. (The menu offers the response style only with the
   built-in chat, and "Send in Claude automatically" only with Claude Desktop.)
+- `IPC.settingsSetFavoriteApp`: a star in the Apps list. Its schema,
+  `z.object({ id: ..., favorite: z.boolean() })`, checks an object field by field, and
+  `({ id, favorite })` unpacks it.
 
 **Uninstall**
 
@@ -1447,7 +1457,7 @@ is either a `popover` (opens UI inside the panel, handled entirely by the page) 
 
 <!-- code: apps/desktop/src/main/actions.ts#ActionHandlers,createActionHandlers -->
 
-[`src/main/actions.ts`, lines 6–33](../../apps/desktop/src/main/actions.ts#L6-L33)
+[`src/main/actions.ts`, lines 6–47](../../apps/desktop/src/main/actions.ts#L6-L47)
 
 ```ts
 export type ActionHandlers = Record<CommandActionId, () => Promise<ActionResult>>
@@ -1456,9 +1466,23 @@ export type ActionHandlers = Record<CommandActionId, () => Promise<ActionResult>
 export function createActionHandlers(deps: {
   controller: BubbleController
   screenshots: ScreenshotService
+  /** Opens the company's IT service desk in the browser, or null if the tenant has none. */
+  openServiceDesk: (() => Promise<void>) | null
   quit: () => void
 }): ActionHandlers {
   return {
+    async servicedesk() {
+      if (!deps.openServiceDesk) return { ok: false, message: 'No service desk is set up' }
+      try {
+        await deps.openServiceDesk()
+      } catch (error) {
+        console.error('Opening the service desk failed', error)
+        return { ok: false, message: "Couldn't open the service desk" }
+      }
+      // The browser is coming to the front; get out of its way.
+      deps.controller.collapse()
+      return { ok: true }
+    },
     async screenshot() {
       try {
         await deps.controller.whileHidden(() => deps.screenshots.capture())
@@ -1488,8 +1512,16 @@ export function createActionHandlers(deps: {
 
 - `Record<CommandActionId, () => Promise<ActionResult>>`: `Record<K, V>` is a TypeScript type for
   an object with a `V` under every key in `K`. `CommandActionId` is the list of command actions
-  (`'screenshot' | 'bounce' | 'close'`), so if a new command is added to the registry, this file
-  won't compile until it has a handler.
+  (`'servicedesk' | 'screenshot' | 'bounce' | 'close'`), so if a new command is added to the
+  registry, this file won't compile until it has a handler.
+- `openServiceDesk: (() => Promise<void>) | null`: a function that opens the service desk, or
+  `null` when the tenant has none. The brackets around the function type are needed so that
+  `| null` applies to the whole of it.
+- `async servicedesk()`: the IT service desk icon (a headset). The tenant check means it's only
+  shown when there's a service desk, but the type allows `null`, so that case gets a message too.
+  Otherwise the page opens in the browser, and `deps.controller.collapse()` closes the panel to
+  get out of the browser's way. A failure to open becomes a toast; the details go to the
+  terminal.
 - `deps.controller.whileHidden(() => deps.screenshots.capture())`: hides both windows, waits for
   Windows to repaint the area under them, takes the screenshot, then brings the panel back. This
   way the app isn't in its own screenshot.
@@ -1602,10 +1634,11 @@ defines the shape of that file as zod schemas, plus two small helpers. `start()`
 checks the bundled config with `TenantSchema.parse()`, and `tests/tenants.test.ts` checks every
 tenant folder the same way, so a mistake is caught by the tests before it reaches a build.
 
-Besides the branding, a tenant chooses where questions go (`chatApp`): to the Claude Desktop app,
-or to the chat built into the panel. Only the built-in chat needs the sign-in settings (`signIn`)
-and the Claude access settings (`claudeAccess`). A tenant with the Apps list (as its start page,
-or behind the Apps icon) also needs its app portal's settings (`portal`).
+Besides the branding, a tenant chooses where questions go (`chatApp`): to the Claude Desktop app, or
+to the chat built into the panel. Only the built-in chat needs the sign-in settings (`signIn`) and
+the Claude access settings (`claudeAccess`). A tenant with the IT service desk icon needs the
+service desk's address (`serviceDesk`). A tenant with the Apps list (as its start page, or behind
+the Apps icon) also needs its app portal's settings (`portal`).
 
 None of the values here are secret. The client ID and the Claude IDs identify the app; on their
 own they don't grant access to anything.
@@ -1713,11 +1746,29 @@ admin has to turn on (the comment says where).
   never get in each other's way.
 - `PortalConfig`: the type derived from the schema.
 
+### `ServiceDeskSchema`
+
+<!-- code: apps/desktop/src/main/tenant.ts#ServiceDeskSchema -->
+
+[`src/main/tenant.ts`, lines 47–50](../../apps/desktop/src/main/tenant.ts#L47-L50)
+
+```ts
+/** The company's IT service desk, opened by the `servicedesk` icon. */
+export const ServiceDeskSchema = z.object({
+  url: z.url({ protocol: /^https$/ }),
+})
+```
+
+<!-- /code -->
+
+The company's IT service desk, opened by the `servicedesk` icon: just its address, `https` only.
+For Morse Micro it's the Atlassian service desk's customer portal.
+
 ### `SignInConfig` and `ClaudeAccessConfig`
 
 <!-- code: apps/desktop/src/main/tenant.ts#SignInConfig,ClaudeAccessConfig -->
 
-[`src/main/tenant.ts`, lines 47–48](../../apps/desktop/src/main/tenant.ts#L47-L48)
+[`src/main/tenant.ts`, lines 52–53](../../apps/desktop/src/main/tenant.ts#L52-L53)
 
 ```ts
 export type SignInConfig = z.infer<typeof SignInSchema>
@@ -1735,7 +1786,7 @@ and `AnthropicBackend.ts` use these types.
 
 <!-- code: apps/desktop/src/main/tenant.ts#CHAT_APPS -->
 
-[`src/main/tenant.ts`, lines 50–58](../../apps/desktop/src/main/tenant.ts#L50-L58)
+[`src/main/tenant.ts`, lines 55–63](../../apps/desktop/src/main/tenant.ts#L55-L63)
 
 ```ts
 /**
@@ -1765,7 +1816,7 @@ billed to the company.
 
 <!-- code: apps/desktop/src/main/tenant.ts#START_PAGES -->
 
-[`src/main/tenant.ts`, lines 60–64](../../apps/desktop/src/main/tenant.ts#L60-L64)
+[`src/main/tenant.ts`, lines 65–69](../../apps/desktop/src/main/tenant.ts#L65-L69)
 
 ```ts
 /**
@@ -1785,7 +1836,7 @@ Morse Micro opens on the Apps list, with the text box behind the Ask Claude icon
 
 <!-- code: apps/desktop/src/main/tenant.ts#TenantSchema,Tenant -->
 
-[`src/main/tenant.ts`, lines 66–102](../../apps/desktop/src/main/tenant.ts#L66-L102)
+[`src/main/tenant.ts`, lines 71–112](../../apps/desktop/src/main/tenant.ts#L71-L112)
 
 ```ts
 export const TenantSchema = z
@@ -1804,6 +1855,8 @@ export const TenantSchema = z
     systemPrompt: z.string().max(8000).optional(),
     /** Needed for the Apps action. */
     portal: PortalSchema.optional(),
+    /** Needed for the service desk icon. */
+    serviceDesk: ServiceDeskSchema.optional(),
     /** Needed for the built-in chat only. */
     signIn: SignInSchema.optional(),
     claudeAccess: ClaudeAccessSchema.optional(),
@@ -1816,6 +1869,9 @@ export const TenantSchema = z
   )
   .refine((tenant) => !tenant.actions.includes('apps') || tenant.portal !== undefined, {
     message: 'the apps action needs portal',
+  })
+  .refine((tenant) => !tenant.actions.includes('servicedesk') || tenant.serviceDesk !== undefined, {
+    message: 'the servicedesk action needs serviceDesk',
   })
   .refine((tenant) => tenant.startPage !== 'apps' || tenant.portal !== undefined, {
     message: 'starting on the apps list needs portal',
@@ -1847,6 +1903,7 @@ The whole `tenant.json`.
 - `startPage: z.enum(START_PAGES).default('ask')`: what the panel opens on; the text box unless
   the tenant says otherwise.
 - `portal: PortalSchema.optional()`: only needed for the Apps list.
+- `serviceDesk: ServiceDeskSchema.optional()`: only needed for the service desk icon.
 - `signIn: SignInSchema.optional()`, `claudeAccess: ClaudeAccessSchema.optional()`: a Claude
   Desktop tenant can leave both out.
 - `.refine((tenant) => tenant.chatApp !== 'built-in' || ...)`: a check on the whole object, so it
@@ -1855,6 +1912,8 @@ The whole `tenant.json`.
   objects into `true` or `false`. If the check fails, parsing throws with `message`.
 - `.refine((tenant) => !tenant.actions.includes('apps') || tenant.portal !== undefined, ...)`: a
   second check of the same kind: a tenant that shows the Apps icon must say which portal it's for.
+- `.refine((tenant) => !tenant.actions.includes('servicedesk') || ...)`: likewise, the service desk
+  icon needs the service desk's address.
 - `.refine((tenant) => tenant.startPage !== 'apps' || tenant.portal !== undefined, ...)`: so must a
   tenant that starts on the Apps list.
 - `.refine((tenant) => tenant.startPage !== 'apps' || tenant.actions.includes('ask'), ...)`: and it
@@ -1864,7 +1923,7 @@ The whole `tenant.json`.
 
 <!-- code: apps/desktop/src/main/tenant.ts#brandingOf -->
 
-[`src/main/tenant.ts`, lines 104–109](../../apps/desktop/src/main/tenant.ts#L104-L109)
+[`src/main/tenant.ts`, lines 114–119](../../apps/desktop/src/main/tenant.ts#L114-L119)
 
 ```ts
 export function brandingOf(tenant: Tenant): Branding {
@@ -1888,7 +1947,7 @@ to the pages.
 
 <!-- code: apps/desktop/src/main/tenant.ts#missingSettings -->
 
-[`src/main/tenant.ts`, lines 111–122](../../apps/desktop/src/main/tenant.ts#L111-L122)
+[`src/main/tenant.ts`, lines 121–132](../../apps/desktop/src/main/tenant.ts#L121-L132)
 
 ```ts
 /** The tenant.json settings still to be filled in before anyone can sign in, by name. */
@@ -1921,7 +1980,7 @@ status is `unconfigured` and the chat box shows the list instead of a sign-in bu
 
 <!-- code: apps/desktop/src/main/tenant.ts#DevOverrideSchema -->
 
-[`src/main/tenant.ts`, lines 124–135](../../apps/desktop/src/main/tenant.ts#L124-L135)
+[`src/main/tenant.ts`, lines 134–145](../../apps/desktop/src/main/tenant.ts#L134-L145)
 
 ```ts
 /**
@@ -1953,16 +2012,16 @@ changes.
 ## `src/main/settings.ts`: the user's preferences
 
 `SettingsService` keeps the user's preferences in `preferences.json` in the userData folder: the
-reply effort (Fast, Balanced, Thorough) for the built-in chat, whether questions are sent in
-Claude Desktop automatically, where the bubble was dragged to, and whether "Start with Windows"
-has been set up. It also reports the settings the Settings menu shows. Created in
-`start()`; the Settings menu reaches it through the `settings...` IPC channels.
+reply effort (Fast, Balanced, Thorough) for the built-in chat, whether questions are sent in Claude
+Desktop automatically, the apps starred in the Apps list, where the bubble was dragged to, and
+whether "Start with Windows" has been set up. It also reports the settings the Settings menu shows.
+Created in `start()`; the Settings menu reaches it through the `settings...` IPC channels.
 
 ### `DEFAULT_EFFORT`, `PreferencesSchema` and `Preferences`
 
 <!-- code: apps/desktop/src/main/settings.ts#DEFAULT_EFFORT,PreferencesSchema,Preferences -->
 
-[`src/main/settings.ts`, lines 7–23](../../apps/desktop/src/main/settings.ts#L7-L23)
+[`src/main/settings.ts`, lines 7–25](../../apps/desktop/src/main/settings.ts#L7-L25)
 
 ```ts
 /** Fast answers by default; Balanced and Thorough think longer. */
@@ -1973,6 +2032,8 @@ const PreferencesSchema = z.object({
   effort: z.enum(['low', 'medium', 'high']).optional(),
   /** Claude Desktop: send the question in Claude, not just fill it in. On unless turned off. */
   autoSend: z.boolean().optional(),
+  /** Apps starred in the Apps list (their IDs), shown first. */
+  favoriteApps: z.array(z.string().min(1).max(200)).max(500).optional(),
   /** Where the bubble was dragged to: a corner of a particular display. */
   bubbleAnchor: z
     .object({
@@ -1990,6 +2051,8 @@ type Preferences = z.infer<typeof PreferencesSchema>
 - `DEFAULT_EFFORT`: the effort until the user picks one. `low` is shown as Fast.
 - `PreferencesSchema`: what the file may contain. Every field is optional, so a missing field
   just means "not set yet", and an older file still loads after a new preference is added.
+- `favoriteApps`: the IDs of the starred apps. `.max(500)` keeps a damaged file from holding an
+  endless list.
 - `autoSend`: "Send in Claude automatically", for Claude Desktop. As the comment says, it's on
   unless the user has turned it off: a missing value counts as on (see `get()`), so it's on for
   everyone who installed before the setting existed too.
@@ -2001,7 +2064,7 @@ type Preferences = z.infer<typeof PreferencesSchema>
 
 <!-- code: apps/desktop/src/main/settings.ts#SettingsService.prefs,saving,constructor -->
 
-[`src/main/settings.ts`, lines 26–32](../../apps/desktop/src/main/settings.ts#L26-L32)
+[`src/main/settings.ts`, lines 28–34](../../apps/desktop/src/main/settings.ts#L28-L34)
 
 ```ts
 private prefs: Preferences = {}
@@ -2031,7 +2094,7 @@ constructor(
 
 <!-- code: apps/desktop/src/main/settings.ts#SettingsService.init -->
 
-[`src/main/settings.ts`, lines 34–42](../../apps/desktop/src/main/settings.ts#L34-L42)
+[`src/main/settings.ts`, lines 36–44](../../apps/desktop/src/main/settings.ts#L36-L44)
 
 ```ts
 /** Loads preferences. The first time an installed build runs, turns on "Start with Windows". */
@@ -2062,7 +2125,7 @@ Loads the file once at startup (called from `start()`).
 
 <!-- code: apps/desktop/src/main/settings.ts#SettingsService.get -->
 
-[`src/main/settings.ts`, lines 44–55](../../apps/desktop/src/main/settings.ts#L44-L55)
+[`src/main/settings.ts`, lines 46–58](../../apps/desktop/src/main/settings.ts#L46-L58)
 
 ```ts
 get(): Settings {
@@ -2074,6 +2137,7 @@ get(): Settings {
     screenshotsDir: this.screenshotsDir,
     effort: this.prefs.effort ?? DEFAULT_EFFORT,
     autoSend: this.prefs.autoSend ?? true,
+    favoriteApps: this.prefs.favoriteApps ?? [],
     canUninstall: available,
   }
 }
@@ -2092,12 +2156,13 @@ The current settings, as the Settings menu shows them (`Settings` in `src/shared
   or `undefined`.
 - `this.prefs.autoSend ?? true`: "Send in Claude automatically" is on until the user turns it off.
 - `canUninstall: available`: only an installed build has an uninstaller.
+- `favoriteApps: this.prefs.favoriteApps ?? []`: no stars until the user adds some.
 
 ### `SettingsService.setAutoStart()`
 
 <!-- code: apps/desktop/src/main/settings.ts#SettingsService.setAutoStart -->
 
-[`src/main/settings.ts`, lines 57–60](../../apps/desktop/src/main/settings.ts#L57-L60)
+[`src/main/settings.ts`, lines 60–63](../../apps/desktop/src/main/settings.ts#L60-L63)
 
 ```ts
 setAutoStart(enabled: boolean): Settings {
@@ -2117,7 +2182,7 @@ settings, so the menu shows what actually happened; in a dev run that's still "o
 
 <!-- code: apps/desktop/src/main/settings.ts#SettingsService.setEffort,setAutoSend -->
 
-[`src/main/settings.ts`, lines 62–70](../../apps/desktop/src/main/settings.ts#L62-L70)
+[`src/main/settings.ts`, lines 65–73](../../apps/desktop/src/main/settings.ts#L65-L73)
 
 ```ts
 async setEffort(effort: Effort): Promise<Settings> {
@@ -2138,11 +2203,36 @@ are. Both take effect from the next question: `ChatSession` reads the effort thr
 `getEffort()` each time it sends, and `ClaudeDesktop` reads the other through its `autoSend()`
 dependency each time it hands a question over.
 
+### `SettingsService.setFavoriteApp()`
+
+<!-- code: apps/desktop/src/main/settings.ts#SettingsService.setFavoriteApp -->
+
+[`src/main/settings.ts`, lines 75–80](../../apps/desktop/src/main/settings.ts#L75-L80)
+
+```ts
+/** Stars an app in the Apps list, or takes its star away. */
+async setFavoriteApp(id: string, favorite: boolean): Promise<Settings> {
+  const others = (this.prefs.favoriteApps ?? []).filter((favoriteId) => favoriteId !== id)
+  await this.save({ favoriteApps: favorite ? [...others, id] : others })
+  return this.get()
+}
+```
+
+<!-- /code -->
+
+Stars an app in the Apps list, or takes the star away, and returns the settings with the new
+list, which the panel adopts.
+
+- `const others = (...).filter((favoriteId) => favoriteId !== id)`: the list without this app,
+  whatever it was before. So starring twice doesn't add it twice.
+- `favorite ? [...others, id] : others`: starring adds it at the end; unstarring leaves it out.
+  The order here doesn't matter: the list shows starred apps by name (`orderApps()`).
+
 ### `SettingsService.bubbleAnchor` and `SettingsService.setBubbleAnchor()`
 
 <!-- code: apps/desktop/src/main/settings.ts#SettingsService.bubbleAnchor,setBubbleAnchor -->
 
-[`src/main/settings.ts`, lines 72–78](../../apps/desktop/src/main/settings.ts#L72-L78)
+[`src/main/settings.ts`, lines 82–88](../../apps/desktop/src/main/settings.ts#L82-L88)
 
 ```ts
 get bubbleAnchor(): BubbleAnchor | null {
@@ -2166,7 +2256,7 @@ settles in a new corner.
 
 <!-- code: apps/desktop/src/main/settings.ts#SettingsService.save -->
 
-[`src/main/settings.ts`, lines 80–87](../../apps/desktop/src/main/settings.ts#L80-L87)
+[`src/main/settings.ts`, lines 90–97](../../apps/desktop/src/main/settings.ts#L90-L97)
 
 ```ts
 private async save(changes: Preferences): Promise<void> {

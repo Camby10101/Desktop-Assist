@@ -1225,7 +1225,7 @@ returns. The sections after it take its values and functions one at a time.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 48–368](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L48-L368)
+[`src/renderer/src/views/PanelView.tsx`, lines 48–374](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L48-L374)
 
 ```tsx
 function Panel({ state }: { state: AppState }) {
@@ -1351,6 +1351,10 @@ function Panel({ state }: { state: AppState }) {
     } else if (result.reason !== 'empty') {
       showToast(ASK_ERRORS[result.reason], 'error')
     }
+  }
+
+  async function toggleFavorite(app: PortalApp, favorite: boolean) {
+    setSettings(await window.assist.settings.setFavoriteApp(app.id, favorite))
   }
 
   async function openApp(app: PortalApp) {
@@ -1494,6 +1498,8 @@ function Panel({ state }: { state: AppState }) {
               state={apps}
               appName={branding.appName}
               portalName={branding.portalName}
+              favorites={settings.favoriteApps}
+              onToggleFavorite={(app, favorite) => void toggleFavorite(app, favorite)}
               onOpenApp={(app) => void openApp(app)}
               onOpenPortal={() => void window.assist.apps.openPortal()}
               onSignIn={() => void window.assist.apps.signIn()}
@@ -1636,6 +1642,8 @@ The JSX it returns:
   shows an `AppsList` in place of everything else (see [Your apps](10-apps.md)); otherwise `null`.
   Checking `portalName` too means a tenant without a portal never shows it, and gives TypeScript
   a definite string for the `portalName` prop.
+- `favorites={settings.favoriteApps}`, `onToggleFavorite={...}`: the starred apps, from the
+  panel's own copy of the settings, and what a star click does (`toggleFavorite`, below).
 - `onRetry={() => void window.assist.apps.get(true).then(setApps)}`: the list's Retry and Refresh
   load it again (`true` means "even if already loaded").
 - `activeId={settingsOpen ? 'settings' : view !== startPage ? view : null}`: the gear stays
@@ -1747,10 +1755,12 @@ Runs when an action icon is clicked (`ActionStack`'s `onAction`).
 - `setSettings(await window.assist.settings.get())`: refreshes the settings as the menu opens,
   because Start with Windows can also be changed in Windows Settings.
 - `window.assist.invokeAction(id)`: after the `apps`, `ask` and `settings` branches return,
-  TypeScript knows `id` is `screenshot`, `bounce` or `close`, which is exactly the `CommandActionId`
+  TypeScript knows `id` is `servicedesk`, `screenshot`, `bounce` or `close`, which is exactly the
+  `CommandActionId`
   type `invokeAction` accepts. The main process runs the matching handler from src/main/actions.ts.
 - `if (result.message) showToast(result.message, result.ok ? 'info' : 'error')`: for example
-  "Screenshot saved", or "Couldn't take a screenshot" in red. Bounce and close return no message.
+  "Screenshot saved", or "Couldn't take a screenshot" in red. Bounce, close and the service desk
+  return no message when they work (the service desk closes the panel as the browser opens).
 - `if (id === 'screenshot' && result.ok) setView('ask')`: as the comment says, a screenshot is
   taken to ask about it, so after one the card shows the text box, with **Attach latest
   screenshot** right there, even on a panel that opened on the Apps list.
@@ -1859,11 +1869,29 @@ Claude automatically" on) carries on in the main process; the panel isn't told h
   [`ASK_ERRORS`](#ask_errors) as a red toast. Once `empty` is ruled out, TypeScript knows
   `result.reason` is one of `ASK_ERRORS`'s keys.
 
+#### `toggleFavorite`
+
+<!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.toggleFavorite -->
+
+[`src/renderer/src/views/PanelView.tsx`, lines 173–175](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L173-L175)
+
+```tsx
+async function toggleFavorite(app: PortalApp, favorite: boolean) {
+  setSettings(await window.assist.settings.setFavoriteApp(app.id, favorite))
+}
+```
+
+<!-- /code -->
+
+A star click in the Apps list. The main process saves the change with the other preferences and
+returns the settings; adopting them updates `settings.favoriteApps`, and the list re-orders itself
+with the starred apps first.
+
 #### `openApp`
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.openApp -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 173–178](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L173-L178)
+[`src/renderer/src/views/PanelView.tsx`, lines 177–182](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L177-L182)
 
 ```tsx
 async function openApp(app: PortalApp) {
@@ -1885,7 +1913,7 @@ panel stays open with a toast, and the portal itself is one click away at the bo
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.attachLatest,removeAttachment,openAttachment -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 180–196](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L180-L196)
+[`src/renderer/src/views/PanelView.tsx`, lines 184–200](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L184-L200)
 
 ```tsx
 async function attachLatest() {
@@ -1925,7 +1953,7 @@ result.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.copy -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 198–201](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L198-L201)
+[`src/renderer/src/views/PanelView.tsx`, lines 202–205](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L202-L205)
 
 ```tsx
 async function copy(text: string) {
@@ -1943,7 +1971,7 @@ The Copy button on Claude's replies. The main process writes the text to the cli
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.signOut,clearText,uninstall,newConversation,setEffort,toggleAutoSend -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 203–236](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L203-L236)
+[`src/renderer/src/views/PanelView.tsx`, lines 207–240](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L207-L240)
 
 ```tsx
 async function signOut() {
@@ -2010,7 +2038,7 @@ Settings menu actions.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.closeSettingsOnOutsideClick -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 238–244](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L238-L244)
+[`src/renderer/src/views/PanelView.tsx`, lines 242–248](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L242-L248)
 
 ```tsx
 // Clicking anywhere else in the panel closes the settings menu.
@@ -2040,7 +2068,7 @@ the panel (`BubbleController.panelBlurred`), and the mode effect above closes th
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.signInPrompt,banner -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 246–291](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L246-L291)
+[`src/renderer/src/views/PanelView.tsx`, lines 250–295](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L250-L295)
 
 ```tsx
 const signInPrompt =
@@ -2139,7 +2167,7 @@ one saying Claude Desktop isn't installed. With the built-in chat, it depends on
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.settingsIndex -->
 
-[`src/renderer/src/views/PanelView.tsx`, line 293](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L293)
+[`src/renderer/src/views/PanelView.tsx`, line 297](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L297)
 
 ```tsx
 const settingsIndex = branding.actions.indexOf('settings')

@@ -126,6 +126,11 @@ export function registerIpc(ctx: IpcContext): void {
     ctx.settings.setEffort(effort),
   )
   handle(IPC.settingsSetAutoSend, z.boolean(), (autoSend) => ctx.settings.setAutoSend(autoSend))
+  handle(
+    IPC.settingsSetFavoriteApp,
+    z.object({ id: z.string().min(1).max(200), favorite: z.boolean() }),
+    ({ id, favorite }) => ctx.settings.setFavoriteApp(id, favorite),
+  )
 
   if (ctx.claudeDesktop) registerClaudeDesktop(ctx.claudeDesktop)
   if (ctx.apps) registerApps(ctx.apps)

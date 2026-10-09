@@ -2,7 +2,8 @@
 
 Status: **Milestones 0 (Foundation), 1 (Chat with Claude), 2.1 (bubble fixes), 3 (JumpCloud
 sign-in), feature 3.1 (questions open in Claude Desktop) and 3.2 (Apps list, Uninstall, fixes)
-complete**. Next up: M4 (Ship). Last updated 2026-10-09.
+complete**. Milestone 4 is in progress (§7g): app logos fixed, favourites and the service desk
+icon so far. Last updated 2026-10-09.
 
 A Windows desktop assistant that runs in the background, shows a small circular company logo
 in the bottom-right corner of the screen, and opens a panel when clicked. It's built for Morse
@@ -362,6 +363,17 @@ Tested with unit tests (219, including reading JumpCloud's answers, connecting, 
 
 Tried for real: with the MCP Server for users turned on, the user connected Desktop Assist to Morse Micro's JumpCloud and the list of their portal apps worked. The start page and Ask Claude icon were then added at their request (end-to-end: 33 checks for 3.2, with the 3.1 (39) and built-in chat (47, 9) runs still passing; 221 unit tests). Still to try: one more auto-send in Claude Desktop with the exact-match rule.
 
+## 7g. Milestone 4 (in progress)
+
+Milestone 4 collects improvements as they're asked for; shipping work (signing, auto-update,
+deployment) can join it later. Done so far:
+
+- **App logos**: Some apps showed a letter instead of their logo. Watching the installed app's requests showed why: JumpCloud serves the logos a company uploads itself (`assets.jumpcloud.com/images/applications/…`) labelled `application/octet-stream`, while its catalogue logos (`static.jumpcloud.com`) are labelled `image/png`, and only image labels were accepted. The files are ordinary PNGs and JPEGs, so Desktop Assist now recognises the image from its first bytes (PNG, JPEG, GIF, WebP, ICO, BMP, SVG) and still refuses anything that isn't one, whatever its label says. Checked against Morse Micro's real logos. Logos are also kept between refreshes.
+- **Favourites**: A small star on each app logo's top-right corner, faint until hovered. Clicking it stars the app (filled, gold) and moves it to the top of the list; clicking again takes the star away. Starred apps keep their name order among themselves. Saved in the preferences (`favoriteApps`), so they survive restarts.
+- **Service desk**: A new icon (a headset, "IT service desk") opens the company's service desk in the default browser and closes the panel. For Morse Micro: `https://morsemicro.atlassian.net/servicedesk/customer/portals` (`serviceDesk.url` in `tenant.json`, with the `servicedesk` action).
+
+Tested with unit tests (226, including recognising images from their bytes, the octet-stream logos, a page of HTML labelled as an image, the favourites order and the logo cache) and end-to-end (44 checks for the Apps list, now including starring an app, the order surviving a restart, unstarring, and the service desk link; the 3.1 (39) and built-in chat (47, 9) runs still pass).
+
 ## 8. Milestones
 
 - **0** ✅ **Foundation**: Everything in §7 works in `npm run dev` and in the unsigned installer. Unit tests and lint pass.
@@ -370,7 +382,7 @@ Tried for real: with the MCP Server for users turned on, the user connected Desk
 - **3** ✅ **JumpCloud sign-in**: See §7d. Combines the earlier plan's M2 (sign-in) and M3 (backend), using the direct option (B).
 - **3.1** ✅ **Each person's own Claude**: Questions open in Claude Desktop, against each person's own usage limit. See §7e.
 - **3.2** ✅ **Apps list, Uninstall, fixes**: The user's JumpCloud portal apps in the panel; Uninstall in Settings; the bubble, notification and auto-send fixes. See §7f.
-- 4 Ship: Code signing, MSI, auto-update, CI (GitHub Actions), pilot deployment through JumpCloud
+- 4 (in progress): App logos, favourites, the service desk icon (§7g). Still to choose from: code signing, auto-update, deployment through JumpCloud, CI (GitHub Actions), version numbers, a keyboard shortcut, region screenshots, reporting a problem to IT
 - later : Hiding during full-screen apps, company integrations (as claude.ai organization skills or plugins, now that questions go to Claude Desktop), macOS. For the built-in chat: Claude-requested screenshots (as a tool), saved history, a gateway for per-user audit
 
 ## 9. What we need from admins

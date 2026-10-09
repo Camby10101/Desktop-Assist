@@ -39,6 +39,8 @@ export interface Settings {
   autoSend: boolean
   /** Uninstalling from Settings only works for an installed build, not `npm run dev`. */
   canUninstall: boolean
+  /** IDs of the apps the user starred in the Apps list. */
+  favoriteApps: string[]
 }
 
 /**

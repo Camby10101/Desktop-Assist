@@ -12,6 +12,8 @@ const PreferencesSchema = z.object({
   effort: z.enum(['low', 'medium', 'high']).optional(),
   /** Claude Desktop: send the question in Claude, not just fill it in. On unless turned off. */
   autoSend: z.boolean().optional(),
+  /** Apps starred in the Apps list (their IDs), shown first. */
+  favoriteApps: z.array(z.string().min(1).max(200)).max(500).optional(),
   /** Where the bubble was dragged to: a corner of a particular display. */
   bubbleAnchor: z
     .object({
@@ -50,6 +52,7 @@ export class SettingsService {
       screenshotsDir: this.screenshotsDir,
       effort: this.prefs.effort ?? DEFAULT_EFFORT,
       autoSend: this.prefs.autoSend ?? true,
+      favoriteApps: this.prefs.favoriteApps ?? [],
       canUninstall: available,
     }
   }
@@ -66,6 +69,13 @@ export class SettingsService {
 
   async setAutoSend(autoSend: boolean): Promise<Settings> {
     await this.save({ autoSend })
+    return this.get()
+  }
+
+  /** Stars an app in the Apps list, or takes its star away. */
+  async setFavoriteApp(id: string, favorite: boolean): Promise<Settings> {
+    const others = (this.prefs.favoriteApps ?? []).filter((favoriteId) => favoriteId !== id)
+    await this.save({ favoriteApps: favorite ? [...others, id] : others })
     return this.get()
   }
 

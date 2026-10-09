@@ -38,6 +38,7 @@ export const IPC = {
   settingsSetAutoStart: 'assist:settings-set-auto-start',
   settingsSetEffort: 'assist:settings-set-effort',
   settingsSetAutoSend: 'assist:settings-set-auto-send',
+  settingsSetFavoriteApp: 'assist:settings-set-favorite-app',
   authSignIn: 'assist:auth-sign-in',
   authCancel: 'assist:auth-cancel',
   authSignOut: 'assist:auth-sign-out',
@@ -97,6 +98,8 @@ export interface AssistApi {
     setAutoStart(enabled: boolean): Promise<Settings>
     setEffort(effort: Effort): Promise<Settings>
     setAutoSend(autoSend: boolean): Promise<Settings>
+    /** Stars an app in the Apps list (it moves to the top), or takes its star away. */
+    setFavoriteApp(id: string, favorite: boolean): Promise<Settings>
   }
   auth: {
     /** Opens JumpCloud in the browser; progress arrives through `onAuthStatus`. */

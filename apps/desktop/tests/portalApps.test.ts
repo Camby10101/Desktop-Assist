@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { AppsState } from '@shared/types'
 import { SignInCancelledError, type RedirectListener } from '../src/main/auth/loopback'
-import { fetchLogo } from '../src/main/apps/mcp'
+import { orderApps } from '@shared/apps'
+import { fetchLogo, sniffImageType } from '../src/main/apps/mcp'
 import {
   findLaunchUrl,
   httpsUrl,
@@ -87,23 +88,68 @@ describe('reading the apps list', () => {
   })
 })
 
+const PNG = Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex')
+const JPEG = Buffer.from('ffd8ffe000104a4649460001', 'hex')
+
+describe('sniffImageType', () => {
+  it('knows images by their first bytes', () => {
+    expect(sniffImageType(PNG)).toBe('image/png')
+    expect(sniffImageType(JPEG)).toBe('image/jpeg')
+    expect(sniffImageType(Buffer.from('GIF89a'))).toBe('image/gif')
+    expect(sniffImageType(Buffer.from('RIFF0000WEBPVP8 '))).toBe('image/webp')
+    expect(sniffImageType(Buffer.from('  <svg xmlns="http://www.w3.org/2000/svg">'))).toBe(
+      'image/svg+xml',
+    )
+    expect(sniffImageType(Buffer.from('<?xml version="1.0"?><svg>'))).toBe('image/svg+xml')
+  })
+
+  it('says null for anything else', () => {
+    expect(sniffImageType(Buffer.from('<!doctype html><html>'))).toBeNull()
+    expect(sniffImageType(Buffer.from('{"error":"not found"}'))).toBeNull()
+    expect(sniffImageType(Buffer.alloc(0))).toBeNull()
+  })
+})
+
 describe('fetchLogo', () => {
-  const response = (body: string, type: string, ok = true) =>
+  const response = (body: Buffer | string, type: string, ok = true) =>
     Promise.resolve(
-      new Response(body, { status: ok ? 200 : 404, headers: { 'content-type': type } }),
+      new Response(typeof body === 'string' ? body : new Uint8Array(body), {
+        status: ok ? 200 : 404,
+        headers: { 'content-type': type },
+      }),
     )
 
   it('turns an https image into a data: URL', async () => {
-    const fetch = vi.fn(() => response('PNG', 'image/png'))
-    expect(await fetchLogo(fetch, 'https://cdn.example/a.png')).toBe('data:image/png;base64,UE5H')
+    const fetch = vi.fn(() => response(PNG, 'image/png'))
+    expect(await fetchLogo(fetch, 'https://cdn.example/a.png')).toBe(
+      `data:image/png;base64,${PNG.toString('base64')}`,
+    )
   })
 
-  it('refuses http, non-images, failures and anything too big', async () => {
-    expect(await fetchLogo(() => response('x', 'image/png'), 'http://cdn.example/a.png')).toBeNull()
+  it("takes JumpCloud's uploaded logos, which come labelled application/octet-stream", async () => {
+    const fetch = () => response(JPEG, 'application/octet-stream')
+    expect(await fetchLogo(fetch, 'https://assets.jumpcloud.com/images/applications/a.jpg')).toBe(
+      `data:image/jpeg;base64,${JPEG.toString('base64')}`,
+    )
+  })
+
+  it('refuses http, non-images (whatever the label says), failures and anything too big', async () => {
+    expect(await fetchLogo(() => response(PNG, 'image/png'), 'http://cdn.example/a.png')).toBeNull()
     expect(await fetchLogo(() => response('<html>', 'text/html'), 'https://x/a')).toBeNull()
-    expect(await fetchLogo(() => response('x', 'image/png', false), 'https://x/a')).toBeNull()
-    const big = 'x'.repeat(300_001)
+    expect(await fetchLogo(() => response('<html>', 'image/png'), 'https://x/a')).toBeNull()
+    expect(await fetchLogo(() => response(PNG, 'image/png', false), 'https://x/a')).toBeNull()
+    const big = Buffer.concat([PNG, Buffer.alloc(300_001)])
     expect(await fetchLogo(() => response(big, 'image/png'), 'https://x/a')).toBeNull()
+  })
+})
+
+describe('orderApps', () => {
+  const app = (id: string) => ({ id, name: id.toUpperCase(), logo: null })
+  it('puts starred apps first, each group keeping its order', () => {
+    const apps = [app('a'), app('b'), app('c'), app('d')]
+    expect(orderApps(apps, ['d', 'b']).map((a) => a.id)).toEqual(['b', 'd', 'a', 'c'])
+    expect(orderApps(apps, []).map((a) => a.id)).toEqual(['a', 'b', 'c', 'd'])
+    expect(orderApps(apps, ['gone']).map((a) => a.id)).toEqual(['a', 'b', 'c', 'd'])
   })
 })
 
@@ -225,6 +271,23 @@ describe('PortalApps', () => {
       client: { client_id: 'registered-client' },
       tokens: { access_token: 'secret-token', token_type: 'bearer' },
     })
+  })
+
+  it("keeps logos it already has, so a refresh doesn't download them again", async () => {
+    const { portal, world } = fakePortal()
+    world.signedIn = true
+    const fetched: string[] = []
+    const internals = portal as unknown as {
+      deps: { fetchLogo: (url: string) => Promise<string | null> }
+    }
+    const original = internals.deps.fetchLogo
+    internals.deps.fetchLogo = async (url) => {
+      fetched.push(url)
+      return original(url)
+    }
+    await portal.get()
+    await portal.get(true)
+    expect(fetched).toEqual(['https://cdn.example/slack.png'])
   })
 
   it('remembers the list until asked to refresh', async () => {

@@ -1433,7 +1433,8 @@ it tells screen readers whether it's on, so the switch itself is `aria-hidden`.
 ## `src/renderer/src/components/ActionStack.tsx`: the action icons
 
 The column of round icon buttons that pops out of the bubble when the panel opens (for Morse
-Micro: Ask Claude, screenshot, settings, bounce and close), in the order the tenant's
+Micro: Ask Claude, IT service desk, screenshot, settings, bounce and close), in the order the
+tenant's
 `tenant.json` lists them, nearest the bubble first. `Panel` always renders it; while closed it's
 simply invisible. Its props are the `corner`, the tenant's `actions`, `open`, `activeId`
 (`settings` while the settings menu is open, `ask` or `apps` while the page that isn't the start
@@ -1444,12 +1445,13 @@ page is showing, otherwise `null`), `dotted` (icons that get a small dot) and `o
 
 <!-- code: apps/desktop/src/renderer/src/components/ActionStack.tsx#ICONS -->
 
-[`src/renderer/src/components/ActionStack.tsx`, lines 15–22](../../apps/desktop/src/renderer/src/components/ActionStack.tsx#L15-L22)
+[`src/renderer/src/components/ActionStack.tsx`, lines 16–24](../../apps/desktop/src/renderer/src/components/ActionStack.tsx#L16-L24)
 
 ```tsx
 const ICONS: Record<ActionId, LucideIcon> = {
   ask: MessageCircle,
   apps: LayoutGrid,
+  servicedesk: Headset,
   screenshot: Camera,
   settings: Settings,
   bounce: Volleyball,
@@ -1459,8 +1461,9 @@ const ICONS: Record<ActionId, LucideIcon> = {
 
 <!-- /code -->
 
-Which lucide icon each action shows. Ask Claude is `MessageCircle`, a speech bubble, and Apps is
-`LayoutGrid`, a grid of four squares, the usual sign for "apps".
+Which lucide icon each action shows. Ask Claude is `MessageCircle`, a speech bubble; Apps is
+`LayoutGrid`, a grid of four squares, the usual sign for "apps"; and the IT service desk is
+`Headset`, as for a help desk.
 
 - `Record<ActionId, LucideIcon>`: an object with exactly one entry for every action id. If a new
   id is added to `ACTION_IDS` in `src/shared/actions.ts` without an icon here, TypeScript reports
@@ -1470,7 +1473,7 @@ Which lucide icon each action shows. Ask Claude is `MessageCircle`, a speech bub
 
 <!-- code: apps/desktop/src/renderer/src/components/ActionStack.tsx#ActionStack -->
 
-[`src/renderer/src/components/ActionStack.tsx`, lines 24–93](../../apps/desktop/src/renderer/src/components/ActionStack.tsx#L24-L93)
+[`src/renderer/src/components/ActionStack.tsx`, lines 26–95](../../apps/desktop/src/renderer/src/components/ActionStack.tsx#L26-L95)
 
 ```tsx
 /**
