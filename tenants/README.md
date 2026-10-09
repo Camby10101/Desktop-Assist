@@ -9,15 +9,36 @@ $env:TENANT = 'morse-micro'; npm run dev
 
 A tenant folder contains:
 
-- `tenant.json`: Company and app names, accent colour, the action icons shown above the bubble (listed from the bubble upward), and the sign-in settings. Validated at startup and by `npm test`.
+- `tenant.json`: Company and app names, accent colour, the action icons shown above the bubble (listed from the bubble upward), where chats happen, and the sign-in settings. Validated at startup and by `npm test`.
 - `logo.png` or `logo.svg`: The logo. `logo.png` is also the tray icon and the `.exe` icon. If both exist, `logo.png` is used.
 
-Available actions: `screenshot`, `settings`, `bounce`, `close`.
+Available actions: `ask`, `apps`, `screenshot`, `settings`, `bounce`, `close`.
+
+`startPage`: what the panel opens on, `ask` (the text box, the default) or `apps` (the Apps list,
+Morse Micro). The other page is behind its icon: `ask` ("Ask Claude") when starting on the apps,
+which then needs that action; `apps` ("Your apps") when starting on the text box. The Apps list
+needs `portal`:
+
+- `portal`: the company's app portal for the Apps list (JumpCloud's User Portal): `name` (shown
+  to users, e.g. `JumpCloud`), `url` (the User Portal), `appsServer` (JumpCloud's MCP Server for
+  Users: `https://usermcp.jumpcloud.com/v1` in the US region) and `redirectPort` (the local port
+  the browser returns to while connecting, `47622`). See
+  [docs/APPS_SETUP.md](../docs/APPS_SETUP.md).
+
+`chatApp`, where questions are answered:
+
+- `"claude-desktop"` (Morse Micro, since feature 3.1): Desktop Assist opens each question in the
+  Claude Desktop app, in the person's own Claude account, so it counts against their own usage
+  limit. No sign-in in Desktop Assist, and `signIn` and `claudeAccess` aren't needed. See
+  [docs/CLAUDE_DESKTOP_SETUP.md](../docs/CLAUDE_DESKTOP_SETUP.md).
+- `"built-in"` (the default): the chat runs in the panel through the Claude API, after a JumpCloud
+  sign-in, billed to the company's Claude Console account. Needs `signIn` and `claudeAccess`.
 
 Optional: `systemPrompt`, extra instructions added to what Claude is told at the start of every
-conversation (for example, house style or company-specific context). Up to 8,000 characters.
+conversation in the built-in chat (for example, house style or company-specific context). Up to
+8,000 characters. With Claude Desktop, use claude.ai's Organization instructions instead.
 
-Sign-in settings (none of them secret):
+Sign-in settings for the built-in chat (none of them secret):
 
 - `signIn`: the company's OpenID Connect sign-in: `issuer` (JumpCloud's is
   `https://oauth.id.jumpcloud.com/` in the US region; see the setup guide for EU and India), the app's `clientId`, and `redirectPort` (the local port the

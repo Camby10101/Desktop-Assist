@@ -1,5 +1,11 @@
 # Setting up JumpCloud sign-in (for IT)
 
+> **Only for the built-in chat.** Since feature 3.1, Morse Micro's Desktop Assist hands questions
+> to the Claude Desktop app instead (`"chatApp": "claude-desktop"` in `tenant.json`), which uses
+> each person's own Claude account and needs none of this. See
+> [CLAUDE_DESKTOP_SETUP.md](CLAUDE_DESKTOP_SETUP.md). This guide applies when a tenant uses
+> `"chatApp": "built-in"`.
+
 Desktop Assist signs people in with JumpCloud and then reaches Claude **without any API key**:
 Anthropic's Workload Identity Federation swaps the user's JumpCloud ID token for a short-lived
 Claude token. To turn that on you need to do three things, about 20 minutes in total:
@@ -7,7 +13,8 @@ Claude token. To turn that on you need to do three things, about 20 minutes in t
 1. **JumpCloud**: create an OIDC app for Desktop Assist. Gives a **client ID**.
 2. **Claude Console**: trust JumpCloud and say who may use Claude. Gives an **organization ID**,
    a **federation rule ID** and a **service account ID**.
-3. **Desktop Assist**: put those four values in `tenants/morse-micro/tenant.json` and rebuild.
+3. **Desktop Assist**: put those four values in `tenants/morse-micro/tenant.json`, with
+   `"chatApp": "built-in"`, and rebuild.
 
 None of these values are secret. The app has no client secret and no API key.
 

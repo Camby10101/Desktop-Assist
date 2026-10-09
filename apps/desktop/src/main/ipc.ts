@@ -10,14 +10,22 @@ import {
 import { z } from 'zod'
 import { COMMAND_ACTION_IDS } from '@shared/actions'
 import { IPC } from '@shared/ipc'
-import type { AppState, AttachResult, SendResult } from '@shared/types'
+import type { AppState, AskResult, AttachResult, SendResult, UninstallResult } from '@shared/types'
 import type { ActionHandlers } from './actions'
+import type { PortalApps } from './apps/PortalApps'
 import type { AuthManager } from './auth/AuthManager'
 import type { BubbleController } from './bubble/BubbleController'
 import type { ChatSession, OutgoingImage } from './claude/ChatSession'
+import type { ClaudeDesktop } from './claudeDesktop'
 import { MAX_NOTE_LENGTH, type NotesStore } from './notes/NotesStore'
 import type { ScreenshotService } from './screenshots/ScreenshotService'
 import type { SettingsService } from './settings'
+
+/** The built-in chat and the JumpCloud sign-in it needs. */
+export interface BuiltInChat {
+  auth: AuthManager
+  chat: ChatSession
+}
 
 export interface IpcContext {
   /** Only these windows' renderers may call in. */
@@ -26,9 +34,15 @@ export interface IpcContext {
   notes: NotesStore
   screenshots: ScreenshotService
   settings: SettingsService
-  auth: AuthManager
-  chat: ChatSession
+  /** The built-in chat and its sign-in, or null when chats happen in Claude Desktop. */
+  builtIn: BuiltInChat | null
+  /** Hands questions to Claude Desktop, or null when the chat is built in. */
+  claudeDesktop: ClaudeDesktop | null
+  /** The Apps list and the portal it comes from, or null when the tenant has no portal. */
+  apps: { list: PortalApps; portalUrl: string } | null
   actions: ActionHandlers
+  /** Settings → Uninstall. */
+  uninstall(): UninstallResult
   getState(): AppState
 }
 
@@ -86,6 +100,7 @@ export function registerIpc(ctx: IpcContext): void {
   })
 
   handle(IPC.invokeAction, z.enum(COMMAND_ACTION_IDS), (id) => ctx.actions[id]())
+  handle(IPC.appUninstall, NoArgs, () => ctx.uninstall())
   handle(IPC.openExternal, ExternalUrl, (url) => shell.openExternal(url))
   handle(IPC.copyText, z.string().max(1_000_000), (text) => clipboard.writeText(text))
 
@@ -99,6 +114,7 @@ export function registerIpc(ctx: IpcContext): void {
   handle(IPC.notesRemoveAttachment, z.string().min(1).max(64), (id) =>
     ctx.notes.removeAttachment(id),
   )
+  handle(IPC.notesClear, NoArgs, () => ctx.notes.clear())
 
   handle(IPC.screenshotThumbnail, FilePath, (path) => ctx.screenshots.thumbnail(path))
   handle(IPC.screenshotOpen, FilePath, (path) => ctx.screenshots.open(path))
@@ -109,29 +125,70 @@ export function registerIpc(ctx: IpcContext): void {
   handle(IPC.settingsSetEffort, z.enum(['low', 'medium', 'high']), (effort) =>
     ctx.settings.setEffort(effort),
   )
+  handle(IPC.settingsSetAutoSend, z.boolean(), (autoSend) => ctx.settings.setAutoSend(autoSend))
 
-  // Sign-in happens in the browser and can take minutes, so these return straight away;
-  // progress is broadcast on IPC.authStatus. No tokens ever reach the renderer.
-  handle(IPC.authSignIn, NoArgs, () => void ctx.auth.signIn())
-  handle(IPC.authCancel, NoArgs, () => ctx.auth.cancelSignIn())
-  handle(IPC.authSignOut, NoArgs, () => ctx.auth.signOut())
-  handle(IPC.authRetry, NoArgs, () => void ctx.auth.retry())
+  if (ctx.claudeDesktop) registerClaudeDesktop(ctx.claudeDesktop)
+  if (ctx.apps) registerApps(ctx.apps)
 
-  // Sends the draft: the text from the box plus the screenshots attached to it.
-  handle(IPC.chatSend, z.string().max(MAX_NOTE_LENGTH), (text): SendResult => {
-    if (ctx.chat.busy) return { ok: false, reason: 'busy' }
-    const draft = ctx.notes.get()
-    const images: OutgoingImage[] = []
-    for (const attachment of draft.attachments) {
-      const image = ctx.screenshots.forClaude(attachment.path)
-      if (!image) return { ok: false, reason: 'missing-screenshot' }
-      images.push(image)
-    }
-    const status = ctx.chat.send(text, images, draft.attachments)
-    if (status !== 'sent') return { ok: false, reason: status }
-    return { ok: true, notes: ctx.notes.clear() }
-  })
-  handle(IPC.chatStop, NoArgs, () => ctx.chat.stop())
-  handle(IPC.chatRetry, NoArgs, () => ctx.chat.retry())
-  handle(IPC.chatNew, NoArgs, () => ctx.chat.newConversation())
+  function registerApps({ list, portalUrl }: NonNullable<IpcContext['apps']>): void {
+    handle(IPC.appsGet, z.boolean(), (refresh) => list.get(refresh))
+    // Connecting happens in the browser and can take minutes, so this returns straight away;
+    // progress is broadcast on IPC.appsState. No tokens ever reach the renderer.
+    handle(IPC.appsSignIn, NoArgs, () => void list.signIn())
+    handle(IPC.appsCancelSignIn, NoArgs, () => list.cancelSignIn())
+    handle(IPC.appsOpen, z.string().min(1).max(200), async (id) => {
+      const opened = await list.open(id)
+      // The browser is coming to the front; get out of its way.
+      if (opened) ctx.controller.collapse()
+      return opened
+    })
+    handle(IPC.appsOpenPortal, NoArgs, async () => {
+      await shell.openExternal(portalUrl)
+      ctx.controller.collapse()
+    })
+  }
+  if (ctx.builtIn) registerBuiltInChat(ctx.builtIn)
+
+  function registerClaudeDesktop(claudeDesktop: ClaudeDesktop): void {
+    handle(IPC.claudeDesktopInstalled, NoArgs, () => claudeDesktop.isInstalled())
+    // Hands the draft over: the text from the box, plus the screenshots attached to it.
+    handle(
+      IPC.claudeDesktopAsk,
+      z.string().max(MAX_NOTE_LENGTH),
+      async (text): Promise<AskResult> => {
+        const result = await claudeDesktop.ask(text, ctx.notes.get().attachments)
+        if (!result.ok) return result
+        // Claude Desktop is coming to the front; get out of its way.
+        ctx.controller.collapse()
+        return { ...result, notes: ctx.notes.clear() }
+      },
+    )
+  }
+
+  function registerBuiltInChat({ auth, chat }: BuiltInChat): void {
+    // Sign-in happens in the browser and can take minutes, so these return straight away;
+    // progress is broadcast on IPC.authStatus. No tokens ever reach the renderer.
+    handle(IPC.authSignIn, NoArgs, () => void auth.signIn())
+    handle(IPC.authCancel, NoArgs, () => auth.cancelSignIn())
+    handle(IPC.authSignOut, NoArgs, () => auth.signOut())
+    handle(IPC.authRetry, NoArgs, () => void auth.retry())
+
+    // Sends the draft: the text from the box plus the screenshots attached to it.
+    handle(IPC.chatSend, z.string().max(MAX_NOTE_LENGTH), (text): SendResult => {
+      if (chat.busy) return { ok: false, reason: 'busy' }
+      const draft = ctx.notes.get()
+      const images: OutgoingImage[] = []
+      for (const attachment of draft.attachments) {
+        const image = ctx.screenshots.forClaude(attachment.path)
+        if (!image) return { ok: false, reason: 'missing-screenshot' }
+        images.push(image)
+      }
+      const status = chat.send(text, images, draft.attachments)
+      if (status !== 'sent') return { ok: false, reason: status }
+      return { ok: true, notes: ctx.notes.clear() }
+    })
+    handle(IPC.chatStop, NoArgs, () => chat.stop())
+    handle(IPC.chatRetry, NoArgs, () => chat.retry())
+    handle(IPC.chatNew, NoArgs, () => chat.newConversation())
+  }
 }

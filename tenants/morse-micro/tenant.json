@@ -3,7 +3,15 @@
   "companyName": "Morse Micro",
   "appName": "Desktop Assist",
   "accentColor": "#9333EA",
-  "actions": ["screenshot", "settings", "bounce", "close"],
+  "actions": ["ask", "screenshot", "settings", "bounce", "close"],
+  "chatApp": "claude-desktop",
+  "startPage": "apps",
+  "portal": {
+    "name": "JumpCloud",
+    "url": "https://console.jumpcloud.com/userconsole#/",
+    "appsServer": "https://usermcp.jumpcloud.com/v1",
+    "redirectPort": 47622
+  },
   "signIn": {
     "issuer": "https://oauth.id.jumpcloud.com/",
     "clientId": "43ae891c-6cf4-43b5-bde5-585a3ecc792f",

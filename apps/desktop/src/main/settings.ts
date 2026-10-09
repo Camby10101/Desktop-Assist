@@ -10,6 +10,8 @@ export const DEFAULT_EFFORT: Effort = 'low'
 const PreferencesSchema = z.object({
   autoStartInitialized: z.boolean().optional(),
   effort: z.enum(['low', 'medium', 'high']).optional(),
+  /** Claude Desktop: send the question in Claude, not just fill it in. On unless turned off. */
+  autoSend: z.boolean().optional(),
   /** Where the bubble was dragged to: a corner of a particular display. */
   bubbleAnchor: z
     .object({
@@ -47,6 +49,8 @@ export class SettingsService {
       autoStartAvailable: available,
       screenshotsDir: this.screenshotsDir,
       effort: this.prefs.effort ?? DEFAULT_EFFORT,
+      autoSend: this.prefs.autoSend ?? true,
+      canUninstall: available,
     }
   }
 
@@ -57,6 +61,11 @@ export class SettingsService {
 
   async setEffort(effort: Effort): Promise<Settings> {
     await this.save({ effort })
+    return this.get()
+  }
+
+  async setAutoSend(autoSend: boolean): Promise<Settings> {
+    await this.save({ autoSend })
     return this.get()
   }
 

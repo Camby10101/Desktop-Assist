@@ -8,6 +8,10 @@ through Anthropic's SDK, `errors.ts` turns failures into plain English, and `Cha
 the conversation and runs each reply. There is no API key: the SDK swaps the user's JumpCloud
 sign-in for a short-lived Claude token (see `AnthropicBackend.getClient()`).
 
+This is the built-in chat, created by `startBuiltInChat()` in `index.ts`. When a tenant sends
+questions to Claude Desktop instead (see [Claude Desktop](9-claude-desktop.md)), Desktop Assist
+doesn't call the Claude API at all, and none of this page's code runs.
+
 **What happens when you send a message**
 
 1. The panel sends IPC `assist:chat-send`. Its handler in `ipc.ts` turns the draft's screenshots

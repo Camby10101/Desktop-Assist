@@ -1,8 +1,19 @@
 import { useEffect, useState, type PointerEvent } from 'react'
 import type { ActionId } from '@shared/actions'
+import { CLAUDE_DOWNLOAD_PAGE } from '@shared/claudeDesktop'
 import { actionOffset } from '@shared/geometry'
-import type { AppState, Attachment, Effort } from '@shared/types'
+import type {
+  AppsState,
+  AppState,
+  AskResult,
+  Attachment,
+  Effort,
+  PortalApp,
+  StartPage,
+  UninstallResult,
+} from '@shared/types'
 import { ActionStack } from '../components/ActionStack'
+import { AppsList } from '../components/AppsList'
 import { Banner, ChatBox } from '../components/ChatBox'
 import { SettingsMenu } from '../components/SettingsMenu'
 import { SignInPanel } from '../components/SignInPanel'
@@ -10,6 +21,21 @@ import { useAccentColor, useAssistState } from '../hooks/useAssistState'
 import { useClickThrough } from '../hooks/useClickThrough'
 import { useToast } from '../hooks/useToast'
 import { cn } from '../lib/cn'
+
+/** What to say when a question couldn't be handed to Claude Desktop. */
+const ASK_ERRORS: Record<Exclude<Extract<AskResult, { ok: false }>['reason'], 'empty'>, string> = {
+  'too-long': "That's too long to open in Claude. Shorten it, or paste it into Claude yourself.",
+  'not-installed': "Claude Desktop isn't installed on this PC. Ask IT to install it.",
+  'missing-screenshot': 'An attached screenshot is missing. Remove it and try again.',
+  failed: "Couldn't open Claude Desktop. Try again.",
+}
+
+/** What to say when Settings → Uninstall couldn't start the uninstaller. */
+const UNINSTALL_ERRORS: Record<Extract<UninstallResult, { ok: false }>['reason'], string> = {
+  'not-installed': 'Only the installed app can be uninstalled from here.',
+  missing: 'The uninstaller is missing. Uninstall from Windows Settings → Apps.',
+  failed: "Couldn't start the uninstaller. Uninstall from Windows Settings → Apps.",
+}
 
 /** Everything that appears around the bubble when it's clicked. */
 export function PanelView() {
@@ -22,38 +48,82 @@ export function PanelView() {
 function Panel({ state }: { state: AppState }) {
   const open = state.mode === 'expanded'
   const { branding, auth } = state
+  // Questions go to the Claude Desktop app instead of the chat in the panel (no sign-in here).
+  const inClaudeDesktop = branding.chatApp === 'claude-desktop'
 
   // The draft is edited here and mirrored to the main process, which saves it.
   const [draft, setDraft] = useState(state.notes.text)
   const [attachments, setAttachments] = useState(state.notes.attachments)
   const [settings, setSettings] = useState(state.settings)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [asking, setAsking] = useState(false)
+  // The card shows the text box or the Apps list: the tenant's start page when the panel opens,
+  // the other one while its icon (Ask Claude or Your apps) is on.
+  const { startPage } = branding
+  const [view, setView] = useState<StartPage>(startPage)
+  const [apps, setApps] = useState<AppsState>({ status: 'loading' })
+  /** Claude Desktop isn't installed, so questions can't be opened in it (checked on opening). */
+  const [claudeMissing, setClaudeMissing] = useState(false)
   const [toast, showToast] = useToast()
 
   useEffect(
     () =>
       window.assist.onModeChanged((mode) => {
         if (mode !== 'expanded') setSettingsOpen(false)
+        // The panel always reopens on the start page (but taking a screenshot isn't closing it).
+        if (mode === 'collapsed') setView(startPage)
       }),
-    [],
+    [startPage],
   )
+  useEffect(() => window.assist.onAppsState(setApps), [])
+  // The Apps list is loaded (or remembered) by the main process; ask for it whenever it shows.
+  useEffect(() => {
+    if (!open || view !== 'apps' || !branding.portalName) return
+    let alive = true
+    void window.assist.apps.get().then((current) => {
+      if (alive) setApps(current)
+    })
+    return () => {
+      alive = false
+    }
+  }, [open, view, branding.portalName])
+  useEffect(() => {
+    if (!open || !inClaudeDesktop) return
+    let alive = true
+    void window.assist.claudeDesktop.isInstalled().then((installed) => {
+      if (alive) setClaudeMissing(!installed)
+    })
+    return () => {
+      alive = false
+    }
+  }, [open, inClaudeDesktop])
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
       if (settingsOpen) setSettingsOpen(false)
+      else if (view !== startPage) setView(startPage)
       else window.assist.collapse()
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [settingsOpen])
+  }, [settingsOpen, view, startPage])
 
   // Not signed in: the chat box shows the sign-in instead of the chat. While a saved sign-in is
   // being renewed, or JumpCloud can't be reached, the chat stays (sending tries JumpCloud again).
-  const signedIn = auth.state === 'signed-in' || auth.state === 'offline'
+  // With Claude Desktop there's no sign-in here at all.
+  const signedIn = auth === null || auth.state === 'signed-in' || auth.state === 'offline'
+  // `busy` is the built-in chat's reply streaming (the text box then offers Stop). Handing a
+  // question to Claude Desktop only takes a moment, so it just holds the button back.
   const busy = state.chat.some((message) => message.status === 'streaming')
-  const canSend = signedIn && !busy && (draft.trim() !== '' || attachments.length > 0)
+  const canSend = signedIn && !busy && !asking && (draft.trim() !== '' || attachments.length > 0)
 
   async function runAction(id: ActionId) {
+    if (id === 'apps' || id === 'ask') {
+      // Swaps the card to that page, or back again.
+      setSettingsOpen(false)
+      setView(view === id ? (id === 'apps' ? 'ask' : 'apps') : id)
+      return
+    }
     if (id === 'settings') {
       setSettingsOpen(!settingsOpen)
       // Refresh: "Start with Windows" can also be changed in Windows Settings.
@@ -63,6 +133,8 @@ function Panel({ state }: { state: AppState }) {
     setSettingsOpen(false)
     const result = await window.assist.invokeAction(id)
     if (result.message) showToast(result.message, result.ok ? 'info' : 'error')
+    // A screenshot is taken to ask about it: show the text box, where it can be attached.
+    if (id === 'screenshot' && result.ok) setView('ask')
   }
 
   function changeDraft(next: string) {
@@ -72,6 +144,7 @@ function Panel({ state }: { state: AppState }) {
 
   async function send() {
     if (!canSend) return
+    if (inClaudeDesktop) return askInClaudeDesktop()
     const result = await window.assist.chat.send(draft)
     if (result.ok) {
       setDraft(result.notes.text)
@@ -80,6 +153,27 @@ function Panel({ state }: { state: AppState }) {
       showToast('An attached screenshot is missing. Remove it and try again.', 'error')
     } else if (result.reason === 'signed-out') {
       showToast('Sign in with JumpCloud first.', 'error')
+    }
+  }
+
+  async function askInClaudeDesktop() {
+    setAsking(true)
+    const result = await window.assist.claudeDesktop.ask(draft).finally(() => setAsking(false))
+    if (result.ok) setClaudeMissing(false)
+    else if (result.reason === 'not-installed') setClaudeMissing(true)
+    if (result.ok) {
+      // The panel has closed and Claude Desktop has opened with the question filled in.
+      setDraft(result.notes.text)
+      setAttachments(result.notes.attachments)
+    } else if (result.reason !== 'empty') {
+      showToast(ASK_ERRORS[result.reason], 'error')
+    }
+  }
+
+  async function openApp(app: PortalApp) {
+    // On success the main process closes the panel; the browser opens the app.
+    if (!(await window.assist.apps.open(app.id))) {
+      showToast(`Couldn't open ${app.name}. Try it from the portal.`, 'error')
     }
   }
 
@@ -112,6 +206,21 @@ function Panel({ state }: { state: AppState }) {
     showToast('Logged out')
   }
 
+  async function clearText() {
+    const notes = await window.assist.notes.clear()
+    setDraft(notes.text)
+    setAttachments(notes.attachments)
+    setSettingsOpen(false)
+    showToast('Text box cleared')
+  }
+
+  async function uninstall() {
+    setSettingsOpen(false)
+    const result = await window.assist.uninstall()
+    // On success the uninstaller has started and the app is quitting.
+    if (!result.ok) showToast(UNINSTALL_ERRORS[result.reason], 'error')
+  }
+
   async function newConversation() {
     await window.assist.chat.newConversation()
     setSettingsOpen(false)
@@ -120,6 +229,10 @@ function Panel({ state }: { state: AppState }) {
 
   async function setEffort(effort: Effort) {
     setSettings(await window.assist.settings.setEffort(effort))
+  }
+
+  async function toggleAutoSend() {
+    setSettings(await window.assist.settings.setAutoSend(!settings.autoSend))
   }
 
   // Clicking anywhere else in the panel closes the settings menu.
@@ -131,7 +244,9 @@ function Panel({ state }: { state: AppState }) {
   }
 
   const signInPrompt =
-    auth.state === 'unconfigured' || auth.state === 'signed-out' || auth.state === 'signing-in' ? (
+    auth?.state === 'unconfigured' ||
+    auth?.state === 'signed-out' ||
+    auth?.state === 'signing-in' ? (
       <SignInPanel
         open={open}
         status={auth}
@@ -142,9 +257,24 @@ function Panel({ state }: { state: AppState }) {
     ) : null
 
   const banner =
-    auth.state === 'checking' ? (
+    inClaudeDesktop && claudeMissing ? (
+      <Banner
+        action={
+          <button
+            type="button"
+            onClick={() => void window.assist.openExternal(CLAUDE_DOWNLOAD_PAGE)}
+            className="shrink-0 rounded-md px-1.5 py-0.5 font-medium text-accent hover:bg-zinc-100 dark:text-accent-soft dark:hover:bg-zinc-800"
+          >
+            Download
+          </button>
+        }
+      >
+        Claude Desktop isn't installed on this PC, and {branding.appName} opens your questions in
+        it. Ask IT to install it, or download it.
+      </Banner>
+    ) : auth?.state === 'checking' ? (
       <Banner spinner>Checking your JumpCloud sign-in…</Banner>
-    ) : auth.state === 'offline' ? (
+    ) : auth?.state === 'offline' ? (
       <Banner
         action={
           <button
@@ -172,6 +302,23 @@ function Panel({ state }: { state: AppState }) {
         corner={state.corner}
         open={open}
         toast={toast}
+        inClaudeDesktop={inClaudeDesktop}
+        autoSend={settings.autoSend}
+        apps={
+          view === 'apps' && branding.portalName ? (
+            <AppsList
+              open={open}
+              state={apps}
+              appName={branding.appName}
+              portalName={branding.portalName}
+              onOpenApp={(app) => void openApp(app)}
+              onOpenPortal={() => void window.assist.apps.openPortal()}
+              onSignIn={() => void window.assist.apps.signIn()}
+              onCancelSignIn={() => void window.assist.apps.cancelSignIn()}
+              onRetry={() => void window.assist.apps.get(true).then(setApps)}
+            />
+          ) : null
+        }
         signInPrompt={signInPrompt}
         banner={banner}
         messages={state.chat}
@@ -192,7 +339,8 @@ function Panel({ state }: { state: AppState }) {
         corner={state.corner}
         actions={branding.actions}
         open={open}
-        activeId={settingsOpen ? 'settings' : null}
+        activeId={settingsOpen ? 'settings' : view !== startPage ? view : null}
+        dotted={view !== 'ask' && (draft.trim() !== '' || attachments.length > 0) ? ['ask'] : []}
         onAction={(id) => void runAction(id)}
       />
       {open && settingsOpen && settingsIndex >= 0 && (
@@ -202,14 +350,17 @@ function Panel({ state }: { state: AppState }) {
           settings={settings}
           branding={branding}
           version={state.version}
-          user={signedIn ? auth.user : null}
+          user={auth?.state === 'signed-in' || auth?.state === 'offline' ? auth.user : null}
           onToggleAutoStart={async () =>
             setSettings(await window.assist.settings.setAutoStart(!settings.autoStart))
           }
           onSetEffort={(effort) => void setEffort(effort)}
+          onToggleAutoSend={() => void toggleAutoSend()}
           onSignOut={() => void signOut()}
           onOpenScreenshotsFolder={() => void window.assist.screenshots.openFolder()}
           onNewConversation={() => void newConversation()}
+          onClearText={() => void clearText()}
+          onUninstall={() => void uninstall()}
         />
       )}
     </div>

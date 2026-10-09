@@ -35,14 +35,32 @@ export interface Settings {
   autoStartAvailable: boolean
   screenshotsDir: string
   effort: Effort
+  /** With Claude Desktop: send the question there too, not just fill it in. */
+  autoSend: boolean
+  /** Uninstalling from Settings only works for an installed build, not `npm run dev`. */
+  canUninstall: boolean
 }
+
+/**
+ * Where conversations happen: in the panel through the Claude API (`built-in`), or handed over to
+ * the Claude Desktop app (`claude-desktop`), which uses each person's own Claude account.
+ */
+export type ChatApp = 'built-in' | 'claude-desktop'
 
 export interface Branding {
   companyName: string
   appName: string
   accentColor: string
   actions: ActionId[]
+  chatApp: ChatApp
+  /** The identity provider's name for the Apps list ("JumpCloud"), or null without one. */
+  portalName: string | null
+  /** What the card shows when the panel opens: the text box, or the Apps list. */
+  startPage: StartPage
 }
+
+/** The two things the card beside the bubble can show. */
+export type StartPage = 'ask' | 'apps'
 
 export interface SignedInUser {
   name?: string
@@ -83,6 +101,14 @@ export type SendResult =
   | { ok: true; notes: Notes }
   | { ok: false; reason: 'busy' | 'empty' | 'signed-out' | 'missing-screenshot' }
 
+/**
+ * Handing the draft to Claude Desktop. `screenshots` is how many were copied to the clipboard
+ * (as one image) for the user to paste.
+ */
+export type AskResult =
+  | { ok: true; notes: Notes; screenshots: number }
+  | { ok: false; reason: 'empty' | 'too-long' | 'not-installed' | 'missing-screenshot' | 'failed' }
+
 export interface AppState {
   mode: Mode
   /** The screen corner the bubble rests in; the panel lays itself out to open away from it. */
@@ -91,9 +117,35 @@ export interface AppState {
   settings: Settings
   branding: Branding
   version: string
-  auth: AuthStatus
+  /** Null when chats happen in Claude Desktop, which has its own sign-in. */
+  auth: AuthStatus | null
   chat: ChatMessage[]
 }
+
+/** One app from the user's JumpCloud User Portal, as the Apps list shows it. */
+export interface PortalApp {
+  id: string
+  name: string
+  /** The logo as a data: URL (the pages can't load images from the web), or null. */
+  logo: string | null
+}
+
+/**
+ * The Apps list.
+ * - `sign-in`: the user hasn't connected Desktop Assist to their portal yet (or the connection
+ *   ended); a button starts it, in the browser.
+ * - `signing-in`: waiting for the user to finish in their browser.
+ */
+export type AppsState =
+  | { status: 'loading' }
+  | { status: 'sign-in'; message?: string }
+  | { status: 'signing-in' }
+  | { status: 'ready'; apps: PortalApp[] }
+  | { status: 'error'; message: string }
+
+/** Settings → Uninstall. On success the app is already quitting. */
+export type UninstallResult =
+  { ok: true } | { ok: false; reason: 'not-installed' | 'missing' | 'failed' }
 
 export type ActionResult = { ok: true; message?: string } | { ok: false; message: string }
 

@@ -8,6 +8,10 @@ long-lived _refresh token_, encrypted on disk, and uses it to get short-lived _I
 Anthropic swaps for Claude tokens. All of it runs in the main process: the pages only ever learn the
 sign-in status and your name and email (`AuthStatus` in `src/shared/types.ts`), never a token.
 
+This is the built-in chat's sign-in. When a tenant sends questions to Claude Desktop instead
+(`chatApp` in `tenant.json`; see [Claude Desktop](9-claude-desktop.md)), none of this page's code
+runs: Claude Desktop has its own sign-in.
+
 **Signing in**
 
 1. The user clicks **Sign in with JumpCloud**. IPC `assist:auth-sign-in` calls
@@ -26,8 +30,8 @@ sign-in status and your name and email (`AuthStatus` in `src/shared/types.ts`), 
 
 **Starting up**
 
-1. `start()` in `index.ts` calls `AuthManager.init()`, which reads the saved sign-in with
-   `loadSession()` → `SecretStore.load()`.
+1. `startBuiltInChat()` in `index.ts` calls `AuthManager.init()`, which reads the saved sign-in
+   with `loadSession()` → `SecretStore.load()`.
 2. If there is one, `renew()` → `refresh()` → `Oidc.refresh()` swaps the refresh token for new
    tokens, saves JumpCloud's replacement refresh token (if it sent one), and keeps the new ID token
    as the spare. If JumpCloud can't be reached the status becomes `offline`; if it refuses,
@@ -56,9 +60,9 @@ file, and `Oidc.revoke()` asks JumpCloud to cancel the refresh token. Through `o
 ## `src/main/auth/AuthManager.ts`: owning the sign-in
 
 `AuthManager` decides whether someone is signed in, keeps the refresh token, and hands out ID tokens
-for Claude. `start()` in `src/main/index.ts` creates the one instance. The IPC handlers in
-`src/main/ipc.ts` call `signIn()`, `cancelSignIn()`, `signOut()` and `retry()`; `ChatSession` asks
-`canChat` before sending; `AnthropicBackend` calls `freshIdToken()` (through a small wrapper in
+for Claude. `startBuiltInChat()` in `src/main/index.ts` creates the one instance. The IPC handlers
+in `src/main/ipc.ts` call `signIn()`, `cancelSignIn()`, `signOut()` and `retry()`; `ChatSession`
+asks `canChat` before sending; `AnthropicBackend` calls `freshIdToken()` (through a small wrapper in
 `index.ts`). It never touches JumpCloud, the disk or the browser itself: those arrive through
 `AuthManagerDeps`, so `tests/authManager.test.ts` can drive it with fakes.
 
@@ -176,9 +180,9 @@ export interface AuthManagerDeps {
 
 <!-- /code -->
 
-Everything `AuthManager` needs from outside, passed to its constructor. `start()` in `index.ts`
-supplies the real ones: `createOidc()`, a `SecretStore` using Windows DPAPI, `listenForRedirect()`
-and Electron's `shell.openExternal()`.
+Everything `AuthManager` needs from outside, passed to its constructor. `startBuiltInChat()` in
+`index.ts` supplies the real ones: `createOidc()`, a `SecretStore` using Windows DPAPI,
+`listenForRedirect()` and Electron's `shell.openExternal()`.
 
 - `oidc: Oidc | null`: `null` when `missingSettings()` in `src/main/tenant.ts` says tenant.json
   isn't filled in; `missing` then lists what's needed, for the panel to show.
@@ -339,10 +343,10 @@ async init(): Promise<void> {
 
 <!-- /code -->
 
-Runs once at startup (`start()` in `index.ts` calls it without waiting). It loads the saved sign-in
-and renews it straight away, before any chat. That shows an expired sign-in at once rather than on
-the first message, saves JumpCloud's newest refresh token, and leaves a spare ID token ready for the
-first message.
+Runs once at startup (`startBuiltInChat()` in `index.ts` calls it without waiting). It loads the
+saved sign-in and renews it straight away, before any chat. That shows an expired sign-in at once
+rather than on the first message, saves JumpCloud's newest refresh token, and leaves a spare ID
+token ready for the first message.
 
 - `if (!this.deps.oidc)`: tenant.json isn't filled in, so the status becomes `unconfigured` with the
   list of missing settings, and JumpCloud is never contacted. `return this.setStatus(...)` is just a
@@ -853,7 +857,7 @@ Small helpers outside the class.
 
 The only file that speaks OIDC. It wraps the `openid-client` library (version 6) behind a small
 `Oidc` interface with three calls (`begin`, `refresh`, `revoke`), so `AuthManager` and its tests
-don't depend on the library. `start()` in `index.ts` creates it with
+don't depend on the library. `startBuiltInChat()` in `index.ts` creates it with
 `createOidc(signIn, { allowInsecure: localIssuer })` only when tenant.json is complete.
 
 The ideas behind it:
@@ -1249,7 +1253,8 @@ which other computers can't reach. JumpCloud is registered with `http://127.0.0.
 the redirect URI. Plain `http` is fine because the traffic never leaves the PC, and PKCE protects
 the code even if another program on the PC sees it. `index.ts` passes `listenForRedirect` to
 `AuthManager` as `listen`, and `signIn()` starts one listener per sign-in. It uses Node's built-in
-`http` module, which works in Electron's main process.
+`http` module, which works in Electron's main process. The Apps list's connection to JumpCloud
+uses the same listener, on port 47622 (see [Your apps](10-apps.md)).
 
 ### `CALLBACK_PATH`, `RedirectListener`
 
@@ -1451,12 +1456,12 @@ what the token says (the same things a federation rule checks) so the log can sh
 only decodes the token and never verifies it, which is fine because nothing trusts the result: it's
 only for a person reading the log.
 
-It's used only by `start()` in `index.ts`. The `identityToken` function given to `AnthropicBackend`
-summarizes every ID token before handing it over, and keeps the latest summary in `lastIdToken`.
-When a chat request fails and `classifyError()` (in `src/main/claude/errors.ts`) says `not-allowed`,
-meaning Anthropic's token exchange refused the swap (a status such as 400, 401 or 403),
-`ChatSession`'s `onError` writes that summary to the app's log (`logs\desktop-assist.log` in the
-app's data folder).
+It's used only by `startBuiltInChat()` in `index.ts`. The `identityToken` function given to
+`AnthropicBackend` summarizes every ID token before handing it over, and keeps the latest summary in
+`lastIdToken`. When a chat request fails and `classifyError()` (in `src/main/claude/errors.ts`) says
+`not-allowed`, meaning Anthropic's token exchange refused the swap (a status such as 400, 401 or
+403), `ChatSession`'s `onError` writes that summary to the app's log (`logs\desktop-assist.log` in
+the app's data folder).
 
 The case it was written for, and what to look for:
 
@@ -1614,8 +1619,10 @@ function text(value: unknown): string | undefined {
 ## `src/main/storage/SecretStore.ts`: keeping the sign-in safe
 
 Keeps one secret in one file, encrypted so only the same Windows user on the same PC can read it.
-The app has exactly one secret: the JumpCloud sign-in (`AuthManager` saves the refresh token and
-user as JSON in `%APPDATA%\Desktop Assist\jumpcloud-session.bin`). The encryption itself is passed
+The app has two such secrets, each in a store of its own: the built-in chat's JumpCloud sign-in
+(`AuthManager` saves the refresh token and user as JSON in
+`%APPDATA%\Desktop Assist\jumpcloud-session.bin`), and the Apps list's connection to JumpCloud
+(`jumpcloud-apps.bin`, see [Your apps](10-apps.md)). The encryption itself is passed
 in as an `Encryptor`: `index.ts` gives it Electron's `safeStorage`, which on Windows uses **DPAPI**
 (the Windows Data Protection API, which encrypts with a key tied to the user's Windows login). Tests
 use a fake.

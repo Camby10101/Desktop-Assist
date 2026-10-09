@@ -1,10 +1,20 @@
-import { Camera, Power, Settings, Volleyball, type LucideIcon } from 'lucide-react'
+import {
+  Camera,
+  LayoutGrid,
+  MessageCircle,
+  Power,
+  Settings,
+  Volleyball,
+  type LucideIcon,
+} from 'lucide-react'
 import { ACTIONS, type ActionId } from '@shared/actions'
 import { PANEL_LAYOUT, UI, isTopCorner, type Corner } from '@shared/geometry'
 import { anchored } from '../lib/anchor'
 import { cn } from '../lib/cn'
 
 const ICONS: Record<ActionId, LucideIcon> = {
+  ask: MessageCircle,
+  apps: LayoutGrid,
   screenshot: Camera,
   settings: Settings,
   bounce: Volleyball,
@@ -20,6 +30,8 @@ export function ActionStack(props: {
   actions: ActionId[]
   open: boolean
   activeId: ActionId | null
+  /** Icons with a small dot, e.g. Ask Claude while an unsent question is waiting behind it. */
+  dotted?: ActionId[]
   onAction: (id: ActionId) => void
 }) {
   const top = isTopCorner(props.corner)
@@ -52,7 +64,7 @@ export function ActionStack(props: {
               transitionDelay: props.open ? `${index * 30}ms` : '0ms',
             }}
             className={cn(
-              'grid place-items-center rounded-full border shadow-md outline-none',
+              'relative grid place-items-center rounded-full border shadow-md outline-none',
               'transition duration-150 ease-out motion-reduce:transition-none',
               'focus-visible:ring-2 focus-visible:ring-accent',
               // Hidden icons sit tucked toward the bubble, then slide out.
@@ -67,6 +79,12 @@ export function ActionStack(props: {
             )}
           >
             <Icon size={18} strokeWidth={2} aria-hidden />
+            {props.dotted?.includes(id) && !active && (
+              <span
+                aria-hidden
+                className="absolute top-1 right-1 size-2.5 rounded-full border-2 border-white bg-accent dark:border-zinc-800"
+              />
+            )}
           </button>
         )
       })}

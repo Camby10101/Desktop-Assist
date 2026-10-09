@@ -30,6 +30,8 @@ const PAGES = [
   '6-drafts-and-screenshots.md',
   '7-renderer-pages.md',
   '8-renderer-components.md',
+  '9-claude-desktop.md',
+  '10-apps.md',
 ]
 /** Code blocks up to this many lines are kept on one sheet; longer ones may break across sheets. */
 const KEEP_TOGETHER_LINES = 45

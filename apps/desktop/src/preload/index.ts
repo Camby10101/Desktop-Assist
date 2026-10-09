@@ -23,6 +23,7 @@ const api: AssistApi = {
     setText: (text) => ipcRenderer.send(IPC.notesSetText, text),
     attachLatestScreenshot: () => ipcRenderer.invoke(IPC.notesAttachLatest),
     removeAttachment: (id) => ipcRenderer.invoke(IPC.notesRemoveAttachment, id),
+    clear: () => ipcRenderer.invoke(IPC.notesClear),
   },
   screenshots: {
     thumbnail: (path) => ipcRenderer.invoke(IPC.screenshotThumbnail, path),
@@ -33,6 +34,7 @@ const api: AssistApi = {
     get: () => ipcRenderer.invoke(IPC.settingsGet),
     setAutoStart: (enabled) => ipcRenderer.invoke(IPC.settingsSetAutoStart, enabled),
     setEffort: (effort) => ipcRenderer.invoke(IPC.settingsSetEffort, effort),
+    setAutoSend: (autoSend) => ipcRenderer.invoke(IPC.settingsSetAutoSend, autoSend),
   },
   auth: {
     signIn: () => ipcRenderer.invoke(IPC.authSignIn),
@@ -40,18 +42,31 @@ const api: AssistApi = {
     signOut: () => ipcRenderer.invoke(IPC.authSignOut),
     retry: () => ipcRenderer.invoke(IPC.authRetry),
   },
+  claudeDesktop: {
+    ask: (text) => ipcRenderer.invoke(IPC.claudeDesktopAsk, text),
+    isInstalled: () => ipcRenderer.invoke(IPC.claudeDesktopInstalled),
+  },
   chat: {
     send: (text) => ipcRenderer.invoke(IPC.chatSend, text),
     stop: () => ipcRenderer.invoke(IPC.chatStop),
     retry: () => ipcRenderer.invoke(IPC.chatRetry),
     newConversation: () => ipcRenderer.invoke(IPC.chatNew),
   },
+  apps: {
+    get: (refresh) => ipcRenderer.invoke(IPC.appsGet, refresh ?? false),
+    signIn: () => ipcRenderer.invoke(IPC.appsSignIn),
+    cancelSignIn: () => ipcRenderer.invoke(IPC.appsCancelSignIn),
+    open: (id) => ipcRenderer.invoke(IPC.appsOpen, id),
+    openPortal: () => ipcRenderer.invoke(IPC.appsOpenPortal),
+  },
+  uninstall: () => ipcRenderer.invoke(IPC.appUninstall),
   onModeChanged: (callback) => subscribe(IPC.modeChanged, callback),
   onCornerChanged: (callback) => subscribe(IPC.cornerChanged, callback),
   onClickThroughReset: (callback) => subscribe(IPC.clickThroughReset, callback),
   onAuthStatus: (callback) => subscribe(IPC.authStatus, callback),
   onChatMessage: (callback) => subscribe(IPC.chatMessage, callback),
   onChatReset: (callback) => subscribe(IPC.chatReset, () => callback()),
+  onAppsState: (callback) => subscribe(IPC.appsState, callback),
 }
 
 contextBridge.exposeInMainWorld('assist', api)

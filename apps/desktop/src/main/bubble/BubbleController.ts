@@ -54,6 +54,8 @@ export interface BubbleControllerDeps {
   onAnchorChange(anchor: BubbleAnchor): void
   now?: () => number
   random?: () => number
+  /** Things worth a line in the log, such as a click on the bubble that didn't open it. */
+  onDiagnostic?: (message: string) => void
 }
 
 const FRAME_MS = 16
@@ -65,6 +67,12 @@ export const PANEL_FADE_MS = 150
  * A click this soon after a blur-collapse belongs to the same gesture and must not reopen it.
  */
 export const BLUR_CLICK_GRACE_MS = 300
+/**
+ * A blur this soon after the panel opened doesn't close it. Another app can take the focus back
+ * just as the panel opens (Claude Desktop, say, right after a question was handed to it); closing
+ * then would make the click look like it did nothing. The panel stays open, unfocused, instead.
+ */
+export const OPEN_BLUR_GRACE_MS = 400
 /** Lets Windows repaint the area under our windows before a screenshot. */
 export const HIDE_SETTLE_MS = 150
 
@@ -85,6 +93,7 @@ export class BubbleController {
   private ticker: ReturnType<typeof setInterval> | null = null
   private hideTimer: ReturnType<typeof setTimeout> | null = null
   private lastBlurCollapse = Number.NEGATIVE_INFINITY
+  private expandedAt = Number.NEGATIVE_INFINITY
   private expandAfterReturn = false
   private readonly now: () => number
   private readonly random: () => number
@@ -124,6 +133,7 @@ export class BubbleController {
     switch (this.mode) {
       case 'collapsed':
         if (this.now() - this.lastBlurCollapse >= BLUR_CLICK_GRACE_MS) this.expand()
+        else this.deps.onDiagnostic?.('Bubble click ignored: the panel had just closed')
         return
       case 'expanded':
         this.collapse()
@@ -134,6 +144,7 @@ export class BubbleController {
       case 'dragging':
       case 'returning':
       case 'capturing':
+        this.deps.onDiagnostic?.(`Bubble click ignored while ${this.mode}`)
         return
     }
   }
@@ -157,6 +168,7 @@ export class BubbleController {
       case 'collapsed':
         this.cancelHide()
         this.setMode('expanded')
+        this.expandedAt = this.now()
         this.deps.panel.show()
         this.deps.panel.focus()
         return
@@ -175,6 +187,10 @@ export class BubbleController {
 
   panelBlurred(): void {
     if (this.mode !== 'expanded') return
+    if (this.now() - this.expandedAt < OPEN_BLUR_GRACE_MS) {
+      this.deps.onDiagnostic?.('The panel lost the focus as it opened; kept it open')
+      return
+    }
     this.lastBlurCollapse = this.now()
     this.collapse()
   }
@@ -234,6 +250,7 @@ export class BubbleController {
     } finally {
       this.deps.bubble.show()
       this.setMode('expanded')
+      this.expandedAt = this.now()
       this.deps.panel.show()
       this.deps.panel.focus()
     }

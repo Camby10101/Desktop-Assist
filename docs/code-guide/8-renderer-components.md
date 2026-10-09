@@ -2,41 +2,54 @@
 
 [← Code Guide](CODE_GUIDE.md)
 
-These seven files draw everything that appears around the bubble when you click it. `Panel` in
-`PanelView.tsx` (see [The pages](7-renderer-pages.md)) renders three of them directly: the
-`ActionStack` of round icons in a column beside the bubble, the `ChatBox` card next to the bubble
-on the side facing the middle of the screen, and the `SettingsMenu`, which opens beside the gear
-icon. Everything else lives inside the chat card: `SignInPanel` replaces the chat while nobody is
-signed in, `MessageList` shows the conversation (using `Markdown` for Claude's replies), and an
-`AttachmentChip` above the text box stands for each attached screenshot.
+These seven files draw almost everything that appears around the bubble when you click it. `Panel`
+in `PanelView.tsx` (see [The pages](7-renderer-pages.md)) renders three of them directly: the
+`ActionStack` of round icons in a column beside the bubble, the `ChatBox` card next to the bubble on
+the side facing the middle of the screen, and the `SettingsMenu`, which opens beside the gear icon.
+Everything else lives inside the chat card: `SignInPanel` replaces the chat while nobody is signed
+in, `MessageList` shows the conversation (using `Markdown` for Claude's replies), and an
+`AttachmentChip` above the text box stands for each attached screenshot. When questions go to Claude
+Desktop (the tenant's `chatApp`), there's no sign-in and no conversation in the panel, so the card
+is just the text box, with an "Ask in Claude" button. The card can show the Apps list instead,
+either from the start or behind an icon, depending on the tenant; that component, `AppsList`, is
+covered in [Your apps](10-apps.md).
 
 ## `src/renderer/src/components/ChatBox.tsx`: the chat card
 
 The card beside the bubble, with the text box at its bottom. `Panel` renders one `ChatBox` and
 passes it everything it shows: the bubble's `corner`, whether the panel is `open`, the current
 `toast`, the conversation (`messages`), the `draft` and its `attachments`, whether Claude is
-replying (`busy`) and whether Send is allowed (`canSend`). `Panel` also builds the two optional
-pieces that go inside it, the sign-in (`signInPrompt`) and a status line (`banner`). The `on…`
-props are what the buttons and the text box call. The file has three components: `ChatBox` (the
-card), `Composer` (the text box, private to this file) and `Banner` (exported, used by `Panel`).
+replying (`busy`), whether Send is allowed (`canSend`), whether questions go to Claude Desktop
+(`inClaudeDesktop`) and, if so, whether they're sent there automatically (`autoSend`). `Panel`
+also builds the two optional pieces that go inside it, the sign-in
+(`signInPrompt`) and a status line (`banner`). The `on…` props are what the buttons and the text
+box call. The file has three components: `ChatBox` (the card), `Composer` (the text box, private
+to this file) and `Banner` (exported, used by `Panel`).
 
 ### `ChatBox`
 
 <!-- code: apps/desktop/src/renderer/src/components/ChatBox.tsx#ChatBox -->
 
-[`src/renderer/src/components/ChatBox.tsx`, lines 11–90](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L11-L90)
+[`src/renderer/src/components/ChatBox.tsx`, lines 11–97](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L11-L97)
 
 ```tsx
 /**
  * The card beside the bubble, on the side facing the middle of the screen. It's anchored at the
  * bubble's edge (bottom in a bottom corner, top in a top corner), so it starts as just the text
  * box and grows away from that edge as the conversation gets longer, then scrolls. When nobody is
- * signed in, `signInPrompt` is shown instead of the chat.
+ * signed in, `signInPrompt` is shown instead of the chat. With `inClaudeDesktop`, it's only the
+ * text box, and sending opens the question in Claude Desktop.
  */
 export function ChatBox(props: {
   corner: Corner
   open: boolean
   toast: ToastMessage | null
+  /** Sending hands the question to Claude Desktop instead of the chat in the panel. */
+  inClaudeDesktop: boolean
+  /** With Claude Desktop: the question (and screenshot) is sent there for the user. */
+  autoSend: boolean
+  /** Replaces the text box with the Apps list while the Apps icon is on, or null. */
+  apps: ReactNode
   /** Replaces the chat (the JumpCloud sign-in), or null to show the chat. */
   signInPrompt: ReactNode
   /** A line above the text box, e.g. "Checking your sign-in…". */
@@ -90,7 +103,7 @@ export function ChatBox(props: {
         </div>
       )}
 
-      {props.signInPrompt ?? (
+      {props.apps ?? props.signInPrompt ?? (
         <>
           {props.messages.length > 0 && (
             <MessageList
@@ -169,6 +182,13 @@ the other corners are mirror images:
 
 The parts of `ChatBox` itself:
 
+- `inClaudeDesktop: boolean`: `ChatBox` only passes it on to `Composer`, which changes the send
+  button. The rest of the card needs no change: with Claude Desktop, `Panel` never passes a
+  sign-in prompt or any messages, so the card is just the text box (and sometimes a banner).
+- `autoSend: boolean`: the "Send in Claude automatically" setting, also only for `Composer`'s
+  wording.
+- `apps: ReactNode`: the Apps list while it's showing, built by `Panel` like `signInPrompt`;
+  otherwise `null`.
 - `originClass(props.corner)`: sets the CSS `transform-origin` to the bubble's corner (for
   example `origin-bottom-right`), so the zoom-in animation grows out of the bubble.
 - `'scale-95 opacity-0 transition duration-150 ease-out'`: the card is always rendered, even
@@ -198,9 +218,10 @@ The parts of `ChatBox` itself:
   height (`UI.toastRoom`), so the toast always fits.
 - `isLeftCorner(props.corner) ? 'left-0' : 'right-0'`: lines the toast up with the card's edge
   nearest the bubble.
-- `{props.signInPrompt ?? (`: `??` uses the left side unless it's `null` or `undefined`. `Panel`
-  passes a `SignInPanel` when nobody is signed in and `null` otherwise, so the card shows either
-  the sign-in or the chat, never both.
+- `{props.apps ?? props.signInPrompt ?? (`: `??` uses the left side unless it's `null` or
+  `undefined`, so the first of the three that isn't `null` is shown: the Apps list if it's on,
+  otherwise the sign-in if nobody is signed in, otherwise the chat. Never more than one. The toast
+  above stays outside this choice, so it shows over the Apps list too.
 - `<>`: a _fragment_. It groups several elements without adding an extra `<div>` to the page.
 - `props.messages.length > 0 &&`: before the first message there's no list, so the card is just
   the text box.
@@ -213,7 +234,7 @@ The parts of `ChatBox` itself:
 
 <!-- code: apps/desktop/src/renderer/src/components/ChatBox.tsx#Composer -->
 
-[`src/renderer/src/components/ChatBox.tsx`, lines 92–184](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L92-L184)
+[`src/renderer/src/components/ChatBox.tsx`, lines 99–210](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L99-L210)
 
 ```tsx
 /** The text box: attached screenshots, the text, and the attach / send / stop buttons. */
@@ -259,6 +280,14 @@ function Composer(props: Parameters<typeof ChatBox>[0]) {
           ))}
         </div>
       )}
+      {props.inClaudeDesktop && props.attachments.length > 0 && (
+        <p className="px-3.5 pt-2 text-[11px] text-zinc-500">
+          {props.attachments.length === 1 ? 'The screenshot' : 'The screenshots'}
+          {props.autoSend && props.draft.trim()
+            ? ' will be pasted into Claude for you.'
+            : ' will be copied for you to paste into Claude with Ctrl+V.'}
+        </p>
+      )}
 
       <textarea
         ref={textarea}
@@ -292,6 +321,17 @@ function Composer(props: Parameters<typeof ChatBox>[0]) {
             className="grid size-8 place-items-center rounded-full bg-zinc-900 text-white hover:bg-zinc-700 dark:bg-white dark:text-zinc-900"
           >
             <Square size={12} fill="currentColor" aria-hidden />
+          </button>
+        ) : props.inClaudeDesktop ? (
+          <button
+            type="button"
+            onClick={props.onSend}
+            disabled={!props.canSend}
+            title={props.autoSend ? 'Send in Claude (Enter)' : 'Open in Claude (Enter)'}
+            className="inline-flex h-8 items-center gap-1 rounded-full bg-accent pr-2.5 pl-3 text-xs font-medium text-white disabled:opacity-40"
+          >
+            Ask in Claude
+            <ArrowUpRight size={14} aria-hidden />
           </button>
         ) : (
           <button
@@ -347,6 +387,15 @@ first appears. Effects are for work outside drawing the UI, such as moving the k
 - `key={attachment.id}`: every item in a list needs a `key` that stays the same between renders,
   so React can tell the items apart when one is removed.
 - `overflow-x-auto`: with many attachments, the row of chips scrolls sideways.
+- `{props.inClaudeDesktop && props.attachments.length > 0 && (`: with Claude Desktop, a small
+  note under the chips says what will happen to the screenshots. A link to Claude Desktop can
+  carry text but not images, so they go on the clipboard to be pasted (see
+  [Claude Desktop](9-claude-desktop.md)). It says "The screenshot" or "The screenshots" to match
+  how many there are.
+- `props.autoSend && props.draft.trim() ? ... : ...`: with "Send in Claude automatically" on and a
+  question typed, Desktop Assist pastes them itself ("will be pasted into Claude for you").
+  Otherwise the user pastes them with Ctrl+V. A screenshot without a question is never pasted
+  for the user, so the second wording also covers that.
 - `value={props.draft}`: a _controlled_ text box. What it shows always comes from the `draft`
   prop, not from the element's own memory.
 - `onChange={(event) => props.onDraftChange(event.target.value)}`: React's `onChange` fires on
@@ -364,17 +413,26 @@ first appears. Effects are for work outside drawing the UI, such as moving the k
 - `onClick={props.onAttachLatest}`: `Panel.attachLatest` adds the newest screenshot to the
   draft, or shows a toast saying why it couldn't.
 - `props.busy ? (`: while Claude is replying, Send is replaced by Stop. `Panel` sets `busy` when
-  any message is still `streaming`.
+  any message is still `streaming`, which only happens in the built-in chat.
 - `fill="currentColor"`: lucide icons are outlines; this fills the square with the text colour so
   it reads as a solid "stop" symbol.
-- `disabled={!props.canSend}`: `Panel` allows sending only when you're signed in, Claude isn't
-  busy, and there's text or a screenshot. `disabled:opacity-40` fades the button out.
+- `) : props.inClaudeDesktop ? (`: a second condition, chained on the first. Not busy and handing
+  questions to Claude Desktop: the button is a pill that says **Ask in Claude**, with an arrow
+  pointing up and out (`ArrowUpRight`), since the question opens in another app. Otherwise it's
+  the round Send arrow (`ArrowUp`). Enter does the same as either button.
+- `title={props.autoSend ? 'Send in Claude (Enter)' : 'Open in Claude (Enter)'}`: the tooltip
+  says whether the question will be sent in Claude or only opened there. The Ask button has no
+  `aria-label`, because its visible text already names it; the round Send button has only an
+  icon, so it needs one.
+- `disabled={!props.canSend}`: `Panel` allows sending only when you're signed in (always, with
+  Claude Desktop), Claude isn't replying, no question is already being handed to Claude Desktop,
+  and there's text or a screenshot. `disabled:opacity-40` fades the button out.
 
 ### `Banner`
 
 <!-- code: apps/desktop/src/renderer/src/components/ChatBox.tsx#Banner -->
 
-[`src/renderer/src/components/ChatBox.tsx`, lines 186–195](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L186-L195)
+[`src/renderer/src/components/ChatBox.tsx`, lines 212–221](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L212-L221)
 
 ```tsx
 /** A one-line status above the text box, with an optional action. */
@@ -391,16 +449,19 @@ export function Banner(props: { spinner?: boolean; children: ReactNode; action?:
 
 <!-- /code -->
 
-A one-line status strip between the conversation and the text box. `Panel` uses it in two cases:
-"Checking your JumpCloud sign-in…" with a spinner while a saved sign-in is renewed at startup, and
-the "couldn't reach JumpCloud" message with a Retry button (see [JumpCloud sign-in](3-sign-in.md)).
+A one-line status strip between the conversation and the text box. `Panel` uses it in three
+cases: "Checking your JumpCloud sign-in…" with a spinner while a saved sign-in is renewed at
+startup, the "couldn't reach JumpCloud" message with a Retry button (see
+[JumpCloud sign-in](3-sign-in.md)), and, with Claude Desktop, "Claude Desktop isn't installed on
+this PC…" with a Download button.
 
 - `spinner?: boolean`: the `?` makes the prop optional. Writing `<Banner spinner>` with no value
   means `spinner={true}`.
 - `children: ReactNode`: `children` is a special prop holding whatever is written between
   `<Banner>` and `</Banner>`. `ReactNode` is the type for anything React can display: text,
   elements, or `null`.
-- `action?: ReactNode`: an optional element at the right-hand end, such as `Panel`'s Retry button.
+- `action?: ReactNode`: an optional element at the right-hand end, such as `Panel`'s Retry or
+  Download button.
 - `animate-spin`: Tailwind's spinning animation, applied to lucide's `LoaderCircle` icon.
 - `flex-1`: the text takes all the spare width, which pushes the action to the right.
 
@@ -979,17 +1040,18 @@ passed as `children`.
 
 ## `src/renderer/src/components/SettingsMenu.tsx`: the settings menu
 
-The small menu that opens beside the gear icon. `Panel` renders it only while the panel is open,
-the gear has toggled it on, and the tenant's list of actions includes `settings`. Its props are
-the `corner` and `offset` for positioning; the current `settings`, `branding` (app and company
-name), `version` and signed-in `user` to display; and one callback per menu item. `Panel` closes
-it on Esc, on a click anywhere else in the panel, and when the panel closes.
+The small menu that opens beside the gear icon. `Panel` renders it only while the panel is open, the
+gear has toggled it on, and the tenant's list of actions includes `settings`. Its props are the
+`corner` and `offset` for positioning; the current `settings`, `branding` (app and company name, and
+which kind of chat), `version` and signed-in `user` to display; and one callback per menu item,
+`onUninstall` included. `Panel` closes it on Esc, on a click anywhere else in the panel, and when
+the panel closes.
 
 ### `CONFIRM_MS`, `EFFORTS`
 
 <!-- code: apps/desktop/src/renderer/src/components/SettingsMenu.tsx#CONFIRM_MS,EFFORTS -->
 
-[`src/renderer/src/components/SettingsMenu.tsx`, lines 8–14](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L8-L14)
+[`src/renderer/src/components/SettingsMenu.tsx`, lines 15–21](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L15-L21)
 
 ```tsx
 const CONFIRM_MS = 3000
@@ -1003,7 +1065,8 @@ const EFFORTS: { value: Effort; label: string; hint: string }[] = [
 
 <!-- /code -->
 
-- `const CONFIRM_MS = 3000`: how long "New conversation" waits for its second click.
+- `const CONFIRM_MS = 3000`: how long "New conversation" (or "Clear text box") waits for its
+  second click.
 - `EFFORTS: { value: Effort; label: string; hint: string }[]`: the three response styles. Each
   maps an `Effort` value (what's sent to the Claude API) to the label on its button and a tooltip.
   Typing `value` as `Effort` means TypeScript rejects a misspelt value. The API side is
@@ -1013,7 +1076,7 @@ const EFFORTS: { value: Effort; label: string; hint: string }[] = [
 
 <!-- code: apps/desktop/src/renderer/src/components/SettingsMenu.tsx#SettingsMenu -->
 
-[`src/renderer/src/components/SettingsMenu.tsx`, lines 16–139](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L16-L139)
+[`src/renderer/src/components/SettingsMenu.tsx`, lines 23–203](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L23-L203)
 
 ```tsx
 /** The menu that opens beside the gear icon, on the side facing the middle of the screen. */
@@ -1028,19 +1091,31 @@ export function SettingsMenu(props: {
   user: SignedInUser | null
   onToggleAutoStart: () => void
   onSetEffort: (effort: Effort) => void
+  onToggleAutoSend: () => void
   onSignOut: () => void
   onOpenScreenshotsFolder: () => void
   onNewConversation: () => void
+  onClearText: () => void
+  onUninstall: () => void
 }) {
-  // "New conversation" needs a second click within a few seconds.
+  // "New conversation" (or "Clear text box") needs a second click within a few seconds.
   const [confirmingNew, setConfirmingNew] = useState(false)
   useEffect(() => {
     if (!confirmingNew) return
     const timer = setTimeout(() => setConfirmingNew(false), CONFIRM_MS)
     return () => clearTimeout(timer)
   }, [confirmingNew])
+  // So does "Uninstall".
+  const [confirmingUninstall, setConfirmingUninstall] = useState(false)
+  useEffect(() => {
+    if (!confirmingUninstall) return
+    const timer = setTimeout(() => setConfirmingUninstall(false), CONFIRM_MS)
+    return () => clearTimeout(timer)
+  }, [confirmingUninstall])
 
   const { settings, branding } = props
+  // With Claude Desktop, the chat and its settings live there; only the text box is here.
+  const builtInChat = branding.chatApp === 'built-in'
 
   return (
     <div
@@ -1079,48 +1154,75 @@ export function SettingsMenu(props: {
         <Switch on={settings.autoStart} />
       </button>
 
-      <div className="px-2.5 pt-1.5 pb-2">
-        <p className="mb-1.5 text-sm">Response style</p>
-        <div
-          role="radiogroup"
-          aria-label="Response style"
-          className="flex rounded-lg bg-zinc-100 p-0.5 dark:bg-zinc-800"
+      {!builtInChat && (
+        <button
+          type="button"
+          role="menuitemcheckbox"
+          aria-checked={settings.autoSend}
+          onClick={props.onToggleAutoSend}
+          className="flex w-full items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800"
         >
-          {EFFORTS.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              role="radio"
-              aria-checked={settings.effort === option.value}
-              title={option.hint}
-              onClick={() => props.onSetEffort(option.value)}
-              className={cn(
-                'flex-1 rounded-md py-1 text-xs font-medium',
-                settings.effort === option.value
-                  ? 'bg-white text-zinc-900 shadow-sm dark:bg-zinc-600 dark:text-white'
-                  : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200',
-              )}
-            >
-              {option.label}
-            </button>
-          ))}
+          <span>
+            Send in Claude automatically
+            <span className="block text-[11px] text-zinc-500">
+              {settings.autoSend ? 'Questions are sent for you' : 'You press Enter in Claude'}
+            </span>
+          </span>
+          <Switch on={settings.autoSend} />
+        </button>
+      )}
+
+      {builtInChat && (
+        <div className="px-2.5 pt-1.5 pb-2">
+          <p className="mb-1.5 text-sm">Response style</p>
+          <div
+            role="radiogroup"
+            aria-label="Response style"
+            className="flex rounded-lg bg-zinc-100 p-0.5 dark:bg-zinc-800"
+          >
+            {EFFORTS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                role="radio"
+                aria-checked={settings.effort === option.value}
+                title={option.hint}
+                onClick={() => props.onSetEffort(option.value)}
+                className={cn(
+                  'flex-1 rounded-md py-1 text-xs font-medium',
+                  settings.effort === option.value
+                    ? 'bg-white text-zinc-900 shadow-sm dark:bg-zinc-600 dark:text-white'
+                    : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200',
+                )}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       <MenuItem icon={FolderOpen} onClick={props.onOpenScreenshotsFolder}>
         Open screenshots folder
       </MenuItem>
 
       <MenuItem
-        icon={MessageSquarePlus}
+        icon={builtInChat ? MessageSquarePlus : Eraser}
         danger={confirmingNew}
         onClick={() => {
           if (!confirmingNew) return setConfirmingNew(true)
           setConfirmingNew(false)
-          props.onNewConversation()
+          if (builtInChat) props.onNewConversation()
+          else props.onClearText()
         }}
       >
-        {confirmingNew ? 'Click again to clear the chat' : 'New conversation'}
+        {builtInChat
+          ? confirmingNew
+            ? 'Click again to clear the chat'
+            : 'New conversation'
+          : confirmingNew
+            ? 'Click again to clear the text'
+            : 'Clear text box'}
       </MenuItem>
 
       {props.user && (
@@ -1134,6 +1236,24 @@ export function SettingsMenu(props: {
         </div>
       )}
 
+      <div className="mt-1 border-t border-black/10 pt-1 dark:border-white/10">
+        <MenuItem
+          icon={Trash2}
+          danger={confirmingUninstall}
+          disabled={!settings.canUninstall}
+          onClick={() => {
+            if (!confirmingUninstall) return setConfirmingUninstall(true)
+            setConfirmingUninstall(false)
+            props.onUninstall()
+          }}
+        >
+          {confirmingUninstall ? 'Click again to uninstall' : `Uninstall ${branding.appName}`}
+          {!settings.canUninstall && (
+            <span className="block text-[11px] text-zinc-500">Only in the installed app</span>
+          )}
+        </MenuItem>
+      </div>
+
       <div className="mt-1 border-t border-black/10 px-2.5 pt-1.5 pb-0.5 text-[11px] text-zinc-500 dark:border-white/10">
         {branding.appName} {props.version} · {branding.companyName}
       </div>
@@ -1144,13 +1264,18 @@ export function SettingsMenu(props: {
 
 <!-- /code -->
 
-Draws the menu's rows: Start with Windows, Response style, Open screenshots folder, New
-conversation, who's signed in with Log out, and the version. It keeps one piece of its own state.
+Draws the menu's rows. With the built-in chat: Start with Windows, Response style, Open
+screenshots folder, New conversation, who's signed in with Log out, and the version. With Claude
+Desktop the chat and its settings live in Claude Desktop, so there's no Response style and no
+sign-in; instead there's a "Send in Claude automatically" switch, and New conversation becomes
+Clear text box. Both kinds end with Uninstall, then the version. It keeps two pieces of its own
+state.
 
 **State.** `useState(initial)` returns the current value and a function that changes it. Calling
 that function makes React run the component again with the new value, which redraws it. Use a ref
 for values that don't affect what's shown, and state for values that do. Here `confirmingNew`
-switches the "New conversation" row into its "Click again" form.
+switches the "New conversation" (or "Clear text box") row into its "Click again" form, and
+`confirmingUninstall` does the same for Uninstall.
 
 - `offset: number`: `Panel` passes `actionOffset()` of the gear's place in the icon stack.
 - `...anchored(props.corner, PANEL_LAYOUT.settingsX, props.offset)`: `settingsX` (64 px) puts the
@@ -1169,25 +1294,52 @@ switches the "New conversation" row into its "Click again" form.
   timer that turns it off again. The function an effect returns is its _cleanup_: React calls it
   before running the effect again and when the component disappears. So the timer is cancelled
   after a confirming second click, or when the menu closes.
+- `// So does "Uninstall".`: the same pair of state and timer for the Uninstall row, kept separate
+  so arming one row never arms the other.
 - `const { settings, branding } = props`: shorthand for two props used often below.
+- `const builtInChat = branding.chatApp === 'built-in'`: which rows to show. The rest of the menu
+  checks this one value.
 - `disabled={!settings.autoStartAvailable}`: Start with Windows only works in the installed app,
   not in `npm run dev`; there the row is greyed out with a note. `onToggleAutoStart` asks the
   main process to flip it, and `Panel` keeps the settings it returns (see `settings.ts` in
   [Main process: startup, IPC and app plumbing](2-main-startup.md)).
 - `<Switch on={settings.autoStart} />`: the on/off graphic at the end of the row.
+- `{!builtInChat && (`: with Claude Desktop, the "Send in Claude automatically" row, built the
+  same way as Start with Windows: a `menuitemcheckbox` button with the setting's name, a grey
+  line under it, and a `Switch`. Clicking it calls `onToggleAutoSend`, which flips the setting in
+  the main process.
+- `{settings.autoSend ? 'Questions are sent for you' : 'You press Enter in Claude'}`: the grey
+  line says what the switch means in practice.
+- `{builtInChat && (`: Response style only with the built-in chat. With Claude Desktop the chat,
+  and how Claude answers, are Claude Desktop's business, so the setting would do nothing.
 - `aria-checked={settings.effort === option.value}`: the response styles work like radio buttons.
   The current one is white with a shadow; the others are plain text on the grey track.
 - `onClick={() => props.onSetEffort(option.value)}`: `Panel.setEffort` saves the choice in the
   main process. `ChatSession` reads it at the start of each request, so it applies from the next
   message.
-- `if (!confirmingNew) return setConfirmingNew(true)`: the first click on "New conversation" only
-  arms it (the `return` just ends the function early). A second click within 3 seconds turns it
-  off and calls `onNewConversation`, which clears the chat (`ChatSession.newConversation()`).
+- `icon={builtInChat ? MessageSquarePlus : Eraser}`: one row that does either job, with a
+  speech bubble for New conversation or an eraser for Clear text box. Both clear something and
+  need the same second click, so they share the row and its confirm state.
+- `if (!confirmingNew) return setConfirmingNew(true)`: the first click only arms the row (the
+  `return` just ends the function early). A second click within 3 seconds turns it off and calls
+  `onNewConversation`, which clears the chat (`ChatSession.newConversation()`), or with Claude
+  Desktop `onClearText`, which empties the text box and its screenshots.
 - `danger={confirmingNew}`: the row turns red while it's armed.
-- `{props.user && (`: only when someone is signed in; `Panel` passes `null` otherwise.
+- `{builtInChat ? confirmingNew ? ... : ... : ...}`: the label, from two questions in turn:
+  which kind of chat, then whether the row is armed. So it reads "New conversation" or "Click
+  again to clear the chat", or "Clear text box" or "Click again to clear the text".
+- `{props.user && (`: only when someone is signed in; `Panel` passes `null` otherwise, which is
+  always the case with Claude Desktop.
 - `props.user.name ?? props.user.email ?? 'you'`: the first of the name or the email that
   JumpCloud provided. `truncate` cuts a long one short with "…", and `title={props.user.email}`
   shows the email as a tooltip.
+- `icon={Trash2}`, `danger={confirmingUninstall}`: Uninstall, in a section of its own below a
+  line, needs the same second click within 3 seconds, and turns red while armed. The second click
+  calls `onUninstall`; `Panel.uninstall` starts the uninstaller and the app quits.
+- `disabled={!settings.canUninstall}`: only the installed app has an uninstaller. In `npm run dev`
+  the row is greyed out, with "Only in the installed app" under its label (the same note as Start
+  with Windows).
+- `` `Uninstall ${branding.appName}` ``: the label names the app, "Uninstall Desktop Assist".
 - `{branding.appName} {props.version} · {branding.companyName}`: the footer, for example
   "Desktop Assist 0.1.0 · Morse Micro".
 
@@ -1195,12 +1347,13 @@ switches the "New conversation" row into its "Click again" form.
 
 <!-- code: apps/desktop/src/renderer/src/components/SettingsMenu.tsx#MenuItem -->
 
-[`src/renderer/src/components/SettingsMenu.tsx`, lines 141–162](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L141-L162)
+[`src/renderer/src/components/SettingsMenu.tsx`, lines 205–232](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L205-L232)
 
 ```tsx
 function MenuItem(props: {
   icon: LucideIcon
   danger?: boolean
+  disabled?: boolean
   onClick: () => void
   children: ReactNode
 }) {
@@ -1209,10 +1362,15 @@ function MenuItem(props: {
     <button
       type="button"
       role="menuitem"
+      disabled={props.disabled}
       onClick={props.onClick}
       className={cn(
         'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm',
-        props.danger ? 'bg-red-600 text-white' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800',
+        props.danger
+          ? 'bg-red-600 text-white'
+          : props.disabled
+            ? 'cursor-default opacity-60'
+            : 'hover:bg-zinc-100 dark:hover:bg-zinc-800',
       )}
     >
       <Icon size={16} aria-hidden />
@@ -1230,14 +1388,17 @@ One row of the menu: an icon and a label, as a button.
   (`<FolderOpen />`), so `MenuItem` decides the size.
 - `const Icon = props.icon`: JSX treats a lowercase tag as an HTML element, so the component has
   to be in a capitalised variable before it can be written as `<Icon size={16} aria-hidden />`.
+- `disabled?: boolean`: a greyed-out row that can't be clicked (`disabled={props.disabled}` on the
+  button), used for Uninstall in a dev run.
 - `props.danger ? 'bg-red-600 text-white'`: the red version, used for the armed "New
-  conversation".
+  conversation", "Clear text box" or Uninstall. Otherwise a disabled row is faded
+  (`opacity-60`) with no hover, and an enabled one gets the grey hover.
 
 ### `Switch`
 
 <!-- code: apps/desktop/src/renderer/src/components/SettingsMenu.tsx#Switch -->
 
-[`src/renderer/src/components/SettingsMenu.tsx`, lines 164–181](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L164-L181)
+[`src/renderer/src/components/SettingsMenu.tsx`, lines 234–251](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L234-L251)
 
 ```tsx
 function Switch({ on }: { on: boolean }) {
@@ -1271,20 +1432,24 @@ it tells screen readers whether it's on, so the switch itself is `aria-hidden`.
 
 ## `src/renderer/src/components/ActionStack.tsx`: the action icons
 
-The column of round icon buttons that pops out of the bubble when the panel opens: screenshot,
-settings, bounce and close, in the order the tenant's `tenant.json` lists them, nearest the bubble
-first. `Panel` always renders it; while closed it's simply invisible. Its props are the `corner`,
-the tenant's `actions`, `open`, `activeId` (`settings` while the settings menu is open, otherwise
-`null`) and `onAction`, which is `Panel.runAction`.
+The column of round icon buttons that pops out of the bubble when the panel opens (for Morse
+Micro: Ask Claude, screenshot, settings, bounce and close), in the order the tenant's
+`tenant.json` lists them, nearest the bubble first. `Panel` always renders it; while closed it's
+simply invisible. Its props are the `corner`, the tenant's `actions`, `open`, `activeId`
+(`settings` while the settings menu is open, `ask` or `apps` while the page that isn't the start
+page is showing, otherwise `null`), `dotted` (icons that get a small dot) and `onAction`, which is
+`Panel.runAction`.
 
 ### `ICONS`
 
 <!-- code: apps/desktop/src/renderer/src/components/ActionStack.tsx#ICONS -->
 
-[`src/renderer/src/components/ActionStack.tsx`, lines 7–12](../../apps/desktop/src/renderer/src/components/ActionStack.tsx#L7-L12)
+[`src/renderer/src/components/ActionStack.tsx`, lines 15–22](../../apps/desktop/src/renderer/src/components/ActionStack.tsx#L15-L22)
 
 ```tsx
 const ICONS: Record<ActionId, LucideIcon> = {
+  ask: MessageCircle,
+  apps: LayoutGrid,
   screenshot: Camera,
   settings: Settings,
   bounce: Volleyball,
@@ -1294,7 +1459,8 @@ const ICONS: Record<ActionId, LucideIcon> = {
 
 <!-- /code -->
 
-Which lucide icon each action shows.
+Which lucide icon each action shows. Ask Claude is `MessageCircle`, a speech bubble, and Apps is
+`LayoutGrid`, a grid of four squares, the usual sign for "apps".
 
 - `Record<ActionId, LucideIcon>`: an object with exactly one entry for every action id. If a new
   id is added to `ACTION_IDS` in `src/shared/actions.ts` without an icon here, TypeScript reports
@@ -1304,7 +1470,7 @@ Which lucide icon each action shows.
 
 <!-- code: apps/desktop/src/renderer/src/components/ActionStack.tsx#ActionStack -->
 
-[`src/renderer/src/components/ActionStack.tsx`, lines 14–75](../../apps/desktop/src/renderer/src/components/ActionStack.tsx#L14-L75)
+[`src/renderer/src/components/ActionStack.tsx`, lines 24–93](../../apps/desktop/src/renderer/src/components/ActionStack.tsx#L24-L93)
 
 ```tsx
 /**
@@ -1316,6 +1482,8 @@ export function ActionStack(props: {
   actions: ActionId[]
   open: boolean
   activeId: ActionId | null
+  /** Icons with a small dot, e.g. Ask Claude while an unsent question is waiting behind it. */
+  dotted?: ActionId[]
   onAction: (id: ActionId) => void
 }) {
   const top = isTopCorner(props.corner)
@@ -1348,7 +1516,7 @@ export function ActionStack(props: {
               transitionDelay: props.open ? `${index * 30}ms` : '0ms',
             }}
             className={cn(
-              'grid place-items-center rounded-full border shadow-md outline-none',
+              'relative grid place-items-center rounded-full border shadow-md outline-none',
               'transition duration-150 ease-out motion-reduce:transition-none',
               'focus-visible:ring-2 focus-visible:ring-accent',
               // Hidden icons sit tucked toward the bubble, then slide out.
@@ -1363,6 +1531,12 @@ export function ActionStack(props: {
             )}
           >
             <Icon size={18} strokeWidth={2} aria-hidden />
+            {props.dotted?.includes(id) && !active && (
+              <span
+                aria-hidden
+                className="absolute top-1 right-1 size-2.5 rounded-full border-2 border-white bg-accent dark:border-zinc-800"
+              />
+            )}
           </button>
         )
       })}
@@ -1388,11 +1562,11 @@ Lays the icons out in a column beside the bubble and animates them in and out.
 - `data-action={id}`: `Panel.closeSettingsOnOutsideClick` looks for `[data-action="settings"]`,
   so clicking the gear toggles the menu instead of counting as a click outside it.
 - `aria-expanded={ACTIONS[id].kind === 'popover' ? active : undefined}`: for a popover action
-  (only Settings) it tells screen readers whether its menu is open. `undefined` leaves the
-  attribute off the others.
-- `onClick={() => props.onAction(id)}`: `Panel.runAction` toggles the menu for Settings, and asks
-  the main process to run any other action (see `src/main/actions.ts` in
-  [Main process: startup, IPC and app plumbing](2-main-startup.md)).
+  (Settings, Ask Claude and Apps) it tells screen readers whether what it opens is showing.
+  `undefined` leaves the attribute off the others.
+- `onClick={() => props.onAction(id)}`: `Panel.runAction` toggles the menu for Settings, switches
+  the card's page for Ask Claude and Apps, and asks the main process to run any other action (see
+  `src/main/actions.ts` in [Main process: startup, IPC and app plumbing](2-main-startup.md)).
 - ``transitionDelay: props.open ? `${index * 30}ms` : '0ms'``: each icon starts its animation 30
   ms after the one before, so they pop out one after another. Closing has no delay, so they all go
   together.
@@ -1401,7 +1575,13 @@ Lays the icons out in a column beside the bubble and animates them in and out.
   (explained under `ChatBox`) move it to its place at full size when the panel opens.
 - `outline-none`: together with `'focus-visible:ring-2 focus-visible:ring-accent'`, swaps the
   usual square focus outline for an accent ring that follows the round button.
-- `active`: the active action (the gear while its menu is open) is filled with the accent colour.
+- `active`: the active action (the gear while its menu is open, Ask Claude or Apps while its page
+  is showing) is filled with the accent colour.
+- `'relative grid ...'`: `relative` makes each button the reference box for the dot below.
+- `{props.dotted?.includes(id) && !active && (`: a small accent-coloured dot in the icon's corner
+  (`absolute top-1 right-1`), with a ring in the button's own colour so it stands out. `Panel` puts
+  one on Ask Claude while an unsent question or screenshot is waiting behind it. Not on the active
+  icon, whose page is already showing.
   Otherwise `id === 'close'` turns red on hover, as a warning that it quits the app, and the rest
   get a grey hover.
 
