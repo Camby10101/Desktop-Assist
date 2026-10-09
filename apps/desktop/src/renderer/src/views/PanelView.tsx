@@ -124,6 +124,12 @@ function Panel({ state }: { state: AppState }) {
       setView(view === id ? (id === 'apps' ? 'ask' : 'apps') : id)
       return
     }
+    if (id === 'theme') {
+      setSettings(
+        await window.assist.settings.setTheme(settings.theme === 'dark' ? 'light' : 'dark'),
+      )
+      return
+    }
     if (id === 'settings') {
       setSettingsOpen(!settingsOpen)
       // Refresh: "Start with Windows" can also be changed in Windows Settings.
@@ -344,6 +350,7 @@ function Panel({ state }: { state: AppState }) {
         actions={branding.actions}
         open={open}
         activeId={settingsOpen ? 'settings' : view !== startPage ? view : null}
+        theme={settings.theme}
         dotted={view !== 'ask' && (draft.trim() !== '' || attachments.length > 0) ? ['ask'] : []}
         onAction={(id) => void runAction(id)}
       />

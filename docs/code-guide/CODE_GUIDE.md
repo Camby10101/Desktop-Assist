@@ -4,7 +4,8 @@ A walk through the whole project: what every file is for, and the actual code of
 and method with an explanation of what it does and why. Covers Milestones 0 (Foundation), 1
 (Chat with Claude), 2.1 (bubble fixes) and 3 (JumpCloud sign-in), and features 3.1 (questions go
 to Claude Desktop) and 3.2 (the Apps list, Uninstall in Settings, and fixes), and Milestone 4 so
-far (app logos fixed, favourite apps, the IT service desk icon).
+far (app logos fixed, favourite apps, the IT service desk icon, light or dark mode, and a fix
+for clicks on the bubble).
 
 This page is the overview. The code itself is in the [code walkthrough](#6-code-walkthrough),
 one page per area of the app.
@@ -219,6 +220,23 @@ Bounce icon → `BubbleController.startBounce()` hides the panel and runs a 60 f
 calls `bounce.step()` and moves the bubble window within its display. Clicking the bubble calls `glideHome()`,
 which animates it back to the corner with `bounce.glidePosition()`.
 
+**Light or dark mode**
+
+Sun or moon icon → `Panel.runAction('theme')` → `window.assist.settings.setTheme()` → IPC
+`assist:settings-set-theme` → `SettingsService.setTheme()` sets Electron's
+`nativeTheme.themeSource`, which every page sees as `prefers-color-scheme`, so both windows switch
+at once, and saves the choice. Desktop Assist is dark until the user switches, whatever Windows
+uses; `SettingsService.init()` applies the saved mode before any window shows.
+
+**Clicking the bubble**
+
+`BubbleView` notes when the mouse button goes down, and on the click calls
+`window.assist.bubbleClick(pressedAt)` → IPC `assist:bubble-click` →
+`BubbleController.clickBubble(pressedAt)`. Collapsed, it opens the panel; open, it closes it.
+Both windows can take the keyboard focus (a bubble that couldn't sometimes lost its mouse presses
+on Windows), so pressing the bubble while the panel is open closes the panel as the button goes
+down; the press time tells the controller that this click's job is done, and it doesn't reopen.
+
 **Dragging the bubble**
 
 1. `BubbleView` sees the mouse pressed on the bubble and moved more than 5 pixels → `window.assist.bubbleDragStart()` → `BubbleController.startDrag()`.
@@ -254,7 +272,7 @@ A _tenant_ is one business's branding. The build includes exactly one, chosen by
 environment variable (default `morse-micro`). This is what makes the app easy to re-brand later.
 
 - `tenants/README.md`: How tenants work, and how to change the logo.
-- `tenants/morse-micro/tenant.json`: `id` (must match the folder name), `companyName`, `appName` (also the name of the screenshots folder), `accentColor` (the highlight colour), `actions` (which icons appear above the bubble, from the bubble upward), `chatApp` (where questions go: `claude-desktop`, as for Morse Micro, or `built-in`, the default), `startPage` (what the panel opens on: `ask`, the text box, by default, or `apps`, the Apps list, as for Morse Micro, whose `actions` then include `ask` to reach the text box), `portal` for the Apps list (the portal's name, its address, JumpCloud's apps server and the sign-in port), `serviceDesk` for the IT service desk icon (its `https` address), and for the built-in chat only: optionally `systemPrompt` (extra instructions for Claude), `signIn` (JumpCloud's address, the app's JumpCloud client ID and the sign-in port) and `claudeAccess` (the Claude Console organization, federation rule, service account and optional workspace IDs). The built-in chat needs `signIn` and `claudeAccess`; Claude Desktop needs neither; the Apps list needs `portal`; the service desk icon (`servicedesk` in `actions`) needs `serviceDesk`. None of these are secret. See `docs/CLAUDE_DESKTOP_SETUP.md`, `docs/APPS_SETUP.md` and `docs/JUMPCLOUD_SETUP.md`.
+- `tenants/morse-micro/tenant.json`: `id` (must match the folder name), `companyName`, `appName` (also the name of the screenshots folder), `accentColor` (the highlight colour), `actions` (which icons appear above the bubble, from the bubble upward: for Morse Micro Ask Claude, the IT service desk, screenshot, light or dark mode, settings, bounce and close), `chatApp` (where questions go: `claude-desktop`, as for Morse Micro, or `built-in`, the default), `startPage` (what the panel opens on: `ask`, the text box, by default, or `apps`, the Apps list, as for Morse Micro, whose `actions` then include `ask` to reach the text box), `portal` for the Apps list (the portal's name, its address, JumpCloud's apps server and the sign-in port), `serviceDesk` for the IT service desk icon (its `https` address), and for the built-in chat only: optionally `systemPrompt` (extra instructions for Claude), `signIn` (JumpCloud's address, the app's JumpCloud client ID and the sign-in port) and `claudeAccess` (the Claude Console organization, federation rule, service account and optional workspace IDs). The built-in chat needs `signIn` and `claudeAccess`; Claude Desktop needs neither; the Apps list needs `portal`; the service desk icon (`servicedesk` in `actions`) needs `serviceDesk`. None of these are secret. See `docs/CLAUDE_DESKTOP_SETUP.md`, `docs/APPS_SETUP.md` and `docs/JUMPCLOUD_SETUP.md`.
 - `tenants/morse-micro/logo.png`: The logo: the Morse Micro "Mμ" mark cut to a circle (512×512, transparent corners). It's the bubble, the tray icon and the `.exe` icon. A tenant can use `logo.svg` for the bubble instead (if both exist, the PNG wins), but then the tray falls back to a plain circle in the accent colour and the `.exe` gets Electron's default icon.
 
 ---
@@ -317,7 +335,7 @@ Run with `npm test`. Each file tests code that doesn't need a real window or a r
 
 - `layout.test.ts`: Home positions in all four corners (including displays not at the origin), nearest-corner snapping, window sizes, and that the panel window opens into the screen and fits on it in every corner.
 - `bounce.test.ts`: Launch direction (away from each corner) and speed, bouncing off every edge, never leaving the screen, and the glide.
-- `bubbleController.test.ts`: The bubble state machine with fake windows, a fake clock and two fake displays: open/close, blur (including staying open when another app takes the focus back just as it opens, and logging a click that did nothing), the saved corner, dragging (follows the mouse, snaps to the nearest corner, onto another display, panel re-placed), bouncing on the current display, screenshots, and display changes (including unplugging the bubble's display).
+- `bubbleController.test.ts`: The bubble state machine with fake windows, a fake clock and two fake displays: open/close, blur (including staying open when another app takes the focus back just as it opens), clicking the bubble (staying closed when the press on the bubble is what closed the panel, even for a slow click, and reopening straight away after clicking somewhere else, however quick), logging a click ignored while capturing, the saved corner, dragging (follows the mouse, snaps to the nearest corner, onto another display, panel re-placed), bouncing on the current display, screenshots, and display changes (including unplugging the bubble's display).
 - `notesStore.test.ts`: Saving the draft, reloading, overtaken writes, damaged files, attachments.
 - `screenshotFiles.test.ts`: Screenshot names, never overwriting, finding the newest, the inside-the-folder check.
 - `screenshotStack.test.ts`: Stacking screenshots into one image for the clipboard: the width they're scaled to (the narrowest, capped), the order and the grey band between them (checked pixel by pixel), a single image left as it is, and refusing different widths, padded rows or an empty list.

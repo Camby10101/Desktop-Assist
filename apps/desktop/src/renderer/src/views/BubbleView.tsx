@@ -38,12 +38,16 @@ export function BubbleView() {
   const appName = state?.branding.appName ?? 'Desktop Assist'
 
   const press = useRef<{ x: number; y: number; dragging: boolean } | null>(null)
+  // When the button last went down: the main process uses it to tell whether this press is what
+  // closed the panel (see BubbleController.clickBubble).
+  const pressedAt = useRef<number | undefined>(undefined)
   // A drag ends with a click event on the bubble; this stops it counting as a click.
   const swallowClick = useRef(false)
 
   function onPointerDown(event: PointerEvent<HTMLButtonElement>) {
     if (event.button !== 0) return
     swallowClick.current = false
+    pressedAt.current = Date.now()
     event.currentTarget.setPointerCapture(event.pointerId)
     press.current = { x: event.screenX, y: event.screenY, dragging: false }
   }
@@ -73,14 +77,15 @@ export function BubbleView() {
         data-hit
         type="button"
         aria-label={`${ACTION_LABEL[mode]} ${appName}`}
-        title={mode === 'collapsed' ? 'Click to open, drag to move' : undefined}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={endPress}
         onLostPointerCapture={endPress}
         onClick={() => {
           if (swallowClick.current) swallowClick.current = false
-          else window.assist.bubbleClick()
+          // A click from the keyboard has no press: it's "now".
+          else window.assist.bubbleClick(pressedAt.current ?? Date.now())
+          pressedAt.current = undefined
         }}
         style={{ width: UI.bubbleSize, height: UI.bubbleSize }}
         className={cn(

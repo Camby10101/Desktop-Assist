@@ -213,9 +213,9 @@ Everything the constructor needs, passed as one object (its _dependencies_).
 
 ### Constants
 
-<!-- code: apps/desktop/src/main/bubble/BubbleController.ts#FRAME_MS,DEFAULT_CORNER,PANEL_FADE_MS,BLUR_CLICK_GRACE_MS,OPEN_BLUR_GRACE_MS,HIDE_SETTLE_MS -->
+<!-- code: apps/desktop/src/main/bubble/BubbleController.ts#FRAME_MS,DEFAULT_CORNER,PANEL_FADE_MS,BLUR_CLICK_GRACE_MS,PRESS_SLACK_MS,OPEN_BLUR_GRACE_MS,HIDE_SETTLE_MS -->
 
-[`src/main/bubble/BubbleController.ts`, lines 61–77](../../apps/desktop/src/main/bubble/BubbleController.ts#L61-L77)
+[`src/main/bubble/BubbleController.ts`, lines 61–81](../../apps/desktop/src/main/bubble/BubbleController.ts#L61-L81)
 
 ```ts
 const FRAME_MS = 16
@@ -226,10 +226,15 @@ const DEFAULT_CORNER: Corner = 'bottom-right'
 export const PANEL_FADE_MS = 150
 
 /**
- * Clicking the bubble while the panel is open can blur the panel just before the click lands.
- * A click this soon after a blur-collapse belongs to the same gesture and must not reopen it.
+ * Clicking the bubble while the panel is open blurs the panel as the button goes down (the bubble
+ * takes the focus), so the panel has already closed when the click arrives. When the click says
+ * when it was pressed, a panel that closed after that press (give or take this much) closed
+ * because of it, and stays closed. Without that time, a click this soon after a blur-collapse is
+ * taken to be the same gesture.
  */
 export const BLUR_CLICK_GRACE_MS = 300
+
+export const PRESS_SLACK_MS = 50
 
 /**
  * A blur this soon after the panel opened doesn't close it. Another app can take the focus back
@@ -250,12 +255,13 @@ export const HIDE_SETTLE_MS = 150
 - `PANEL_FADE_MS = 150`: when the panel closes, its page fades its contents out. The window is
   hidden only after this delay, otherwise the fade would be cut off (see `collapse()`). It matches
   the page's fade exactly: the renderer's transitions are also 150 ms (`duration-150`).
-- `BLUR_CLICK_GRACE_MS = 300`: see `clickBubble()`.
+- `BLUR_CLICK_GRACE_MS = 300`, `PRESS_SLACK_MS = 50`: see `clickBubble()`. The comment above them
+  covers both.
 - `OPEN_BLUR_GRACE_MS = 400`: see `panelBlurred()`. As its comment says, another app can take the
   focus back just as the panel opens.
 - `HIDE_SETTLE_MS = 150`: after the windows are hidden, Windows needs a moment to redraw what was
   behind them. A screenshot taken sooner could still show them.
-- `export const`: the last four are exported so the tests can wait exactly the right time.
+- `export const`: the last five are exported so the tests can wait exactly the right time.
 
 ### `BubbleController`
 
@@ -263,7 +269,7 @@ The class, with the comment that describes it:
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.class -->
 
-[`src/main/bubble/BubbleController.ts`, lines 79–88](../../apps/desktop/src/main/bubble/BubbleController.ts#L79-L88)
+[`src/main/bubble/BubbleController.ts`, lines 83–92](../../apps/desktop/src/main/bubble/BubbleController.ts#L83-L92)
 
 ```ts
 /**
@@ -287,7 +293,7 @@ long version. These are the class's fields:
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.mode,position,anchor,motion,ticker,hideTimer,lastBlurCollapse,expandedAt,expandAfterReturn,now,random -->
 
-[`src/main/bubble/BubbleController.ts`, lines 89–99](../../apps/desktop/src/main/bubble/BubbleController.ts#L89-L99)
+[`src/main/bubble/BubbleController.ts`, lines 93–103](../../apps/desktop/src/main/bubble/BubbleController.ts#L93-L103)
 
 ```ts
 private mode: Mode = 'collapsed'
@@ -343,11 +349,12 @@ private readonly random: () => number
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.constructor -->
 
-[`src/main/bubble/BubbleController.ts`, lines 101–111](../../apps/desktop/src/main/bubble/BubbleController.ts#L101-L111)
+[`src/main/bubble/BubbleController.ts`, lines 105–116](../../apps/desktop/src/main/bubble/BubbleController.ts#L105-L116)
 
 ```ts
 constructor(private readonly deps: BubbleControllerDeps) {
-  this.now = deps.now ?? (() => performance.now())
+  // Wall-clock time, so it compares with the time a click was pressed in the bubble's page.
+  this.now = deps.now ?? (() => Date.now())
   this.random = deps.random ?? Math.random
   // Set now, not in start(): the pages ask for the corner as soon as they load, which can be
   // before start() runs.
@@ -367,10 +374,12 @@ appears on screen until `start()`.
 - `constructor(private readonly deps: BubbleControllerDeps)`: TypeScript shorthand. Marking a
   constructor parameter `private readonly` declares a field called `deps` and stores the argument
   in it.
-- `deps.now ?? (() => performance.now())`: `??` uses the right-hand side only when the left is
-  `null` or `undefined`. `performance.now()` is a millisecond clock that only moves forward; unlike
-  `Date.now()`, it doesn't jump when the PC's clock is adjusted, which would make an animation
-  skip.
+- `deps.now ?? (() => Date.now())`: `??` uses the right-hand side only when the left is `null` or
+  `undefined`. As the comment says, the clock is the wall-clock time (milliseconds since 1970),
+  because `clickBubble()` compares it with the time the bubble's page saw the mouse button go
+  down, and the page's `Date.now()` is the same clock. (`performance.now()`, which never jumps
+  when the PC's clock is adjusted, counts from a different starting point in every process, so
+  the two couldn't be compared.)
 - `// Set now, not in start()`: `index.ts` registers the IPC handlers (including `getState()`,
   which reads `corner`) before it waits for the pages to load, and only calls `start()` after both
   have drawn. A page can ask for the corner in between. Choosing the anchor here means that answer
@@ -388,7 +397,7 @@ appears on screen until `start()`.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.currentMode,bubblePosition,corner -->
 
-[`src/main/bubble/BubbleController.ts`, lines 113–123](../../apps/desktop/src/main/bubble/BubbleController.ts#L113-L123)
+[`src/main/bubble/BubbleController.ts`, lines 118–128](../../apps/desktop/src/main/bubble/BubbleController.ts#L118-L128)
 
 ```ts
 get currentMode(): Mode {
@@ -417,7 +426,7 @@ a page that has just loaded learns the current state.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.start -->
 
-[`src/main/bubble/BubbleController.ts`, lines 125–130](../../apps/desktop/src/main/bubble/BubbleController.ts#L125-L130)
+[`src/main/bubble/BubbleController.ts`, lines 130–135](../../apps/desktop/src/main/bubble/BubbleController.ts#L130-L135)
 
 ```ts
 /** Puts the bubble in its saved corner (or bottom-right of the main display) and shows it. */
@@ -444,15 +453,21 @@ anchor was already chosen in the constructor; this just puts the windows there.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.clickBubble -->
 
-[`src/main/bubble/BubbleController.ts`, lines 132–150](../../apps/desktop/src/main/bubble/BubbleController.ts#L132-L150)
+[`src/main/bubble/BubbleController.ts`, lines 137–161](../../apps/desktop/src/main/bubble/BubbleController.ts#L137-L161)
 
 ```ts
-clickBubble(): void {
+/** A click on the bubble. `pressedAt` is when its mouse button went down (wall-clock ms). */
+clickBubble(pressedAt?: number): void {
   switch (this.mode) {
-    case 'collapsed':
-      if (this.now() - this.lastBlurCollapse >= BLUR_CLICK_GRACE_MS) this.expand()
-      else this.deps.onDiagnostic?.('Bubble click ignored: the panel had just closed')
+    case 'collapsed': {
+      const closedByThisPress =
+        pressedAt === undefined
+          ? this.now() - this.lastBlurCollapse < BLUR_CLICK_GRACE_MS
+          : this.lastBlurCollapse >= pressedAt - PRESS_SLACK_MS
+      if (closedByThisPress) return // the press closed the panel: that was the click's job
+      this.expand()
       return
+    }
     case 'expanded':
       this.collapse()
       return
@@ -470,18 +485,29 @@ clickBubble(): void {
 
 <!-- /code -->
 
-What a click on the bubble means depends on the mode. The bubble page just sends `IPC.bubbleClick`
-and leaves the decision to the main process, which knows the mode and the blur timing.
+What a click on the bubble means depends on the mode. The bubble page sends `IPC.bubbleClick` with
+the time the mouse button went down (`pressedAt`), and leaves the decision to the main process,
+which knows the mode and when the panel last closed.
 
-- `if (this.now() - this.lastBlurCollapse >= BLUR_CLICK_GRACE_MS) this.expand()`: with the panel
-  open, pressing on the bubble can take focus away from the panel just before the click itself
-  arrives. The blur closes the panel, and without this check the click would open it straight
-  back up, so the panel would seem to ignore you. A click within 300 ms of a blur-close counts as
-  part of the same gesture. (`windows.ts` also makes the bubble window unable to take focus, which
-  normally prevents that blur; this check covers the times it still happens.)
-- `else this.deps.onDiagnostic?.('Bubble click ignored: the panel had just closed')`: the click
-  inside that grace period is logged, so a report of the bubble "not opening" can be checked
-  against the log.
+- `clickBubble(pressedAt?: number)`: `?` makes the press time optional; the tests, and anything
+  older, can leave it out.
+- `case 'collapsed': {`: the braces give this `case` a block of its own, so `closedByThisPress`
+  can be declared inside it.
+- `closedByThisPress`: with the panel open, pressing on the bubble takes the keyboard focus from
+  the panel (the bubble window can take the focus, see `windows.ts` below), and the blur closes the
+  panel as the button goes down. By the time the click arrives the mode is already `collapsed`,
+  and without this check the click would open the panel straight back up: it would seem to ignore
+  you.
+- `this.lastBlurCollapse >= pressedAt - PRESS_SLACK_MS`: with a press time, the question is
+  simple: did the panel close at or after this press? Then this press closed it, and the click
+  has done its job. The 50 ms of slack covers the two processes noticing things in a slightly
+  different order. However long the button is held, the answer is right (a slow click is still
+  one click), and a click soon after closing the panel some other way (clicking another app)
+  opens it at once.
+- `this.now() - this.lastBlurCollapse < BLUR_CLICK_GRACE_MS`: without a press time, the older rule:
+  a click within 300 ms of a blur-close counts as part of the same gesture.
+- `if (closedByThisPress) return`: as the comment says, closing the panel was the click's job.
+  Otherwise `this.expand()` opens it.
 - `case 'bouncing':`: clicking a bouncing bubble catches it and sends it home, without opening the
   panel.
 - `case 'capturing':`: the dragging, returning and capturing modes ignore clicks. Listing them
@@ -493,7 +519,7 @@ and leaves the decision to the main process, which knows the mode and the blur t
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.expand -->
 
-[`src/main/bubble/BubbleController.ts`, lines 152–176](../../apps/desktop/src/main/bubble/BubbleController.ts#L152-L176)
+[`src/main/bubble/BubbleController.ts`, lines 163–187](../../apps/desktop/src/main/bubble/BubbleController.ts#L163-L187)
 
 ```ts
 /** Opens the panel. While bouncing, glides home first and then opens. */
@@ -546,7 +572,7 @@ the browser, and clicking one of the app's Windows notifications (all in `index.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.collapse -->
 
-[`src/main/bubble/BubbleController.ts`, lines 178–186](../../apps/desktop/src/main/bubble/BubbleController.ts#L178-L186)
+[`src/main/bubble/BubbleController.ts`, lines 189–197](../../apps/desktop/src/main/bubble/BubbleController.ts#L189-L197)
 
 ```ts
 collapse(): void {
@@ -576,7 +602,7 @@ has been handed to Claude Desktop, by `ipc.ts`.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.panelBlurred -->
 
-[`src/main/bubble/BubbleController.ts`, lines 188–196](../../apps/desktop/src/main/bubble/BubbleController.ts#L188-L196)
+[`src/main/bubble/BubbleController.ts`, lines 199–207](../../apps/desktop/src/main/bubble/BubbleController.ts#L199-L207)
 
 ```ts
 panelBlurred(): void {
@@ -609,7 +635,7 @@ behaves like a popup and closes.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.startDrag -->
 
-[`src/main/bubble/BubbleController.ts`, lines 198–210](../../apps/desktop/src/main/bubble/BubbleController.ts#L198-L210)
+[`src/main/bubble/BubbleController.ts`, lines 209–221](../../apps/desktop/src/main/bubble/BubbleController.ts#L209-L221)
 
 ```ts
 /** The mouse pressed on the bubble and moved: the bubble follows the pointer until released. */
@@ -652,7 +678,7 @@ it.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.endDrag -->
 
-[`src/main/bubble/BubbleController.ts`, lines 212–226](../../apps/desktop/src/main/bubble/BubbleController.ts#L212-L226)
+[`src/main/bubble/BubbleController.ts`, lines 223–237](../../apps/desktop/src/main/bubble/BubbleController.ts#L223-L237)
 
 ```ts
 /** Released: snap to the nearest corner of the display the bubble was dropped on. */
@@ -692,7 +718,7 @@ whichever display it was dropped on.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.startBounce -->
 
-[`src/main/bubble/BubbleController.ts`, lines 228–239](../../apps/desktop/src/main/bubble/BubbleController.ts#L228-L239)
+[`src/main/bubble/BubbleController.ts`, lines 239–250](../../apps/desktop/src/main/bubble/BubbleController.ts#L239-L250)
 
 ```ts
 startBounce(): void {
@@ -731,7 +757,7 @@ The Bounce action: the bubble flies around its display, bouncing off the edges, 
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.whileHidden -->
 
-[`src/main/bubble/BubbleController.ts`, lines 241–257](../../apps/desktop/src/main/bubble/BubbleController.ts#L241-L257)
+[`src/main/bubble/BubbleController.ts`, lines 252–268](../../apps/desktop/src/main/bubble/BubbleController.ts#L252-L268)
 
 ```ts
 /** Hides both windows, runs `task` (a screenshot), then reopens the panel. */
@@ -778,7 +804,7 @@ hidden first and brought back afterwards.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.displayChanged -->
 
-[`src/main/bubble/BubbleController.ts`, lines 259–270](../../apps/desktop/src/main/bubble/BubbleController.ts#L259-L270)
+[`src/main/bubble/BubbleController.ts`, lines 270–281](../../apps/desktop/src/main/bubble/BubbleController.ts#L270-L281)
 
 ```ts
 /**
@@ -818,7 +844,7 @@ display's travel box, so it reappears there.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.dispose -->
 
-[`src/main/bubble/BubbleController.ts`, lines 272–275](../../apps/desktop/src/main/bubble/BubbleController.ts#L272-L275)
+[`src/main/bubble/BubbleController.ts`, lines 283–286](../../apps/desktop/src/main/bubble/BubbleController.ts#L283-L286)
 
 ```ts
 dispose(): void {
@@ -836,7 +862,7 @@ against a window that is being destroyed. The tests call it after each test.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.display,home -->
 
-[`src/main/bubble/BubbleController.ts`, lines 277–284](../../apps/desktop/src/main/bubble/BubbleController.ts#L277-L284)
+[`src/main/bubble/BubbleController.ts`, lines 288–295](../../apps/desktop/src/main/bubble/BubbleController.ts#L288-L295)
 
 ```ts
 /** The anchor's display, or the main display if it's gone. */
@@ -861,7 +887,7 @@ private home(): Point {
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.glideHome -->
 
-[`src/main/bubble/BubbleController.ts`, lines 286–310](../../apps/desktop/src/main/bubble/BubbleController.ts#L286-L310)
+[`src/main/bubble/BubbleController.ts`, lines 297–321](../../apps/desktop/src/main/bubble/BubbleController.ts#L297-L321)
 
 ```ts
 /** Glides the bubble into its anchor corner, then switches to collapsed. */
@@ -914,7 +940,7 @@ Used after a drag (`endDrag()`) and to end a bounce (`clickBubble()`, `expand()`
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.runTicker,stopTicker -->
 
-[`src/main/bubble/BubbleController.ts`, lines 312–325](../../apps/desktop/src/main/bubble/BubbleController.ts#L312-L325)
+[`src/main/bubble/BubbleController.ts`, lines 323–336](../../apps/desktop/src/main/bubble/BubbleController.ts#L323-L336)
 
 ```ts
 private runTicker(onFrame: (dtMs: number) => void): void {
@@ -950,7 +976,7 @@ time.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.moveBubble,placeWindows -->
 
-[`src/main/bubble/BubbleController.ts`, lines 327–337](../../apps/desktop/src/main/bubble/BubbleController.ts#L327-L337)
+[`src/main/bubble/BubbleController.ts`, lines 338–348](../../apps/desktop/src/main/bubble/BubbleController.ts#L338-L348)
 
 ```ts
 private moveBubble(position: Point): void {
@@ -981,7 +1007,7 @@ private placeWindows(): void {
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.setAnchor,cancelHide,setMode -->
 
-[`src/main/bubble/BubbleController.ts`, lines 339–354](../../apps/desktop/src/main/bubble/BubbleController.ts#L339-L354)
+[`src/main/bubble/BubbleController.ts`, lines 350–365](../../apps/desktop/src/main/bubble/BubbleController.ts#L350-L365)
 
 ```ts
 private setAnchor(anchor: BubbleAnchor): void {
@@ -1449,7 +1475,7 @@ anything else.
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#createOverlayWindow -->
 
-[`src/main/bubble/windows.ts`, lines 9–59](../../apps/desktop/src/main/bubble/windows.ts#L9-L59)
+[`src/main/bubble/windows.ts`, lines 9–62](../../apps/desktop/src/main/bubble/windows.ts#L9-L62)
 
 ```ts
 /**
@@ -1478,8 +1504,11 @@ export function createOverlayWindow(view: View, size: Size): BrowserWindow {
     skipTaskbar: true,
     alwaysOnTop: true,
     type: 'toolbar',
-    // The bubble never takes keyboard focus, so clicking it doesn't blur the panel.
-    focusable: view === 'panel',
+    // Both can take the focus. A bubble that couldn't had its mouse presses dropped by Windows /
+    // Chromium after clicking elsewhere (only the release arrived, so clicks did nothing).
+    // Clicking the bubble now takes the focus from an open panel; BubbleController.clickBubble
+    // knows that press closed it.
+    focusable: true,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: true,
@@ -1521,9 +1550,15 @@ inside; the options say what kind of window.
   page draws its own.
 - `type: 'toolbar'`: on Windows, a toolbar window is left out of Alt+Tab. `skipTaskbar: true` keeps
   it off the taskbar too.
-- `focusable: view === 'panel'`: the bubble window can never take keyboard focus, so clicking it
-  doesn't take focus from the panel (which would close it, see `panelBlurred()`) or from the app
-  you're working in. The panel must be focusable, since you type in it.
+- `focusable: true`: both windows can take the keyboard focus. The panel must, since you type in
+  it. The bubble used to be unable to (`focusable: false`), so that clicking it wouldn't take the
+  focus from the panel or from the app you were working in. But, as the comment says, in some
+  states (after clicking somewhere else) Windows and Chromium dropped the mouse _press_ on that
+  never-focusable window and delivered only the release. The page then saw no `pointerdown` and
+  no `click`, so clicks on the bubble did nothing at all, neither opening nor closing the panel.
+  This was found by attaching to the running app on a PC where it happened. With a focusable
+  bubble every press arrives; the cost is that pressing the bubble now blurs an open panel, which
+  `BubbleController.clickBubble()` allows for with the press time.
 - `preload: join(__dirname, '../preload/index.js')`: the preload script, which gives the page
   `window.assist`. `__dirname` is the folder of the built main-process file (`out/main`), so this
   points at the built preload in `out/preload`.
@@ -1549,7 +1584,7 @@ inside; the options say what kind of window.
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#bubbleSurface,panelSurface -->
 
-[`src/main/bubble/windows.ts`, lines 61–79](../../apps/desktop/src/main/bubble/windows.ts#L61-L79)
+[`src/main/bubble/windows.ts`, lines 64–82](../../apps/desktop/src/main/bubble/windows.ts#L64-L82)
 
 ```ts
 export function bubbleSurface(win: BrowserWindow): Surface {
@@ -1589,7 +1624,7 @@ forwards each call to the matching Electron method.
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#resetClickThrough -->
 
-[`src/main/bubble/windows.ts`, lines 81–93](../../apps/desktop/src/main/bubble/windows.ts#L81-L93)
+[`src/main/bubble/windows.ts`, lines 84–96](../../apps/desktop/src/main/bubble/windows.ts#L84-L96)
 
 ```ts
 /**
@@ -1627,7 +1662,7 @@ been hidden, for example for a screenshot.
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#lockDown -->
 
-[`src/main/bubble/windows.ts`, lines 95–104](../../apps/desktop/src/main/bubble/windows.ts#L95-L104)
+[`src/main/bubble/windows.ts`, lines 98–107](../../apps/desktop/src/main/bubble/windows.ts#L98-L107)
 
 ```ts
 function lockDown(win: BrowserWindow, view: View): void {
@@ -1662,7 +1697,7 @@ Basic safety and crash recovery for both pages.
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#addEditContextMenu -->
 
-[`src/main/bubble/windows.ts`, lines 106–127](../../apps/desktop/src/main/bubble/windows.ts#L106-L127)
+[`src/main/bubble/windows.ts`, lines 109–130](../../apps/desktop/src/main/bubble/windows.ts#L109-L130)
 
 ```ts
 /** Right-click menu for the text box: spelling suggestions plus the usual edit commands. */

@@ -3,7 +3,7 @@
   "companyName": "Morse Micro",
   "appName": "Desktop Assist",
   "accentColor": "#9333EA",
-  "actions": ["ask", "servicedesk", "screenshot", "settings", "bounce", "close"],
+  "actions": ["ask", "servicedesk", "screenshot", "theme", "settings", "bounce", "close"],
   "chatApp": "claude-desktop",
   "startPage": "apps",
   "serviceDesk": {

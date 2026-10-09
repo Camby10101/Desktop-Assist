@@ -145,7 +145,7 @@ when you press Send it calls `props.onSend()`, and `Panel` does the work (see `s
 lists small _utility classes_ that each do one thing: `absolute` is `position: absolute`,
 `rounded-2xl` rounds the corners, `px-3` sets the left and right padding, `text-xs` is small text.
 Tailwind generates CSS for just the classes the code uses. A prefix makes a class conditional:
-`hover:` applies while the pointer is over the element, `dark:` while Windows is in dark mode,
+`hover:` applies while the pointer is over the element, `dark:` while the app is in dark mode,
 `disabled:` while a button is disabled. `bg-accent` and `text-accent` use the tenant's colour,
 which `styles.css` defines and `useAccentColor` sets at runtime (see
 [The pages](7-renderer-pages.md)). `cn()` (from `lib/cn.ts`) joins class strings and drops
@@ -1433,19 +1433,18 @@ it tells screen readers whether it's on, so the switch itself is `aria-hidden`.
 ## `src/renderer/src/components/ActionStack.tsx`: the action icons
 
 The column of round icon buttons that pops out of the bubble when the panel opens (for Morse
-Micro: Ask Claude, IT service desk, screenshot, settings, bounce and close), in the order the
-tenant's
-`tenant.json` lists them, nearest the bubble first. `Panel` always renders it; while closed it's
-simply invisible. Its props are the `corner`, the tenant's `actions`, `open`, `activeId`
-(`settings` while the settings menu is open, `ask` or `apps` while the page that isn't the start
-page is showing, otherwise `null`), `dotted` (icons that get a small dot) and `onAction`, which is
-`Panel.runAction`.
+Micro: Ask Claude, IT service desk, screenshot, light or dark mode, settings, bounce and close),
+in the order the tenant's `tenant.json` lists them, nearest the bubble first. `Panel` always
+renders it; while closed it's simply invisible. Its props are the `corner`, the tenant's
+`actions`, `open`, `activeId` (`settings` while the settings menu is open, `ask` or `apps` while
+the page that isn't the start page is showing, otherwise `null`), `theme` (the current light or
+dark mode), `dotted` (icons that get a small dot) and `onAction`, which is `Panel.runAction`.
 
 ### `ICONS`
 
 <!-- code: apps/desktop/src/renderer/src/components/ActionStack.tsx#ICONS -->
 
-[`src/renderer/src/components/ActionStack.tsx`, lines 16–24](../../apps/desktop/src/renderer/src/components/ActionStack.tsx#L16-L24)
+[`src/renderer/src/components/ActionStack.tsx`, lines 19–28](../../apps/desktop/src/renderer/src/components/ActionStack.tsx#L19-L28)
 
 ```tsx
 const ICONS: Record<ActionId, LucideIcon> = {
@@ -1453,6 +1452,7 @@ const ICONS: Record<ActionId, LucideIcon> = {
   apps: LayoutGrid,
   servicedesk: Headset,
   screenshot: Camera,
+  theme: Sun,
   settings: Settings,
   bounce: Volleyball,
   close: Power,
@@ -1463,7 +1463,7 @@ const ICONS: Record<ActionId, LucideIcon> = {
 
 Which lucide icon each action shows. Ask Claude is `MessageCircle`, a speech bubble; Apps is
 `LayoutGrid`, a grid of four squares, the usual sign for "apps"; and the IT service desk is
-`Headset`, as for a help desk.
+`Headset`, as for a help desk. The theme icon is `Sun`, but see below: it changes with the mode.
 
 - `Record<ActionId, LucideIcon>`: an object with exactly one entry for every action id. If a new
   id is added to `ACTION_IDS` in `src/shared/actions.ts` without an icon here, TypeScript reports
@@ -1473,7 +1473,7 @@ Which lucide icon each action shows. Ask Claude is `MessageCircle`, a speech bub
 
 <!-- code: apps/desktop/src/renderer/src/components/ActionStack.tsx#ActionStack -->
 
-[`src/renderer/src/components/ActionStack.tsx`, lines 26–95](../../apps/desktop/src/renderer/src/components/ActionStack.tsx#L26-L95)
+[`src/renderer/src/components/ActionStack.tsx`, lines 30–106](../../apps/desktop/src/renderer/src/components/ActionStack.tsx#L30-L106)
 
 ```tsx
 /**
@@ -1485,6 +1485,8 @@ export function ActionStack(props: {
   actions: ActionId[]
   open: boolean
   activeId: ActionId | null
+  /** The current mode: the theme icon shows the one it switches to. */
+  theme: Theme
   /** Icons with a small dot, e.g. Ask Claude while an unsent question is waiting behind it. */
   dotted?: ActionId[]
   onAction: (id: ActionId) => void
@@ -1499,8 +1501,13 @@ export function ActionStack(props: {
       }}
     >
       {props.actions.map((id, index) => {
-        const Icon = ICONS[id]
-        const { label } = ACTIONS[id]
+        const Icon = id === 'theme' && props.theme === 'light' ? Moon : ICONS[id]
+        const label =
+          id === 'theme'
+            ? props.theme === 'dark'
+              ? 'Switch to light mode'
+              : 'Switch to dark mode'
+            : ACTIONS[id].label
         const active = id === props.activeId
         return (
           <button
@@ -1560,16 +1567,21 @@ Lays the icons out in a column beside the bubble and animates them in and out.
   bubble.
 - `gap: UI.actionGap`: 8 px between icons. The main process sizes the panel window from the same
   numbers (`panelWindowSize` in `src/shared/geometry.ts`), so the stack always fits.
-- `const { label } = ACTIONS[id]`: the tooltip and screen-reader name, from the action registry.
+- `const Icon = id === 'theme' && props.theme === 'light' ? Moon : ICONS[id]`: the theme icon shows
+  what clicking it switches to: a sun while dark (switch to light), a moon while light.
+- `const label = id === 'theme' ? ... : ACTIONS[id].label`: the tooltip and screen-reader name,
+  from the action registry, except for the theme icon, which says what it will do ("Switch to
+  light mode" or "Switch to dark mode").
 - `data-hit`: on each button, not on the column, so the gaps between icons stay click-through.
 - `data-action={id}`: `Panel.closeSettingsOnOutsideClick` looks for `[data-action="settings"]`,
   so clicking the gear toggles the menu instead of counting as a click outside it.
 - `aria-expanded={ACTIONS[id].kind === 'popover' ? active : undefined}`: for a popover action
   (Settings, Ask Claude and Apps) it tells screen readers whether what it opens is showing.
-  `undefined` leaves the attribute off the others.
+  `undefined` leaves the attribute off the others, the theme icon included, which opens nothing.
 - `onClick={() => props.onAction(id)}`: `Panel.runAction` toggles the menu for Settings, switches
-  the card's page for Ask Claude and Apps, and asks the main process to run any other action (see
-  `src/main/actions.ts` in [Main process: startup, IPC and app plumbing](2-main-startup.md)).
+  the card's page for Ask Claude and Apps, flips light or dark mode for the theme icon, and asks the
+  main process to run any other action (see `src/main/actions.ts` in [Main process: startup, IPC and
+  app plumbing](2-main-startup.md)).
 - ``transitionDelay: props.open ? `${index * 30}ms` : '0ms'``: each icon starts its animation 30
   ms after the one before, so they pop out one after another. Closing has no delay, so they all go
   together.

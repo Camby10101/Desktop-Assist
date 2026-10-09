@@ -41,7 +41,11 @@ export interface Settings {
   canUninstall: boolean
   /** IDs of the apps the user starred in the Apps list. */
   favoriteApps: string[]
+  /** Light or dark mode for Desktop Assist (dark until the user switches). */
+  theme: Theme
 }
+
+export type Theme = 'dark' | 'light'
 
 /**
  * Where conversations happen: in the panel through the Claude API (`built-in`), or handed over to

@@ -11,7 +11,7 @@ function subscribe<T>(channel: string, callback: (payload: T) => void): () => vo
 
 const api: AssistApi = {
   getState: () => ipcRenderer.invoke(IPC.getState),
-  bubbleClick: () => ipcRenderer.send(IPC.bubbleClick),
+  bubbleClick: (pressedAt) => ipcRenderer.send(IPC.bubbleClick, pressedAt),
   bubbleDragStart: () => ipcRenderer.send(IPC.bubbleDragStart),
   bubbleDragEnd: () => ipcRenderer.send(IPC.bubbleDragEnd),
   collapse: () => ipcRenderer.send(IPC.collapse),
@@ -35,6 +35,7 @@ const api: AssistApi = {
     setAutoStart: (enabled) => ipcRenderer.invoke(IPC.settingsSetAutoStart, enabled),
     setEffort: (effort) => ipcRenderer.invoke(IPC.settingsSetEffort, effort),
     setAutoSend: (autoSend) => ipcRenderer.invoke(IPC.settingsSetAutoSend, autoSend),
+    setTheme: (theme) => ipcRenderer.invoke(IPC.settingsSetTheme, theme),
     setFavoriteApp: (id, favorite) =>
       ipcRenderer.invoke(IPC.settingsSetFavoriteApp, { id, favorite }),
   },

@@ -44,6 +44,7 @@ are complete. Next is Milestone 4: Ship.
   - **Ask Claude** swaps the apps for the text box (above); click it again or press Esc to go
     back. A dot on it means an unsent question is waiting.
   - **IT service desk** opens the Morse Micro service desk in your browser.
+  - **Light or dark mode** (sun or moon) switches Desktop Assist's colours. It starts dark.
   - **Screenshot** saves the screen the bubble is on to `Pictures\Desktop Assist`.
   - **Settings**: Start with Windows, Send in Claude automatically, Open screenshots folder,
     Clear text box and **Uninstall Desktop Assist**. (With the

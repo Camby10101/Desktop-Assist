@@ -140,12 +140,12 @@ export {}
 
 **Tailwind in brief.** Tailwind CSS provides small, single-purpose class names: `flex`,
 `rounded-full`, `px-3` (horizontal padding), `bg-white`, `text-xs`. Components style themselves by
-listing these in `className` instead of writing a separate stylesheet. A prefix applies a class
-only in some situation: `hover:` while the pointer is over it, `dark:` when Windows is in dark
-mode, `motion-reduce:` when Windows animations are turned off, and `group-data-open:` when a parent
-marked `group` has a `data-open` attribute (used by the panel). At build time Tailwind scans the
-source for the class names actually used and generates CSS for just those. This file sets Tailwind
-up and holds the styles that classes can't express.
+listing these in `className` instead of writing a separate stylesheet. A prefix applies a class only
+in some situation: `hover:` while the pointer is over it, `dark:` when the page is in dark mode
+(Desktop Assist's own setting, dark by default), `motion-reduce:` when Windows animations are turned
+off, and `group-data-open:` when a parent marked `group` has a `data-open` attribute (used by the
+panel). At build time Tailwind scans the source for the class names actually used and generates CSS
+for just those. This file sets Tailwind up and holds the styles that classes can't express.
 
 <!-- code: apps/desktop/src/renderer/src/styles.css -->
 
@@ -428,7 +428,9 @@ up and holds the styles that classes can't express.
 - `.markdown table`: `display: block` with `overflow-x: auto` lets a wide table scroll inside the
   card.
 - `@media (prefers-color-scheme: dark)`: the dark-mode colours for the same elements. This media
-  query follows the Windows light/dark setting.
+  query follows Desktop Assist's own light/dark setting: the main process sets Electron's
+  `nativeTheme.themeSource`, which decides what the pages see (see `SettingsService.setTheme()` in
+  [Main process: startup, IPC and app plumbing](2-main-startup.md)).
 - `.hljs-comment`: the start of the code-highlighting colours. `rehype-highlight` (used by
   `Markdown`) wraps each token of a code block in a `<span>` with a highlight.js class such as
   `hljs-keyword` or `hljs-string`; these rules colour them. The palette is GitHub's, light then
@@ -982,7 +984,7 @@ const DRAG_THRESHOLD = 5
 
 <!-- code: apps/desktop/src/renderer/src/views/BubbleView.tsx#BubbleView -->
 
-[`src/renderer/src/views/BubbleView.tsx`, lines 28–104](../../apps/desktop/src/renderer/src/views/BubbleView.tsx#L28-L104)
+[`src/renderer/src/views/BubbleView.tsx`, lines 28–109](../../apps/desktop/src/renderer/src/views/BubbleView.tsx#L28-L109)
 
 ```tsx
 /**
@@ -998,12 +1000,16 @@ export function BubbleView() {
   const appName = state?.branding.appName ?? 'Desktop Assist'
 
   const press = useRef<{ x: number; y: number; dragging: boolean } | null>(null)
+  // When the button last went down: the main process uses it to tell whether this press is what
+  // closed the panel (see BubbleController.clickBubble).
+  const pressedAt = useRef<number | undefined>(undefined)
   // A drag ends with a click event on the bubble; this stops it counting as a click.
   const swallowClick = useRef(false)
 
   function onPointerDown(event: PointerEvent<HTMLButtonElement>) {
     if (event.button !== 0) return
     swallowClick.current = false
+    pressedAt.current = Date.now()
     event.currentTarget.setPointerCapture(event.pointerId)
     press.current = { x: event.screenX, y: event.screenY, dragging: false }
   }
@@ -1033,14 +1039,15 @@ export function BubbleView() {
         data-hit
         type="button"
         aria-label={`${ACTION_LABEL[mode]} ${appName}`}
-        title={mode === 'collapsed' ? 'Click to open, drag to move' : undefined}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={endPress}
         onLostPointerCapture={endPress}
         onClick={() => {
           if (swallowClick.current) swallowClick.current = false
-          else window.assist.bubbleClick()
+          // A click from the keyboard has no press: it's "now".
+          else window.assist.bubbleClick(pressedAt.current ?? Date.now())
+          pressedAt.current = undefined
         }}
         style={{ width: UI.bubbleSize, height: UI.bubbleSize }}
         className={cn(
@@ -1079,9 +1086,13 @@ argument (see `Panel` below).
   a box (`.current`) that keeps its contents between renders, but unlike state, changing it doesn't
   re-render. It suits values that only event handlers need: here, where the press started and
   whether it has become a drag.
+- `const pressedAt = useRef<number | undefined>(undefined)`: when the mouse button last went down
+  on the bubble. As the comment says, the main process uses it to tell whether this press is what
+  closed the panel (see `BubbleController.clickBubble` in [The bubble](5-bubble.md)).
 - `const swallowClick = useRef(false)`: releasing after a drag still fires a `click` on the
   button. This flag makes that one click be ignored.
 - `if (event.button !== 0) return`: only the main (left) mouse button.
+- `pressedAt.current = Date.now()`: the press time, on the wall clock the main process uses too.
 - `event.currentTarget.setPointerCapture(event.pointerId)`: sends all further events from this
   pointer to the button, even when the pointer is outside it, until it's released. The window is
   only 72 pixels square and gets moved during a drag, so without this the release could be lost.
@@ -1101,6 +1112,12 @@ argument (see `Panel` below).
   finds `press.current` already `null` and does nothing.
 - `onClick={() => {`: a real click calls `bubbleClick()`, and `BubbleController.clickBubble`
   decides what it means: open, close, or glide home from a bounce.
+- `window.assist.bubbleClick(pressedAt.current ?? Date.now())`: the click goes with its press
+  time. As the comment says, a click from the keyboard (Enter or Space on the focused button) has
+  no press, so it's "now". `pressedAt.current = undefined` then forgets it, so it can't be
+  reused by a later keyboard click.
+- There's no `title`, so nothing pops up when the pointer rests on the bubble. The `aria-label`
+  still names it for screen readers.
 - `data-hit`: the marker `useClickThrough` looks for. The bubble window doesn't use click-through,
   so here it has no effect.
 - `ACTION_LABEL[mode]`: the `aria-label` reads, for example, "Close Desktop Assist" while the panel
@@ -1225,7 +1242,7 @@ returns. The sections after it take its values and functions one at a time.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 48–372](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L48-L372)
+[`src/renderer/src/views/PanelView.tsx`, lines 48–379](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L48-L379)
 
 ```tsx
 function Panel({ state }: { state: AppState }) {
@@ -1305,6 +1322,12 @@ function Panel({ state }: { state: AppState }) {
       // Swaps the card to that page, or back again.
       setSettingsOpen(false)
       setView(view === id ? (id === 'apps' ? 'ask' : 'apps') : id)
+      return
+    }
+    if (id === 'theme') {
+      setSettings(
+        await window.assist.settings.setTheme(settings.theme === 'dark' ? 'light' : 'dark'),
+      )
       return
     }
     if (id === 'settings') {
@@ -1527,6 +1550,7 @@ function Panel({ state }: { state: AppState }) {
         actions={branding.actions}
         open={open}
         activeId={settingsOpen ? 'settings' : view !== startPage ? view : null}
+        theme={settings.theme}
         dotted={view !== 'ask' && (draft.trim() !== '' || attachments.length > 0) ? ['ask'] : []}
         onAction={(id) => void runAction(id)}
       />
@@ -1648,6 +1672,7 @@ The JSX it returns:
   highlighted while its menu is open, and otherwise the icon of the page that isn't the start page
   while it's showing (Ask Claude while the text box is on, for a panel that starts on the Apps
   list). The start page itself has no icon to highlight.
+- `theme={settings.theme}`: the current mode, so the theme icon shows the mode it switches to.
 - `dotted={view !== 'ask' && (draft.trim() !== '' || attachments.length > 0) ? ['ask'] : []}`: a
   small dot on the Ask Claude icon while there's an unsent question or screenshot behind it, so it
   isn't forgotten while the Apps list is showing.
@@ -1710,7 +1735,7 @@ Values worked out on every render from the current state.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.runAction -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 120–136](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L120-L136)
+[`src/renderer/src/views/PanelView.tsx`, lines 120–142](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L120-L142)
 
 ```tsx
 async function runAction(id: ActionId) {
@@ -1718,6 +1743,12 @@ async function runAction(id: ActionId) {
     // Swaps the card to that page, or back again.
     setSettingsOpen(false)
     setView(view === id ? (id === 'apps' ? 'ask' : 'apps') : id)
+    return
+  }
+  if (id === 'theme') {
+    setSettings(
+      await window.assist.settings.setTheme(settings.theme === 'dark' ? 'light' : 'dark'),
+    )
     return
   }
   if (id === 'settings') {
@@ -1743,6 +1774,9 @@ Runs when an action icon is clicked (`ActionStack`'s `onAction`).
 - `setView(view === id ? (id === 'apps' ? 'ask' : 'apps') : id)`: clicking the icon of the page
   that isn't showing shows it; clicking it again (while it is) swaps back to the other page. The
   list is fetched by the effect above as soon as it shows.
+- `if (id === 'theme') {`: the light or dark mode icon, a "switch" action. It asks the main
+  process for the other mode (`settings.setTheme()`), which switches every window at once, and
+  keeps the settings it returns, so the icon shows the new mode.
 - `if (id === 'settings') {`: Settings is a "popover" action too: it opens UI inside the panel and
   never reaches the main process.
 - `setSettingsOpen(!settingsOpen)`: setting state doesn't change the variable in this run of the
@@ -1750,10 +1784,10 @@ Runs when an action icon is clicked (`ActionStack`'s `onAction`).
   `if (!settingsOpen)` means "the menu is being opened now".
 - `setSettings(await window.assist.settings.get())`: refreshes the settings as the menu opens,
   because Start with Windows can also be changed in Windows Settings.
-- `window.assist.invokeAction(id)`: after the `apps`, `ask` and `settings` branches return,
+- `window.assist.invokeAction(id)`: after the `apps`, `ask`, `theme` and `settings` branches return,
   TypeScript knows `id` is `servicedesk`, `screenshot`, `bounce` or `close`, which is exactly the
-  `CommandActionId`
-  type `invokeAction` accepts. The main process runs the matching handler from src/main/actions.ts.
+  `CommandActionId` type `invokeAction` accepts. The main process runs the matching handler from
+  src/main/actions.ts.
 - `if (result.message) showToast(result.message, result.ok ? 'info' : 'error')`: for example
   "Screenshot saved", or "Couldn't take a screenshot" in red. Bounce, close and the service desk
   return no message when they work (the service desk closes the panel as the browser opens).
@@ -1765,7 +1799,7 @@ Runs when an action icon is clicked (`ActionStack`'s `onAction`).
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.changeDraft -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 138–141](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L138-L141)
+[`src/renderer/src/views/PanelView.tsx`, lines 144–147](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L144-L147)
 
 ```tsx
 function changeDraft(next: string) {
@@ -1784,7 +1818,7 @@ writes notes.json about half a second after typing stops, so an unsent message s
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.send -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 143–155](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L143-L155)
+[`src/renderer/src/views/PanelView.tsx`, lines 149–161](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L149-L161)
 
 ```tsx
 async function send() {
@@ -1824,7 +1858,7 @@ The other two reasons, `busy` and `empty`, are ignored: `canSend` already rules 
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.askInClaudeDesktop -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 157–169](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L157-L169)
+[`src/renderer/src/views/PanelView.tsx`, lines 163–175](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L163-L175)
 
 ```tsx
 async function askInClaudeDesktop() {
@@ -1869,7 +1903,7 @@ Claude automatically" on) carries on in the main process; the panel isn't told h
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.toggleFavorite -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 171–173](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L171-L173)
+[`src/renderer/src/views/PanelView.tsx`, lines 177–179](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L177-L179)
 
 ```tsx
 async function toggleFavorite(app: PortalApp, favorite: boolean) {
@@ -1887,7 +1921,7 @@ with the starred apps first.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.openApp -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 175–180](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L175-L180)
+[`src/renderer/src/views/PanelView.tsx`, lines 181–186](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L181-L186)
 
 ```tsx
 async function openApp(app: PortalApp) {
@@ -1909,7 +1943,7 @@ panel stays open with a toast, and the portal itself is one click away at the bo
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.attachLatest,removeAttachment,openAttachment -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 182–198](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L182-L198)
+[`src/renderer/src/views/PanelView.tsx`, lines 188–204](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L188-L204)
 
 ```tsx
 async function attachLatest() {
@@ -1949,7 +1983,7 @@ result.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.copy -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 200–203](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L200-L203)
+[`src/renderer/src/views/PanelView.tsx`, lines 206–209](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L206-L209)
 
 ```tsx
 async function copy(text: string) {
@@ -1967,7 +2001,7 @@ The Copy button on Claude's replies. The main process writes the text to the cli
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.signOut,clearText,uninstall,newConversation,setEffort,toggleAutoSend -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 205–238](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L205-L238)
+[`src/renderer/src/views/PanelView.tsx`, lines 211–244](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L211-L244)
 
 ```tsx
 async function signOut() {
@@ -2034,7 +2068,7 @@ Settings menu actions.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.closeSettingsOnOutsideClick -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 240–246](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L240-L246)
+[`src/renderer/src/views/PanelView.tsx`, lines 246–252](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L246-L252)
 
 ```tsx
 // Clicking anywhere else in the panel closes the settings menu.
@@ -2064,7 +2098,7 @@ the panel (`BubbleController.panelBlurred`), and the mode effect above closes th
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.signInPrompt,banner -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 248–293](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L248-L293)
+[`src/renderer/src/views/PanelView.tsx`, lines 254–299](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L254-L299)
 
 ```tsx
 const signInPrompt =
@@ -2163,7 +2197,7 @@ one saying Claude Desktop isn't installed. With the built-in chat, it depends on
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.settingsIndex -->
 
-[`src/renderer/src/views/PanelView.tsx`, line 295](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L295)
+[`src/renderer/src/views/PanelView.tsx`, line 301](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L301)
 
 ```tsx
 const settingsIndex = branding.actions.indexOf('settings')

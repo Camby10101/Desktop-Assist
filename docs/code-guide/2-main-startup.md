@@ -1158,7 +1158,7 @@ Schemas used by several channels.
 
 <!-- code: apps/desktop/src/main/ipc.ts#registerIpc -->
 
-[`src/main/ipc.ts`, lines 63–199](../../apps/desktop/src/main/ipc.ts#L63-L199)
+[`src/main/ipc.ts`, lines 63–202](../../apps/desktop/src/main/ipc.ts#L63-L202)
 
 ```ts
 /** Wires every renderer request to the main process. All arguments are validated with zod. */
@@ -1190,7 +1190,9 @@ export function registerIpc(ctx: IpcContext): void {
 
   handle(IPC.getState, NoArgs, () => ctx.getState())
 
-  on(IPC.bubbleClick, NoArgs, () => ctx.controller.clickBubble())
+  on(IPC.bubbleClick, z.number().finite().optional(), (pressedAt) =>
+    ctx.controller.clickBubble(pressedAt),
+  )
   on(IPC.bubbleDragStart, NoArgs, () => ctx.controller.startDrag())
   on(IPC.bubbleDragEnd, NoArgs, () => ctx.controller.endDrag())
   on(IPC.collapse, NoArgs, () => ctx.controller.collapse())
@@ -1227,6 +1229,7 @@ export function registerIpc(ctx: IpcContext): void {
     ctx.settings.setEffort(effort),
   )
   handle(IPC.settingsSetAutoSend, z.boolean(), (autoSend) => ctx.settings.setAutoSend(autoSend))
+  handle(IPC.settingsSetTheme, z.enum(['dark', 'light']), (theme) => ctx.settings.setTheme(theme))
   handle(
     IPC.settingsSetFavoriteApp,
     z.object({ id: z.string().min(1).max(200), favorite: z.boolean() }),
@@ -1330,6 +1333,8 @@ and `registerBuiltInChat()`, and only one of them runs.
 - `handle(IPC.getState, ...)`: the snapshot each page loads at startup.
 - `IPC.bubbleClick`, `IPC.bubbleDragStart`, `IPC.bubbleDragEnd`, `IPC.collapse`: forwarded to the
   matching `BubbleController` methods.
+- `z.number().finite().optional()`: the bubble click's press time, a real number (not `NaN` or
+  infinity), or nothing.
 - `setIgnoreMouseEvents(!interactive, { forward: true })`: click-through for the panel. While the
   pointer is over a see-through area, the page asks for mouse input to be ignored, so clicks go to
   the window underneath; `forward: true` keeps sending pointer movement to the page so it can
@@ -1368,6 +1373,7 @@ and `registerBuiltInChat()`, and only one of them runs.
   `IPC.settingsSetAutoSend`: the Settings menu. Each returns the full, current settings, so the
   menu always shows what actually took effect. (The menu offers the response style only with the
   built-in chat, and "Send in Claude automatically" only with Claude Desktop.)
+- `IPC.settingsSetTheme`, `z.enum(['dark', 'light'])`: the light or dark mode icon.
 - `IPC.settingsSetFavoriteApp`: a star in the Apps list. Its schema,
   `z.object({ id: ..., favorite: z.boolean() })`, checks an object field by field, and
   `({ id, favorite })` unpacks it.
@@ -2013,15 +2019,16 @@ changes.
 
 `SettingsService` keeps the user's preferences in `preferences.json` in the userData folder: the
 reply effort (Fast, Balanced, Thorough) for the built-in chat, whether questions are sent in Claude
-Desktop automatically, the apps starred in the Apps list, where the bubble was dragged to, and
-whether "Start with Windows" has been set up. It also reports the settings the Settings menu shows.
-Created in `start()`; the Settings menu reaches it through the `settings...` IPC channels.
+Desktop automatically, the apps starred in the Apps list, light or dark mode, where the bubble was
+dragged to, and whether "Start with Windows" has been set up. It also reports the settings the
+Settings menu shows. Created in `start()`; the Settings menu reaches it through the `settings...`
+IPC channels.
 
 ### `DEFAULT_EFFORT`, `PreferencesSchema` and `Preferences`
 
 <!-- code: apps/desktop/src/main/settings.ts#DEFAULT_EFFORT,PreferencesSchema,Preferences -->
 
-[`src/main/settings.ts`, lines 7–25](../../apps/desktop/src/main/settings.ts#L7-L25)
+[`src/main/settings.ts`, lines 7–27](../../apps/desktop/src/main/settings.ts#L7-L27)
 
 ```ts
 /** Fast answers by default; Balanced and Thorough think longer. */
@@ -2032,6 +2039,8 @@ const PreferencesSchema = z.object({
   effort: z.enum(['low', 'medium', 'high']).optional(),
   /** Claude Desktop: send the question in Claude, not just fill it in. On unless turned off. */
   autoSend: z.boolean().optional(),
+  /** Light or dark mode; dark until the user switches. */
+  theme: z.enum(['dark', 'light']).optional(),
   /** Apps starred in the Apps list (their IDs), shown first. */
   favoriteApps: z.array(z.string().min(1).max(200)).max(500).optional(),
   /** Where the bubble was dragged to: a corner of a particular display. */
@@ -2051,6 +2060,7 @@ type Preferences = z.infer<typeof PreferencesSchema>
 - `DEFAULT_EFFORT`: the effort until the user picks one. `low` is shown as Fast.
 - `PreferencesSchema`: what the file may contain. Every field is optional, so a missing field
   just means "not set yet", and an older file still loads after a new preference is added.
+- `theme`: light or dark mode; as the comment says, dark until the user switches.
 - `favoriteApps`: the IDs of the starred apps. `.max(500)` keeps a damaged file from holding an
   endless list.
 - `autoSend`: "Send in Claude automatically", for Claude Desktop. As the comment says, it's on
@@ -2064,7 +2074,7 @@ type Preferences = z.infer<typeof PreferencesSchema>
 
 <!-- code: apps/desktop/src/main/settings.ts#SettingsService.prefs,saving,constructor -->
 
-[`src/main/settings.ts`, lines 28–34](../../apps/desktop/src/main/settings.ts#L28-L34)
+[`src/main/settings.ts`, lines 30–36](../../apps/desktop/src/main/settings.ts#L30-L36)
 
 ```ts
 private prefs: Preferences = {}
@@ -2094,13 +2104,15 @@ constructor(
 
 <!-- code: apps/desktop/src/main/settings.ts#SettingsService.init -->
 
-[`src/main/settings.ts`, lines 36–44](../../apps/desktop/src/main/settings.ts#L36-L44)
+[`src/main/settings.ts`, lines 38–48](../../apps/desktop/src/main/settings.ts#L38-L48)
 
 ```ts
 /** Loads preferences. The first time an installed build runs, turns on "Start with Windows". */
 async init(): Promise<void> {
   const result = await readJsonFile(this.preferencesPath, PreferencesSchema)
   this.prefs = result.status === 'ok' ? result.value : {}
+  // Before any window shows, so it never flashes the other mode.
+  nativeTheme.themeSource = this.get().theme
   if (app.isPackaged && !this.prefs.autoStartInitialized) {
     this.setAutoStart(true)
     await this.save({ autoStartInitialized: true })
@@ -2120,12 +2132,15 @@ Loads the file once at startup (called from `start()`).
 - `if (app.isPackaged && !this.prefs.autoStartInitialized)`: the first time an installed build
   runs, "Start with Windows" is switched on and `autoStartInitialized` is saved. Because of that
   flag it happens only once: if the user turns it off later, it stays off.
+- `nativeTheme.themeSource = this.get().theme`: applies the saved light or dark mode (see
+  [`setTheme()`](#settingsservicesettheme)). `init()` runs before the windows are created, so, as
+  the comment says, no window ever shows in the other mode first.
 
 ### `SettingsService.get()`
 
 <!-- code: apps/desktop/src/main/settings.ts#SettingsService.get -->
 
-[`src/main/settings.ts`, lines 46–58](../../apps/desktop/src/main/settings.ts#L46-L58)
+[`src/main/settings.ts`, lines 50–63](../../apps/desktop/src/main/settings.ts#L50-L63)
 
 ```ts
 get(): Settings {
@@ -2138,6 +2153,7 @@ get(): Settings {
     effort: this.prefs.effort ?? DEFAULT_EFFORT,
     autoSend: this.prefs.autoSend ?? true,
     favoriteApps: this.prefs.favoriteApps ?? [],
+    theme: this.prefs.theme ?? 'dark',
     canUninstall: available,
   }
 }
@@ -2157,12 +2173,13 @@ The current settings, as the Settings menu shows them (`Settings` in `src/shared
 - `this.prefs.autoSend ?? true`: "Send in Claude automatically" is on until the user turns it off.
 - `canUninstall: available`: only an installed build has an uninstaller.
 - `favoriteApps: this.prefs.favoriteApps ?? []`: no stars until the user adds some.
+- `theme: this.prefs.theme ?? 'dark'`: dark until the user switches.
 
 ### `SettingsService.setAutoStart()`
 
 <!-- code: apps/desktop/src/main/settings.ts#SettingsService.setAutoStart -->
 
-[`src/main/settings.ts`, lines 60–63](../../apps/desktop/src/main/settings.ts#L60-L63)
+[`src/main/settings.ts`, lines 65–68](../../apps/desktop/src/main/settings.ts#L65-L68)
 
 ```ts
 setAutoStart(enabled: boolean): Settings {
@@ -2182,7 +2199,7 @@ settings, so the menu shows what actually happened; in a dev run that's still "o
 
 <!-- code: apps/desktop/src/main/settings.ts#SettingsService.setEffort,setAutoSend -->
 
-[`src/main/settings.ts`, lines 65–73](../../apps/desktop/src/main/settings.ts#L65-L73)
+[`src/main/settings.ts`, lines 70–78](../../apps/desktop/src/main/settings.ts#L70-L78)
 
 ```ts
 async setEffort(effort: Effort): Promise<Settings> {
@@ -2203,11 +2220,41 @@ are. Both take effect from the next question: `ChatSession` reads the effort thr
 `getEffort()` each time it sends, and `ClaudeDesktop` reads the other through its `autoSend()`
 dependency each time it hands a question over.
 
+### `SettingsService.setTheme()`
+
+<!-- code: apps/desktop/src/main/settings.ts#SettingsService.setTheme -->
+
+[`src/main/settings.ts`, lines 80–88](../../apps/desktop/src/main/settings.ts#L80-L88)
+
+```ts
+/**
+ * Light or dark mode for every Desktop Assist window, whatever Windows uses: Electron's
+ * `themeSource` sets what the pages see as prefers-color-scheme, which the styles follow.
+ */
+async setTheme(theme: Theme): Promise<Settings> {
+  nativeTheme.themeSource = theme
+  await this.save({ theme })
+  return this.get()
+}
+```
+
+<!-- /code -->
+
+Switches every Desktop Assist window between light and dark, and saves the choice.
+
+- `nativeTheme.themeSource = theme`: Electron's `nativeTheme.themeSource` decides which mode the
+  app's pages are told the system is in: `'dark'` or `'light'` overrides Windows' own setting
+  (`'system'`, the default, would follow it). The pages see it as the CSS media feature
+  `prefers-color-scheme`, which both the hand-written dark styles in `styles.css` and Tailwind's
+  `dark:` classes follow. So both windows switch at once, without the pages doing anything.
+- `await this.save({ theme })`, `return this.get()`: saved for next time, and the new settings go
+  back to the panel, which updates the theme icon.
+
 ### `SettingsService.setFavoriteApp()`
 
 <!-- code: apps/desktop/src/main/settings.ts#SettingsService.setFavoriteApp -->
 
-[`src/main/settings.ts`, lines 75–80](../../apps/desktop/src/main/settings.ts#L75-L80)
+[`src/main/settings.ts`, lines 90–95](../../apps/desktop/src/main/settings.ts#L90-L95)
 
 ```ts
 /** Stars an app in the Apps list, or takes its star away. */
@@ -2232,7 +2279,7 @@ list, which the panel adopts.
 
 <!-- code: apps/desktop/src/main/settings.ts#SettingsService.bubbleAnchor,setBubbleAnchor -->
 
-[`src/main/settings.ts`, lines 82–88](../../apps/desktop/src/main/settings.ts#L82-L88)
+[`src/main/settings.ts`, lines 97–103](../../apps/desktop/src/main/settings.ts#L97-L103)
 
 ```ts
 get bubbleAnchor(): BubbleAnchor | null {
@@ -2256,7 +2303,7 @@ settles in a new corner.
 
 <!-- code: apps/desktop/src/main/settings.ts#SettingsService.save -->
 
-[`src/main/settings.ts`, lines 90–97](../../apps/desktop/src/main/settings.ts#L90-L97)
+[`src/main/settings.ts`, lines 105–112](../../apps/desktop/src/main/settings.ts#L105-L112)
 
 ```ts
 private async save(changes: Preferences): Promise<void> {
