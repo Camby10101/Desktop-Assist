@@ -133,8 +133,6 @@ function Panel({ state }: { state: AppState }) {
     setSettingsOpen(false)
     const result = await window.assist.invokeAction(id)
     if (result.message) showToast(result.message, result.ok ? 'info' : 'error')
-    // A screenshot is taken to ask about it: show the text box, where it can be attached.
-    if (id === 'screenshot' && result.ok) setView('ask')
   }
 
   function changeDraft(next: string) {

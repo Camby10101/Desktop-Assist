@@ -122,8 +122,8 @@ process talks to JumpCloud, and the pages never see a token.
    the Apps icon is clicked, and asks for it then (`window.assist.apps.get()` → IPC
    `assist:apps-get` → `PortalApps.get()`), getting the list already loaded. The **Ask Claude**
    icon swaps the list for the text box and back; a dot on it means an unsent question is waiting
-   there. Closing the panel (or Esc) goes back to the start page; taking a screenshot switches to
-   the text box, ready to attach it.
+   there. Closing the panel (or Esc) goes back to the start page; taking a screenshot leaves the
+   card on the page it was showing.
 3. With no saved sign-in, the list offers **Sign in with JumpCloud**: the browser opens
    JumpCloud's sign-in page and comes back to `127.0.0.1:47622/callback`, and the MCP SDK
    registers the app, swaps the code for tokens (PKCE, no secret) and saves them encrypted

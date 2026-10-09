@@ -1225,7 +1225,7 @@ returns. The sections after it take its values and functions one at a time.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 48–374](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L48-L374)
+[`src/renderer/src/views/PanelView.tsx`, lines 48–372](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L48-L372)
 
 ```tsx
 function Panel({ state }: { state: AppState }) {
@@ -1316,8 +1316,6 @@ function Panel({ state }: { state: AppState }) {
     setSettingsOpen(false)
     const result = await window.assist.invokeAction(id)
     if (result.message) showToast(result.message, result.ok ? 'info' : 'error')
-    // A screenshot is taken to ask about it: show the text box, where it can be attached.
-    if (id === 'screenshot' && result.ok) setView('ask')
   }
 
   function changeDraft(next: string) {
@@ -1712,7 +1710,7 @@ Values worked out on every render from the current state.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.runAction -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 120–138](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L120-L138)
+[`src/renderer/src/views/PanelView.tsx`, lines 120–136](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L120-L136)
 
 ```tsx
 async function runAction(id: ActionId) {
@@ -1731,8 +1729,6 @@ async function runAction(id: ActionId) {
   setSettingsOpen(false)
   const result = await window.assist.invokeAction(id)
   if (result.message) showToast(result.message, result.ok ? 'info' : 'error')
-  // A screenshot is taken to ask about it: show the text box, where it can be attached.
-  if (id === 'screenshot' && result.ok) setView('ask')
 }
 ```
 
@@ -1761,15 +1757,15 @@ Runs when an action icon is clicked (`ActionStack`'s `onAction`).
 - `if (result.message) showToast(result.message, result.ok ? 'info' : 'error')`: for example
   "Screenshot saved", or "Couldn't take a screenshot" in red. Bounce, close and the service desk
   return no message when they work (the service desk closes the panel as the browser opens).
-- `if (id === 'screenshot' && result.ok) setView('ask')`: as the comment says, a screenshot is
-  taken to ask about it, so after one the card shows the text box, with **Attach latest
-  screenshot** right there, even on a panel that opened on the Apps list.
+- There's no change of page after a screenshot: the panel comes back showing whatever it showed
+  before (the Apps list, say). The view isn't reset either, because taking a screenshot moves the
+  mode through `capturing`, not `collapsed` (see the mode effect above).
 
 #### `changeDraft`
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.changeDraft -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 140–143](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L140-L143)
+[`src/renderer/src/views/PanelView.tsx`, lines 138–141](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L138-L141)
 
 ```tsx
 function changeDraft(next: string) {
@@ -1788,7 +1784,7 @@ writes notes.json about half a second after typing stops, so an unsent message s
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.send -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 145–157](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L145-L157)
+[`src/renderer/src/views/PanelView.tsx`, lines 143–155](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L143-L155)
 
 ```tsx
 async function send() {
@@ -1828,7 +1824,7 @@ The other two reasons, `busy` and `empty`, are ignored: `canSend` already rules 
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.askInClaudeDesktop -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 159–171](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L159-L171)
+[`src/renderer/src/views/PanelView.tsx`, lines 157–169](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L157-L169)
 
 ```tsx
 async function askInClaudeDesktop() {
@@ -1873,7 +1869,7 @@ Claude automatically" on) carries on in the main process; the panel isn't told h
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.toggleFavorite -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 173–175](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L173-L175)
+[`src/renderer/src/views/PanelView.tsx`, lines 171–173](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L171-L173)
 
 ```tsx
 async function toggleFavorite(app: PortalApp, favorite: boolean) {
@@ -1891,7 +1887,7 @@ with the starred apps first.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.openApp -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 177–182](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L177-L182)
+[`src/renderer/src/views/PanelView.tsx`, lines 175–180](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L175-L180)
 
 ```tsx
 async function openApp(app: PortalApp) {
@@ -1913,7 +1909,7 @@ panel stays open with a toast, and the portal itself is one click away at the bo
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.attachLatest,removeAttachment,openAttachment -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 184–200](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L184-L200)
+[`src/renderer/src/views/PanelView.tsx`, lines 182–198](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L182-L198)
 
 ```tsx
 async function attachLatest() {
@@ -1953,7 +1949,7 @@ result.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.copy -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 202–205](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L202-L205)
+[`src/renderer/src/views/PanelView.tsx`, lines 200–203](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L200-L203)
 
 ```tsx
 async function copy(text: string) {
@@ -1971,7 +1967,7 @@ The Copy button on Claude's replies. The main process writes the text to the cli
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.signOut,clearText,uninstall,newConversation,setEffort,toggleAutoSend -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 207–240](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L207-L240)
+[`src/renderer/src/views/PanelView.tsx`, lines 205–238](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L205-L238)
 
 ```tsx
 async function signOut() {
@@ -2038,7 +2034,7 @@ Settings menu actions.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.closeSettingsOnOutsideClick -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 242–248](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L242-L248)
+[`src/renderer/src/views/PanelView.tsx`, lines 240–246](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L240-L246)
 
 ```tsx
 // Clicking anywhere else in the panel closes the settings menu.
@@ -2068,7 +2064,7 @@ the panel (`BubbleController.panelBlurred`), and the mode effect above closes th
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.signInPrompt,banner -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 250–295](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L250-L295)
+[`src/renderer/src/views/PanelView.tsx`, lines 248–293](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L248-L293)
 
 ```tsx
 const signInPrompt =
@@ -2167,7 +2163,7 @@ one saying Claude Desktop isn't installed. With the built-in chat, it depends on
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.settingsIndex -->
 
-[`src/renderer/src/views/PanelView.tsx`, line 297](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L297)
+[`src/renderer/src/views/PanelView.tsx`, line 295](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L295)
 
 ```tsx
 const settingsIndex = branding.actions.indexOf('settings')
