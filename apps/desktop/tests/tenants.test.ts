@@ -43,6 +43,23 @@ describe('tenants', () => {
     expect(TenantSchema.safeParse({ ...base, actions: ['close'] }).success).toBe(true)
   })
 
+  it('chats in the panel unless told to use Claude Desktop, which needs no sign-in settings', () => {
+    const base = {
+      id: 'x',
+      companyName: 'X',
+      appName: 'X',
+      accentColor: '#000000',
+      actions: ['close'],
+    }
+    expect(TenantSchema.parse({ ...base, signIn, claudeAccess }).chatApp).toBe('built-in')
+    expect(TenantSchema.safeParse(base).success).toBe(false)
+    expect(TenantSchema.safeParse({ ...base, chatApp: 'built-in', signIn }).success).toBe(false)
+    const desktop = TenantSchema.parse({ ...base, chatApp: 'claude-desktop' })
+    expect(desktop.chatApp).toBe('claude-desktop')
+    expect(desktop.signIn).toBeUndefined()
+    expect(TenantSchema.safeParse({ ...base, chatApp: 'teams' }).success).toBe(false)
+  })
+
   it('lists the sign-in settings still to fill in', () => {
     expect(missingSettings(signIn, claudeAccess)).toEqual([
       'signIn.clientId',

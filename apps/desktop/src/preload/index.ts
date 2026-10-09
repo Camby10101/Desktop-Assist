@@ -23,6 +23,7 @@ const api: AssistApi = {
     setText: (text) => ipcRenderer.send(IPC.notesSetText, text),
     attachLatestScreenshot: () => ipcRenderer.invoke(IPC.notesAttachLatest),
     removeAttachment: (id) => ipcRenderer.invoke(IPC.notesRemoveAttachment, id),
+    clear: () => ipcRenderer.invoke(IPC.notesClear),
   },
   screenshots: {
     thumbnail: (path) => ipcRenderer.invoke(IPC.screenshotThumbnail, path),
@@ -33,12 +34,17 @@ const api: AssistApi = {
     get: () => ipcRenderer.invoke(IPC.settingsGet),
     setAutoStart: (enabled) => ipcRenderer.invoke(IPC.settingsSetAutoStart, enabled),
     setEffort: (effort) => ipcRenderer.invoke(IPC.settingsSetEffort, effort),
+    setAutoSend: (autoSend) => ipcRenderer.invoke(IPC.settingsSetAutoSend, autoSend),
   },
   auth: {
     signIn: () => ipcRenderer.invoke(IPC.authSignIn),
     cancel: () => ipcRenderer.invoke(IPC.authCancel),
     signOut: () => ipcRenderer.invoke(IPC.authSignOut),
     retry: () => ipcRenderer.invoke(IPC.authRetry),
+  },
+  claudeDesktop: {
+    ask: (text) => ipcRenderer.invoke(IPC.claudeDesktopAsk, text),
+    isInstalled: () => ipcRenderer.invoke(IPC.claudeDesktopInstalled),
   },
   chat: {
     send: (text) => ipcRenderer.invoke(IPC.chatSend, text),

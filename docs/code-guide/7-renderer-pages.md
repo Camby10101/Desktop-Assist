@@ -1129,11 +1129,47 @@ panel's shared state and handlers live in `Panel`; the components it renders (`C
 `ActionStack`, `SettingsMenu`, `SignInPanel`, `Banner`) get their data and callbacks from it as
 props. Those are covered in [the components part](8-renderer-components.md).
 
+The panel works in one of two ways, set by the tenant's `chatApp` (`branding.chatApp`). With the
+built-in chat it's a chat with Claude, behind a JumpCloud sign-in. With Claude Desktop it's just
+the text box: asking opens the question in the Claude Desktop app (and, with "Send in Claude
+automatically" on, sends it there), and there's no sign-in and no conversation in the panel
+(`state.auth` is `null` and `state.chat` stays empty).
+
+### `ASK_ERRORS`
+
+<!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#ASK_ERRORS -->
+
+[`src/renderer/src/views/PanelView.tsx`, lines 15–21](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L15-L21)
+
+```tsx
+/** What to say when a question couldn't be handed to Claude Desktop. */
+const ASK_ERRORS: Record<Exclude<Extract<AskResult, { ok: false }>['reason'], 'empty'>, string> = {
+  'too-long': "That's too long to open in Claude. Shorten it, or paste it into Claude yourself.",
+  'not-installed': "Claude Desktop isn't installed on this PC. Ask IT to install it.",
+  'missing-screenshot': 'An attached screenshot is missing. Remove it and try again.',
+  failed: "Couldn't open Claude Desktop. Try again.",
+}
+```
+
+<!-- /code -->
+
+The toast for each way handing a question to Claude Desktop can fail (`AskResult` in
+`src/shared/types.ts`).
+
+- `Extract<AskResult, { ok: false }>['reason']`: `Extract` picks the failure shape out of
+  `AskResult`, and `['reason']` takes the type of its `reason` field: the five reasons.
+- `Exclude<..., 'empty'>`: leaves out `empty`, which needs no message (Ask is disabled while the
+  box is empty anyway).
+- `Record<..., string>`: an object with a message for every remaining reason. If a reason is ever
+  added to `AskResult`, this won't compile until it has a message.
+- `'not-installed'`: the panel already shows a banner when it opens on a PC without Claude
+  Desktop; this toast is for asking anyway.
+
 ### `<PanelView>`
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#PanelView -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 14–20](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L14-L20)
+[`src/renderer/src/views/PanelView.tsx`, lines 23–29](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L23-L29)
 
 ```tsx
 /** Everything that appears around the bubble when it's clicked. */
@@ -1164,18 +1200,23 @@ returns. The sections after it take its values and functions one at a time.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 22–217](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L22-L217)
+[`src/renderer/src/views/PanelView.tsx`, lines 31–292](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L31-L292)
 
 ```tsx
 function Panel({ state }: { state: AppState }) {
   const open = state.mode === 'expanded'
   const { branding, auth } = state
+  // Questions go to the Claude Desktop app instead of the chat in the panel (no sign-in here).
+  const inClaudeDesktop = branding.chatApp === 'claude-desktop'
 
   // The draft is edited here and mirrored to the main process, which saves it.
   const [draft, setDraft] = useState(state.notes.text)
   const [attachments, setAttachments] = useState(state.notes.attachments)
   const [settings, setSettings] = useState(state.settings)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [asking, setAsking] = useState(false)
+  /** Claude Desktop isn't installed, so questions can't be opened in it (checked on opening). */
+  const [claudeMissing, setClaudeMissing] = useState(false)
   const [toast, showToast] = useToast()
 
   useEffect(
@@ -1185,6 +1226,16 @@ function Panel({ state }: { state: AppState }) {
       }),
     [],
   )
+  useEffect(() => {
+    if (!open || !inClaudeDesktop) return
+    let alive = true
+    void window.assist.claudeDesktop.isInstalled().then((installed) => {
+      if (alive) setClaudeMissing(!installed)
+    })
+    return () => {
+      alive = false
+    }
+  }, [open, inClaudeDesktop])
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
@@ -1197,9 +1248,12 @@ function Panel({ state }: { state: AppState }) {
 
   // Not signed in: the chat box shows the sign-in instead of the chat. While a saved sign-in is
   // being renewed, or JumpCloud can't be reached, the chat stays (sending tries JumpCloud again).
-  const signedIn = auth.state === 'signed-in' || auth.state === 'offline'
+  // With Claude Desktop there's no sign-in here at all.
+  const signedIn = auth === null || auth.state === 'signed-in' || auth.state === 'offline'
+  // `busy` is the built-in chat's reply streaming (the text box then offers Stop). Handing a
+  // question to Claude Desktop only takes a moment, so it just holds the button back.
   const busy = state.chat.some((message) => message.status === 'streaming')
-  const canSend = signedIn && !busy && (draft.trim() !== '' || attachments.length > 0)
+  const canSend = signedIn && !busy && !asking && (draft.trim() !== '' || attachments.length > 0)
 
   async function runAction(id: ActionId) {
     if (id === 'settings') {
@@ -1220,6 +1274,7 @@ function Panel({ state }: { state: AppState }) {
 
   async function send() {
     if (!canSend) return
+    if (inClaudeDesktop) return askInClaudeDesktop()
     const result = await window.assist.chat.send(draft)
     if (result.ok) {
       setDraft(result.notes.text)
@@ -1228,6 +1283,20 @@ function Panel({ state }: { state: AppState }) {
       showToast('An attached screenshot is missing. Remove it and try again.', 'error')
     } else if (result.reason === 'signed-out') {
       showToast('Sign in with JumpCloud first.', 'error')
+    }
+  }
+
+  async function askInClaudeDesktop() {
+    setAsking(true)
+    const result = await window.assist.claudeDesktop.ask(draft).finally(() => setAsking(false))
+    if (result.ok) setClaudeMissing(false)
+    else if (result.reason === 'not-installed') setClaudeMissing(true)
+    if (result.ok) {
+      // The panel has closed and Claude Desktop has opened with the question filled in.
+      setDraft(result.notes.text)
+      setAttachments(result.notes.attachments)
+    } else if (result.reason !== 'empty') {
+      showToast(ASK_ERRORS[result.reason], 'error')
     }
   }
 
@@ -1260,6 +1329,14 @@ function Panel({ state }: { state: AppState }) {
     showToast('Logged out')
   }
 
+  async function clearText() {
+    const notes = await window.assist.notes.clear()
+    setDraft(notes.text)
+    setAttachments(notes.attachments)
+    setSettingsOpen(false)
+    showToast('Text box cleared')
+  }
+
   async function newConversation() {
     await window.assist.chat.newConversation()
     setSettingsOpen(false)
@@ -1268,6 +1345,10 @@ function Panel({ state }: { state: AppState }) {
 
   async function setEffort(effort: Effort) {
     setSettings(await window.assist.settings.setEffort(effort))
+  }
+
+  async function toggleAutoSend() {
+    setSettings(await window.assist.settings.setAutoSend(!settings.autoSend))
   }
 
   // Clicking anywhere else in the panel closes the settings menu.
@@ -1279,7 +1360,9 @@ function Panel({ state }: { state: AppState }) {
   }
 
   const signInPrompt =
-    auth.state === 'unconfigured' || auth.state === 'signed-out' || auth.state === 'signing-in' ? (
+    auth?.state === 'unconfigured' ||
+    auth?.state === 'signed-out' ||
+    auth?.state === 'signing-in' ? (
       <SignInPanel
         open={open}
         status={auth}
@@ -1290,9 +1373,24 @@ function Panel({ state }: { state: AppState }) {
     ) : null
 
   const banner =
-    auth.state === 'checking' ? (
+    inClaudeDesktop && claudeMissing ? (
+      <Banner
+        action={
+          <button
+            type="button"
+            onClick={() => void window.assist.openExternal(CLAUDE_DOWNLOAD_PAGE)}
+            className="shrink-0 rounded-md px-1.5 py-0.5 font-medium text-accent hover:bg-zinc-100 dark:text-accent-soft dark:hover:bg-zinc-800"
+          >
+            Download
+          </button>
+        }
+      >
+        Claude Desktop isn't installed on this PC, and {branding.appName} opens your questions in
+        it. Ask IT to install it, or download it.
+      </Banner>
+    ) : auth?.state === 'checking' ? (
       <Banner spinner>Checking your JumpCloud sign-in…</Banner>
-    ) : auth.state === 'offline' ? (
+    ) : auth?.state === 'offline' ? (
       <Banner
         action={
           <button
@@ -1320,6 +1418,8 @@ function Panel({ state }: { state: AppState }) {
         corner={state.corner}
         open={open}
         toast={toast}
+        inClaudeDesktop={inClaudeDesktop}
+        autoSend={settings.autoSend}
         signInPrompt={signInPrompt}
         banner={banner}
         messages={state.chat}
@@ -1350,14 +1450,16 @@ function Panel({ state }: { state: AppState }) {
           settings={settings}
           branding={branding}
           version={state.version}
-          user={signedIn ? auth.user : null}
+          user={auth?.state === 'signed-in' || auth?.state === 'offline' ? auth.user : null}
           onToggleAutoStart={async () =>
             setSettings(await window.assist.settings.setAutoStart(!settings.autoStart))
           }
           onSetEffort={(effort) => void setEffort(effort)}
+          onToggleAutoSend={() => void toggleAutoSend()}
           onSignOut={() => void signOut()}
           onOpenScreenshotsFolder={() => void window.assist.screenshots.openFolder()}
           onNewConversation={() => void newConversation()}
+          onClearText={() => void clearText()}
         />
       )}
     </div>
@@ -1373,10 +1475,17 @@ Props and state:
   This takes `state` out of it, and `{ state: AppState }` is the type of the props.
 - `const open = state.mode === 'expanded'`: the panel is open only in `expanded`. In every other
   mode (collapsed, dragging, bouncing and so on) it's closed or hidden.
+- `const inClaudeDesktop = branding.chatApp === 'claude-desktop'`: whether questions go to Claude
+  Desktop. Much of what follows checks it.
 - `const [draft, setDraft] = useState(state.notes.text)`: the text box's contents. Like
   `attachments` and `settings`, it starts from the app state but is then owned here: the panel
   updates it as you type and from the main process's replies.
 - `const [settingsOpen, setSettingsOpen] = useState(false)`: whether the settings menu is showing.
+- `const [asking, setAsking] = useState(false)`: true while a question is being handed to Claude
+  Desktop, so it can't be sent twice. (Only for that moment: sending it in Claude carries on in
+  the main process after the panel has closed.)
+- `const [claudeMissing, setClaudeMissing] = useState(false)`: whether Claude Desktop was found
+  to be missing, which shows a banner with a Download button.
 - `const [toast, showToast] = useToast()`: the current toast and the function to show one.
 
 Effects:
@@ -1384,6 +1493,14 @@ Effects:
 - `window.assist.onModeChanged((mode) => {`: closes the settings menu whenever the panel closes,
   so it isn't still open the next time. The arrow returns what `onModeChanged` returns, the
   unsubscribe function, which React uses as the cleanup.
+- `if (!open || !inClaudeDesktop) return`: with Claude Desktop, each time the panel opens it asks
+  whether Claude Desktop is installed (`window.assist.claudeDesktop.isInstalled()`), so a missing
+  app is pointed out before anything is typed. Asking every time, rather than once, picks up
+  Claude Desktop being installed while Desktop Assist is running.
+- `let alive = true`, `if (alive) setClaudeMissing(!installed)`: the same guard as in
+  `useAssistState`. If the panel closes before the answer arrives, the cleanup sets `alive` to
+  `false` and the late answer is ignored.
+- `}, [open, inClaudeDesktop])`: the effect runs again when the panel opens or closes.
 - `if (event.key !== 'Escape') return`: Esc closes the settings menu if it's open, otherwise asks
   the main process to close the panel (`BubbleController.collapse`). Keys reach the panel because
   the main process focuses it when it opens.
@@ -1405,43 +1522,66 @@ The JSX it returns:
 - `onPointerDown={closeSettingsOnOutsideClick}`: see below.
 - `<ChatBox`: the card. It gets what to draw (corner, toast, sign-in prompt, banner, messages, draft
   and attachments) and a callback for each thing you can do there.
+- `inClaudeDesktop={inClaudeDesktop}`: the card shows an "Ask in Claude" button instead of the
+  round Send arrow, and a note about what happens to attached screenshots.
+- `autoSend={settings.autoSend}`: whether "Send in Claude automatically" is on, which changes that
+  note and the button's tooltip. It comes from the panel's own `settings`, so flipping the switch
+  in the menu shows at once.
 - `onSend={() => void send()}`: the handlers are `async`, so they return promises. Each is wrapped
   in an arrow with `void`, which marks the promise as deliberately not awaited and makes the
   callback return nothing.
 - `activeId={settingsOpen ? 'settings' : null}`: the gear stays highlighted while its menu is open.
 - `{open && settingsOpen && settingsIndex >= 0 && (`: JSX's way of saying "only if": when any part
   is false, nothing is rendered. Removing the menu also resets its own state (its "click again to
-  confirm" on New conversation).
+  confirm" on New conversation or Clear text box).
 - `offset={actionOffset(settingsIndex)}`: how far the gear is from the bubble, so the menu lines up
   with it.
-- `user={signedIn ? auth.user : null}`: TypeScript allows `auth.user` here because it remembers
-  that `signedIn` being true means `auth` is a state that has a user.
+- `user={auth?.state === 'signed-in' || auth?.state === 'offline' ? auth.user : null}`: who's
+  signed in, for the menu's "Signed in as" and Log out. `auth?.state` is `undefined` when `auth`
+  is `null` (Claude Desktop), so then there's no user. After the check, TypeScript knows `auth`
+  is one of the two states that have a `user`.
 - `onToggleAutoStart={async () =>`: flips Start with Windows and shows the settings the main
   process returns.
+- `onToggleAutoSend={() => void toggleAutoSend()}`: the menu's "Send in Claude automatically"
+  switch, offered with Claude Desktop instead of Response style.
+- `onClearText={() => void clearText()}`: the menu's Clear text box, offered instead of New
+  conversation with Claude Desktop.
 
 #### `signedIn`, `busy`, `canSend`
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.signedIn,busy,canSend -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 50–54](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L50-L54)
+[`src/renderer/src/views/PanelView.tsx`, lines 74–81](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L74-L81)
 
 ```tsx
 // Not signed in: the chat box shows the sign-in instead of the chat. While a saved sign-in is
 // being renewed, or JumpCloud can't be reached, the chat stays (sending tries JumpCloud again).
-const signedIn = auth.state === 'signed-in' || auth.state === 'offline'
+// With Claude Desktop there's no sign-in here at all.
+const signedIn = auth === null || auth.state === 'signed-in' || auth.state === 'offline'
 
+// `busy` is the built-in chat's reply streaming (the text box then offers Stop). Handing a
+// question to Claude Desktop only takes a moment, so it just holds the button back.
 const busy = state.chat.some((message) => message.status === 'streaming')
 
-const canSend = signedIn && !busy && (draft.trim() !== '' || attachments.length > 0)
+const canSend = signedIn && !busy && !asking && (draft.trim() !== '' || attachments.length > 0)
 ```
 
 <!-- /code -->
 
 Values worked out on every render from the current state.
 
+- `auth === null`: with Claude Desktop there's no sign-in in the panel (Claude Desktop has its
+  own), so the panel always counts as signed in. Checking `null` first also lets TypeScript allow
+  `auth.state` in the rest of the line.
 - `auth.state === 'signed-in' || auth.state === 'offline'`: `offline` counts as signed in: the
   sign-in is kept while JumpCloud can't be reached, and sending a message tries JumpCloud again.
-- `state.chat.some((message) => message.status === 'streaming')`: Claude is still replying.
+- `state.chat.some((message) => message.status === 'streaming')`: the built-in chat's Claude is
+  still replying. As the comment says, that's all `busy` means: while it's true the text box
+  offers Stop instead of Send. With Claude Desktop the chat is always empty, so `busy` is never
+  true there.
+- `!asking`: a question is being handed to Claude Desktop. That only takes a moment, so it just
+  holds the button back rather than counting as `busy` (which would show a Stop button with
+  nothing to stop).
 - `draft.trim() !== '' || attachments.length > 0`: there must be some text or at least one
   screenshot. `ChatBox` disables Send, and Enter does nothing, unless `canSend` is true.
 
@@ -1449,7 +1589,7 @@ Values worked out on every render from the current state.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.runAction -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 56–66](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L56-L66)
+[`src/renderer/src/views/PanelView.tsx`, lines 83–93](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L83-L93)
 
 ```tsx
 async function runAction(id: ActionId) {
@@ -1486,7 +1626,7 @@ Runs when an action icon is clicked (`ActionStack`'s `onAction`).
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.changeDraft -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 68–71](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L68-L71)
+[`src/renderer/src/views/PanelView.tsx`, lines 95–98](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L95-L98)
 
 ```tsx
 function changeDraft(next: string) {
@@ -1505,11 +1645,12 @@ writes notes.json about half a second after typing stops, so an unsent message s
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.send -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 73–84](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L73-L84)
+[`src/renderer/src/views/PanelView.tsx`, lines 100–112](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L100-L112)
 
 ```tsx
 async function send() {
   if (!canSend) return
+  if (inClaudeDesktop) return askInClaudeDesktop()
   const result = await window.assist.chat.send(draft)
   if (result.ok) {
     setDraft(result.notes.text)
@@ -1524,9 +1665,11 @@ async function send() {
 
 <!-- /code -->
 
-Sends the draft to Claude.
+Sends the draft to Claude: to the built-in chat, or to Claude Desktop.
 
 - `if (!canSend) return`: a second guard; `ChatBox` checks too.
+- `if (inClaudeDesktop) return askInClaudeDesktop()`: with Claude Desktop, the rest of this
+  function doesn't apply; see [`askInClaudeDesktop`](#askinclaudedesktop) below.
 - `window.assist.chat.send(draft)`: only the text is sent. The main process takes the attachments
   from its own copy of the draft, prepares the screenshots and starts the reply (the `chatSend`
   handler in src/main/ipc.ts). Claude's reply doesn't come back here: it streams in through
@@ -1538,11 +1681,56 @@ Sends the draft to Claude.
 
 The other two reasons, `busy` and `empty`, are ignored: `canSend` already rules them out.
 
+#### `askInClaudeDesktop`
+
+<!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.askInClaudeDesktop -->
+
+[`src/renderer/src/views/PanelView.tsx`, lines 114–126](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L114-L126)
+
+```tsx
+async function askInClaudeDesktop() {
+  setAsking(true)
+  const result = await window.assist.claudeDesktop.ask(draft).finally(() => setAsking(false))
+  if (result.ok) setClaudeMissing(false)
+  else if (result.reason === 'not-installed') setClaudeMissing(true)
+  if (result.ok) {
+    // The panel has closed and Claude Desktop has opened with the question filled in.
+    setDraft(result.notes.text)
+    setAttachments(result.notes.attachments)
+  } else if (result.reason !== 'empty') {
+    showToast(ASK_ERRORS[result.reason], 'error')
+  }
+}
+```
+
+<!-- /code -->
+
+Hands the draft to Claude Desktop (see [Claude Desktop](9-claude-desktop.md)). When it works, the
+main process has opened Claude Desktop with the question filled in, copied any screenshots for
+pasting, closed the panel and emptied the draft. Sending the question in Claude (with "Send in
+Claude automatically" on) carries on in the main process; the panel isn't told how it went.
+
+- `setAsking(true)`: makes `canSend` false, so Enter and the Ask button do nothing until the
+  answer comes back.
+- `window.assist.claudeDesktop.ask(draft)`: as with `chat.send()`, only the text is passed; the
+  main process takes the screenshots from its own copy of the draft.
+- `.finally(() => setAsking(false))`: runs whether the request succeeded or failed, so `asking`
+  can't get stuck on.
+- `if (result.ok) setClaudeMissing(false)`, `else if (result.reason === 'not-installed')`: a
+  question that got through hides the Download banner, and `not-installed` shows it. Other
+  failures (too long, say) say nothing about whether Claude Desktop is installed, so they leave
+  the banner as it was.
+- `setDraft(result.notes.text)`: the draft comes back empty, and the box and the chips adopt it,
+  ready for the next question.
+- `else if (result.reason !== 'empty')`: any other failure shows its message from
+  [`ASK_ERRORS`](#ask_errors) as a red toast. Once `empty` is ruled out, TypeScript knows
+  `result.reason` is one of `ASK_ERRORS`'s keys.
+
 #### `attachLatest`, `removeAttachment`, `openAttachment`
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.attachLatest,removeAttachment,openAttachment -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 86–102](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L86-L102)
+[`src/renderer/src/views/PanelView.tsx`, lines 128–144](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L128-L144)
 
 ```tsx
 async function attachLatest() {
@@ -1582,7 +1770,7 @@ result.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.copy -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 104–107](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L104-L107)
+[`src/renderer/src/views/PanelView.tsx`, lines 146–149](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L146-L149)
 
 ```tsx
 async function copy(text: string) {
@@ -1596,17 +1784,25 @@ async function copy(text: string) {
 The Copy button on Claude's replies. The main process writes the text to the clipboard
 (`clipboard.writeText` in src/main/ipc.ts).
 
-#### `signOut`, `newConversation`, `setEffort`
+#### `signOut`, `clearText`, `newConversation`, `setEffort`, `toggleAutoSend`
 
-<!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.signOut,newConversation,setEffort -->
+<!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.signOut,clearText,newConversation,setEffort,toggleAutoSend -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 109–123](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L109-L123)
+[`src/renderer/src/views/PanelView.tsx`, lines 151–177](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L151-L177)
 
 ```tsx
 async function signOut() {
   setSettingsOpen(false)
   await window.assist.auth.signOut()
   showToast('Logged out')
+}
+
+async function clearText() {
+  const notes = await window.assist.notes.clear()
+  setDraft(notes.text)
+  setAttachments(notes.attachments)
+  setSettingsOpen(false)
+  showToast('Text box cleared')
 }
 
 async function newConversation() {
@@ -1618,6 +1814,10 @@ async function newConversation() {
 async function setEffort(effort: Effort) {
   setSettings(await window.assist.settings.setEffort(effort))
 }
+
+async function toggleAutoSend() {
+  setSettings(await window.assist.settings.setAutoSend(!settings.autoSend))
+}
 ```
 
 <!-- /code -->
@@ -1628,16 +1828,23 @@ Settings menu actions.
   this is a log-out, the main process also starts a new conversation (`onSignedOut` in
   src/main/index.ts). The new `signed-out` status and the chat reset arrive through
   `useAssistState`, and the chat card switches to the sign-in.
+- `const notes = await window.assist.notes.clear()`: Clear text box, which the menu offers with
+  Claude Desktop instead of New conversation (there's no conversation in the panel to clear).
+  The main process empties the draft and its screenshots and returns it; the box and the chips
+  adopt it.
 - `await window.assist.chat.newConversation()`: `ChatSession` forgets the conversation and
   broadcasts a reset, which empties the chat in `useAssistState`.
 - `setSettings(await window.assist.settings.setEffort(effort))`: saves the response style (Fast,
   Balanced or Thorough) and shows the settings the main process returns.
+- `setSettings(await window.assist.settings.setAutoSend(!settings.autoSend))`: flips "Send in
+  Claude automatically" (Claude Desktop only) and shows the settings the main process returns.
+  The menu stays open, as for the other switch.
 
 #### `closeSettingsOnOutsideClick`
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.closeSettingsOnOutsideClick -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 125–131](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L125-L131)
+[`src/renderer/src/views/PanelView.tsx`, lines 179–185](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L179-L185)
 
 ```tsx
 // Clicking anywhere else in the panel closes the settings menu.
@@ -1667,11 +1874,13 @@ the panel (`BubbleController.panelBlurred`), and the mode effect above closes th
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.signInPrompt,banner -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 133–161](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L133-L161)
+[`src/renderer/src/views/PanelView.tsx`, lines 187–232](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L187-L232)
 
 ```tsx
 const signInPrompt =
-  auth.state === 'unconfigured' || auth.state === 'signed-out' || auth.state === 'signing-in' ? (
+  auth?.state === 'unconfigured' ||
+  auth?.state === 'signed-out' ||
+  auth?.state === 'signing-in' ? (
     <SignInPanel
       open={open}
       status={auth}
@@ -1682,9 +1891,24 @@ const signInPrompt =
   ) : null
 
 const banner =
-  auth.state === 'checking' ? (
+  inClaudeDesktop && claudeMissing ? (
+    <Banner
+      action={
+        <button
+          type="button"
+          onClick={() => void window.assist.openExternal(CLAUDE_DOWNLOAD_PAGE)}
+          className="shrink-0 rounded-md px-1.5 py-0.5 font-medium text-accent hover:bg-zinc-100 dark:text-accent-soft dark:hover:bg-zinc-800"
+        >
+          Download
+        </button>
+      }
+    >
+      Claude Desktop isn't installed on this PC, and {branding.appName} opens your questions in
+      it. Ask IT to install it, or download it.
+    </Banner>
+  ) : auth?.state === 'checking' ? (
     <Banner spinner>Checking your JumpCloud sign-in…</Banner>
-  ) : auth.state === 'offline' ? (
+  ) : auth?.state === 'offline' ? (
     <Banner
       action={
         <button
@@ -1709,6 +1933,9 @@ the conversation when it isn't `null`; otherwise it shows the messages, then the
 text box. The sign-in status comes from `AuthManager` in the main process, through `onAuthStatus`
 in `useAssistState`.
 
+With Claude Desktop, `auth` is `null`: there's never a sign-in prompt, and the only banner is the
+one saying Claude Desktop isn't installed. With the built-in chat, it depends on `auth.state`:
+
 | `auth.state`   | The chat card shows                                  |
 | -------------- | ---------------------------------------------------- |
 | `unconfigured` | Sign-in: "Sign-in isn't set up yet"                  |
@@ -1718,13 +1945,24 @@ in `useAssistState`.
 | `offline`      | The chat, the reason and Retry; sending works        |
 | `signed-in`    | The chat                                             |
 
-- `auth.state === 'unconfigured' || auth.state === 'signed-out' || auth.state === 'signing-in'`:
-  inside the `? (` branch, TypeScript has narrowed `auth` to those three states, which is exactly
-  the type `SignInPanel`'s `status` prop accepts.
+- `auth?.state === 'unconfigured' || auth?.state === 'signed-out' || ...`: `?.` gives `undefined`
+  when `auth` is `null`, so every comparison is false and there's no sign-in prompt. Inside the
+  `? (` branch, TypeScript has narrowed `auth` to those three states, which is exactly the type
+  `SignInPanel`'s `status` prop accepts.
 - `onSignIn={() => void window.assist.auth.signIn()}`: `AuthManager.signIn` opens JumpCloud in the
   browser and returns at once. Progress arrives as status changes (`signing-in`, then
   `signed-in`), and the main process reopens the panel when it's done.
 - `onCancel={() => void window.assist.auth.cancel()}`: stops waiting for the browser.
+- `inClaudeDesktop && claudeMissing ? (`: the first banner checked. Claude Desktop isn't
+  installed (found when the panel opened, or when asking), so the banner says so and offers a
+  **Download** button. It goes away the next time the panel opens and finds Claude Desktop, or
+  when a question is handed over successfully.
+- `window.assist.openExternal(CLAUDE_DOWNLOAD_PAGE)`: opens Anthropic's download page in the
+  browser (see `src/shared/claudeDesktop.ts` in
+  [Shared code and the preload bridge](1-shared-and-preload.md)). `shrink-0` stops the long
+  message squeezing the button.
+- `{branding.appName}`: the tenant's app name, so the message reads "…and Desktop Assist opens
+  your questions in it."
 - `<Banner spinner>`: shown while a saved sign-in is being renewed, at startup or after Retry. The
   chat is visible, but `signedIn` is false, so nothing can be sent yet.
 - `onClick={() => void window.assist.auth.retry()}`: `AuthManager.retry` tries again to renew the
@@ -1735,7 +1973,7 @@ in `useAssistState`.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.settingsIndex -->
 
-[`src/renderer/src/views/PanelView.tsx`, line 163](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L163)
+[`src/renderer/src/views/PanelView.tsx`, line 234](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L234)
 
 ```tsx
 const settingsIndex = branding.actions.indexOf('settings')

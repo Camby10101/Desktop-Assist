@@ -3,6 +3,7 @@ import type { Corner, Point } from './geometry'
 import type {
   ActionResult,
   AppState,
+  AskResult,
   AttachResult,
   AuthStatus,
   ChatMessage,
@@ -27,12 +28,14 @@ export const IPC = {
   notesSetText: 'assist:notes-set-text',
   notesAttachLatest: 'assist:notes-attach-latest',
   notesRemoveAttachment: 'assist:notes-remove-attachment',
+  notesClear: 'assist:notes-clear',
   screenshotThumbnail: 'assist:screenshot-thumbnail',
   screenshotOpen: 'assist:screenshot-open',
   screenshotsOpenFolder: 'assist:screenshots-open-folder',
   settingsGet: 'assist:settings-get',
   settingsSetAutoStart: 'assist:settings-set-auto-start',
   settingsSetEffort: 'assist:settings-set-effort',
+  settingsSetAutoSend: 'assist:settings-set-auto-send',
   authSignIn: 'assist:auth-sign-in',
   authCancel: 'assist:auth-cancel',
   authSignOut: 'assist:auth-sign-out',
@@ -41,6 +44,8 @@ export const IPC = {
   chatStop: 'assist:chat-stop',
   chatRetry: 'assist:chat-retry',
   chatNew: 'assist:chat-new',
+  claudeDesktopAsk: 'assist:claude-desktop-ask',
+  claudeDesktopInstalled: 'assist:claude-desktop-installed',
   // main → renderer
   modeChanged: 'assist:mode-changed',
   cornerChanged: 'assist:corner-changed',
@@ -69,6 +74,8 @@ export interface AssistApi {
     setText(text: string): void
     attachLatestScreenshot(): Promise<AttachResult>
     removeAttachment(id: string): Promise<Notes>
+    /** Empties the text box and removes the attached screenshots (the files are kept). */
+    clear(): Promise<Notes>
   }
   screenshots: {
     /** A small data-URL preview, or null if the file is missing. */
@@ -80,6 +87,7 @@ export interface AssistApi {
     get(): Promise<Settings>
     setAutoStart(enabled: boolean): Promise<Settings>
     setEffort(effort: Effort): Promise<Settings>
+    setAutoSend(autoSend: boolean): Promise<Settings>
   }
   auth: {
     /** Opens JumpCloud in the browser; progress arrives through `onAuthStatus`. */
@@ -90,6 +98,16 @@ export interface AssistApi {
     /** Tries again to renew a saved sign-in that couldn't reach JumpCloud. */
     retry(): Promise<void>
   }
+  claudeDesktop: {
+    /**
+     * Opens a new chat in Claude Desktop with the draft text filled in, and copies the attached
+     * screenshots for the user to paste. Clears the draft and collapses the panel if it worked.
+     */
+    ask(text: string): Promise<AskResult>
+    /** Whether Claude Desktop is installed on this PC (anything handles claude:// links). */
+    isInstalled(): Promise<boolean>
+  }
+  /** The built-in chat (only when the tenant's `chatApp` is `built-in`). */
   chat: {
     /** Sends the draft text plus the draft's attached screenshots. */
     send(text: string): Promise<SendResult>

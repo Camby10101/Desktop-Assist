@@ -3,11 +3,12 @@
 [← Code Guide](CODE_GUIDE.md)
 
 This part covers the main-process code that keeps things on disk. `NotesStore` saves the unsent
-draft so it survives a restart; `ScreenshotService` and its helpers take, preview and shrink
-screenshots, and make sure the pages can only touch files in the screenshots folder. Underneath
-both, `jsonFile.ts` reads saved files with a validity check and writes them so that a crash can't
-leave a half-written file. All of this runs in the main process (Electron's Node.js side, which can
-use the disk); the pages reach it only through the IPC handlers in `src/main/ipc.ts`.
+draft so it survives a restart; `ScreenshotService` and its helpers take, preview, shrink and
+combine screenshots, and make sure the pages can only touch files in the screenshots folder.
+Underneath both, `jsonFile.ts` reads saved files with a validity check and writes them so that a
+crash can't leave a half-written file. All of this runs in the main process (Electron's Node.js
+side, which can use the disk); the pages reach it only through the IPC handlers in
+`src/main/ipc.ts`.
 
 ## `src/main/notes/NotesStore.ts`: saving the draft
 
@@ -16,7 +17,7 @@ The draft is the text typed into the chat box but not yet sent, plus any screens
 (`app.getPath('userData')`, under `%APPDATA%`), so a half-written message is still there after a
 restart or a crash. `src/main/index.ts` creates one store at startup, loads it, and flushes it when
 the app quits. `src/main/ipc.ts` calls it whenever the page changes the draft, and clears it when a
-message is sent.
+message is sent or handed to Claude Desktop, or when the user picks "Clear text box".
 
 Key ideas:
 
@@ -296,9 +297,11 @@ clear(): Notes {
 <!-- /code -->
 
 `removeAttachment()` drops one screenshot by its ID (the × on a chip). `clear()` empties the draft:
-`ipc.ts` calls it after a message has been handed to `ChatSession.send()`, and returns the empty
-draft to the page. Both go through the same debounced autosave as any other change, so the saved
-file is emptied too shortly after a message is sent.
+`ipc.ts` calls it after a message has been handed to `ChatSession.send()` or a question to Claude
+Desktop, and for "Clear text box" in the settings menu, and returns the empty draft to the page.
+Only the draft's list of attachments is emptied; the screenshot files stay in the folder. Both go
+through the same debounced autosave as any other change, so the saved file is emptied too shortly
+after a message is sent.
 
 - `filter((a) => a.id !== id)`: an unknown ID removes nothing, but it still counts as a change and
   schedules a save.
@@ -538,10 +541,12 @@ Compares two file paths the way Windows does, for `addAttachment()`.
 ## `src/main/screenshots/ScreenshotService.ts`: capturing and serving screenshots
 
 Everything the app does with screenshot images goes through this class: taking one, finding the
-newest, making small previews, preparing one for Claude, and opening one in another app. `index.ts`
-creates a single instance with the screenshots folder (`Pictures\<appName>`, for example
-`Pictures\Desktop Assist`) and a function that returns the display the bubble is on. `actions.ts`
-calls `capture()` for the camera button, and `ipc.ts` exposes the rest to the pages.
+newest, making small previews, preparing one for Claude, combining several into one image for the
+clipboard, and opening one in another app. `index.ts` creates a single instance with the
+screenshots folder (`Pictures\<appName>`, for example `Pictures\Desktop Assist`) and a function
+that returns the display the bubble is on. `actions.ts` calls `capture()` for the camera button,
+`index.ts` uses `forClipboard()` when a question goes to Claude Desktop, and `ipc.ts` exposes the
+rest to the pages.
 
 Key ideas:
 
@@ -559,7 +564,7 @@ Key ideas:
 
 <!-- code: apps/desktop/src/main/screenshots/ScreenshotService.ts#THUMBNAIL_HEIGHT,MAX_CACHED_THUMBNAILS,JPEG_QUALITY -->
 
-[`src/main/screenshots/ScreenshotService.ts`, lines 7–9](../../apps/desktop/src/main/screenshots/ScreenshotService.ts#L7-L9)
+[`src/main/screenshots/ScreenshotService.ts`, lines 8–10](../../apps/desktop/src/main/screenshots/ScreenshotService.ts#L8-L10)
 
 ```ts
 const THUMBNAIL_HEIGHT = 112
@@ -581,7 +586,7 @@ const JPEG_QUALITY = 85
 
 <!-- code: apps/desktop/src/main/screenshots/ScreenshotService.ts#ScreenshotService.thumbnails,constructor -->
 
-[`src/main/screenshots/ScreenshotService.ts`, lines 12–18](../../apps/desktop/src/main/screenshots/ScreenshotService.ts#L12-L18)
+[`src/main/screenshots/ScreenshotService.ts`, lines 13–19](../../apps/desktop/src/main/screenshots/ScreenshotService.ts#L13-L19)
 
 ```ts
 private readonly thumbnails = new Map<string, string>()
@@ -609,7 +614,7 @@ constructor(
 
 <!-- code: apps/desktop/src/main/screenshots/ScreenshotService.ts#ScreenshotService.capture -->
 
-[`src/main/screenshots/ScreenshotService.ts`, lines 20–33](../../apps/desktop/src/main/screenshots/ScreenshotService.ts#L20-L33)
+[`src/main/screenshots/ScreenshotService.ts`, lines 21–34](../../apps/desktop/src/main/screenshots/ScreenshotService.ts#L21-L34)
 
 ```ts
 /** Captures the target display at full resolution and saves it. Returns the file path. */
@@ -661,7 +666,7 @@ screenshot.
 
 <!-- code: apps/desktop/src/main/screenshots/ScreenshotService.ts#ScreenshotService.latest -->
 
-[`src/main/screenshots/ScreenshotService.ts`, lines 35–37](../../apps/desktop/src/main/screenshots/ScreenshotService.ts#L35-L37)
+[`src/main/screenshots/ScreenshotService.ts`, lines 36–38](../../apps/desktop/src/main/screenshots/ScreenshotService.ts#L36-L38)
 
 ```ts
 latest(): Promise<string | null> {
@@ -679,7 +684,7 @@ by `findLatestScreenshot()` in `files.ts`.
 
 <!-- code: apps/desktop/src/main/screenshots/ScreenshotService.ts#ScreenshotService.thumbnail -->
 
-[`src/main/screenshots/ScreenshotService.ts`, lines 39–59](../../apps/desktop/src/main/screenshots/ScreenshotService.ts#L39-L59)
+[`src/main/screenshots/ScreenshotService.ts`, lines 40–60](../../apps/desktop/src/main/screenshots/ScreenshotService.ts#L40-L60)
 
 ```ts
 /** A small preview as a data URL, or null if the file is missing or not one of ours. */
@@ -734,7 +739,7 @@ it, and encode it as PNG, JPEG or a data URL.
 
 <!-- code: apps/desktop/src/main/screenshots/ScreenshotService.ts#ScreenshotService.forClaude -->
 
-[`src/main/screenshots/ScreenshotService.ts`, lines 61–74](../../apps/desktop/src/main/screenshots/ScreenshotService.ts#L61-L74)
+[`src/main/screenshots/ScreenshotService.ts`, lines 62–75](../../apps/desktop/src/main/screenshots/ScreenshotService.ts#L62-L75)
 
 ```ts
 /**
@@ -777,11 +782,78 @@ pixels beyond what Claude uses only make the request bigger and slower (see `ima
   inside the JSON request; `ChatSession.send()` puts this into an `image` block with the `mediaType`
   given here.
 
+### `ScreenshotService.forClipboard()`
+
+<!-- code: apps/desktop/src/main/screenshots/ScreenshotService.ts#ScreenshotService.forClipboard -->
+
+[`src/main/screenshots/ScreenshotService.ts`, lines 77–102](../../apps/desktop/src/main/screenshots/ScreenshotService.ts#L77-L102)
+
+```ts
+/**
+ * The screenshots as one image for the clipboard (a link to Claude Desktop can't carry images).
+ * One screenshot is left as it is; several are scaled to the same width and stacked top to
+ * bottom. Null if a file is missing or not one of ours.
+ */
+forClipboard(paths: string[]): NativeImage | null {
+  const images: NativeImage[] = []
+  for (const path of paths) {
+    const image = this.owns(path) ? nativeImage.createFromPath(path) : null
+    if (!image || image.isEmpty()) return null
+    images.push(image)
+  }
+  if (images.length <= 1) return images[0] ?? null
+  const width = stackWidth(images.map((image) => image.getSize()))
+  const stacked = stackBitmaps(
+    images.map((image) => {
+      const scaled =
+        image.getSize().width === width ? image : image.resize({ width, quality: 'best' })
+      return { ...scaled.getSize(), data: scaled.toBitmap() }
+    }),
+  )
+  return nativeImage.createFromBitmap(stacked.data, {
+    width: stacked.width,
+    height: stacked.height,
+  })
+}
+```
+
+<!-- /code -->
+
+Prepares the attached screenshots for Claude Desktop. A question goes to Claude Desktop as a link,
+and a link can carry text but not images, so the screenshots go on the Windows clipboard to be
+pasted into Claude with Ctrl+V, by Desktop Assist or by the user (see
+[Claude Desktop](9-claude-desktop.md)). The clipboard holds only one image at a time, so several
+screenshots are combined into one, stacked top to bottom. `copyScreenshots` in `index.ts` calls
+this and puts the result on the clipboard as a PNG.
+
+Unlike `forClaude()`, nothing is shrunk to Claude's preferred size or turned into a JPEG: the
+screenshots keep their full size (apart from the scaling needed to stack them), and `index.ts`
+copies them as a lossless PNG.
+
+- `images: NativeImage[]`: each file is loaded first. If any one is missing, not inside the
+  screenshots folder, or can't be read, the whole method returns `null`, and the question isn't
+  sent with some of its screenshots silently left out.
+- `this.owns(path) ? nativeImage.createFromPath(path) : null`: the inside-the-folder check, then
+  loading the file, as in `thumbnail()`.
+- `if (images.length <= 1) return images[0] ?? null`: one screenshot is used exactly as it is.
+  With an empty list `images[0]` is `undefined`, so `?? null` gives `null` (the caller only asks
+  when there's at least one).
+- `stackWidth(images.map((image) => image.getSize()))`: the width to stack at, from `stack.ts`
+  below: the narrowest screenshot's width, at most 2,560 pixels.
+- `image.getSize().width === width ? image : image.resize({ width, quality: 'best' })`: scales
+  each screenshot to that width (the height follows, keeping its shape). One that is already that
+  wide is left alone. `'best'` keeps small text readable.
+- `{ ...scaled.getSize(), data: scaled.toBitmap() }`: the image as raw pixels (a `Bitmap`), which
+  is what `stackBitmaps()` works on. `toBitmap()` gives 4 bytes per pixel, in Electron's BGRA
+  order (blue, green, red, alpha).
+- `nativeImage.createFromBitmap(stacked.data, { width, height })`: turns the stacked pixels back
+  into an image, which `index.ts` encodes as PNG.
+
 ### `ScreenshotService.open()` and `ScreenshotService.openFolder()`
 
 <!-- code: apps/desktop/src/main/screenshots/ScreenshotService.ts#ScreenshotService.open,openFolder -->
 
-[`src/main/screenshots/ScreenshotService.ts`, lines 76–90](../../apps/desktop/src/main/screenshots/ScreenshotService.ts#L76-L90)
+[`src/main/screenshots/ScreenshotService.ts`, lines 104–118](../../apps/desktop/src/main/screenshots/ScreenshotService.ts#L104-L118)
 
 ```ts
 /** Opens a screenshot in the default image viewer. Returns false if it no longer exists. */
@@ -820,7 +892,7 @@ clicked. `openFolder()` opens the screenshots folder in File Explorer, from the 
 
 <!-- code: apps/desktop/src/main/screenshots/ScreenshotService.ts#ScreenshotService.owns -->
 
-[`src/main/screenshots/ScreenshotService.ts`, lines 92–95](../../apps/desktop/src/main/screenshots/ScreenshotService.ts#L92-L95)
+[`src/main/screenshots/ScreenshotService.ts`, lines 120–123](../../apps/desktop/src/main/screenshots/ScreenshotService.ts#L120-L123)
 
 ```ts
 /** Renderers may only ask about files inside the screenshots folder. */
@@ -831,8 +903,8 @@ private owns(path: string): boolean {
 
 <!-- /code -->
 
-The inside-the-folder check used by `thumbnail()`, `forClaude()` and `open()`. It's a one-line
-wrapper around `isInsideDir()` in `files.ts`, which explains how the check works.
+The inside-the-folder check used by `thumbnail()`, `forClaude()`, `forClipboard()` and `open()`.
+It's a one-line wrapper around `isInsideDir()` in `files.ts`, which explains how the check works.
 
 ## `src/main/screenshots/files.ts`: naming, saving and finding screenshot files
 
@@ -1033,6 +1105,114 @@ export function fitWithin(size: Size, maxEdge: number = MAX_IMAGE_EDGE): Size {
   1920×1080 becomes 1568×882.
 - `Math.max(1, Math.round(size.width * scale))`: rounding could make a very thin image's short side
   0 pixels; this keeps every side at least 1.
+
+## `src/main/screenshots/stack.ts`: stacking screenshots into one image
+
+The pixel arithmetic behind `ScreenshotService.forClipboard()`: putting several screenshots one
+above the other in a single image, with a grey band between them. It works on raw pixels and has
+no Electron in it, so `tests/screenshotStack.test.ts` can check it with tiny made-up images.
+
+### `Bitmap`, `MAX_STACK_WIDTH`, `STACK_GAP` and `GAP_PIXEL`
+
+<!-- code: apps/desktop/src/main/screenshots/stack.ts#Bitmap,MAX_STACK_WIDTH,STACK_GAP,GAP_PIXEL -->
+
+[`src/main/screenshots/stack.ts`, lines 3–14](../../apps/desktop/src/main/screenshots/stack.ts#L3-L14)
+
+```ts
+/** Raw pixels, 4 bytes each (Electron's BGRA bitmaps), row after row with no padding. */
+export interface Bitmap extends Size {
+  data: Buffer
+}
+
+/** Stacked screenshots are never wider than this, to keep the combined image a sensible size. */
+export const MAX_STACK_WIDTH = 2560
+
+/** Height of the grey band between stacked screenshots, in pixels. */
+export const STACK_GAP = 12
+
+const GAP_PIXEL = Buffer.from([0x99, 0x99, 0x99, 0xff])
+```
+
+<!-- /code -->
+
+- `interface Bitmap extends Size`: a `Size` (`width` and `height`, from
+  `src/shared/geometry.ts`) plus `data`, the pixels. `extends` adds fields to an existing type.
+- `data: Buffer`: as the comment says, 4 bytes per pixel, row after row: the top row's pixels
+  first, left to right, then the next row, and so on. So the pixel at column x, row y starts at
+  byte `(y * width + x) * 4`. Some image formats add padding at the end of each row;
+  `stackBitmaps()` checks there is none.
+- `MAX_STACK_WIDTH = 2560`: the widest a stacked image gets (see `stackWidth()`).
+- `STACK_GAP = 12`: the grey band, so it's clear where one screenshot ends and the next begins.
+- `Buffer.from([0x99, 0x99, 0x99, 0xff])`: one pixel. Blue, green and red are all `0x99` (153 out
+  of 255, a mid-grey), and alpha is `0xff`, fully opaque. With the three colours equal, the byte
+  order doesn't matter.
+
+### `stackWidth()`
+
+<!-- code: apps/desktop/src/main/screenshots/stack.ts#stackWidth -->
+
+[`src/main/screenshots/stack.ts`, lines 16–19](../../apps/desktop/src/main/screenshots/stack.ts#L16-L19)
+
+```ts
+/** The width screenshots are scaled to before stacking: the narrowest one's, so none is enlarged. */
+export function stackWidth(sizes: Size[]): number {
+  return Math.min(MAX_STACK_WIDTH, ...sizes.map((size) => size.width))
+}
+```
+
+<!-- /code -->
+
+Every screenshot in a stack must be the same width, so they're all scaled to this one first.
+
+- `...sizes.map((size) => size.width)`: `...` spreads the list of widths into separate arguments
+  for `Math.min()`.
+- `Math.min(MAX_STACK_WIDTH, ...)`: the narrowest screenshot's width, so screenshots are only
+  ever shrunk to match, never enlarged (which would blur them). The cap stops two screenshots of
+  a 4K screen (3,840 pixels wide) from making a needlessly huge image.
+
+### `stackBitmaps()`
+
+<!-- code: apps/desktop/src/main/screenshots/stack.ts#stackBitmaps -->
+
+[`src/main/screenshots/stack.ts`, lines 21–35](../../apps/desktop/src/main/screenshots/stack.ts#L21-L35)
+
+```ts
+/** One image of `bitmaps` from top to bottom, with a grey band between each. All must be as wide. */
+export function stackBitmaps(bitmaps: Bitmap[]): Bitmap {
+  const width = bitmaps[0]?.width
+  if (width === undefined) throw new Error('Nothing to stack')
+  for (const bitmap of bitmaps) {
+    if (bitmap.width !== width) throw new Error('Stacked images must be the same width')
+    if (bitmap.data.length !== bitmap.width * bitmap.height * 4) {
+      throw new Error('Unexpected bitmap layout')
+    }
+  }
+  const gap = Buffer.alloc(width * STACK_GAP * 4, GAP_PIXEL)
+  const parts = bitmaps.flatMap((bitmap, i) => (i === 0 ? [bitmap.data] : [gap, bitmap.data]))
+  const height = bitmaps.reduce((sum, b) => sum + b.height, 0) + STACK_GAP * (bitmaps.length - 1)
+  return { width, height, data: Buffer.concat(parts) }
+}
+```
+
+<!-- /code -->
+
+Joins the bitmaps into one, top to bottom. Because each bitmap is stored row after row, and they
+are all the same width, stacking is just putting one buffer after another: the first image's rows,
+then the gap's rows, then the second image's rows. No pixel has to be moved one at a time.
+
+- `bitmaps[0]?.width`, `throw new Error('Nothing to stack')`: an empty list is a mistake in the
+  calling code. (`forClipboard()` only stacks two or more.)
+- `if (bitmap.width !== width) throw`, `bitmap.data.length !== bitmap.width * bitmap.height * 4`:
+  checks the two things the joining relies on. A wrong width or padded rows would give a garbled
+  image, so it fails loudly instead.
+- `Buffer.alloc(width * STACK_GAP * 4, GAP_PIXEL)`: the grey band, `STACK_GAP` rows of `width`
+  pixels. `Buffer.alloc(size, fill)` repeats the 4-byte `GAP_PIXEL` to fill it.
+- `bitmaps.flatMap((bitmap, i) => (i === 0 ? [bitmap.data] : [gap, bitmap.data]))`: the pieces
+  in order: the first image, then a gap before each of the others. `flatMap` turns each item into
+  a list and joins the lists into one.
+- `bitmaps.reduce((sum, b) => sum + b.height, 0) + STACK_GAP * (bitmaps.length - 1)`: the total
+  height, the images' heights added up plus one gap fewer than there are images.
+- `Buffer.concat(parts)`: copies the pieces into one buffer, the stacked image.
 
 ## `src/main/storage/jsonFile.ts`: safe files
 

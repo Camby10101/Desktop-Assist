@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { ACTION_IDS } from '@shared/actions'
-import type { Branding } from '@shared/types'
+import type { Branding, ChatApp } from '@shared/types'
 
 /**
  * How users sign in: the company's OpenID Connect app (JumpCloud for Morse Micro). The client ID
@@ -29,26 +29,45 @@ export const ClaudeAccessSchema = z.object({
 export type SignInConfig = z.infer<typeof SignInSchema>
 export type ClaudeAccessConfig = z.infer<typeof ClaudeAccessSchema>
 
-export const TenantSchema = z.object({
-  id: z.string().regex(/^[a-z0-9-]+$/),
-  companyName: z.string().min(1),
-  appName: z.string().min(1),
-  accentColor: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'must be a #RRGGBB colour'),
-  actions: z
-    .array(z.enum(ACTION_IDS))
-    .min(1)
-    .refine((ids) => new Set(ids).size === ids.length, 'actions must not repeat'),
-  /** Extra instructions for Claude, added to the built-in system prompt. */
-  systemPrompt: z.string().max(8000).optional(),
-  signIn: SignInSchema,
-  claudeAccess: ClaudeAccessSchema,
-})
+/**
+ * Where conversations with Claude happen.
+ * - `claude-desktop`: Desktop Assist hands the question to the Claude Desktop app, so it uses the
+ *   person's own Claude (Team/Enterprise) account and counts against their own usage limit. No
+ *   sign-in in Desktop Assist.
+ * - `built-in`: the chat runs in the panel, through the Claude API, after a JumpCloud sign-in
+ *   (`signIn` and `claudeAccess`). Usage is billed to the company's Claude Console account.
+ */
+export const CHAT_APPS = ['built-in', 'claude-desktop'] as const satisfies ChatApp[]
+
+export const TenantSchema = z
+  .object({
+    id: z.string().regex(/^[a-z0-9-]+$/),
+    companyName: z.string().min(1),
+    appName: z.string().min(1),
+    accentColor: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'must be a #RRGGBB colour'),
+    actions: z
+      .array(z.enum(ACTION_IDS))
+      .min(1)
+      .refine((ids) => new Set(ids).size === ids.length, 'actions must not repeat'),
+    chatApp: z.enum(CHAT_APPS).default('built-in'),
+    /** Extra instructions for Claude, added to the built-in chat's system prompt. */
+    systemPrompt: z.string().max(8000).optional(),
+    /** Needed for the built-in chat only. */
+    signIn: SignInSchema.optional(),
+    claudeAccess: ClaudeAccessSchema.optional(),
+  })
+  .refine(
+    (tenant) => tenant.chatApp !== 'built-in' || Boolean(tenant.signIn && tenant.claudeAccess),
+    {
+      message: 'the built-in chat needs signIn and claudeAccess',
+    },
+  )
 
 export type Tenant = z.infer<typeof TenantSchema>
 
 export function brandingOf(tenant: Tenant): Branding {
-  const { companyName, appName, accentColor, actions } = tenant
-  return { companyName, appName, accentColor, actions }
+  const { companyName, appName, accentColor, actions, chatApp } = tenant
+  return { companyName, appName, accentColor, actions, chatApp }
 }
 
 /** The tenant.json settings still to be filled in before anyone can sign in, by name. */
@@ -65,11 +84,12 @@ export function missingSettings(signIn: SignInConfig, access: ClaudeAccessConfig
 }
 
 /**
- * Dev runs only: a JSON file (path in DESKTOP_ASSIST_DEV_CONFIG) can override `signIn` and
- * `claudeAccess`, so the app can be pointed at a test identity provider without editing
+ * Dev runs only: a JSON file (path in DESKTOP_ASSIST_DEV_CONFIG) can override `chatApp`, `signIn`
+ * and `claudeAccess`, so the app can be pointed at a test identity provider without editing
  * tenant.json. Installed builds never read it.
  */
 export const DevOverrideSchema = z.object({
+  chatApp: z.enum(CHAT_APPS).optional(),
   signIn: SignInSchema.partial().optional(),
   claudeAccess: ClaudeAccessSchema.partial().optional(),
 })

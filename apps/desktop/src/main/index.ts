@@ -1,4 +1,15 @@
-import { app, dialog, Menu, safeStorage, screen, shell, type Tray } from 'electron'
+import {
+  app,
+  clipboard,
+  ClipboardItem,
+  dialog,
+  Menu,
+  Notification,
+  safeStorage,
+  screen,
+  shell,
+  type Tray,
+} from 'electron'
 import { once } from 'node:events'
 import { readFile, rm } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -17,8 +28,10 @@ import { AnthropicBackend } from './claude/AnthropicBackend'
 import { ChatSession } from './claude/ChatSession'
 import { classifyError } from './claude/errors'
 import { API_BASE_URL, buildSystemPrompt } from './claude/model'
-import { registerIpc } from './ipc'
-import { createLog } from './log'
+import { ClaudeDesktop, NEW_CHAT_LINK } from './claudeDesktop'
+import { registerIpc, type BuiltInChat } from './ipc'
+import { createLog, type Log } from './log'
+import { sendInClaude } from './sendInClaude'
 import { NotesStore } from './notes/NotesStore'
 import { ScreenshotService } from './screenshots/ScreenshotService'
 import { SettingsService } from './settings'
@@ -27,8 +40,9 @@ import {
   brandingOf,
   DevOverrideSchema,
   missingSettings,
-  SignInSchema,
   TenantSchema,
+  type ClaudeAccessConfig,
+  type SignInConfig,
   type Tenant,
 } from './tenant'
 import { createTray } from './tray'
@@ -59,8 +73,7 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 async function start(): Promise<void> {
-  const tenant = TenantSchema.parse(tenantConfig)
-  const { signIn, claudeAccess } = await withDevOverrides(tenant)
+  const tenant = await withDevOverrides(TenantSchema.parse(tenantConfig))
   Menu.setApplicationMenu(null)
   app.setAppUserModelId('com.morsemicro.desktopassist')
 
@@ -107,6 +120,120 @@ async function start(): Promise<void> {
   const screenshots = new ScreenshotService(screenshotsDir, () =>
     screen.getDisplayMatching(bubbleWindow.getBounds()),
   )
+
+  const { chatApp, signIn, claudeAccess } = tenant
+  const builtIn =
+    chatApp === 'built-in' && signIn && claudeAccess
+      ? startBuiltInChat({
+          tenant,
+          signIn,
+          claudeAccess,
+          userData,
+          settings,
+          log,
+          broadcast,
+          bubble,
+        })
+      : null
+  const claudeDesktop =
+    chatApp === 'claude-desktop'
+      ? new ClaudeDesktop({
+          isInstalled: () => app.getApplicationNameForProtocol(NEW_CHAT_LINK) !== '',
+          openLink: (url) => shell.openExternal(url),
+          copyScreenshots: async (paths) => {
+            const image = screenshots.forClipboard(paths)
+            if (!image) return false
+            const png = new Blob([image.toPNG()], { type: 'image/png' })
+            await clipboard.write([new ClipboardItem({ 'image/png': png })])
+            return true
+          },
+          autoSend: () => settings.get().autoSend,
+          sendInClaude: async (question, paste) => {
+            const outcome = await sendInClaude({ question, paste })
+            // Not a failure as such (the user is told to finish in Claude), but worth knowing.
+            if (outcome !== 'sent') log(`Sending in Claude Desktop stopped: ${outcome}`)
+            return outcome
+          },
+          notify: ({ title, body }) => {
+            if (Notification.isSupported()) new Notification({ title, body }).show()
+          },
+          onError: (error) => log('Handing a question to Claude Desktop failed:', error),
+        })
+      : null
+  if (!builtIn) {
+    // Chats happen in Claude Desktop: a JumpCloud sign-in saved by the built-in chat isn't needed.
+    void rm(join(userData, 'jumpcloud-session.bin'), { force: true }).catch(() => {})
+  }
+  // Milestone 1 saved a Claude API key here. Nothing uses it any more, so don't leave it behind.
+  void rm(join(userData, 'claude-api-key.bin'), { force: true }).catch(() => {})
+
+  registerIpc({
+    windows,
+    controller: bubble,
+    notes,
+    screenshots,
+    settings,
+    builtIn,
+    claudeDesktop,
+    actions: createActionHandlers({ controller: bubble, screenshots, quit: () => app.quit() }),
+    getState: () => ({
+      mode: bubble.currentMode,
+      corner: bubble.corner,
+      notes: notes.get(),
+      settings: settings.get(),
+      branding: brandingOf(tenant),
+      version: app.getVersion(),
+      auth: builtIn?.auth.status ?? null,
+      chat: builtIn?.chat.list() ?? [],
+    }),
+  })
+
+  tray = createTray({
+    appName: tenant.appName,
+    accentColor: tenant.accentColor,
+    onOpen: () => bubble.expand(),
+    onQuit: () => app.quit(),
+  })
+
+  const onDisplayChange = () => bubble.displayChanged()
+  screen.on('display-added', onDisplayChange)
+  screen.on('display-removed', onDisplayChange)
+  screen.on('display-metrics-changed', onDisplayChange)
+
+  // Save the text box before quitting. before-quit fires again after the second app.quit().
+  let shuttingDown = false
+  app.on('before-quit', (event) => {
+    if (shuttingDown) return
+    shuttingDown = true
+    event.preventDefault()
+    bubble.dispose()
+    builtIn?.chat.stop()
+    tray?.destroy() // otherwise the icon lingers in the tray until hovered
+    const timeout = new Promise((resolve) => setTimeout(resolve, SHUTDOWN_TIMEOUT_MS))
+    void Promise.race([notes.flush(), timeout]).finally(() => app.quit())
+  })
+  // Windows log-off / shutdown doesn't wait for async work.
+  panelWindow.on('session-end', () => notes.flushSync())
+
+  await windowsReady
+  bubble.start()
+}
+
+/**
+ * The built-in chat: JumpCloud sign-in, and Claude reached with the signed-in user's ID token
+ * through Workload Identity Federation.
+ */
+function startBuiltInChat(deps: {
+  tenant: Tenant
+  signIn: SignInConfig
+  claudeAccess: ClaudeAccessConfig
+  userData: string
+  settings: SettingsService
+  log: Log
+  broadcast: (channel: string, payload?: unknown) => void
+  bubble: BubbleController
+}): BuiltInChat {
+  const { tenant, signIn, claudeAccess, userData, settings, log, broadcast, bubble } = deps
 
   // Dev runs may point at a local test server; an installed app always talks to Anthropic.
   const devBaseUrl = !app.isPackaged ? process.env['ANTHROPIC_BASE_URL'] : undefined
@@ -161,59 +288,7 @@ async function start(): Promise<void> {
   })
   // Renew the saved sign-in at every start; if there isn't one, the chat box offers to sign in.
   void auth.init()
-  // Milestone 1 saved a Claude API key here. Nothing uses it any more, so don't leave it behind.
-  void rm(join(userData, 'claude-api-key.bin'), { force: true }).catch(() => {})
-
-  registerIpc({
-    windows,
-    controller: bubble,
-    notes,
-    screenshots,
-    settings,
-    auth,
-    chat,
-    actions: createActionHandlers({ controller: bubble, screenshots, quit: () => app.quit() }),
-    getState: () => ({
-      mode: bubble.currentMode,
-      corner: bubble.corner,
-      notes: notes.get(),
-      settings: settings.get(),
-      branding: brandingOf(tenant),
-      version: app.getVersion(),
-      auth: auth.status,
-      chat: chat.list(),
-    }),
-  })
-
-  tray = createTray({
-    appName: tenant.appName,
-    accentColor: tenant.accentColor,
-    onOpen: () => bubble.expand(),
-    onQuit: () => app.quit(),
-  })
-
-  const onDisplayChange = () => bubble.displayChanged()
-  screen.on('display-added', onDisplayChange)
-  screen.on('display-removed', onDisplayChange)
-  screen.on('display-metrics-changed', onDisplayChange)
-
-  // Save the text box before quitting. before-quit fires again after the second app.quit().
-  let shuttingDown = false
-  app.on('before-quit', (event) => {
-    if (shuttingDown) return
-    shuttingDown = true
-    event.preventDefault()
-    bubble.dispose()
-    chat.stop()
-    tray?.destroy() // otherwise the icon lingers in the tray until hovered
-    const timeout = new Promise((resolve) => setTimeout(resolve, SHUTDOWN_TIMEOUT_MS))
-    void Promise.race([notes.flush(), timeout]).finally(() => app.quit())
-  })
-  // Windows log-off / shutdown doesn't wait for async work.
-  panelWindow.on('session-end', () => notes.flushSync())
-
-  await windowsReady
-  bubble.start()
+  return { auth, chat }
 }
 
 /** Windows DPAPI through Electron: only this Windows user can decrypt what it encrypts. */
@@ -224,17 +299,22 @@ const safeStorageEncryptor: Encryptor = {
 }
 
 /**
- * Dev runs only: the sign-in and Claude access settings can be overridden from a JSON file named
- * by DESKTOP_ASSIST_DEV_CONFIG, to test against a local identity provider.
+ * Dev runs only: where chats happen, and the sign-in and Claude access settings, can be
+ * overridden from a JSON file named by DESKTOP_ASSIST_DEV_CONFIG, to test against a local
+ * identity provider.
  */
-async function withDevOverrides(tenant: Tenant): Promise<Pick<Tenant, 'signIn' | 'claudeAccess'>> {
+async function withDevOverrides(tenant: Tenant): Promise<Tenant> {
   const path = !app.isPackaged ? process.env['DESKTOP_ASSIST_DEV_CONFIG'] : undefined
   if (!path) return tenant
   const override = DevOverrideSchema.parse(JSON.parse(await readFile(path, 'utf8')))
-  return {
-    signIn: SignInSchema.parse({ ...tenant.signIn, ...override.signIn }),
-    claudeAccess: { ...tenant.claudeAccess, ...override.claudeAccess },
-  }
+  return TenantSchema.parse({
+    ...tenant,
+    chatApp: override.chatApp ?? tenant.chatApp,
+    signIn: override.signIn ? { ...tenant.signIn, ...override.signIn } : tenant.signIn,
+    claudeAccess: override.claudeAccess
+      ? { ...tenant.claudeAccess, ...override.claudeAccess }
+      : tenant.claudeAccess,
+  })
 }
 
 function isLoopback(url: URL): boolean {

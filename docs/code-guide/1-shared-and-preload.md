@@ -484,7 +484,7 @@ survives a restart.
 
 <!-- code: apps/desktop/src/shared/types.ts#Effort,Settings -->
 
-[`src/shared/types.ts`, lines 29–38](../../apps/desktop/src/shared/types.ts#L29-L38)
+[`src/shared/types.ts`, lines 29–40](../../apps/desktop/src/shared/types.ts#L29-L40)
 
 ```ts
 /** How hard Claude thinks before answering (the API's `effort`), shown as Fast/Balanced/Thorough. */
@@ -496,6 +496,8 @@ export interface Settings {
   autoStartAvailable: boolean
   screenshotsDir: string
   effort: Effort
+  /** With Claude Desktop: send the question there too, not just fill it in. */
+  autoSend: boolean
 }
 ```
 
@@ -512,12 +514,42 @@ Thorough. `Settings` is what the settings menu shows; `SettingsService.get()` in
   `npm run dev` the switch is greyed out with "Only in the installed app".
 - `screenshotsDir: string`: the folder screenshots are saved in, opened by "Open screenshots
   folder".
+- `effort: Effort`: the response style, used by the built-in chat only.
+- `autoSend: boolean`: used with Claude Desktop only: whether Desktop Assist also sends the
+  question there (presses Ctrl+V and Enter in Claude), or only fills it in. On unless the user
+  turns "Send in Claude automatically" off in the settings menu.
+
+### `ChatApp`
+
+<!-- code: apps/desktop/src/shared/types.ts#ChatApp -->
+
+[`src/shared/types.ts`, lines 42–46](../../apps/desktop/src/shared/types.ts#L42-L46)
+
+```ts
+/**
+ * Where conversations happen: in the panel through the Claude API (`built-in`), or handed over to
+ * the Claude Desktop app (`claude-desktop`), which uses each person's own Claude account.
+ */
+export type ChatApp = 'built-in' | 'claude-desktop'
+```
+
+<!-- /code -->
+
+Where questions are answered, set per tenant (`chatApp` in `tenant.json`, checked against
+`CHAT_APPS` in `src/main/tenant.ts`). The two are quite different apps:
+
+- `built-in`: the panel is a chat of its own. The user signs in with JumpCloud, and the main
+  process calls the Claude API, billed to the company's Claude Console account.
+- `claude-desktop`: the panel is only a text box. Asking opens the question in the Claude Desktop
+  app (and, unless the user turns it off, sends it there), where the person is signed in with
+  their own Claude account, so it counts against their own usage limit. Desktop Assist has no
+  sign-in of its own then (see [Claude Desktop](9-claude-desktop.md)).
 
 ### `Branding`
 
 <!-- code: apps/desktop/src/shared/types.ts#Branding -->
 
-[`src/shared/types.ts`, lines 40–45](../../apps/desktop/src/shared/types.ts#L40-L45)
+[`src/shared/types.ts`, lines 48–54](../../apps/desktop/src/shared/types.ts#L48-L54)
 
 ```ts
 export interface Branding {
@@ -525,22 +557,24 @@ export interface Branding {
   appName: string
   accentColor: string
   actions: ActionId[]
+  chatApp: ChatApp
 }
 ```
 
 <!-- /code -->
 
 The parts of the tenant's `tenant.json` that the pages need. `brandingOf()` in
-`src/main/tenant.ts` copies just these four fields, deliberately leaving out the sign-in
+`src/main/tenant.ts` copies just these five fields, deliberately leaving out the sign-in
 settings, the Claude access settings and the system prompt. `accentColor` becomes the page's
 accent colour (`useAccentColor()` sets the CSS variable `--color-accent`), and `actions` decides
-which icons `ActionStack` shows, in order.
+which icons `ActionStack` shows, in order. `chatApp` tells the panel which kind of chat it is: it
+changes the send button, the settings menu, and whether there's a sign-in at all.
 
 ### `SignedInUser` and `AuthStatus`
 
 <!-- code: apps/desktop/src/shared/types.ts#SignedInUser,AuthStatus -->
 
-[`src/shared/types.ts`, lines 47–66](../../apps/desktop/src/shared/types.ts#L47-L66)
+[`src/shared/types.ts`, lines 56–75](../../apps/desktop/src/shared/types.ts#L56-L75)
 
 ```ts
 export interface SignedInUser {
@@ -567,10 +601,12 @@ export type AuthStatus =
 
 <!-- /code -->
 
-Who is signed in, and where sign-in stands. The user signs in with **JumpCloud**, the company's
-single sign-on service. Only `AuthManager` (`src/main/auth/AuthManager.ts`) sets the status, and
-every change is broadcast on `assist:auth-status`. The pages only ever learn the state and the
-user's name and email; no token ever reaches them.
+Who is signed in, and where sign-in stands, for the built-in chat. The user signs in with
+**JumpCloud**, the company's single sign-on service. Only `AuthManager`
+(`src/main/auth/AuthManager.ts`) sets the status, and every change is broadcast on
+`assist:auth-status`. The pages only ever learn the state and the user's name and email; no
+token ever reaches them. With Claude Desktop there is no `AuthManager` and no status at all
+(`AppState.auth` is `null`, below).
 
 - `name?: string` and `email?: string`: taken from the `name` and `email` claims in JumpCloud's
   ID token (its signed statement of who signed in). Both are optional because JumpCloud may
@@ -587,7 +623,7 @@ user's name and email; no token ever reaches them.
 
 <!-- code: apps/desktop/src/shared/types.ts#ChatMessage,SendResult -->
 
-[`src/shared/types.ts`, lines 68–84](../../apps/desktop/src/shared/types.ts#L68-L84)
+[`src/shared/types.ts`, lines 77–93](../../apps/desktop/src/shared/types.ts#L77-L93)
 
 ```ts
 /** One message as the chat shows it. */
@@ -630,11 +666,46 @@ draft, which the panel shows. The reply itself arrives later, through `onChatMes
   from `ChatSession.send()`; `missing-screenshot` (an attached file has gone) comes from the
   `chat-send` handler in `src/main/ipc.ts`.
 
+### `AskResult`
+
+<!-- code: apps/desktop/src/shared/types.ts#AskResult -->
+
+[`src/shared/types.ts`, lines 95–101](../../apps/desktop/src/shared/types.ts#L95-L101)
+
+```ts
+/**
+ * Handing the draft to Claude Desktop. `screenshots` is how many were copied to the clipboard
+ * (as one image) for the user to paste.
+ */
+export type AskResult =
+  | { ok: true; notes: Notes; screenshots: number }
+  | { ok: false; reason: 'empty' | 'too-long' | 'not-installed' | 'missing-screenshot' | 'failed' }
+```
+
+<!-- /code -->
+
+The answer to `window.assist.claudeDesktop.ask()`, which hands the draft to Claude Desktop instead
+of the built-in chat. On success, `notes` is the now-empty draft, as with `SendResult`, and
+Claude Desktop has opened with the question filled in. The failures come from
+`ClaudeDesktop.ask()` in `src/main/claudeDesktop.ts` (see [Claude Desktop](9-claude-desktop.md)).
+
+- `screenshots: number`: how many attached screenshots were put on the clipboard, combined into
+  one image, to be pasted into Claude (by Desktop Assist with "Send in Claude automatically" on,
+  otherwise by the user with Ctrl+V).
+- The result doesn't say whether the question was sent in Claude: that happens afterwards, in
+  the background, and if it doesn't work a Windows notification tells the user what's left.
+- `'empty'`, `'missing-screenshot'`: the same as for `SendResult`. There's no `busy` or
+  `signed-out`: nothing streams here, and there's no sign-in.
+- `'too-long'`: more text than Claude Desktop accepts in a link (12,000 characters here).
+- `'not-installed'`: nothing on the PC opens `claude://` links, so Claude Desktop isn't
+  installed.
+- `'failed'`: copying the screenshots or opening the link went wrong; the details are in the log.
+
 ### `AppState`
 
 <!-- code: apps/desktop/src/shared/types.ts#AppState -->
 
-[`src/shared/types.ts`, lines 86–96](../../apps/desktop/src/shared/types.ts#L86-L96)
+[`src/shared/types.ts`, lines 103–114](../../apps/desktop/src/shared/types.ts#L103-L114)
 
 ```ts
 export interface AppState {
@@ -645,7 +716,8 @@ export interface AppState {
   settings: Settings
   branding: Branding
   version: string
-  auth: AuthStatus
+  /** Null when chats happen in Claude Desktop, which has its own sign-in. */
+  auth: AuthStatus | null
   chat: ChatMessage[]
 }
 ```
@@ -659,12 +731,15 @@ together by the `getState` function that `start()` in `src/main/index.ts` passes
 the page's own requests, so the panel takes their new values from the replies.
 
 - `version: string`: `app.getVersion()`, shown in the settings menu.
+- `auth: AuthStatus | null`: the sign-in status of the built-in chat, or `null` with Claude
+  Desktop, which has its own sign-in. The pages check for `null` before reading `auth.state`.
+- `chat: ChatMessage[]`: the built-in chat's messages. With Claude Desktop it's always empty.
 
 ### `ActionResult` and `AttachResult`
 
 <!-- code: apps/desktop/src/shared/types.ts#ActionResult,AttachResult -->
 
-[`src/shared/types.ts`, lines 98–101](../../apps/desktop/src/shared/types.ts#L98-L101)
+[`src/shared/types.ts`, lines 116–119](../../apps/desktop/src/shared/types.ts#L116-L119)
 
 ```ts
 export type ActionResult = { ok: true; message?: string } | { ok: false; message: string }
@@ -708,7 +783,7 @@ Messages come in three styles:
 
 <!-- code: apps/desktop/src/shared/ipc.ts#IPC -->
 
-[`src/shared/ipc.ts`, lines 16–51](../../apps/desktop/src/shared/ipc.ts#L16-L51)
+[`src/shared/ipc.ts`, lines 17–56](../../apps/desktop/src/shared/ipc.ts#L17-L56)
 
 ```ts
 /** IPC channel names. The preload maps them onto `window.assist`; src/main/ipc.ts handles them. */
@@ -725,12 +800,14 @@ export const IPC = {
   notesSetText: 'assist:notes-set-text',
   notesAttachLatest: 'assist:notes-attach-latest',
   notesRemoveAttachment: 'assist:notes-remove-attachment',
+  notesClear: 'assist:notes-clear',
   screenshotThumbnail: 'assist:screenshot-thumbnail',
   screenshotOpen: 'assist:screenshot-open',
   screenshotsOpenFolder: 'assist:screenshots-open-folder',
   settingsGet: 'assist:settings-get',
   settingsSetAutoStart: 'assist:settings-set-auto-start',
   settingsSetEffort: 'assist:settings-set-effort',
+  settingsSetAutoSend: 'assist:settings-set-auto-send',
   authSignIn: 'assist:auth-sign-in',
   authCancel: 'assist:auth-cancel',
   authSignOut: 'assist:auth-sign-out',
@@ -739,6 +816,8 @@ export const IPC = {
   chatStop: 'assist:chat-stop',
   chatRetry: 'assist:chat-retry',
   chatNew: 'assist:chat-new',
+  claudeDesktopAsk: 'assist:claude-desktop-ask',
+  claudeDesktopInstalled: 'assist:claude-desktop-installed',
   // main → renderer
   modeChanged: 'assist:mode-changed',
   cornerChanged: 'assist:corner-changed',
@@ -756,6 +835,11 @@ name: a typo is a compile error instead of a message nobody hears.
 
 - `'assist:get-state'`: every name starts with `assist:`, so it can't clash with a channel that
   Electron or a library might use.
+- `notesClear`: empties the draft, for "Clear text box" in the settings menu.
+- `settingsSetAutoSend`: the settings menu's "Send in Claude automatically" switch.
+- `authSignIn` to `chatNew`, and `claudeDesktopAsk` and `claudeDesktopInstalled`: the first group
+  belongs to the built-in chat and the second to Claude Desktop. The main process only answers
+  the group the tenant uses (`registerIpc()` in `src/main/ipc.ts`).
 - `// main → renderer`: the channels from here on go the other way. `broadcast()` in `start()`
   (`src/main/index.ts`) sends them to both windows, except `clickThroughReset`, which
   `resetClickThrough()` in `src/main/bubble/windows.ts` sends only to the panel.
@@ -764,7 +848,7 @@ name: a typo is a compile error instead of a message nobody hears.
 
 <!-- code: apps/desktop/src/shared/ipc.ts#AssistApi -->
 
-[`src/shared/ipc.ts`, lines 53–108](../../apps/desktop/src/shared/ipc.ts#L53-L108)
+[`src/shared/ipc.ts`, lines 58–126](../../apps/desktop/src/shared/ipc.ts#L58-L126)
 
 ```ts
 /** The API the preload exposes to renderers as `window.assist`. */
@@ -786,6 +870,8 @@ export interface AssistApi {
     setText(text: string): void
     attachLatestScreenshot(): Promise<AttachResult>
     removeAttachment(id: string): Promise<Notes>
+    /** Empties the text box and removes the attached screenshots (the files are kept). */
+    clear(): Promise<Notes>
   }
   screenshots: {
     /** A small data-URL preview, or null if the file is missing. */
@@ -797,6 +883,7 @@ export interface AssistApi {
     get(): Promise<Settings>
     setAutoStart(enabled: boolean): Promise<Settings>
     setEffort(effort: Effort): Promise<Settings>
+    setAutoSend(autoSend: boolean): Promise<Settings>
   }
   auth: {
     /** Opens JumpCloud in the browser; progress arrives through `onAuthStatus`. */
@@ -807,6 +894,16 @@ export interface AssistApi {
     /** Tries again to renew a saved sign-in that couldn't reach JumpCloud. */
     retry(): Promise<void>
   }
+  claudeDesktop: {
+    /**
+     * Opens a new chat in Claude Desktop with the draft text filled in, and copies the attached
+     * screenshots for the user to paste. Clears the draft and collapses the panel if it worked.
+     */
+    ask(text: string): Promise<AskResult>
+    /** Whether Claude Desktop is installed on this PC (anything handles claude:// links). */
+    isInstalled(): Promise<boolean>
+  }
+  /** The built-in chat (only when the tenant's `chatApp` is `built-in`). */
   chat: {
     /** Sends the draft text plus the draft's attached screenshots. */
     send(text: string): Promise<SendResult>
@@ -828,8 +925,10 @@ export interface AssistApi {
 <!-- /code -->
 
 The API a page sees as `window.assist`. Each method maps onto one channel in `IPC`. Related calls
-are grouped into nested objects (`notes`, `screenshots`, `settings`, `auth`, `chat`), which is
-only for readability.
+are grouped into nested objects (`notes`, `screenshots`, `settings`, `auth`, `claudeDesktop`,
+`chat`), which is only for readability. Every page gets all of them, but `auth` and `chat` only
+work with the built-in chat and `claudeDesktop` only with Claude Desktop; the panel checks
+`branding.chatApp` to know which to call.
 
 - `getState(): Promise<AppState>`: called once when a page loads (`useAssistState()`).
 - `bubbleClick(): void`: this and the next three are fire-and-forget calls into
@@ -845,11 +944,22 @@ only for readability.
   `src/main/ipc.ts`).
 - `setText(text: string): void`: sent on every keystroke, so it doesn't wait for an answer.
   `NotesStore` saves the draft to disk about half a second after typing stops.
+- `clear(): Promise<Notes>`: empties the text and removes the attachments from the draft, and
+  returns the empty draft. The screenshot files themselves stay in the folder.
 - `thumbnail(path: string): Promise<string | null>`: returns the preview as a _data URL_, the
   image encoded into a `data:image/...` string. The page can't load files from disk itself; its
   Content-Security-Policy (`index.html`) only allows images from the app or from data URLs.
+- `setEffort(effort: Effort)`, `setAutoSend(autoSend: boolean)`: save the response style (built-in
+  chat) or "Send in Claude automatically" (Claude Desktop), and return the settings as they now
+  are, like the other `settings` calls.
 - `signIn(): Promise<void>`: resolves straight away, because signing in happens in the browser
   and can take minutes. Progress arrives through `onAuthStatus`.
+- `ask(text: string): Promise<AskResult>`: like `chat.send()`, only the text is passed; the main
+  process takes the screenshots from its own copy of the draft. It resolves once Claude Desktop
+  has been asked to open; sending the question there carries on in the main process afterwards,
+  and there's no reply to wait for, because the conversation carries on in Claude Desktop.
+- `isInstalled(): Promise<boolean>`: whether anything on the PC opens `claude://` links. The
+  panel asks each time it opens, to warn before anything is typed.
 - `send(text: string): Promise<SendResult>`: sends the draft. The promise only says whether it
   was accepted; Claude's reply streams in through `onChatMessage`.
 - `onModeChanged(callback: (mode: Mode) => void): () => void`: each `on...` method starts
@@ -911,6 +1021,32 @@ date and time for older ones.
   TypeScript's `noUncheckedIndexedAccess` setting, which treats every array element as possibly
   missing. The `?? 1` fallback satisfies the compiler.
 
+## `src/shared/claudeDesktop.ts`: where to get Claude Desktop
+
+One constant for the Claude Desktop hand-over. The rest of that feature is in the main process
+(`src/main/claudeDesktop.ts`, see [Claude Desktop](9-claude-desktop.md)), but a page can't import
+main-process files, so the one value the panel needs lives here.
+
+### `CLAUDE_DOWNLOAD_PAGE`
+
+<!-- code: apps/desktop/src/shared/claudeDesktop.ts -->
+
+[`src/shared/claudeDesktop.ts`, lines 1–4](../../apps/desktop/src/shared/claudeDesktop.ts#L1-L4)
+
+```ts
+// Claude Desktop, which questions are handed to when the tenant's `chatApp` is `claude-desktop`.
+
+/** Where people get Claude Desktop when it isn't installed (IT may install it for them instead). */
+export const CLAUDE_DOWNLOAD_PAGE = 'https://claude.com/download'
+```
+
+<!-- /code -->
+
+Anthropic's download page for Claude Desktop. When the panel finds that Claude Desktop isn't
+installed, it shows a banner with a **Download** button that opens this page in the browser
+(`window.assist.openExternal()`, which allows `https:` links). On company PCs IT may install
+Claude Desktop instead, which is why the banner suggests asking IT first.
+
 ## `src/preload/index.ts`: the bridge to the page
 
 A _preload script_ runs inside each window (bubble and panel) just before the page's own code. This
@@ -963,7 +1099,7 @@ listening. Every `on...` method in `api` uses it.
 
 <!-- code: apps/desktop/src/preload/index.ts#api -->
 
-[`src/preload/index.ts`, lines 12–55](../../apps/desktop/src/preload/index.ts#L12-L55)
+[`src/preload/index.ts`, lines 12–61](../../apps/desktop/src/preload/index.ts#L12-L61)
 
 ```ts
 const api: AssistApi = {
@@ -980,6 +1116,7 @@ const api: AssistApi = {
     setText: (text) => ipcRenderer.send(IPC.notesSetText, text),
     attachLatestScreenshot: () => ipcRenderer.invoke(IPC.notesAttachLatest),
     removeAttachment: (id) => ipcRenderer.invoke(IPC.notesRemoveAttachment, id),
+    clear: () => ipcRenderer.invoke(IPC.notesClear),
   },
   screenshots: {
     thumbnail: (path) => ipcRenderer.invoke(IPC.screenshotThumbnail, path),
@@ -990,12 +1127,17 @@ const api: AssistApi = {
     get: () => ipcRenderer.invoke(IPC.settingsGet),
     setAutoStart: (enabled) => ipcRenderer.invoke(IPC.settingsSetAutoStart, enabled),
     setEffort: (effort) => ipcRenderer.invoke(IPC.settingsSetEffort, effort),
+    setAutoSend: (autoSend) => ipcRenderer.invoke(IPC.settingsSetAutoSend, autoSend),
   },
   auth: {
     signIn: () => ipcRenderer.invoke(IPC.authSignIn),
     cancel: () => ipcRenderer.invoke(IPC.authCancel),
     signOut: () => ipcRenderer.invoke(IPC.authSignOut),
     retry: () => ipcRenderer.invoke(IPC.authRetry),
+  },
+  claudeDesktop: {
+    ask: (text) => ipcRenderer.invoke(IPC.claudeDesktopAsk, text),
+    isInstalled: () => ipcRenderer.invoke(IPC.claudeDesktopInstalled),
   },
   chat: {
     send: (text) => ipcRenderer.invoke(IPC.chatSend, text),

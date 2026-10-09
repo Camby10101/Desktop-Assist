@@ -7,12 +7,14 @@ screen and opens a panel when clicked. Built for Morse Micro first. Branding liv
 - [docs/PLAN.md](docs/PLAN.md): the plan, architecture, milestones and decisions.
 - [docs/code-guide/CODE_GUIDE.md](docs/code-guide/CODE_GUIDE.md): how the code fits together, with the code of every
   function shown and explained.
+- [docs/CLAUDE_DESKTOP_SETUP.md](docs/CLAUDE_DESKTOP_SETUP.md): for IT, what each PC needs so
+  questions open in Claude Desktop.
 - [docs/JUMPCLOUD_SETUP.md](docs/JUMPCLOUD_SETUP.md): for IT, setting up JumpCloud sign-in and
-  Claude access.
+  Claude access for the built-in chat (not used by Morse Micro since 3.1).
 
 **Status:** Milestones 0 (Foundation), 1 (Chat with Claude), 2.1 (bubble fixes) and 3 (JumpCloud
-sign-in) are complete. Sign-in needs a one-off setup by IT before it works for real (see
-[JUMPCLOUD_SETUP.md](docs/JUMPCLOUD_SETUP.md)). Next is Milestone 4: Ship.
+sign-in) and feature 3.1 (questions open in Claude Desktop) are complete. Next is Milestone 4:
+Ship.
 
 ## Features
 
@@ -20,24 +22,28 @@ sign-in) are complete. Sign-in needs a one-off setup by IT before it works for r
   panel; Esc or clicking elsewhere also closes it.
 - **Drag it anywhere**, even onto another monitor. Let go and it snaps to the nearest corner of
   that screen, and the panel flips to open toward the middle. It remembers the spot next time.
-- **Chat with Claude** (Claude Opus 5.5) in the card beside the bubble, which grows
-  as the conversation does. Replies stream in with formatting and highlighted code; Stop, Retry and Copy are
-  built in. Enter sends, Shift+Enter adds a line. An unsent message is saved automatically.
-- **Sign in with JumpCloud**, once: the button opens JumpCloud in your browser, and if you're
-  already signed in there it finishes by itself. You stay signed in across restarts (the sign-in
-  is stored encrypted for your Windows account only) until JumpCloud ends it. There's no API key:
-  your JumpCloud sign-in is swapped for short-lived Claude access each time it's needed.
+- **Ask Claude**: type a question in the box beside the bubble and press Enter (or **Ask in
+  Claude**). The Claude Desktop app opens a new chat and the question is sent there, with any
+  attached screenshots pasted in, and Claude answers. It's your own Claude account, so it counts
+  against your own usage limit. (Turn off **Send in Claude automatically** in Settings to only
+  fill the question in and send it yourself.) Shift+Enter adds a line; an unsent question is
+  saved automatically. If Claude Desktop isn't installed, the panel says so, with a Download
+  button.
+- **Or the built-in chat** (a tenant setting, `"chatApp": "built-in"`; Morse Micro used it until
+  3.1): chat with Claude (Claude Opus 5.5) in the card beside the bubble, after signing in once
+  with JumpCloud. Replies stream in with formatting and highlighted code, with Stop, Retry and
+  Copy. Usage is billed to the company's Claude Console account, through a service account IT
+  sets up; there's no API key.
 - **Action icons** above the bubble:
   - **Screenshot** saves the screen the bubble is on to `Pictures\Desktop Assist`.
-  - **Settings**: Start with Windows, Response style (Fast / Balanced / Thorough), Open
-    screenshots folder, New conversation, and who you're signed in as with **Log out**.
+  - **Settings**: Start with Windows, Send in Claude automatically, Open screenshots folder and
+    Clear text box. (With the
+    built-in chat: Response style (Fast / Balanced / Thorough), New conversation, and who you're
+    signed in as with **Log out**.)
   - **Bounce** sends the bubble bouncing around the screen; click it to send it gliding home.
   - **Close** quits the app.
-- **Attach latest screenshot** adds the newest screenshot to your next message.
+- **Attach latest screenshot** adds the newest screenshot to your next question.
 - A tray icon (the same logo) with Open and Quit.
-
-Claude usage is billed to the company's Claude Console account, through the service account IT
-sets up.
 
 ## Getting started
 
@@ -46,9 +52,9 @@ sets up.
 1. Install [Node.js](https://nodejs.org) 24.
 2. Open a terminal in the `Desktop-Assist` folder and run `npm install` (first time only).
 3. Run `npm run dev`. The bubble appears in the bottom-right corner of your screen.
-4. Click the bubble, then **Sign in with JumpCloud**, and start chatting. (Until IT has filled
-   in `tenants/morse-micro/tenant.json`, the chat box says sign-in isn't set up yet and lists
-   what's missing.)
+4. Click the bubble, type a question and press Enter: Claude Desktop opens and sends it. (Claude
+   Desktop must be installed and signed in; with the built-in chat, click **Sign in with
+   JumpCloud** first.)
 5. To stop it, use the power icon above the bubble, Quit from the tray icon, or Ctrl+C in the
    terminal.
 
@@ -86,8 +92,9 @@ For testing without real accounts, dev runs (never installed builds) read three 
 variables:
 
 - `ANTHROPIC_BASE_URL`: point the app at a local mock of the Claude API.
-- `DESKTOP_ASSIST_DEV_CONFIG`: a JSON file whose `signIn` and `claudeAccess` settings replace
-  tenant.json's, for example to use a local test sign-in server.
+- `DESKTOP_ASSIST_DEV_CONFIG`: a JSON file whose `chatApp`, `signIn` and `claudeAccess` settings
+  replace tenant.json's, for example to try the built-in chat against a local test sign-in
+  server.
 - `DESKTOP_ASSIST_DEV_USER_DATA`: a separate data folder, so tests never touch your own dev
   sign-in or notes.
 
@@ -101,13 +108,14 @@ icon. See [tenants/README.md](tenants/README.md) for tips.
 
 ```
 apps/desktop/
-  src/main/       Electron main process: windows, bubble state machine, JumpCloud sign-in
-                  (auth/), Claude chat (claude/), draft, screenshots, IPC
+  src/main/       Electron main process: windows, bubble state machine, handing questions to
+                  Claude Desktop (claudeDesktop.ts), the built-in chat (claude/) and its
+                  JumpCloud sign-in (auth/), draft, screenshots, IPC
   src/preload/    the typed `window.assist` bridge
   src/renderer/   React views: the bubble, and the panel (actions, settings, chat, sign-in)
   src/shared/     code both sides use: IPC contract, action registry, layout constants, types
   tests/          unit tests
-tenants/          per-business branding, enabled actions and sign-in settings
+tenants/          per-business branding, enabled actions, where chats happen, sign-in settings
 ```
 
 All runtime libraries are bundled by electron-vite, so they live in `devDependencies` and the

@@ -1,4 +1,4 @@
-import { ArrowUp, LoaderCircle, Paperclip, Square } from 'lucide-react'
+import { ArrowUp, ArrowUpRight, LoaderCircle, Paperclip, Square } from 'lucide-react'
 import { useEffect, useRef, type KeyboardEvent, type ReactNode } from 'react'
 import { PANEL_LAYOUT, UI, isLeftCorner, isTopCorner, type Corner } from '@shared/geometry'
 import type { Attachment, ChatMessage } from '@shared/types'
@@ -12,12 +12,17 @@ import { MessageList } from './MessageList'
  * The card beside the bubble, on the side facing the middle of the screen. It's anchored at the
  * bubble's edge (bottom in a bottom corner, top in a top corner), so it starts as just the text
  * box and grows away from that edge as the conversation gets longer, then scrolls. When nobody is
- * signed in, `signInPrompt` is shown instead of the chat.
+ * signed in, `signInPrompt` is shown instead of the chat. With `inClaudeDesktop`, it's only the
+ * text box, and sending opens the question in Claude Desktop.
  */
 export function ChatBox(props: {
   corner: Corner
   open: boolean
   toast: ToastMessage | null
+  /** Sending hands the question to Claude Desktop instead of the chat in the panel. */
+  inClaudeDesktop: boolean
+  /** With Claude Desktop: the question (and screenshot) is sent there for the user. */
+  autoSend: boolean
   /** Replaces the chat (the JumpCloud sign-in), or null to show the chat. */
   signInPrompt: ReactNode
   /** A line above the text box, e.g. "Checking your sign-in…". */
@@ -132,6 +137,14 @@ function Composer(props: Parameters<typeof ChatBox>[0]) {
           ))}
         </div>
       )}
+      {props.inClaudeDesktop && props.attachments.length > 0 && (
+        <p className="px-3.5 pt-2 text-[11px] text-zinc-500">
+          {props.attachments.length === 1 ? 'The screenshot' : 'The screenshots'}
+          {props.autoSend && props.draft.trim()
+            ? ' will be pasted into Claude for you.'
+            : ' will be copied for you to paste into Claude with Ctrl+V.'}
+        </p>
+      )}
 
       <textarea
         ref={textarea}
@@ -165,6 +178,17 @@ function Composer(props: Parameters<typeof ChatBox>[0]) {
             className="grid size-8 place-items-center rounded-full bg-zinc-900 text-white hover:bg-zinc-700 dark:bg-white dark:text-zinc-900"
           >
             <Square size={12} fill="currentColor" aria-hidden />
+          </button>
+        ) : props.inClaudeDesktop ? (
+          <button
+            type="button"
+            onClick={props.onSend}
+            disabled={!props.canSend}
+            title={props.autoSend ? 'Send in Claude (Enter)' : 'Open in Claude (Enter)'}
+            className="inline-flex h-8 items-center gap-1 rounded-full bg-accent pr-2.5 pl-3 text-xs font-medium text-white disabled:opacity-40"
+          >
+            Ask in Claude
+            <ArrowUpRight size={14} aria-hidden />
           </button>
         ) : (
           <button

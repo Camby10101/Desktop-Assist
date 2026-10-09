@@ -7,7 +7,7 @@ windows, the files, the tray icon and the network. This page covers how it start
 pages talk to it. `index.ts` creates every service and wires them together, `ipc.ts` answers the
 pages' requests, and the smaller files hold the problem log, the tenant config, the user's
 preferences, the commands behind the action icons and the tray icon. The services themselves (sign-in, Claude, the
-bubble, the draft and screenshots) each have their own page.
+bubble, the draft and screenshots, Claude Desktop) each have their own page.
 
 ## `src/main/index.ts`: startup and shutdown
 
@@ -18,7 +18,10 @@ stages:
 1. **As soon as the file loads**, module-level code picks the data folder and makes sure only one
    copy of the app is running.
 2. **Once Electron is ready**, `start()` creates the windows and every service, connects them with
-   callbacks, registers the IPC handlers and the tray icon, and finally shows the bubble.
+   callbacks, registers the IPC handlers and the tray icon, and finally shows the bubble. Where
+   questions go depends on the tenant's `chatApp`: `start()` either sets up the built-in chat (with
+   [`startBuiltInChat()`](#startbuiltinchat)) or hands questions over to the Claude Desktop app
+   (`ClaudeDesktop`, see [Claude Desktop](9-claude-desktop.md)).
 3. **When the app quits**, a `before-quit` handler saves the draft before letting it close.
 
 The key idea is that the services don't know about each other or about Electron's globals. Each
@@ -29,7 +32,7 @@ tests can drive them with fakes. `index.ts` is the only file that knows about al
 
 <!-- code: apps/desktop/src/main/index.ts#SHUTDOWN_TIMEOUT_MS,controller,tray -->
 
-[`src/main/index.ts`, lines 36–50](../../apps/desktop/src/main/index.ts#L36-L50)
+[`src/main/index.ts`, lines 50–64](../../apps/desktop/src/main/index.ts#L50-L64)
 
 ```ts
 const SHUTDOWN_TIMEOUT_MS = 2000
@@ -78,16 +81,18 @@ they're quoted in the bullets below, in the order they run.
 Builds the whole app once Electron is ready. It's long, so it's shown below in pieces, in source
 order. Only declarations (`const`, `let`) can be picked out as pieces; the plain statements in
 between, such as `registerIpc({...})` and the `before-quit` handler, are quoted in the bullets.
-The link above each piece opens the full source.
+The link above each piece opens the full source. The built-in chat's own pieces (the Claude
+backend, the conversation and the JumpCloud sign-in) are in a separate function,
+[`startBuiltInChat()`](#startbuiltinchat), which `start()` calls only when the tenant uses it.
 
 #### The tenant config
 
 <!-- code: apps/desktop/src/main/index.ts#start.tenant -->
 
-[`src/main/index.ts`, line 62](../../apps/desktop/src/main/index.ts#L62)
+[`src/main/index.ts`, line 76](../../apps/desktop/src/main/index.ts#L76)
 
 ```ts
-const tenant = TenantSchema.parse(tenantConfig)
+const tenant = await withDevOverrides(TenantSchema.parse(tenantConfig))
 ```
 
 <!-- /code -->
@@ -96,21 +101,22 @@ const tenant = TenantSchema.parse(tenantConfig)
   import shortcut points at `tenants/<TENANT>/`). TypeScript only checks it at build time, so it's
   checked again here against the schema in `tenant.ts`. A bad config throws and the app doesn't
   start.
-- `const { signIn, claudeAccess } = await withDevOverrides(tenant)` (the next line): the
-  JumpCloud and Claude access settings, possibly replaced in dev runs by
-  [`withDevOverrides()`](#withdevoverrides). The rest of `start()` uses these two rather than
-  `tenant.signIn` and `tenant.claudeAccess`.
+- `await withDevOverrides(...)`: in dev runs, a JSON file can change where chats happen and the
+  JumpCloud and Claude access settings (see [`withDevOverrides()`](#withdevoverrides)). It returns
+  a whole tenant, checked again, so the rest of `start()` simply reads `tenant`. In an installed
+  build it's the bundled config unchanged.
 - `Menu.setApplicationMenu(null)`: removes Electron's default menu (File, Edit, View and so on)
   and the keyboard shortcuts that come with it, such as reload and developer tools.
 - `app.setAppUserModelId('com.morsemicro.desktopassist')`: the _AppUserModelID_ is how Windows
-  identifies an app, for example to label its notifications. It matches `appId` in
-  `electron-builder.yml`, the ID the installer registers.
+  identifies an app, for example to label its notifications (such as the "Screenshot copied"
+  one when a question goes to Claude Desktop). It matches `appId` in `electron-builder.cjs`, the
+  ID the installer registers.
 
 #### Folders, the draft and preferences
 
 <!-- code: apps/desktop/src/main/index.ts#start.userData,screenshotsDir,actionCount,log,notes,settings -->
 
-[`src/main/index.ts`, lines 67–78](../../apps/desktop/src/main/index.ts#L67-L78)
+[`src/main/index.ts`, lines 80–91](../../apps/desktop/src/main/index.ts#L80-L91)
 
 ```ts
 const userData = app.getPath('userData')
@@ -149,7 +155,7 @@ const settings = new SettingsService(join(userData, 'preferences.json'), screens
 
 <!-- code: apps/desktop/src/main/index.ts#start.bubbleWindow,panelWindow,windows,windowsReady,broadcast -->
 
-[`src/main/index.ts`, lines 81–90](../../apps/desktop/src/main/index.ts#L81-L90)
+[`src/main/index.ts`, lines 94–103](../../apps/desktop/src/main/index.ts#L94-L103)
 
 ```ts
 // The windows are created after the last `await`: from here to registerIpc() below nothing
@@ -193,7 +199,7 @@ page's request is handled, its handler has been registered.
 
 <!-- code: apps/desktop/src/main/index.ts#start.bubble -->
 
-[`src/main/index.ts`, lines 92–103](../../apps/desktop/src/main/index.ts#L92-L103)
+[`src/main/index.ts`, lines 105–116](../../apps/desktop/src/main/index.ts#L105-L116)
 
 ```ts
 const bubble = new BubbleController({
@@ -234,17 +240,223 @@ touches Electron directly; everything it needs is passed in here.
   keyboard focus, for example when the user clicks another app. The controller then closes the
   panel.
 
-#### Screenshots and Claude
+#### Screenshots
 
-<!-- code: apps/desktop/src/main/index.ts#start.screenshots,devBaseUrl,lastIdToken,backend,chat -->
+<!-- code: apps/desktop/src/main/index.ts#start.screenshots -->
 
-[`src/main/index.ts`, lines 107–135](../../apps/desktop/src/main/index.ts#L107-L135)
+[`src/main/index.ts`, lines 120–122](../../apps/desktop/src/main/index.ts#L120-L122)
 
 ```ts
 const screenshots = new ScreenshotService(screenshotsDir, () =>
   screen.getDisplayMatching(bubbleWindow.getBounds()),
 )
+```
 
+<!-- /code -->
+
+- `screen.getDisplayMatching(bubbleWindow.getBounds())`: the screenshot service is given a
+  function rather than a fixed display, so each capture takes the display the bubble is on at
+  that moment.
+
+#### The chat: built in, or in Claude Desktop
+
+<!-- code: apps/desktop/src/main/index.ts#start.builtIn,claudeDesktop -->
+
+[`src/main/index.ts`, lines 125–162](../../apps/desktop/src/main/index.ts#L125-L162)
+
+```ts
+const builtIn =
+  chatApp === 'built-in' && signIn && claudeAccess
+    ? startBuiltInChat({
+        tenant,
+        signIn,
+        claudeAccess,
+        userData,
+        settings,
+        log,
+        broadcast,
+        bubble,
+      })
+    : null
+
+const claudeDesktop =
+  chatApp === 'claude-desktop'
+    ? new ClaudeDesktop({
+        isInstalled: () => app.getApplicationNameForProtocol(NEW_CHAT_LINK) !== '',
+        openLink: (url) => shell.openExternal(url),
+        copyScreenshots: async (paths) => {
+          const image = screenshots.forClipboard(paths)
+          if (!image) return false
+          const png = new Blob([image.toPNG()], { type: 'image/png' })
+          await clipboard.write([new ClipboardItem({ 'image/png': png })])
+          return true
+        },
+        autoSend: () => settings.get().autoSend,
+        sendInClaude: async (question, paste) => {
+          const outcome = await sendInClaude({ question, paste })
+          // Not a failure as such (the user is told to finish in Claude), but worth knowing.
+          if (outcome !== 'sent') log(`Sending in Claude Desktop stopped: ${outcome}`)
+          return outcome
+        },
+        notify: ({ title, body }) => {
+          if (Notification.isSupported()) new Notification({ title, body }).show()
+        },
+        onError: (error) => log('Handing a question to Claude Desktop failed:', error),
+      })
+    : null
+```
+
+<!-- /code -->
+
+Where questions go is the tenant's `chatApp` (see [`CHAT_APPS`](#chat_apps)). Exactly one of
+these two is created and the other stays `null`; everything after this point checks which one
+exists.
+
+- `const { chatApp, signIn, claudeAccess } = tenant` (the line before): the three settings that
+  decide it. `signIn` and `claudeAccess` are optional in the schema.
+- `chatApp === 'built-in' && signIn && claudeAccess`: the schema already refuses a built-in chat
+  without `signIn` and `claudeAccess`, but TypeScript can't see that rule (it's a `.refine()`).
+  Checking them here tells it they exist, so they can be passed on as definite values.
+- `startBuiltInChat({`: creates the Claude backend, the conversation and the JumpCloud sign-in,
+  and returns the two that the rest of the app talks to (see
+  [`startBuiltInChat()`](#startbuiltinchat)). It isn't `async`, so nothing here waits, as the
+  comment in [The two windows](#the-two-windows) requires.
+- `new ClaudeDesktop({`: hands questions over to the Claude Desktop app (see
+  [Claude Desktop](9-claude-desktop.md)). `ClaudeDesktop` knows nothing about Electron: the
+  functions given to it here do the Electron and Windows work, which is what lets
+  `tests/claudeDesktop.test.ts` replace them with fakes.
+- `app.getApplicationNameForProtocol(NEW_CHAT_LINK) !== ''`: asks Windows which app opens
+  `claude://` links. Claude Desktop registers itself for them when it's installed; with no app
+  registered, Electron returns an empty string.
+- `openLink: (url) => shell.openExternal(url)`: hands the `claude://` link to Windows, which opens
+  it in Claude Desktop, the same way it opens a web link in the browser.
+- `screenshots.forClipboard(paths)`: the attached screenshots as one image (several are stacked;
+  see [The draft, screenshots and safe files](6-drafts-and-screenshots.md)). `null` means a file
+  is missing, and `return false` makes `ClaudeDesktop` report `missing-screenshot`.
+- `new Blob([image.toPNG()], { type: 'image/png' })`: the image encoded as PNG and wrapped in a
+  `Blob` (a block of bytes labelled with its media type), which is what a clipboard item holds.
+- `clipboard.write([new ClipboardItem({ 'image/png': png })])`: puts the image on the Windows
+  clipboard, replacing whatever was there. This is Electron 44's clipboard API, modelled on the
+  browser's; Electron 44 removed the older `clipboard.writeImage()`. `write()` returns a promise,
+  hence the `await`.
+- `autoSend: () => settings.get().autoSend`: the user's "Send in Claude automatically" setting. A
+  function rather than a value, so each question uses the setting as it is at that moment.
+- `sendInClaude: async (question, paste) => {`: presses Ctrl+V and Enter in Claude Desktop once it
+  shows the question (`sendInClaude()` in `sendInClaude.ts`, see
+  [Claude Desktop](9-claude-desktop.md)). The wrapper logs any outcome but `sent` ("Sending in
+  Claude Desktop stopped: not-ready", say). As the comment says, that isn't a failure as such:
+  the user gets a notification saying what's left to do. But it's worth having in the log if
+  someone reports that questions aren't being sent.
+- `if (Notification.isSupported()) new Notification({ title, body }).show()`: a Windows
+  notification, used to say what's left to do in Claude: paste the screenshot, or press Enter.
+  The panel can't say it, because it closes as Claude Desktop opens. Where Windows can't show
+  notifications, nothing is shown.
+- `onError: (error) => log('Handing a question to Claude Desktop failed:', error)`: if copying or
+  opening fails, the panel shows a short message; if the sending helper can't run, the user gets
+  a notification. Either way the log gets the details.
+
+Two statements follow:
+
+- `if (!builtIn) {`, `void rm(join(userData, 'jumpcloud-session.bin'), ...)`: with Claude
+  Desktop, a JumpCloud sign-in saved by the built-in chat (which Morse Micro used until 3.1) is no
+  longer needed, so the file is deleted rather than left on disk.
+- `void rm(join(userData, 'claude-api-key.bin'), { force: true }).catch(() => {})`: an earlier
+  version saved a Claude API key in this file. Nothing uses it now, so it's deleted. `force: true`
+  means "no error if it isn't there", and `.catch(() => {})` ignores any other failure. The
+  JumpCloud file above is deleted the same way.
+
+#### IPC, the tray and display changes
+
+<!-- code: apps/desktop/src/main/index.ts#start.onDisplayChange -->
+
+[`src/main/index.ts`, line 198](../../apps/desktop/src/main/index.ts#L198)
+
+```ts
+const onDisplayChange = () => bubble.displayChanged()
+```
+
+<!-- /code -->
+
+Everything else in this part of `start()` is plain statements:
+
+- `registerIpc({`: connects the pages' requests to the services (see
+  [`registerIpc()`](#registeripc)). It's given both windows (only they may call in), every
+  service, and `builtIn` and `claudeDesktop`, one of them `null`, so it only answers the channels
+  of the chat in use.
+- `actions: createActionHandlers({ controller: bubble, screenshots, quit: () => app.quit() })`:
+  the commands behind the Screenshot, Bounce and Close icons (`actions.ts`).
+- `getState: () => ({`: builds the snapshot a page asks for when it first loads: the bubble's mode
+  and corner, the draft, the settings, the branding, the app version (`app.getVersion()`, from
+  `package.json`), the sign-in status and the chat so far. After that the page keeps up through
+  the broadcasts above.
+- `auth: builtIn?.auth.status ?? null`, `chat: builtIn?.chat.list() ?? []`: `?.` reads on only if
+  `builtIn` isn't `null` (otherwise the whole expression is `undefined`), and `??` gives the value
+  to use instead. So with Claude Desktop there's no sign-in status (`null`) and the chat is always
+  empty: the panel shows just the text box.
+- `tray = createTray({`: adds the icon in the notification area. `onOpen` opens the panel and
+  `onQuit` quits (see [`createTray()`](#createtray)).
+- `screen.on('display-added', onDisplayChange)`: the same handler also runs for
+  `display-removed` and `display-metrics-changed` (a resolution, scaling or taskbar change).
+  `BubbleController.displayChanged()` moves the bubble back into its corner, or onto the main
+  display if its own display was unplugged.
+
+#### Quitting
+
+<!-- code: apps/desktop/src/main/index.ts#start.shuttingDown -->
+
+[`src/main/index.ts`, lines 203–204](../../apps/desktop/src/main/index.ts#L203-L204)
+
+```ts
+// Save the text box before quitting. before-quit fires again after the second app.quit().
+let shuttingDown = false
+```
+
+<!-- /code -->
+
+The `app.on('before-quit', (event) => {` handler that follows makes sure the draft reaches the
+disk before the app closes. `before-quit` fires when something calls `app.quit()`: the tray's
+Quit or the Close icon. It doesn't fire when Windows shuts down or logs off, which is what the
+`session-end` handler at the end is for.
+
+- `if (shuttingDown) return`: the handler ends by calling `app.quit()` again, which fires
+  `before-quit` a second time. This flag lets that second one through.
+- `event.preventDefault()`: cancels this first quit, to make time for the steps below.
+- `bubble.dispose()`, `builtIn?.chat.stop()`: stops the bubble's animation timers and, with the
+  built-in chat, aborts a reply that is still streaming.
+- `tray?.destroy()`: removes the tray icon now. Otherwise it can linger in the tray until the
+  mouse passes over it.
+- `Promise.race([notes.flush(), timeout])`: waits for the draft to be written, or
+  `SHUTDOWN_TIMEOUT_MS` (2 seconds), whichever comes first, so a stuck disk can't stop the app
+  from closing. `.finally(() => app.quit())` then quits for real.
+- `panelWindow.on('session-end', () => notes.flushSync())`: when Windows logs off or shuts down,
+  it doesn't wait for asynchronous work, so `session-end` (a Windows-only window event) saves the
+  draft with a blocking write instead.
+
+Finally, `await windowsReady` waits until both pages have painted, and `bubble.start()` puts the
+bubble in its corner and shows it. Waiting avoids showing a window before its page has drawn
+anything.
+
+### `startBuiltInChat()`
+
+The built-in chat: Claude in the panel, reached through the Claude API with the user's JumpCloud
+sign-in. `start()` calls it only when the tenant's `chatApp` is `built-in`; with Claude Desktop
+none of this is created.
+
+Its one parameter, `deps`, holds what it needs from `start()`: the `tenant` (for the system
+prompt), its `signIn` and `claudeAccess` settings (passed separately because here they're known to
+exist), the `userData` folder, the `settings` service, the problem `log`, `broadcast` and the
+`bubble` controller. The first line takes them all out of `deps` again
+(`const { tenant, signIn, claudeAccess, ... } = deps`), so the code below reads as it did when it
+was part of `start()`. It returns a [`BuiltInChat`](#builtinchat): the `AuthManager` and the
+`ChatSession`, which `registerIpc()` and `getState` use.
+
+#### Claude
+
+<!-- code: apps/desktop/src/main/index.ts#startBuiltInChat.devBaseUrl,lastIdToken,backend,chat -->
+
+[`src/main/index.ts`, lines 238–262](../../apps/desktop/src/main/index.ts#L238-L262)
+
+```ts
 // Dev runs may point at a local test server; an installed app always talks to Anthropic.
 const devBaseUrl = !app.isPackaged ? process.env['ANTHROPIC_BASE_URL'] : undefined
 
@@ -277,9 +489,6 @@ const chat = new ChatSession({
 
 <!-- /code -->
 
-- `screen.getDisplayMatching(bubbleWindow.getBounds())`: the screenshot service is given a
-  function rather than a fixed display, so each capture takes the display the bubble is on at
-  that moment.
 - `devBaseUrl`: lets a dev run send Claude requests to a local mock server named in
   `ANTHROPIC_BASE_URL`. An installed build ignores the variable, so it can't be redirected.
 - `let lastIdToken`: a summary of the last JumpCloud ID token handed to Anthropic, kept only so it
@@ -316,9 +525,9 @@ const chat = new ChatSession({
 
 #### Sign-in
 
-<!-- code: apps/desktop/src/main/index.ts#start.missing,localIssuer,authState,auth -->
+<!-- code: apps/desktop/src/main/index.ts#startBuiltInChat.missing,localIssuer,authState,auth -->
 
-[`src/main/index.ts`, lines 137–161](../../apps/desktop/src/main/index.ts#L137-L161)
+[`src/main/index.ts`, lines 264–288](../../apps/desktop/src/main/index.ts#L264-L288)
 
 ```ts
 const missing = missingSettings(signIn, claudeAccess)
@@ -382,86 +591,20 @@ company's identity service in the browser.
 - `onError: (error) => log('JumpCloud sign-in failed:', error)`: a failed sign-in or renewal goes
   to the problem log; the chat box shows its own short message.
 
-Two statements follow:
+Two statements end the function:
 
 - `void auth.init()`: loads the saved sign-in and renews it with JumpCloud. It isn't awaited, so
-  the windows appear while that happens; the result reaches the pages through `onStatus`. An
-  `await` here would also let a page's request in before `registerIpc()` has run.
-- `void rm(join(userData, 'claude-api-key.bin'), { force: true }).catch(() => {})`: an earlier
-  version saved a Claude API key in this file. Nothing uses it now, so it's deleted. `force: true`
-  means "no error if it isn't there", and `.catch(() => {})` ignores any other failure.
-
-#### IPC, the tray and display changes
-
-<!-- code: apps/desktop/src/main/index.ts#start.onDisplayChange -->
-
-[`src/main/index.ts`, line 195](../../apps/desktop/src/main/index.ts#L195)
-
-```ts
-const onDisplayChange = () => bubble.displayChanged()
-```
-
-<!-- /code -->
-
-Everything else in this part of `start()` is plain statements:
-
-- `registerIpc({`: connects the pages' requests to the services (see
-  [`registerIpc()`](#registeripc)). It's given both windows (only they may call in) and every
-  service.
-- `actions: createActionHandlers({ controller: bubble, screenshots, quit: () => app.quit() })`:
-  the commands behind the Screenshot, Bounce and Close icons (`actions.ts`).
-- `getState: () => ({`: builds the snapshot a page asks for when it first loads: the bubble's mode
-  and corner, the draft, the settings, the branding, the app version (`app.getVersion()`, from
-  `package.json`), the sign-in status and the chat so far. After that the page keeps up through
-  the broadcasts above.
-- `tray = createTray({`: adds the icon in the notification area. `onOpen` opens the panel and
-  `onQuit` quits (see [`createTray()`](#createtray)).
-- `screen.on('display-added', onDisplayChange)`: the same handler also runs for
-  `display-removed` and `display-metrics-changed` (a resolution, scaling or taskbar change).
-  `BubbleController.displayChanged()` moves the bubble back into its corner, or onto the main
-  display if its own display was unplugged.
-
-#### Quitting
-
-<!-- code: apps/desktop/src/main/index.ts#start.shuttingDown -->
-
-[`src/main/index.ts`, lines 200–201](../../apps/desktop/src/main/index.ts#L200-L201)
-
-```ts
-// Save the text box before quitting. before-quit fires again after the second app.quit().
-let shuttingDown = false
-```
-
-<!-- /code -->
-
-The `app.on('before-quit', (event) => {` handler that follows makes sure the draft reaches the
-disk before the app closes. `before-quit` fires when something calls `app.quit()`: the tray's
-Quit or the Close icon. It doesn't fire when Windows shuts down or logs off, which is what the
-`session-end` handler at the end is for.
-
-- `if (shuttingDown) return`: the handler ends by calling `app.quit()` again, which fires
-  `before-quit` a second time. This flag lets that second one through.
-- `event.preventDefault()`: cancels this first quit, to make time for the steps below.
-- `bubble.dispose()`, `chat.stop()`: stops the bubble's animation timers and aborts a reply that
-  is still streaming.
-- `tray?.destroy()`: removes the tray icon now. Otherwise it can linger in the tray until the
-  mouse passes over it.
-- `Promise.race([notes.flush(), timeout])`: waits for the draft to be written, or
-  `SHUTDOWN_TIMEOUT_MS` (2 seconds), whichever comes first, so a stuck disk can't stop the app
-  from closing. `.finally(() => app.quit())` then quits for real.
-- `panelWindow.on('session-end', () => notes.flushSync())`: when Windows logs off or shuts down,
-  it doesn't wait for asynchronous work, so `session-end` (a Windows-only window event) saves the
-  draft with a blocking write instead.
-
-Finally, `await windowsReady` waits until both pages have painted, and `bubble.start()` puts the
-bubble in its corner and shows it. Waiting avoids showing a window before its page has drawn
-anything.
+  the windows appear while that happens; the result reaches the pages through `onStatus`. Waiting
+  for it would make this function `async`, and `start()` would then let a page's request in
+  before `registerIpc()` has run.
+- `return { auth, chat }`: the two services the IPC handlers and `getState` need. The backend
+  stays inside: only `chat` and `onSignedOut` use it.
 
 ### `safeStorageEncryptor`
 
 <!-- code: apps/desktop/src/main/index.ts#safeStorageEncryptor -->
 
-[`src/main/index.ts`, lines 219–224](../../apps/desktop/src/main/index.ts#L219-L224)
+[`src/main/index.ts`, lines 294–299](../../apps/desktop/src/main/index.ts#L294-L299)
 
 ```ts
 /** Windows DPAPI through Electron: only this Windows user can decrypt what it encrypts. */
@@ -482,51 +625,61 @@ The encryption `SecretStore` uses for the saved sign-in. `SecretStore` only know
   protection. On Windows that's _DPAPI_, which ties the encrypted data to the signed-in Windows
   user, so another user of the same PC can't decrypt it.
 - `isAvailable`: `safeStorage` only works once the app is ready. Nothing calls these methods
-  before then, because the `SecretStore` is created inside `start()`.
+  before then, because the `SecretStore` is created inside `startBuiltInChat()`, which `start()`
+  calls.
 
 ### `withDevOverrides()`
 
 <!-- code: apps/desktop/src/main/index.ts#withDevOverrides -->
 
-[`src/main/index.ts`, lines 226–238](../../apps/desktop/src/main/index.ts#L226-L238)
+[`src/main/index.ts`, lines 301–318](../../apps/desktop/src/main/index.ts#L301-L318)
 
 ```ts
 /**
- * Dev runs only: the sign-in and Claude access settings can be overridden from a JSON file named
- * by DESKTOP_ASSIST_DEV_CONFIG, to test against a local identity provider.
+ * Dev runs only: where chats happen, and the sign-in and Claude access settings, can be
+ * overridden from a JSON file named by DESKTOP_ASSIST_DEV_CONFIG, to test against a local
+ * identity provider.
  */
-async function withDevOverrides(tenant: Tenant): Promise<Pick<Tenant, 'signIn' | 'claudeAccess'>> {
+async function withDevOverrides(tenant: Tenant): Promise<Tenant> {
   const path = !app.isPackaged ? process.env['DESKTOP_ASSIST_DEV_CONFIG'] : undefined
   if (!path) return tenant
   const override = DevOverrideSchema.parse(JSON.parse(await readFile(path, 'utf8')))
-  return {
-    signIn: SignInSchema.parse({ ...tenant.signIn, ...override.signIn }),
-    claudeAccess: { ...tenant.claudeAccess, ...override.claudeAccess },
-  }
+  return TenantSchema.parse({
+    ...tenant,
+    chatApp: override.chatApp ?? tenant.chatApp,
+    signIn: override.signIn ? { ...tenant.signIn, ...override.signIn } : tenant.signIn,
+    claudeAccess: override.claudeAccess
+      ? { ...tenant.claudeAccess, ...override.claudeAccess }
+      : tenant.claudeAccess,
+  })
 }
 ```
 
 <!-- /code -->
 
-Returns the sign-in and Claude access settings to use. In an installed build, or when
-`DESKTOP_ASSIST_DEV_CONFIG` isn't set, that's simply the ones from `tenant.json`. In a dev run,
-the JSON file named by that variable can replace some of them, for example to point the app at a
-test identity provider, without editing `tenant.json`.
+Returns the tenant config to use. In an installed build, or when `DESKTOP_ASSIST_DEV_CONFIG`
+isn't set, that's simply `tenant.json`. In a dev run, the JSON file named by that variable can
+replace where chats happen (`chatApp`) and some of the sign-in and Claude access settings, for
+example to try the built-in chat against a test identity provider, without editing `tenant.json`.
 
-- `Promise<Pick<Tenant, 'signIn' | 'claudeAccess'>>`: `Pick` is a TypeScript helper that keeps
-  just the named properties of a type. That's why `return tenant` is allowed: the whole tenant has
-  those two properties.
+- `return tenant`: no override file, so the tenant is used as it is.
 - `DevOverrideSchema.parse(JSON.parse(await readFile(path, 'utf8')))`: the file is checked
   against [`DevOverrideSchema`](#devoverrideschema), in which every field is optional.
-- `SignInSchema.parse({ ...tenant.signIn, ...override.signIn })`: `...` copies an object's
-  properties, and later ones win, so the override's fields replace the tenant's. The merged result
-  is checked again, so an override can't produce an invalid sign-in config.
+- `override.chatApp ?? tenant.chatApp`: the override's choice if it has one, otherwise the
+  tenant's.
+- `override.signIn ? { ...tenant.signIn, ...override.signIn } : tenant.signIn`: `...` copies an
+  object's properties, and later ones win, so the override's fields replace the tenant's. The
+  merge only happens when the override has a `signIn`; a Claude Desktop tenant without one keeps
+  having none, rather than an empty object. `claudeAccess` works the same way.
+- `TenantSchema.parse({`: the result is checked again as a whole tenant, so an override can't
+  produce an invalid config. For example, switching to the built-in chat without sign-in settings
+  fails here, and the app shows the error instead of starting.
 
 ### `isLoopback()`
 
 <!-- code: apps/desktop/src/main/index.ts#isLoopback -->
 
-[`src/main/index.ts`, lines 240–242](../../apps/desktop/src/main/index.ts#L240-L242)
+[`src/main/index.ts`, lines 320–322](../../apps/desktop/src/main/index.ts#L320-L322)
 
 ```ts
 function isLoopback(url: URL): boolean {
@@ -544,7 +697,7 @@ in `hostname`. Used only to decide whether plain `http` is allowed for a dev ide
 
 <!-- code: apps/desktop/src/main/index.ts#toArea,electronDisplays -->
 
-[`src/main/index.ts`, lines 244–258](../../apps/desktop/src/main/index.ts#L244-L258)
+[`src/main/index.ts`, lines 324–338](../../apps/desktop/src/main/index.ts#L324-L338)
 
 ```ts
 /** Electron's `screen`, in the shape the bubble controller uses. All coordinates are DIPs. */
@@ -589,7 +742,7 @@ method is called, which happens after `start()` has begun.
 
 <!-- code: apps/desktop/src/main/index.ts#fail -->
 
-[`src/main/index.ts`, lines 260–264](../../apps/desktop/src/main/index.ts#L260-L264)
+[`src/main/index.ts`, lines 340–344](../../apps/desktop/src/main/index.ts#L340-L344)
 
 ```ts
 function fail(error: unknown): void {
@@ -617,8 +770,9 @@ A small log of problems, written to `%APPDATA%\Desktop Assist\logs\desktop-assis
 run, the `Desktop Assist (Dev)` folder) and printed to the terminal as well. An installed copy has
 no terminal, so without this file there would be no way to see why something failed on a user's
 PC, for example why Anthropic refused their sign-in. `start()` in `index.ts` creates the one log
-and gives it to the error callbacks of `NotesStore`, `ChatSession` and `AuthManager`. It's never
-given tokens, only errors and summaries such as the ID token summary.
+and gives it to the error callbacks of `NotesStore` and `ClaudeDesktop`, or of `ChatSession` and
+`AuthManager` with the built-in chat. It's never given tokens, only errors and summaries such as
+the ID token summary.
 
 ### `MAX_LOG_BYTES` and `Log`
 
@@ -783,11 +937,36 @@ value must have (a string of at most so many characters, one of three words, and
 trusted code, but checking at this boundary means a bug or an injected script in a page can't
 send the main process something unexpected.
 
+Only the channels of the chat in use are answered. With the built-in chat, the sign-in and chat
+channels have handlers; with Claude Desktop, the two `claudeDesktop...` channels do instead.
+
+### `BuiltInChat`
+
+<!-- code: apps/desktop/src/main/ipc.ts#BuiltInChat -->
+
+[`src/main/ipc.ts`, lines 23–27](../../apps/desktop/src/main/ipc.ts#L23-L27)
+
+```ts
+/** The built-in chat and the JumpCloud sign-in it needs. */
+export interface BuiltInChat {
+  auth: AuthManager
+  chat: ChatSession
+}
+```
+
+<!-- /code -->
+
+The two services of the built-in chat that the handlers call: `AuthManager` (the JumpCloud
+sign-in, see [JumpCloud sign-in](3-sign-in.md)) and `ChatSession` (the conversation, see
+[Talking to Claude](4-claude.md)). [`startBuiltInChat()`](#startbuiltinchat) in `index.ts`
+creates them and returns them in this shape. Keeping them together means there is no state in
+which one exists without the other.
+
 ### `IpcContext`
 
 <!-- code: apps/desktop/src/main/ipc.ts#IpcContext -->
 
-[`src/main/ipc.ts`, lines 22–33](../../apps/desktop/src/main/ipc.ts#L22-L33)
+[`src/main/ipc.ts`, lines 29–42](../../apps/desktop/src/main/ipc.ts#L29-L42)
 
 ```ts
 export interface IpcContext {
@@ -797,8 +976,10 @@ export interface IpcContext {
   notes: NotesStore
   screenshots: ScreenshotService
   settings: SettingsService
-  auth: AuthManager
-  chat: ChatSession
+  /** The built-in chat and its sign-in, or null when chats happen in Claude Desktop. */
+  builtIn: BuiltInChat | null
+  /** Hands questions to Claude Desktop, or null when the chat is built in. */
+  claudeDesktop: ClaudeDesktop | null
   actions: ActionHandlers
   getState(): AppState
 }
@@ -811,6 +992,9 @@ are created there, so this file only needs their types, not how to build them.
 
 - `windows: BrowserWindow[]`: the bubble and panel windows; requests from any other page are
   refused.
+- `builtIn: BuiltInChat | null`, `claudeDesktop: ClaudeDesktop | null`: where questions go.
+  Exactly one of the two is set, depending on the tenant's `chatApp` (see
+  [The chat: built in, or in Claude Desktop](#the-chat-built-in-or-in-claude-desktop)).
 - `getState(): AppState`: builds the full snapshot a page asks for when it first loads (defined
   in `start()`).
 
@@ -818,7 +1002,7 @@ are created there, so this file only needs their types, not how to build them.
 
 <!-- code: apps/desktop/src/main/ipc.ts#NoArgs,FilePath,ExternalUrl -->
 
-[`src/main/ipc.ts`, lines 35–47](../../apps/desktop/src/main/ipc.ts#L35-L47)
+[`src/main/ipc.ts`, lines 44–56](../../apps/desktop/src/main/ipc.ts#L44-L56)
 
 ```ts
 const NoArgs = z.undefined()
@@ -856,7 +1040,7 @@ Schemas used by several channels.
 
 <!-- code: apps/desktop/src/main/ipc.ts#registerIpc -->
 
-[`src/main/ipc.ts`, lines 49–137](../../apps/desktop/src/main/ipc.ts#L49-L137)
+[`src/main/ipc.ts`, lines 58–169](../../apps/desktop/src/main/ipc.ts#L58-L169)
 
 ```ts
 /** Wires every renderer request to the main process. All arguments are validated with zod. */
@@ -912,6 +1096,7 @@ export function registerIpc(ctx: IpcContext): void {
   handle(IPC.notesRemoveAttachment, z.string().min(1).max(64), (id) =>
     ctx.notes.removeAttachment(id),
   )
+  handle(IPC.notesClear, NoArgs, () => ctx.notes.clear())
 
   handle(IPC.screenshotThumbnail, FilePath, (path) => ctx.screenshots.thumbnail(path))
   handle(IPC.screenshotOpen, FilePath, (path) => ctx.screenshots.open(path))
@@ -922,38 +1107,62 @@ export function registerIpc(ctx: IpcContext): void {
   handle(IPC.settingsSetEffort, z.enum(['low', 'medium', 'high']), (effort) =>
     ctx.settings.setEffort(effort),
   )
+  handle(IPC.settingsSetAutoSend, z.boolean(), (autoSend) => ctx.settings.setAutoSend(autoSend))
 
-  // Sign-in happens in the browser and can take minutes, so these return straight away;
-  // progress is broadcast on IPC.authStatus. No tokens ever reach the renderer.
-  handle(IPC.authSignIn, NoArgs, () => void ctx.auth.signIn())
-  handle(IPC.authCancel, NoArgs, () => ctx.auth.cancelSignIn())
-  handle(IPC.authSignOut, NoArgs, () => ctx.auth.signOut())
-  handle(IPC.authRetry, NoArgs, () => void ctx.auth.retry())
+  if (ctx.claudeDesktop) registerClaudeDesktop(ctx.claudeDesktop)
+  if (ctx.builtIn) registerBuiltInChat(ctx.builtIn)
 
-  // Sends the draft: the text from the box plus the screenshots attached to it.
-  handle(IPC.chatSend, z.string().max(MAX_NOTE_LENGTH), (text): SendResult => {
-    if (ctx.chat.busy) return { ok: false, reason: 'busy' }
-    const draft = ctx.notes.get()
-    const images: OutgoingImage[] = []
-    for (const attachment of draft.attachments) {
-      const image = ctx.screenshots.forClaude(attachment.path)
-      if (!image) return { ok: false, reason: 'missing-screenshot' }
-      images.push(image)
-    }
-    const status = ctx.chat.send(text, images, draft.attachments)
-    if (status !== 'sent') return { ok: false, reason: status }
-    return { ok: true, notes: ctx.notes.clear() }
-  })
-  handle(IPC.chatStop, NoArgs, () => ctx.chat.stop())
-  handle(IPC.chatRetry, NoArgs, () => ctx.chat.retry())
-  handle(IPC.chatNew, NoArgs, () => ctx.chat.newConversation())
+  function registerClaudeDesktop(claudeDesktop: ClaudeDesktop): void {
+    handle(IPC.claudeDesktopInstalled, NoArgs, () => claudeDesktop.isInstalled())
+    // Hands the draft over: the text from the box, plus the screenshots attached to it.
+    handle(
+      IPC.claudeDesktopAsk,
+      z.string().max(MAX_NOTE_LENGTH),
+      async (text): Promise<AskResult> => {
+        const result = await claudeDesktop.ask(text, ctx.notes.get().attachments)
+        if (!result.ok) return result
+        // Claude Desktop is coming to the front; get out of its way.
+        ctx.controller.collapse()
+        return { ...result, notes: ctx.notes.clear() }
+      },
+    )
+  }
+
+  function registerBuiltInChat({ auth, chat }: BuiltInChat): void {
+    // Sign-in happens in the browser and can take minutes, so these return straight away;
+    // progress is broadcast on IPC.authStatus. No tokens ever reach the renderer.
+    handle(IPC.authSignIn, NoArgs, () => void auth.signIn())
+    handle(IPC.authCancel, NoArgs, () => auth.cancelSignIn())
+    handle(IPC.authSignOut, NoArgs, () => auth.signOut())
+    handle(IPC.authRetry, NoArgs, () => void auth.retry())
+
+    // Sends the draft: the text from the box plus the screenshots attached to it.
+    handle(IPC.chatSend, z.string().max(MAX_NOTE_LENGTH), (text): SendResult => {
+      if (chat.busy) return { ok: false, reason: 'busy' }
+      const draft = ctx.notes.get()
+      const images: OutgoingImage[] = []
+      for (const attachment of draft.attachments) {
+        const image = ctx.screenshots.forClaude(attachment.path)
+        if (!image) return { ok: false, reason: 'missing-screenshot' }
+        images.push(image)
+      }
+      const status = chat.send(text, images, draft.attachments)
+      if (status !== 'sent') return { ok: false, reason: status }
+      return { ok: true, notes: ctx.notes.clear() }
+    })
+    handle(IPC.chatStop, NoArgs, () => chat.stop())
+    handle(IPC.chatRetry, NoArgs, () => chat.retry())
+    handle(IPC.chatNew, NoArgs, () => chat.newConversation())
+  }
 }
 ```
 
 <!-- /code -->
 
-Registers a handler for every channel, once, at startup. The first part sets up a sender check
-and two helpers; the rest is one line (or a few) per channel, grouped by area.
+Registers a handler for every channel the app uses, once, at startup. The first part sets up a
+sender check and two helpers; the rest is one line (or a few) per channel, grouped by area. The
+channels of the two kinds of chat are registered by two inner functions, `registerClaudeDesktop()`
+and `registerBuiltInChat()`, and only one of them runs.
 
 **The sender check and the two helpers**
 
@@ -990,8 +1199,9 @@ and two helpers; the rest is one line (or a few) per channel, grouped by area.
   accepted. `ctx.actions[id]()` runs the matching handler from `actions.ts` and returns its
   result, which the panel shows as a toast. The Settings icon is a `popover` action that never
   leaves the page.
-- `shell.openExternal(url)`: opens a link from a Claude reply in the default browser, after
-  `ExternalUrl` has checked it (an email link opens the email app instead).
+- `shell.openExternal(url)`: opens a link from a Claude reply (or the Claude Desktop download
+  page) in the default browser, after `ExternalUrl` has checked it (an email link opens the email
+  app instead).
 - `z.string().max(1_000_000)`: the text of a chat message whose Copy button was pressed, capped
   at a million characters (`_` is just a digit separator). `clipboard.writeText` puts it on the Windows clipboard.
 
@@ -1003,31 +1213,65 @@ and two helpers; the rest is one line (or a few) per channel, grouped by area.
   It answers `no-screenshots` if there are none and `already-attached` if `addAttachment()`
   returns `null` because that file is already attached.
 - `z.string().min(1).max(64)`: an attachment ID (a UUID, 36 characters).
+- `IPC.notesClear`: empties the text box and removes its screenshots (Clear text box in the
+  Settings menu, with Claude Desktop). It returns the empty draft, which the panel shows.
 
 **Screenshots and settings**
 
 - `IPC.screenshotThumbnail`, `IPC.screenshotOpen`, `IPC.screenshotsOpenFolder`: a small preview
   for a chip, opening a screenshot in the default image viewer, and opening the folder. The two
   that take a path refuse one outside the screenshots folder.
-- `IPC.settingsGet`, `IPC.settingsSetAutoStart`, `IPC.settingsSetEffort`: the Settings menu.
-  Each returns the full, current settings, so the menu always shows what actually took effect.
+- `IPC.settingsGet`, `IPC.settingsSetAutoStart`, `IPC.settingsSetEffort`,
+  `IPC.settingsSetAutoSend`: the Settings menu. Each returns the full, current settings, so the
+  menu always shows what actually took effect. (The menu offers the response style only with the
+  built-in chat, and "Send in Claude automatically" only with Claude Desktop.)
 
-**Sign-in**
+**Built-in chat or Claude Desktop**
 
-- `() => void ctx.auth.signIn()`: signing in happens in the browser and can take minutes. `void`
+- `if (ctx.claudeDesktop) registerClaudeDesktop(ctx.claudeDesktop)`,
+  `if (ctx.builtIn) registerBuiltInChat(ctx.builtIn)`: `start()` sets exactly one of the two, so
+  only that chat's channels get handlers. If a page called one of the other chat's channels
+  anyway, Electron would reject its promise, because nothing is registered for it.
+- `function registerClaudeDesktop(...)`, `function registerBuiltInChat(...)`: declared inside
+  `registerIpc()`, so they can use `handle()` and `ctx`. They're called above the lines that
+  declare them, which works because JavaScript sets up a block's `function` declarations before
+  running it (this is called _hoisting_).
+
+**Claude Desktop** (`registerClaudeDesktop()`)
+
+- `IPC.claudeDesktopInstalled`: whether Claude Desktop is installed, which the panel asks each
+  time it opens.
+- `handle(IPC.claudeDesktopAsk, ...)`: hands the draft to Claude Desktop (see
+  [`ClaudeDesktop.ask()`](9-claude-desktop.md)): the text from the box plus the screenshots
+  attached to the draft. The length cap is the draft's own; `ask()` applies Claude Desktop's
+  lower limit itself and answers `too-long`.
+- `if (!result.ok) return result`: a failure (`empty`, `too-long`, `not-installed`,
+  `missing-screenshot` or `failed`) goes straight back to the panel, which shows a toast. The
+  draft is kept.
+- `ctx.controller.collapse()`: on success Claude Desktop comes to the front with the question, so
+  the panel closes to get out of its way. `ask()` returns as soon as Claude is opening, so this
+  happens straight away; sending the question in Claude carries on in the background.
+- `{ ...result, notes: ctx.notes.clear() }`: the outcome (including how many screenshots were
+  copied) plus the emptied draft, so the text box clears, as after sending in the built-in chat.
+
+**Sign-in** (`registerBuiltInChat()`)
+
+- `({ auth, chat }: BuiltInChat)`: the parameter is unpacked straight away into its two
+  services, so the handlers below can say `auth` and `chat`.
+- `() => void auth.signIn()`: signing in happens in the browser and can take minutes. `void`
   discards the promise, so the page's call returns at once; progress arrives as `IPC.authStatus`
   broadcasts. Retry works the same way.
-- `ctx.auth.cancelSignIn()`: stops waiting for the browser (it closes the local listener).
+- `auth.cancelSignIn()`: stops waiting for the browser (it closes the local listener).
 - No handler returns a token: the pages only ever see the status and the user's name.
 
-**Chat**
+**Chat** (`registerBuiltInChat()`)
 
 - `handle(IPC.chatSend, ...)`: sends the text plus the screenshots attached to the draft.
-- `if (ctx.chat.busy) return { ok: false, reason: 'busy' }`: checked first so the screenshots
+- `if (chat.busy) return { ok: false, reason: 'busy' }`: checked first so the screenshots
   aren't processed for nothing while a reply is still streaming.
 - `ctx.screenshots.forClaude(attachment.path)`: shrinks each attached screenshot and encodes it as
   JPEG for Claude. If any file has gone missing, nothing is sent and the panel shows a toast.
-- `ctx.chat.send(text, images, draft.attachments)`: starts the reply and returns straight away
+- `chat.send(text, images, draft.attachments)`: starts the reply and returns straight away
   (it streams in through `IPC.chatMessage`). Anything but `'sent'` (`busy`, `empty`,
   `signed-out`) is passed back as the reason.
 - `{ ok: true, notes: ctx.notes.clear() }`: on success the draft is emptied, and the empty draft
@@ -1105,6 +1349,10 @@ defines the shape of that file as zod schemas, plus two small helpers. `start()`
 checks the bundled config with `TenantSchema.parse()`, and `tests/tenants.test.ts` checks every
 tenant folder the same way, so a mistake is caught by the tests before it reaches a build.
 
+Besides the branding, a tenant chooses where questions go (`chatApp`): to the Claude Desktop app,
+or to the chat built into the panel. Only the built-in chat needs the sign-in settings (`signIn`)
+and the Claude access settings (`claudeAccess`).
+
 None of the values here are secret. The client ID and the Claude IDs identify the app; on their
 own they don't grant access to anything.
 
@@ -1129,7 +1377,7 @@ export const SignInSchema = z.object({
 
 <!-- /code -->
 
-How the app signs users in with JumpCloud (see [JumpCloud sign-in](3-sign-in.md)).
+How the built-in chat signs users in with JumpCloud (see [JumpCloud sign-in](3-sign-in.md)).
 
 - `issuer: z.url()`: the identity provider's address. The OIDC library reads the provider's
   endpoints from it.
@@ -1162,12 +1410,12 @@ export const ClaudeAccessSchema = z.object({
 
 <!-- /code -->
 
-How a signed-in user reaches Claude. There's no API key: Anthropic's _Workload Identity
-Federation_ accepts the user's JumpCloud ID token and returns a short-lived Claude token for the
-company's service account, if the federation rule set up in the Claude Console allows it (see
-[Talking to Claude](4-claude.md) and `docs/JUMPCLOUD_SETUP.md`). These are the IDs that exchange
-needs. `organizationId` must be the Claude Console organization's ID: the claude.ai organization
-has a different one, and using it makes Anthropic refuse every sign-in.
+How a signed-in user reaches Claude in the built-in chat. There's no API key: Anthropic's
+_Workload Identity Federation_ accepts the user's JumpCloud ID token and returns a short-lived
+Claude token for the company's service account, if the federation rule set up in the Claude
+Console allows it (see [Talking to Claude](4-claude.md) and `docs/JUMPCLOUD_SETUP.md`). These are
+the IDs that exchange needs. `organizationId` must be the Claude Console organization's ID: the
+claude.ai organization has a different one, and using it makes Anthropic refuse every sign-in.
 
 ### `SignInConfig` and `ClaudeAccessConfig`
 
@@ -1187,27 +1435,66 @@ The TypeScript types of the two settings blocks. `z.infer<typeof SignInSchema>` 
 from the schema, so the compile-time type and the run-time check can't drift apart. `oidc.ts`
 and `AnthropicBackend.ts` use these types.
 
+### `CHAT_APPS`
+
+<!-- code: apps/desktop/src/main/tenant.ts#CHAT_APPS -->
+
+[`src/main/tenant.ts`, lines 32–40](../../apps/desktop/src/main/tenant.ts#L32-L40)
+
+```ts
+/**
+ * Where conversations with Claude happen.
+ * - `claude-desktop`: Desktop Assist hands the question to the Claude Desktop app, so it uses the
+ *   person's own Claude (Team/Enterprise) account and counts against their own usage limit. No
+ *   sign-in in Desktop Assist.
+ * - `built-in`: the chat runs in the panel, through the Claude API, after a JumpCloud sign-in
+ *   (`signIn` and `claudeAccess`). Usage is billed to the company's Claude Console account.
+ */
+export const CHAT_APPS = ['built-in', 'claude-desktop'] as const satisfies ChatApp[]
+```
+
+<!-- /code -->
+
+The two places a question can go, as the comment explains. With `claude-desktop` the app has no
+sign-in and sends nothing to Anthropic itself: it opens the question in the Claude Desktop app
+(see [Claude Desktop](9-claude-desktop.md)). With `built-in` the panel is a chat of its own,
+billed to the company.
+
+- `as const`: makes the list's type the two exact strings, read-only, rather than `string[]`.
+  That's what `z.enum()` needs to produce the `'built-in' | 'claude-desktop'` type.
+- `satisfies ChatApp[]`: checks every entry is a `ChatApp` (the type in `src/shared/types.ts`
+  that the pages see) without changing the list's own type. A misspelt entry is a compile error.
+
 ### `TenantSchema` and `Tenant`
 
 <!-- code: apps/desktop/src/main/tenant.ts#TenantSchema,Tenant -->
 
-[`src/main/tenant.ts`, lines 32–47](../../apps/desktop/src/main/tenant.ts#L32-L47)
+[`src/main/tenant.ts`, lines 42–66](../../apps/desktop/src/main/tenant.ts#L42-L66)
 
 ```ts
-export const TenantSchema = z.object({
-  id: z.string().regex(/^[a-z0-9-]+$/),
-  companyName: z.string().min(1),
-  appName: z.string().min(1),
-  accentColor: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'must be a #RRGGBB colour'),
-  actions: z
-    .array(z.enum(ACTION_IDS))
-    .min(1)
-    .refine((ids) => new Set(ids).size === ids.length, 'actions must not repeat'),
-  /** Extra instructions for Claude, added to the built-in system prompt. */
-  systemPrompt: z.string().max(8000).optional(),
-  signIn: SignInSchema,
-  claudeAccess: ClaudeAccessSchema,
-})
+export const TenantSchema = z
+  .object({
+    id: z.string().regex(/^[a-z0-9-]+$/),
+    companyName: z.string().min(1),
+    appName: z.string().min(1),
+    accentColor: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'must be a #RRGGBB colour'),
+    actions: z
+      .array(z.enum(ACTION_IDS))
+      .min(1)
+      .refine((ids) => new Set(ids).size === ids.length, 'actions must not repeat'),
+    chatApp: z.enum(CHAT_APPS).default('built-in'),
+    /** Extra instructions for Claude, added to the built-in chat's system prompt. */
+    systemPrompt: z.string().max(8000).optional(),
+    /** Needed for the built-in chat only. */
+    signIn: SignInSchema.optional(),
+    claudeAccess: ClaudeAccessSchema.optional(),
+  })
+  .refine(
+    (tenant) => tenant.chatApp !== 'built-in' || Boolean(tenant.signIn && tenant.claudeAccess),
+    {
+      message: 'the built-in chat needs signIn and claudeAccess',
+    },
+  )
 
 export type Tenant = z.infer<typeof TenantSchema>
 ```
@@ -1223,33 +1510,44 @@ The whole `tenant.json`.
   be a known action, and there must be at least one.
 - `.refine((ids) => new Set(ids).size === ids.length, ...)`: a `Set` drops duplicates, so if it's
   smaller than the list, an action is listed twice.
+- `chatApp: z.enum(CHAT_APPS).default('built-in')`: where questions go. A `tenant.json` without
+  it gets the built-in chat. Because of `.default()`, `chatApp` is always there in the `Tenant`
+  type, so the code never has to handle it missing.
 - `systemPrompt`: optional extra instructions for Claude, added after the built-in ones by
-  `buildSystemPrompt()`.
+  `buildSystemPrompt()`. Only the built-in chat uses it; Claude Desktop has its own (claude.ai's
+  organization instructions).
+- `signIn: SignInSchema.optional()`, `claudeAccess: ClaudeAccessSchema.optional()`: a Claude
+  Desktop tenant can leave both out.
+- `.refine((tenant) => tenant.chatApp !== 'built-in' || ...)`: a check on the whole object, so it
+  can compare fields: the built-in chat must have both `signIn` and `claudeAccess`. `||` reads
+  "either it isn't the built-in chat, or both are there". `Boolean(...)` turns the `&&` of the two
+  objects into `true` or `false`. If the check fails, parsing throws with `message`.
 
 ### `brandingOf()`
 
 <!-- code: apps/desktop/src/main/tenant.ts#brandingOf -->
 
-[`src/main/tenant.ts`, lines 49–52](../../apps/desktop/src/main/tenant.ts#L49-L52)
+[`src/main/tenant.ts`, lines 68–71](../../apps/desktop/src/main/tenant.ts#L68-L71)
 
 ```ts
 export function brandingOf(tenant: Tenant): Branding {
-  const { companyName, appName, accentColor, actions } = tenant
-  return { companyName, appName, accentColor, actions }
+  const { companyName, appName, accentColor, actions, chatApp } = tenant
+  return { companyName, appName, accentColor, actions, chatApp }
 }
 ```
 
 <!-- /code -->
 
-The part of the tenant the pages need: names, the accent colour and the action list. It goes
-into the state snapshot from `getState`. The object is rebuilt field by field rather than passed
-as is, so the sign-in and Claude settings never go to the pages.
+The part of the tenant the pages need: names, the accent colour, the action list, and `chatApp`,
+which tells the panel whether to show the built-in chat or hand questions to Claude Desktop. It
+goes into the state snapshot from `getState`. The object is rebuilt field by field rather than
+passed as is, so the sign-in and Claude settings never go to the pages.
 
 ### `missingSettings()`
 
 <!-- code: apps/desktop/src/main/tenant.ts#missingSettings -->
 
-[`src/main/tenant.ts`, lines 54–65](../../apps/desktop/src/main/tenant.ts#L54-L65)
+[`src/main/tenant.ts`, lines 73–84](../../apps/desktop/src/main/tenant.ts#L73-L84)
 
 ```ts
 /** The tenant.json settings still to be filled in before anyone can sign in, by name. */
@@ -1269,8 +1567,8 @@ export function missingSettings(signIn: SignInConfig, access: ClaudeAccessConfig
 <!-- /code -->
 
 Lists the required IDs that are still blank, by their name in `tenant.json` (for example
-`signIn.clientId`). `start()` passes the list to `AuthManager`; if it isn't empty, the status is
-`unconfigured` and the chat box shows the list instead of a sign-in button.
+`signIn.clientId`). `startBuiltInChat()` passes the list to `AuthManager`; if it isn't empty, the
+status is `unconfigured` and the chat box shows the list instead of a sign-in button.
 
 - `required`: only the IDs a tenant can leave blank. `issuer` and `redirectPort` aren't here
   because the schema already requires them, and `workspaceId` is optional.
@@ -1282,15 +1580,16 @@ Lists the required IDs that are still blank, by their name in `tenant.json` (for
 
 <!-- code: apps/desktop/src/main/tenant.ts#DevOverrideSchema -->
 
-[`src/main/tenant.ts`, lines 67–75](../../apps/desktop/src/main/tenant.ts#L67-L75)
+[`src/main/tenant.ts`, lines 86–95](../../apps/desktop/src/main/tenant.ts#L86-L95)
 
 ```ts
 /**
- * Dev runs only: a JSON file (path in DESKTOP_ASSIST_DEV_CONFIG) can override `signIn` and
- * `claudeAccess`, so the app can be pointed at a test identity provider without editing
+ * Dev runs only: a JSON file (path in DESKTOP_ASSIST_DEV_CONFIG) can override `chatApp`, `signIn`
+ * and `claudeAccess`, so the app can be pointed at a test identity provider without editing
  * tenant.json. Installed builds never read it.
  */
 export const DevOverrideSchema = z.object({
+  chatApp: z.enum(CHAT_APPS).optional(),
   signIn: SignInSchema.partial().optional(),
   claudeAccess: ClaudeAccessSchema.partial().optional(),
 })
@@ -1302,18 +1601,22 @@ The shape of the dev-only override file read by [`withDevOverrides()`](#withdevo
 `.partial()` makes every field of a schema optional, so the file only needs the settings it
 changes.
 
+- `chatApp: z.enum(CHAT_APPS).optional()`: lets a dev run try the other kind of chat, for example
+  the built-in chat against a test identity provider while `tenant.json` says `claude-desktop`.
+
 ## `src/main/settings.ts`: the user's preferences
 
 `SettingsService` keeps the user's preferences in `preferences.json` in the userData folder: the
-reply effort (Fast, Balanced, Thorough), where the bubble was dragged to, and whether "Start with
-Windows" has been set up. It also reports the settings the Settings menu shows. Created in
+reply effort (Fast, Balanced, Thorough) for the built-in chat, whether questions are sent in
+Claude Desktop automatically, where the bubble was dragged to, and whether "Start with Windows"
+has been set up. It also reports the settings the Settings menu shows. Created in
 `start()`; the Settings menu reaches it through the `settings...` IPC channels.
 
 ### `DEFAULT_EFFORT`, `PreferencesSchema` and `Preferences`
 
 <!-- code: apps/desktop/src/main/settings.ts#DEFAULT_EFFORT,PreferencesSchema,Preferences -->
 
-[`src/main/settings.ts`, lines 7–21](../../apps/desktop/src/main/settings.ts#L7-L21)
+[`src/main/settings.ts`, lines 7–23](../../apps/desktop/src/main/settings.ts#L7-L23)
 
 ```ts
 /** Fast answers by default; Balanced and Thorough think longer. */
@@ -1322,6 +1625,8 @@ export const DEFAULT_EFFORT: Effort = 'low'
 const PreferencesSchema = z.object({
   autoStartInitialized: z.boolean().optional(),
   effort: z.enum(['low', 'medium', 'high']).optional(),
+  /** Claude Desktop: send the question in Claude, not just fill it in. On unless turned off. */
+  autoSend: z.boolean().optional(),
   /** Where the bubble was dragged to: a corner of a particular display. */
   bubbleAnchor: z
     .object({
@@ -1339,6 +1644,9 @@ type Preferences = z.infer<typeof PreferencesSchema>
 - `DEFAULT_EFFORT`: the effort until the user picks one. `low` is shown as Fast.
 - `PreferencesSchema`: what the file may contain. Every field is optional, so a missing field
   just means "not set yet", and an older file still loads after a new preference is added.
+- `autoSend`: "Send in Claude automatically", for Claude Desktop. As the comment says, it's on
+  unless the user has turned it off: a missing value counts as on (see `get()`), so it's on for
+  everyone who installed before the setting existed too.
 - `bubbleAnchor`: a display ID and one of the four corners (`BubbleAnchor` in
   `BubbleController.ts`).
 - `type Preferences = z.infer<typeof PreferencesSchema>`: the type derived from the schema.
@@ -1347,7 +1655,7 @@ type Preferences = z.infer<typeof PreferencesSchema>
 
 <!-- code: apps/desktop/src/main/settings.ts#SettingsService.prefs,saving,constructor -->
 
-[`src/main/settings.ts`, lines 24–30](../../apps/desktop/src/main/settings.ts#L24-L30)
+[`src/main/settings.ts`, lines 26–32](../../apps/desktop/src/main/settings.ts#L26-L32)
 
 ```ts
 private prefs: Preferences = {}
@@ -1377,7 +1685,7 @@ constructor(
 
 <!-- code: apps/desktop/src/main/settings.ts#SettingsService.init -->
 
-[`src/main/settings.ts`, lines 32–40](../../apps/desktop/src/main/settings.ts#L32-L40)
+[`src/main/settings.ts`, lines 34–42](../../apps/desktop/src/main/settings.ts#L34-L42)
 
 ```ts
 /** Loads preferences. The first time an installed build runs, turns on "Start with Windows". */
@@ -1408,7 +1716,7 @@ Loads the file once at startup (called from `start()`).
 
 <!-- code: apps/desktop/src/main/settings.ts#SettingsService.get -->
 
-[`src/main/settings.ts`, lines 42–51](../../apps/desktop/src/main/settings.ts#L42-L51)
+[`src/main/settings.ts`, lines 44–54](../../apps/desktop/src/main/settings.ts#L44-L54)
 
 ```ts
 get(): Settings {
@@ -1419,6 +1727,7 @@ get(): Settings {
     autoStartAvailable: available,
     screenshotsDir: this.screenshotsDir,
     effort: this.prefs.effort ?? DEFAULT_EFFORT,
+    autoSend: this.prefs.autoSend ?? true,
   }
 }
 ```
@@ -1434,12 +1743,13 @@ The current settings, as the Settings menu shows them (`Settings` in `src/shared
   Windows' Settings > Apps > Startup.
 - `this.prefs.effort ?? DEFAULT_EFFORT`: `??` uses the right-hand value when the left is `null`
   or `undefined`.
+- `this.prefs.autoSend ?? true`: "Send in Claude automatically" is on until the user turns it off.
 
 ### `SettingsService.setAutoStart()`
 
 <!-- code: apps/desktop/src/main/settings.ts#SettingsService.setAutoStart -->
 
-[`src/main/settings.ts`, lines 53–56](../../apps/desktop/src/main/settings.ts#L53-L56)
+[`src/main/settings.ts`, lines 56–59](../../apps/desktop/src/main/settings.ts#L56-L59)
 
 ```ts
 setAutoStart(enabled: boolean): Settings {
@@ -1455,29 +1765,36 @@ entry in the user's startup list (a "Run" entry in the user's part of the Window
 Nothing is saved in `preferences.json`, since Windows itself is the record. Returns the new
 settings, so the menu shows what actually happened; in a dev run that's still "off".
 
-### `SettingsService.setEffort()`
+### `SettingsService.setEffort()` and `SettingsService.setAutoSend()`
 
-<!-- code: apps/desktop/src/main/settings.ts#SettingsService.setEffort -->
+<!-- code: apps/desktop/src/main/settings.ts#SettingsService.setEffort,setAutoSend -->
 
-[`src/main/settings.ts`, lines 58–61](../../apps/desktop/src/main/settings.ts#L58-L61)
+[`src/main/settings.ts`, lines 61–69](../../apps/desktop/src/main/settings.ts#L61-L69)
 
 ```ts
 async setEffort(effort: Effort): Promise<Settings> {
   await this.save({ effort })
   return this.get()
 }
+
+async setAutoSend(autoSend: boolean): Promise<Settings> {
+  await this.save({ autoSend })
+  return this.get()
+}
 ```
 
 <!-- /code -->
 
-Saves the reply effort. `ChatSession` reads it through `getEffort()` each time it sends, so the
-change applies to the next message.
+Save the reply effort and "Send in Claude automatically", and return the settings as they now
+are. Both take effect from the next question: `ChatSession` reads the effort through
+`getEffort()` each time it sends, and `ClaudeDesktop` reads the other through its `autoSend()`
+dependency each time it hands a question over.
 
 ### `SettingsService.bubbleAnchor` and `SettingsService.setBubbleAnchor()`
 
 <!-- code: apps/desktop/src/main/settings.ts#SettingsService.bubbleAnchor,setBubbleAnchor -->
 
-[`src/main/settings.ts`, lines 63–69](../../apps/desktop/src/main/settings.ts#L63-L69)
+[`src/main/settings.ts`, lines 71–77](../../apps/desktop/src/main/settings.ts#L71-L77)
 
 ```ts
 get bubbleAnchor(): BubbleAnchor | null {
@@ -1501,7 +1818,7 @@ settles in a new corner.
 
 <!-- code: apps/desktop/src/main/settings.ts#SettingsService.save -->
 
-[`src/main/settings.ts`, lines 71–78](../../apps/desktop/src/main/settings.ts#L71-L78)
+[`src/main/settings.ts`, lines 79–86](../../apps/desktop/src/main/settings.ts#L79-L86)
 
 ```ts
 private async save(changes: Preferences): Promise<void> {

@@ -8,35 +8,44 @@ These seven files draw everything that appears around the bubble when you click 
 on the side facing the middle of the screen, and the `SettingsMenu`, which opens beside the gear
 icon. Everything else lives inside the chat card: `SignInPanel` replaces the chat while nobody is
 signed in, `MessageList` shows the conversation (using `Markdown` for Claude's replies), and an
-`AttachmentChip` above the text box stands for each attached screenshot.
+`AttachmentChip` above the text box stands for each attached screenshot. When questions go to
+Claude Desktop (the tenant's `chatApp`), there's no sign-in and no conversation in the panel, so
+the card is just the text box, with an "Ask in Claude" button.
 
 ## `src/renderer/src/components/ChatBox.tsx`: the chat card
 
 The card beside the bubble, with the text box at its bottom. `Panel` renders one `ChatBox` and
 passes it everything it shows: the bubble's `corner`, whether the panel is `open`, the current
 `toast`, the conversation (`messages`), the `draft` and its `attachments`, whether Claude is
-replying (`busy`) and whether Send is allowed (`canSend`). `Panel` also builds the two optional
-pieces that go inside it, the sign-in (`signInPrompt`) and a status line (`banner`). The `on…`
-props are what the buttons and the text box call. The file has three components: `ChatBox` (the
-card), `Composer` (the text box, private to this file) and `Banner` (exported, used by `Panel`).
+replying (`busy`), whether Send is allowed (`canSend`), whether questions go to Claude Desktop
+(`inClaudeDesktop`) and, if so, whether they're sent there automatically (`autoSend`). `Panel`
+also builds the two optional pieces that go inside it, the sign-in
+(`signInPrompt`) and a status line (`banner`). The `on…` props are what the buttons and the text
+box call. The file has three components: `ChatBox` (the card), `Composer` (the text box, private
+to this file) and `Banner` (exported, used by `Panel`).
 
 ### `ChatBox`
 
 <!-- code: apps/desktop/src/renderer/src/components/ChatBox.tsx#ChatBox -->
 
-[`src/renderer/src/components/ChatBox.tsx`, lines 11–90](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L11-L90)
+[`src/renderer/src/components/ChatBox.tsx`, lines 11–95](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L11-L95)
 
 ```tsx
 /**
  * The card beside the bubble, on the side facing the middle of the screen. It's anchored at the
  * bubble's edge (bottom in a bottom corner, top in a top corner), so it starts as just the text
  * box and grows away from that edge as the conversation gets longer, then scrolls. When nobody is
- * signed in, `signInPrompt` is shown instead of the chat.
+ * signed in, `signInPrompt` is shown instead of the chat. With `inClaudeDesktop`, it's only the
+ * text box, and sending opens the question in Claude Desktop.
  */
 export function ChatBox(props: {
   corner: Corner
   open: boolean
   toast: ToastMessage | null
+  /** Sending hands the question to Claude Desktop instead of the chat in the panel. */
+  inClaudeDesktop: boolean
+  /** With Claude Desktop: the question (and screenshot) is sent there for the user. */
+  autoSend: boolean
   /** Replaces the chat (the JumpCloud sign-in), or null to show the chat. */
   signInPrompt: ReactNode
   /** A line above the text box, e.g. "Checking your sign-in…". */
@@ -169,6 +178,11 @@ the other corners are mirror images:
 
 The parts of `ChatBox` itself:
 
+- `inClaudeDesktop: boolean`: `ChatBox` only passes it on to `Composer`, which changes the send
+  button. The rest of the card needs no change: with Claude Desktop, `Panel` never passes a
+  sign-in prompt or any messages, so the card is just the text box (and sometimes a banner).
+- `autoSend: boolean`: the "Send in Claude automatically" setting, also only for `Composer`'s
+  wording.
 - `originClass(props.corner)`: sets the CSS `transform-origin` to the bubble's corner (for
   example `origin-bottom-right`), so the zoom-in animation grows out of the bubble.
 - `'scale-95 opacity-0 transition duration-150 ease-out'`: the card is always rendered, even
@@ -213,7 +227,7 @@ The parts of `ChatBox` itself:
 
 <!-- code: apps/desktop/src/renderer/src/components/ChatBox.tsx#Composer -->
 
-[`src/renderer/src/components/ChatBox.tsx`, lines 92–184](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L92-L184)
+[`src/renderer/src/components/ChatBox.tsx`, lines 97–208](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L97-L208)
 
 ```tsx
 /** The text box: attached screenshots, the text, and the attach / send / stop buttons. */
@@ -259,6 +273,14 @@ function Composer(props: Parameters<typeof ChatBox>[0]) {
           ))}
         </div>
       )}
+      {props.inClaudeDesktop && props.attachments.length > 0 && (
+        <p className="px-3.5 pt-2 text-[11px] text-zinc-500">
+          {props.attachments.length === 1 ? 'The screenshot' : 'The screenshots'}
+          {props.autoSend && props.draft.trim()
+            ? ' will be pasted into Claude for you.'
+            : ' will be copied for you to paste into Claude with Ctrl+V.'}
+        </p>
+      )}
 
       <textarea
         ref={textarea}
@@ -292,6 +314,17 @@ function Composer(props: Parameters<typeof ChatBox>[0]) {
             className="grid size-8 place-items-center rounded-full bg-zinc-900 text-white hover:bg-zinc-700 dark:bg-white dark:text-zinc-900"
           >
             <Square size={12} fill="currentColor" aria-hidden />
+          </button>
+        ) : props.inClaudeDesktop ? (
+          <button
+            type="button"
+            onClick={props.onSend}
+            disabled={!props.canSend}
+            title={props.autoSend ? 'Send in Claude (Enter)' : 'Open in Claude (Enter)'}
+            className="inline-flex h-8 items-center gap-1 rounded-full bg-accent pr-2.5 pl-3 text-xs font-medium text-white disabled:opacity-40"
+          >
+            Ask in Claude
+            <ArrowUpRight size={14} aria-hidden />
           </button>
         ) : (
           <button
@@ -347,6 +380,15 @@ first appears. Effects are for work outside drawing the UI, such as moving the k
 - `key={attachment.id}`: every item in a list needs a `key` that stays the same between renders,
   so React can tell the items apart when one is removed.
 - `overflow-x-auto`: with many attachments, the row of chips scrolls sideways.
+- `{props.inClaudeDesktop && props.attachments.length > 0 && (`: with Claude Desktop, a small
+  note under the chips says what will happen to the screenshots. A link to Claude Desktop can
+  carry text but not images, so they go on the clipboard to be pasted (see
+  [Claude Desktop](9-claude-desktop.md)). It says "The screenshot" or "The screenshots" to match
+  how many there are.
+- `props.autoSend && props.draft.trim() ? ... : ...`: with "Send in Claude automatically" on and a
+  question typed, Desktop Assist pastes them itself ("will be pasted into Claude for you").
+  Otherwise the user pastes them with Ctrl+V. A screenshot without a question is never pasted
+  for the user, so the second wording also covers that.
 - `value={props.draft}`: a _controlled_ text box. What it shows always comes from the `draft`
   prop, not from the element's own memory.
 - `onChange={(event) => props.onDraftChange(event.target.value)}`: React's `onChange` fires on
@@ -364,17 +406,26 @@ first appears. Effects are for work outside drawing the UI, such as moving the k
 - `onClick={props.onAttachLatest}`: `Panel.attachLatest` adds the newest screenshot to the
   draft, or shows a toast saying why it couldn't.
 - `props.busy ? (`: while Claude is replying, Send is replaced by Stop. `Panel` sets `busy` when
-  any message is still `streaming`.
+  any message is still `streaming`, which only happens in the built-in chat.
 - `fill="currentColor"`: lucide icons are outlines; this fills the square with the text colour so
   it reads as a solid "stop" symbol.
-- `disabled={!props.canSend}`: `Panel` allows sending only when you're signed in, Claude isn't
-  busy, and there's text or a screenshot. `disabled:opacity-40` fades the button out.
+- `) : props.inClaudeDesktop ? (`: a second condition, chained on the first. Not busy and handing
+  questions to Claude Desktop: the button is a pill that says **Ask in Claude**, with an arrow
+  pointing up and out (`ArrowUpRight`), since the question opens in another app. Otherwise it's
+  the round Send arrow (`ArrowUp`). Enter does the same as either button.
+- `title={props.autoSend ? 'Send in Claude (Enter)' : 'Open in Claude (Enter)'}`: the tooltip
+  says whether the question will be sent in Claude or only opened there. The Ask button has no
+  `aria-label`, because its visible text already names it; the round Send button has only an
+  icon, so it needs one.
+- `disabled={!props.canSend}`: `Panel` allows sending only when you're signed in (always, with
+  Claude Desktop), Claude isn't replying, no question is already being handed to Claude Desktop,
+  and there's text or a screenshot. `disabled:opacity-40` fades the button out.
 
 ### `Banner`
 
 <!-- code: apps/desktop/src/renderer/src/components/ChatBox.tsx#Banner -->
 
-[`src/renderer/src/components/ChatBox.tsx`, lines 186–195](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L186-L195)
+[`src/renderer/src/components/ChatBox.tsx`, lines 210–219](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L210-L219)
 
 ```tsx
 /** A one-line status above the text box, with an optional action. */
@@ -391,16 +442,19 @@ export function Banner(props: { spinner?: boolean; children: ReactNode; action?:
 
 <!-- /code -->
 
-A one-line status strip between the conversation and the text box. `Panel` uses it in two cases:
-"Checking your JumpCloud sign-in…" with a spinner while a saved sign-in is renewed at startup, and
-the "couldn't reach JumpCloud" message with a Retry button (see [JumpCloud sign-in](3-sign-in.md)).
+A one-line status strip between the conversation and the text box. `Panel` uses it in three
+cases: "Checking your JumpCloud sign-in…" with a spinner while a saved sign-in is renewed at
+startup, the "couldn't reach JumpCloud" message with a Retry button (see
+[JumpCloud sign-in](3-sign-in.md)), and, with Claude Desktop, "Claude Desktop isn't installed on
+this PC…" with a Download button.
 
 - `spinner?: boolean`: the `?` makes the prop optional. Writing `<Banner spinner>` with no value
   means `spinner={true}`.
 - `children: ReactNode`: `children` is a special prop holding whatever is written between
   `<Banner>` and `</Banner>`. `ReactNode` is the type for anything React can display: text,
   elements, or `null`.
-- `action?: ReactNode`: an optional element at the right-hand end, such as `Panel`'s Retry button.
+- `action?: ReactNode`: an optional element at the right-hand end, such as `Panel`'s Retry or
+  Download button.
 - `animate-spin`: Tailwind's spinning animation, applied to lucide's `LoaderCircle` icon.
 - `flex-1`: the text takes all the spare width, which pushes the action to the right.
 
@@ -982,8 +1036,9 @@ passed as `children`.
 The small menu that opens beside the gear icon. `Panel` renders it only while the panel is open,
 the gear has toggled it on, and the tenant's list of actions includes `settings`. Its props are
 the `corner` and `offset` for positioning; the current `settings`, `branding` (app and company
-name), `version` and signed-in `user` to display; and one callback per menu item. `Panel` closes
-it on Esc, on a click anywhere else in the panel, and when the panel closes.
+name, and which kind of chat), `version` and signed-in `user` to display; and one callback per
+menu item. `Panel` closes it on Esc, on a click anywhere else in the panel, and when the panel
+closes.
 
 ### `CONFIRM_MS`, `EFFORTS`
 
@@ -1003,7 +1058,8 @@ const EFFORTS: { value: Effort; label: string; hint: string }[] = [
 
 <!-- /code -->
 
-- `const CONFIRM_MS = 3000`: how long "New conversation" waits for its second click.
+- `const CONFIRM_MS = 3000`: how long "New conversation" (or "Clear text box") waits for its
+  second click.
 - `EFFORTS: { value: Effort; label: string; hint: string }[]`: the three response styles. Each
   maps an `Effort` value (what's sent to the Claude API) to the label on its button and a tooltip.
   Typing `value` as `Effort` means TypeScript rejects a misspelt value. The API side is
@@ -1013,7 +1069,7 @@ const EFFORTS: { value: Effort; label: string; hint: string }[] = [
 
 <!-- code: apps/desktop/src/renderer/src/components/SettingsMenu.tsx#SettingsMenu -->
 
-[`src/renderer/src/components/SettingsMenu.tsx`, lines 16–139](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L16-L139)
+[`src/renderer/src/components/SettingsMenu.tsx`, lines 16–170](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L16-L170)
 
 ```tsx
 /** The menu that opens beside the gear icon, on the side facing the middle of the screen. */
@@ -1028,11 +1084,13 @@ export function SettingsMenu(props: {
   user: SignedInUser | null
   onToggleAutoStart: () => void
   onSetEffort: (effort: Effort) => void
+  onToggleAutoSend: () => void
   onSignOut: () => void
   onOpenScreenshotsFolder: () => void
   onNewConversation: () => void
+  onClearText: () => void
 }) {
-  // "New conversation" needs a second click within a few seconds.
+  // "New conversation" (or "Clear text box") needs a second click within a few seconds.
   const [confirmingNew, setConfirmingNew] = useState(false)
   useEffect(() => {
     if (!confirmingNew) return
@@ -1041,6 +1099,8 @@ export function SettingsMenu(props: {
   }, [confirmingNew])
 
   const { settings, branding } = props
+  // With Claude Desktop, the chat and its settings live there; only the text box is here.
+  const builtInChat = branding.chatApp === 'built-in'
 
   return (
     <div
@@ -1079,48 +1139,75 @@ export function SettingsMenu(props: {
         <Switch on={settings.autoStart} />
       </button>
 
-      <div className="px-2.5 pt-1.5 pb-2">
-        <p className="mb-1.5 text-sm">Response style</p>
-        <div
-          role="radiogroup"
-          aria-label="Response style"
-          className="flex rounded-lg bg-zinc-100 p-0.5 dark:bg-zinc-800"
+      {!builtInChat && (
+        <button
+          type="button"
+          role="menuitemcheckbox"
+          aria-checked={settings.autoSend}
+          onClick={props.onToggleAutoSend}
+          className="flex w-full items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800"
         >
-          {EFFORTS.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              role="radio"
-              aria-checked={settings.effort === option.value}
-              title={option.hint}
-              onClick={() => props.onSetEffort(option.value)}
-              className={cn(
-                'flex-1 rounded-md py-1 text-xs font-medium',
-                settings.effort === option.value
-                  ? 'bg-white text-zinc-900 shadow-sm dark:bg-zinc-600 dark:text-white'
-                  : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200',
-              )}
-            >
-              {option.label}
-            </button>
-          ))}
+          <span>
+            Send in Claude automatically
+            <span className="block text-[11px] text-zinc-500">
+              {settings.autoSend ? 'Questions are sent for you' : 'You press Enter in Claude'}
+            </span>
+          </span>
+          <Switch on={settings.autoSend} />
+        </button>
+      )}
+
+      {builtInChat && (
+        <div className="px-2.5 pt-1.5 pb-2">
+          <p className="mb-1.5 text-sm">Response style</p>
+          <div
+            role="radiogroup"
+            aria-label="Response style"
+            className="flex rounded-lg bg-zinc-100 p-0.5 dark:bg-zinc-800"
+          >
+            {EFFORTS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                role="radio"
+                aria-checked={settings.effort === option.value}
+                title={option.hint}
+                onClick={() => props.onSetEffort(option.value)}
+                className={cn(
+                  'flex-1 rounded-md py-1 text-xs font-medium',
+                  settings.effort === option.value
+                    ? 'bg-white text-zinc-900 shadow-sm dark:bg-zinc-600 dark:text-white'
+                    : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200',
+                )}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       <MenuItem icon={FolderOpen} onClick={props.onOpenScreenshotsFolder}>
         Open screenshots folder
       </MenuItem>
 
       <MenuItem
-        icon={MessageSquarePlus}
+        icon={builtInChat ? MessageSquarePlus : Eraser}
         danger={confirmingNew}
         onClick={() => {
           if (!confirmingNew) return setConfirmingNew(true)
           setConfirmingNew(false)
-          props.onNewConversation()
+          if (builtInChat) props.onNewConversation()
+          else props.onClearText()
         }}
       >
-        {confirmingNew ? 'Click again to clear the chat' : 'New conversation'}
+        {builtInChat
+          ? confirmingNew
+            ? 'Click again to clear the chat'
+            : 'New conversation'
+          : confirmingNew
+            ? 'Click again to clear the text'
+            : 'Clear text box'}
       </MenuItem>
 
       {props.user && (
@@ -1144,13 +1231,16 @@ export function SettingsMenu(props: {
 
 <!-- /code -->
 
-Draws the menu's rows: Start with Windows, Response style, Open screenshots folder, New
-conversation, who's signed in with Log out, and the version. It keeps one piece of its own state.
+Draws the menu's rows. With the built-in chat: Start with Windows, Response style, Open
+screenshots folder, New conversation, who's signed in with Log out, and the version. With Claude
+Desktop the chat and its settings live in Claude Desktop, so there's no Response style and no
+sign-in; instead there's a "Send in Claude automatically" switch, and New conversation becomes
+Clear text box. It keeps one piece of its own state.
 
 **State.** `useState(initial)` returns the current value and a function that changes it. Calling
 that function makes React run the component again with the new value, which redraws it. Use a ref
 for values that don't affect what's shown, and state for values that do. Here `confirmingNew`
-switches the "New conversation" row into its "Click again" form.
+switches the "New conversation" (or "Clear text box") row into its "Click again" form.
 
 - `offset: number`: `Panel` passes `actionOffset()` of the gear's place in the icon stack.
 - `...anchored(props.corner, PANEL_LAYOUT.settingsX, props.offset)`: `settingsX` (64 px) puts the
@@ -1170,21 +1260,39 @@ switches the "New conversation" row into its "Click again" form.
   before running the effect again and when the component disappears. So the timer is cancelled
   after a confirming second click, or when the menu closes.
 - `const { settings, branding } = props`: shorthand for two props used often below.
+- `const builtInChat = branding.chatApp === 'built-in'`: which rows to show. The rest of the menu
+  checks this one value.
 - `disabled={!settings.autoStartAvailable}`: Start with Windows only works in the installed app,
   not in `npm run dev`; there the row is greyed out with a note. `onToggleAutoStart` asks the
   main process to flip it, and `Panel` keeps the settings it returns (see `settings.ts` in
   [Main process: startup, IPC and app plumbing](2-main-startup.md)).
 - `<Switch on={settings.autoStart} />`: the on/off graphic at the end of the row.
+- `{!builtInChat && (`: with Claude Desktop, the "Send in Claude automatically" row, built the
+  same way as Start with Windows: a `menuitemcheckbox` button with the setting's name, a grey
+  line under it, and a `Switch`. Clicking it calls `onToggleAutoSend`, which flips the setting in
+  the main process.
+- `{settings.autoSend ? 'Questions are sent for you' : 'You press Enter in Claude'}`: the grey
+  line says what the switch means in practice.
+- `{builtInChat && (`: Response style only with the built-in chat. With Claude Desktop the chat,
+  and how Claude answers, are Claude Desktop's business, so the setting would do nothing.
 - `aria-checked={settings.effort === option.value}`: the response styles work like radio buttons.
   The current one is white with a shadow; the others are plain text on the grey track.
 - `onClick={() => props.onSetEffort(option.value)}`: `Panel.setEffort` saves the choice in the
   main process. `ChatSession` reads it at the start of each request, so it applies from the next
   message.
-- `if (!confirmingNew) return setConfirmingNew(true)`: the first click on "New conversation" only
-  arms it (the `return` just ends the function early). A second click within 3 seconds turns it
-  off and calls `onNewConversation`, which clears the chat (`ChatSession.newConversation()`).
+- `icon={builtInChat ? MessageSquarePlus : Eraser}`: one row that does either job, with a
+  speech bubble for New conversation or an eraser for Clear text box. Both clear something and
+  need the same second click, so they share the row and its confirm state.
+- `if (!confirmingNew) return setConfirmingNew(true)`: the first click only arms the row (the
+  `return` just ends the function early). A second click within 3 seconds turns it off and calls
+  `onNewConversation`, which clears the chat (`ChatSession.newConversation()`), or with Claude
+  Desktop `onClearText`, which empties the text box and its screenshots.
 - `danger={confirmingNew}`: the row turns red while it's armed.
-- `{props.user && (`: only when someone is signed in; `Panel` passes `null` otherwise.
+- `{builtInChat ? confirmingNew ? ... : ... : ...}`: the label, from two questions in turn:
+  which kind of chat, then whether the row is armed. So it reads "New conversation" or "Click
+  again to clear the chat", or "Clear text box" or "Click again to clear the text".
+- `{props.user && (`: only when someone is signed in; `Panel` passes `null` otherwise, which is
+  always the case with Claude Desktop.
 - `props.user.name ?? props.user.email ?? 'you'`: the first of the name or the email that
   JumpCloud provided. `truncate` cuts a long one short with "…", and `title={props.user.email}`
   shows the email as a tooltip.
@@ -1195,7 +1303,7 @@ switches the "New conversation" row into its "Click again" form.
 
 <!-- code: apps/desktop/src/renderer/src/components/SettingsMenu.tsx#MenuItem -->
 
-[`src/renderer/src/components/SettingsMenu.tsx`, lines 141–162](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L141-L162)
+[`src/renderer/src/components/SettingsMenu.tsx`, lines 172–193](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L172-L193)
 
 ```tsx
 function MenuItem(props: {
@@ -1231,13 +1339,13 @@ One row of the menu: an icon and a label, as a button.
 - `const Icon = props.icon`: JSX treats a lowercase tag as an HTML element, so the component has
   to be in a capitalised variable before it can be written as `<Icon size={16} aria-hidden />`.
 - `props.danger ? 'bg-red-600 text-white'`: the red version, used for the armed "New
-  conversation".
+  conversation" or "Clear text box".
 
 ### `Switch`
 
 <!-- code: apps/desktop/src/renderer/src/components/SettingsMenu.tsx#Switch -->
 
-[`src/renderer/src/components/SettingsMenu.tsx`, lines 164–181](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L164-L181)
+[`src/renderer/src/components/SettingsMenu.tsx`, lines 195–212](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L195-L212)
 
 ```tsx
 function Switch({ on }: { on: boolean }) {

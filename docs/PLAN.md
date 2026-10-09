@@ -1,14 +1,15 @@
 # Desktop Assist: Plan & Tech Stack
 
-Status: **Milestones 0 (Foundation), 1 (Chat with Claude), 2.1 (bubble fixes) and 3 (JumpCloud
-sign-in) complete**. M3 works end to end against test servers; it needs the JumpCloud app and the
-Claude Console set up (see [JUMPCLOUD_SETUP.md](JUMPCLOUD_SETUP.md)) before real users can sign in.
-Next up: M4 (Ship). Last updated 2026-10-08.
+Status: **Milestones 0 (Foundation), 1 (Chat with Claude), 2.1 (bubble fixes), 3 (JumpCloud
+sign-in) and feature 3.1 (questions open in Claude Desktop) complete**. Next up: M4 (Ship). Last
+updated 2026-10-09.
 
 A Windows desktop assistant that runs in the background, shows a small circular company logo
 in the bottom-right corner of the screen, and opens a panel when clicked. It's built for Morse
 Micro first, with branding kept in config so another business can use it later. Claude chat
-(M1) and JumpCloud sign-in (M3) build on top of the foundation laid in M0.
+(M1) and JumpCloud sign-in (M3) build on top of the foundation laid in M0. Since 3.1, Morse
+Micro's questions open in the Claude Desktop app instead, so they use each person's own Claude
+account and usage limit (§7e); the built-in chat stays available as a tenant setting.
 
 ---
 
@@ -62,9 +63,16 @@ There are two separate Claude products, and a custom app can only use one of the
 - Usable from a custom app: **Yes.** This is what it's for.
 - Billing: Per token, usually separate from seats
 
-**So Desktop Assist uses the Claude API.** The user's "own Claude" means their JumpCloud
+**M1–M3: the built-in chat uses the Claude API.** The user's "own Claude" means their JumpCloud
 identity is checked every time the app gets Claude access (see §5). Their claude.ai chat history
-and projects are **not** available to the app.
+and projects are **not** available to the app, and all usage is billed to one Console account.
+
+**3.1: questions open in Claude Desktop.** Morse Micro gives each person a usage limit in
+claude.ai (through their group), and wanted Desktop Assist to use that limit. Only Anthropic's
+own apps draw on it, so Desktop Assist now hands each question to the **Claude Desktop** app
+with its documented `claude://` link (§7e). The conversation then happens in the person's own
+claude.ai account, with their history, projects and organization instructions, and counts
+against their own limit. The tenant setting `chatApp` picks `claude-desktop` or `built-in`.
 
 ## 3. Tech stack
 
@@ -81,6 +89,7 @@ and projects are **not** available to the app.
 - **_M1:_ rendering:** react-markdown + remark-gfm + Shiki
 - **_M3:_ sign-in:** openid-client 6 (JumpCloud OIDC, PKCE) + Electron `safeStorage`. Refresh token encrypted with Windows DPAPI
 - **_M3:_ Claude access:** Anthropic SDK `oidcFederationProvider` (Workload Identity Federation). Swaps the JumpCloud ID token for a short-lived Claude token; no API key
+- **_3.1:_ Claude Desktop:** its documented `claude://claude.ai/new?q=` link (`shell.openExternal`), Electron 44's async clipboard (`clipboard.write` with a `ClipboardItem`; `writeImage` is gone) for screenshots, and a Windows notification
 - **_Later:_ gateway:** Hono + jose, in a container. Optional, for per-user audit and quotas (§4)
 
 Considered and rejected: **Tauri**, which has no official Anthropic SDK, needs a Rust toolchain,
@@ -142,6 +151,18 @@ Two designs were considered:
 
 The desktop talks to a `ChatBackend` interface, so a gateway can still be added later.
 
+### Claude Desktop (3.1): no Claude access in the app at all
+
+```
+ Desktop Assist ── claude://claude.ai/new?q=<question> ──▶ Claude Desktop, signed in to the
+                ── screenshots → clipboard (one image)       person's own claude.ai account:
+                ── notification: "press Ctrl+V"               their usage, their limit
+```
+
+`start()` builds one of two things from the tenant's `chatApp`: the built-in chat (sign-in,
+backend, chat session) or a `ClaudeDesktop`. Only the IPC handlers for the one in use are
+registered. With Claude Desktop, `AppState.auth` is null and the panel shows only the text box.
+
 ## 5. Sign-in design (M3): "log in once, stay logged in"
 
 1. OIDC **Authorization Code + PKCE** as a JumpCloud _public client_ ("Public (None PKCE)"), so
@@ -173,15 +194,16 @@ Desktop-Assist/
 │  ├─ electron.vite.config.ts   TENANT=<id> picks tenants/<id> at build time
 │  ├─ electron-builder.yml
 │  ├─ src/main/                 index (lifecycle), bubble/ (windows, layout, bounce, controller),
-│  │                            auth/ (JumpCloud sign-in), claude/ (chat), storage/, actions,
-│  │                            notes/, screenshots/, settings, tray, ipc
+│  │                            claudeDesktop (3.1), auth/ (JumpCloud sign-in), claude/ (chat),
+│  │                            storage/, actions, notes/, screenshots/, settings, tray, ipc
 │  ├─ src/preload/              typed contextBridge API (window.assist)
 │  ├─ src/renderer/             React views: BubbleView, PanelView (+ components)
 │  ├─ src/shared/               IPC contract, action registry, UI geometry constants, types
 │  └─ tests/                    Vitest unit tests
-├─ tenants/morse-micro/         tenant.json (names, colours, actions, sign-in IDs) + logo.png
-└─ docs/                        PLAN.md, JUMPCLOUD_SETUP.md (for IT), code-guide/ (CODE_GUIDE.md
-                                 and the walkthrough pages), CODE_GUIDE.pdf
+├─ tenants/morse-micro/         tenant.json (names, colours, actions, chatApp, sign-in IDs) + logo.png
+└─ docs/                        PLAN.md, CLAUDE_DESKTOP_SETUP.md and JUMPCLOUD_SETUP.md (for IT),
+                                 code-guide/ (CODE_GUIDE.md and the walkthrough pages),
+                                 CODE_GUIDE.pdf
 ```
 
 ## 7. Milestone 0 spec
@@ -275,24 +297,66 @@ deleted says so, and `mailto:` links in replies open the email app.
 
 The Code Guide is also available as one PDF, `docs/CODE_GUIDE.pdf` (`npm run docs:pdf`).
 
+## 7e. Feature 3.1 spec: questions open in Claude Desktop
+
+Each person's questions should come out of their own usage limit, which Morse sets per group in
+claude.ai. The API can't do that (§2), so Desktop Assist hands the question to Claude Desktop.
+
+- **Ask**: Enter (or the **Ask in Claude** button) opens a new Claude Desktop chat with the question filled in, using `claude://claude.ai/new?q=…`. The panel closes and the text box is cleared. It works with the app closed (Windows starts it). Claude Desktop shows its own caution notice above a question that arrives by link; that can't be turned off from Desktop Assist.
+- **Sent for you**: The link only fills the question in (Anthropic documents no way to send it), so with **Send in Claude automatically** on (the default) Desktop Assist then presses the keys: Ctrl+V for a screenshot, then Enter. A hidden Windows PowerShell helper uses Windows UI Automation and presses a key only while the focused text box belongs to Claude Desktop **and** already shows the question, so nothing lands in another app or another Claude box (this same window can hold a Claude Code session). It waits up to 20 s for that, gives a pasted screenshot 2.5 s, and presses Enter again (up to 3 times) only while the question is still in the box. If it can't (Claude didn't come forward, the focus moved, PowerShell is blocked), a notification says what's left: "Press Enter in Claude to send it", or to paste the screenshot first; the reason goes to the log. A screenshot with no question is never sent for the user: there'd be no question to find in Claude's box. With the setting off, the person presses Enter in Claude themselves.
+- **Screenshots**: A link can't carry images, so the attached screenshots are copied to the clipboard as one image: several are scaled to the narrowest one's width (at most 2560px) and stacked top to bottom with a grey band between (the clipboard holds one). They're pasted for the user when the question is sent for them; otherwise a Windows notification says "Screenshot copied. In Claude, press Ctrl+V to add it to your message, then send." The panel says which under the attached screenshots before sending.
+- **Not installed**: Each time the panel opens, Desktop Assist checks that something on the PC opens `claude://` links. If not, a line above the text box says "Claude Desktop isn't installed on this PC, and Desktop Assist opens your questions in it. Ask IT to install it, or download it." with a **Download** button (`https://claude.com/download`). Asking anyway says the same and opens nothing.
+- **Limits and errors**: Questions over 12,000 characters are refused with an explanation (Claude Desktop cuts a link's question off at about 14,000). A deleted screenshot, or Windows failing to open the link, says so and keeps the draft; the reason goes to the log.
+- **No sign-in**: Desktop Assist doesn't sign in or contact Anthropic. At start it deletes the JumpCloud sign-in the built-in chat saved. Settings has Start with Windows, **Send in Claude automatically** (on by default), Open screenshots folder and **Clear text box** (click twice); Response style, New conversation and Log out belong to the built-in chat.
+- **Config**: `tenant.json` gains `chatApp`: `claude-desktop` (Morse Micro) or `built-in` (the default, M1–M3). `signIn` and `claudeAccess` are only needed for `built-in`. Dev runs can switch it with `DESKTOP_ASSIST_DEV_CONFIG`.
+- **For IT**: [CLAUDE_DESKTOP_SETUP.md](CLAUDE_DESKTOP_SETUP.md): install Claude Desktop, have people sign in to the Morse Micro organization (`forceLoginOrgUUID` recommended), limits stay in claude.ai, and company context goes in claude.ai's Organization instructions.
+
+Options considered (from Anthropic's documentation, October 2026):
+
+- **Use the claude.ai limit from the app directly**: not possible. Anthropic doesn't let other apps sign in to claude.ai or use its limits without its approval, and offers no way to.
+- **A Console workspace per person** with its own spend limit (WIF can map each person to their workspace): a real per-person limit, but a separate one from claude.ai's, and 100 workspaces at most by default.
+- **A nightly job** lowering each person's claude.ai limit by what they spent through the API: needs a server with two admin keys, turns group limits into per-person ones, and lags a day.
+- **Claude Desktop** (chosen): uses the real limit with no server. The `claude://` link and Claude Desktop's Windows support are documented; sending the question (and pasting screenshots) for the user is Desktop Assist pressing the keys, guarded as above. Quick Entry's screenshot tools are Mac-only.
+
+Tested with unit tests (194, including the link encoding, the hand-over order and its errors,
+sending in Claude and what's said when it can't, the PowerShell helper's script, and stacking
+screenshots) and an end-to-end run of the real app (39 checks) with opening links,
+notifications and the clipboard recorded: the link for a question, the panel closing, two
+screenshots of different sizes arriving on the clipboard as one stacked image, the Send in
+Claude switch and the hints it changes, the not-installed warning and its Download button, the
+long-question, deleted-screenshot and failed-link errors, Clear text box, and one pass through
+the real Windows clipboard. The built-in chat's end-to-end runs (47 and 9 checks) still pass with
+`chatApp` set to `built-in`.
+
+Also tried for real (with permission) on this PC's Claude Desktop, signed in to Morse Micro:
+with the setting off, a test question opened a new chat with the question filled in, the
+"Screenshot copied" notification arrived, and Ctrl+V in Claude added the screenshot. With it on,
+a test question and screenshot were pasted and sent by themselves and Claude answered, about 10
+seconds after clicking Ask, with no notification needed.
+
 ## 8. Milestones
 
 - **0** ✅ **Foundation**: Everything in §7 works in `npm run dev` and in the unsigned installer. Unit tests and lint pass.
 - **1** ✅ **Chat with Claude**: See §7b.
 - **2.1** ✅ **Bubble fixes**: See §7c.
 - **3** ✅ **JumpCloud sign-in**: See §7d. Combines the earlier plan's M2 (sign-in) and M3 (backend), using the direct option (B).
+- **3.1** ✅ **Each person's own Claude**: Questions open in Claude Desktop, against each person's own usage limit. See §7e.
 - 4 Ship: Code signing, MSI, auto-update, CI (GitHub Actions), pilot deployment through JumpCloud
-- later : Claude-requested screenshots (as a tool), hiding during full-screen apps, saved history, company integrations, a gateway for per-user audit, macOS
+- later : Hiding during full-screen apps, company integrations (as claude.ai organization skills or plugins, now that questions go to Claude Desktop), macOS. For the built-in chat: Claude-requested screenshots (as a tool), saved history, a gateway for per-user audit
 
 ## 9. What we need from admins
 
-Step-by-step instructions are in [JUMPCLOUD_SETUP.md](JUMPCLOUD_SETUP.md).
+Step-by-step instructions are in [CLAUDE_DESKTOP_SETUP.md](CLAUDE_DESKTOP_SETUP.md) (3.1) and
+[JUMPCLOUD_SETUP.md](JUMPCLOUD_SETUP.md) (built-in chat).
 
-- **JumpCloud admin (needed before M3 works for real):** a Custom OIDC app. Client authentication
+- **Claude Desktop (3.1):** installed on each PC (MSIX, deployable machine-wide), and people
+  signed in to the Morse Micro claude.ai organization. Recommended: the `forceLoginOrgUUID`
+  policy, so it can't be signed in to a personal account. Usage limits stay in claude.ai.
+- **JumpCloud admin (built-in chat only):** a Custom OIDC app. Client authentication
   **Public (None PKCE)**; grant types Authorization Code + Refresh Token; redirect URI
   `http://127.0.0.1:47621/callback`; scopes `openid email profile offline_access`; assigned to the
   user groups who should have Desktop Assist. It gives the **client ID**.
-- **Claude Console admin (needed before M3 works for real):** a workspace for Desktop Assist, a
+- **Claude Console admin (built-in chat only):** a workspace for Desktop Assist, a
   service account with access to it, the JumpCloud issuer, and a federation rule for it. They
   give the **organization, federation rule and service account IDs**.
 - **Code-signing certificate (M4)** (e.g. Azure Trusted Signing). Unsigned installers trigger
@@ -314,14 +378,18 @@ Step-by-step instructions are in [JUMPCLOUD_SETUP.md](JUMPCLOUD_SETUP.md).
 - Expired sign-in → keep the conversation; Log out → clear it
 - Default response style → Fast (`low` effort)
 - Chat history → current session only (for now)
+- 3.1 usage limits → questions open in Claude Desktop, using each person's own claude.ai account
+  and limit (§7e). The built-in chat stays as a tenant option (`chatApp`)
+- 3.1 screenshots → copied to the clipboard; several stacked into one image
+- 3.1 sending → Desktop Assist sends the question (and pastes screenshots) in Claude for the user,
+  on by default, guarded by checking Claude's focused text box holds the question
 
 **Open**
 
-1. Does Morse have a Claude Console organization and workspace for Desktop Assist? (Needed to
-   finish the M3 setup.)
-2. Is one shared service account at Anthropic enough, or is per-user usage reporting needed
-   (which would mean adding the gateway)?
-3. Should chat history be saved across restarts later?
+1. Keep or archive the Console workspace, service account and federation rule now that Morse
+   Micro uses Claude Desktop? (Archiving the rule stops the Console credit being spent through
+   it; keeping it allows switching back.)
+2. Built-in chat only: should chat history be saved across restarts later?
 
 ## 11. Notes
 

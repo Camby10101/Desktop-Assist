@@ -1,8 +1,9 @@
-import { desktopCapturer, nativeImage, shell, type Display } from 'electron'
+import { desktopCapturer, nativeImage, shell, type Display, type NativeImage } from 'electron'
 import { promises as fs } from 'node:fs'
 import type { OutgoingImage } from '../claude/ChatSession'
 import { findLatestScreenshot, isInsideDir, saveScreenshot } from './files'
 import { fitWithin } from './imageSize'
+import { stackBitmaps, stackWidth } from './stack'
 
 const THUMBNAIL_HEIGHT = 112 // 2× the chip's 56px preview, for high-DPI screens
 const MAX_CACHED_THUMBNAILS = 50
@@ -71,6 +72,33 @@ export class ScreenshotService {
     const scaled =
       size.width === original.width ? image : image.resize({ ...size, quality: 'best' })
     return { mediaType: 'image/jpeg', data: scaled.toJPEG(JPEG_QUALITY).toString('base64') }
+  }
+
+  /**
+   * The screenshots as one image for the clipboard (a link to Claude Desktop can't carry images).
+   * One screenshot is left as it is; several are scaled to the same width and stacked top to
+   * bottom. Null if a file is missing or not one of ours.
+   */
+  forClipboard(paths: string[]): NativeImage | null {
+    const images: NativeImage[] = []
+    for (const path of paths) {
+      const image = this.owns(path) ? nativeImage.createFromPath(path) : null
+      if (!image || image.isEmpty()) return null
+      images.push(image)
+    }
+    if (images.length <= 1) return images[0] ?? null
+    const width = stackWidth(images.map((image) => image.getSize()))
+    const stacked = stackBitmaps(
+      images.map((image) => {
+        const scaled =
+          image.getSize().width === width ? image : image.resize({ width, quality: 'best' })
+        return { ...scaled.getSize(), data: scaled.toBitmap() }
+      }),
+    )
+    return nativeImage.createFromBitmap(stacked.data, {
+      width: stacked.width,
+      height: stacked.height,
+    })
   }
 
   /** Opens a screenshot in the default image viewer. Returns false if it no longer exists. */

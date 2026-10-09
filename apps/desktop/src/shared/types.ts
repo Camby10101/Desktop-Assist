@@ -35,13 +35,22 @@ export interface Settings {
   autoStartAvailable: boolean
   screenshotsDir: string
   effort: Effort
+  /** With Claude Desktop: send the question there too, not just fill it in. */
+  autoSend: boolean
 }
+
+/**
+ * Where conversations happen: in the panel through the Claude API (`built-in`), or handed over to
+ * the Claude Desktop app (`claude-desktop`), which uses each person's own Claude account.
+ */
+export type ChatApp = 'built-in' | 'claude-desktop'
 
 export interface Branding {
   companyName: string
   appName: string
   accentColor: string
   actions: ActionId[]
+  chatApp: ChatApp
 }
 
 export interface SignedInUser {
@@ -83,6 +92,14 @@ export type SendResult =
   | { ok: true; notes: Notes }
   | { ok: false; reason: 'busy' | 'empty' | 'signed-out' | 'missing-screenshot' }
 
+/**
+ * Handing the draft to Claude Desktop. `screenshots` is how many were copied to the clipboard
+ * (as one image) for the user to paste.
+ */
+export type AskResult =
+  | { ok: true; notes: Notes; screenshots: number }
+  | { ok: false; reason: 'empty' | 'too-long' | 'not-installed' | 'missing-screenshot' | 'failed' }
+
 export interface AppState {
   mode: Mode
   /** The screen corner the bubble rests in; the panel lays itself out to open away from it. */
@@ -91,7 +108,8 @@ export interface AppState {
   settings: Settings
   branding: Branding
   version: string
-  auth: AuthStatus
+  /** Null when chats happen in Claude Desktop, which has its own sign-in. */
+  auth: AuthStatus | null
   chat: ChatMessage[]
 }
 

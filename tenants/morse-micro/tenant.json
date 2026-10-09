@@ -4,6 +4,7 @@
   "appName": "Desktop Assist",
   "accentColor": "#9333EA",
   "actions": ["screenshot", "settings", "bounce", "close"],
+  "chatApp": "claude-desktop",
   "signIn": {
     "issuer": "https://oauth.id.jumpcloud.com/",
     "clientId": "43ae891c-6cf4-43b5-bde5-585a3ecc792f",

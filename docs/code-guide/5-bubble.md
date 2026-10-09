@@ -22,8 +22,9 @@ What moves the controller from one mode to another:
 
 - `collapsed` → `expanded`: a click on the bubble (`clickBubble()`), or the tray icon, launching
   the app a second time, or finishing sign-in in the browser (all `expand()`).
-- `expanded` → `collapsed`: a click on the bubble, Esc in the panel (`collapse()`), or clicking
-  somewhere else so the panel loses focus (`panelBlurred()`).
+- `expanded` → `collapsed`: a click on the bubble, Esc in the panel (`collapse()`), handing a
+  question to Claude Desktop (also `collapse()`), or clicking somewhere else so the panel loses
+  focus (`panelBlurred()`).
 - `collapsed` or `expanded` → `dragging` → `returning`: pressing and moving the bubble
   (`startDrag()`), then letting go (`endDrag()`).
 - `collapsed` or `expanded` → `bouncing` → `returning`: the Bounce action (`startBounce()`),
@@ -48,7 +49,8 @@ Who calls it:
   panel window's `blur` event to `panelBlurred()`, screen changes to `displayChanged()`, the tray
   icon and a second launch to `expand()`, and quitting to `dispose()`.
 - `src/main/ipc.ts` forwards the pages' requests: the bubble's click and drag (`clickBubble()`,
-  `startDrag()`, `endDrag()`) and the panel's Esc (`collapse()`).
+  `startDrag()`, `endDrag()`) and the panel's Esc (`collapse()`). It also calls `collapse()`
+  after handing a question to Claude Desktop.
 - `src/main/actions.ts` calls `startBounce()` for the Bounce icon and `whileHidden()` for the
   screenshot icon.
 
@@ -533,7 +535,8 @@ collapse(): void {
 
 Closes the panel in two steps: the mode changes now, so the page starts its fade-out, and the
 window itself is hidden `PANEL_FADE_MS` later. Hiding the window at once would cut the animation
-off. Called by `clickBubble()`, `panelBlurred()` and, for Esc in the panel, by `ipc.ts`.
+off. Called by `clickBubble()`, `panelBlurred()` and, for Esc in the panel or after a question
+has been handed to Claude Desktop, by `ipc.ts`.
 
 - `if (this.mode !== 'expanded') return`: closing only makes sense when open. It also makes a
   repeated request harmless.
