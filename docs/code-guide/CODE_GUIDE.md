@@ -3,9 +3,9 @@
 A walk through the whole project: what every file is for, and the actual code of every function
 and method with an explanation of what it does and why. Covers Milestones 0 (Foundation), 1
 (Chat with Claude), 2.1 (bubble fixes) and 3 (JumpCloud sign-in), and features 3.1 (questions go
-to Claude Desktop) and 3.2 (the Apps list, Uninstall in Settings, and fixes), and Milestone 4 so
-far (app logos fixed, favourite apps, the IT service desk icon, light or dark mode, and a fix
-for clicks on the bubble).
+to Claude Desktop) and 3.2 (the Apps list, Uninstall in Settings, and fixes), and Milestone 4
+(app logos fixed, favourite apps, the IT service desk icon, light or dark mode, and a fix for
+clicks on the bubble).
 
 This page is the overview. The code itself is in the [code walkthrough](#6-code-walkthrough),
 one page per area of the app.

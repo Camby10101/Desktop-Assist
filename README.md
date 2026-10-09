@@ -14,9 +14,10 @@ screen and opens a panel when clicked. Built for Morse Micro first. Branding liv
 - [docs/JUMPCLOUD_SETUP.md](docs/JUMPCLOUD_SETUP.md): for IT, setting up JumpCloud sign-in and
   Claude access for the built-in chat (not used by Morse Micro since 3.1).
 
-**Status:** Milestones 0 (Foundation), 1 (Chat with Claude), 2.1 (bubble fixes) and 3 (JumpCloud
-sign-in), feature 3.1 (questions open in Claude Desktop) and feature 3.2 (Apps list, Uninstall)
-are complete. Next is Milestone 4: Ship.
+**Status:** Milestones 0 (Foundation), 1 (Chat with Claude), 2.1 (bubble fixes), 3 (JumpCloud
+sign-in) and 4 (logos, favourites, service desk, light/dark mode, bubble-click fix), and features
+3.1 (questions open in Claude Desktop) and 3.2 (Apps list, Uninstall) are complete. Next is
+Milestone 5 (see [PLAN.md](docs/PLAN.md) §8).
 
 ## Features
 
@@ -76,7 +77,7 @@ are complete. Next is Milestone 4: Ship.
    Start menu as **Desktop Assist**.
 
 Windows may warn about an unrecognised app because the installer isn't code-signed yet
-(**More info → Run anyway**). Signing is planned for Milestone 4.
+(**More info → Run anyway**). Code signing is a candidate for Milestone 5.
 
 ## Development
 

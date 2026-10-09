@@ -1,9 +1,9 @@
 # Desktop Assist: Plan & Tech Stack
 
 Status: **Milestones 0 (Foundation), 1 (Chat with Claude), 2.1 (bubble fixes), 3 (JumpCloud
-sign-in), feature 3.1 (questions open in Claude Desktop) and 3.2 (Apps list, Uninstall, fixes)
-complete**. Milestone 4 is in progress (§7g): app logos fixed, favourites and the service desk
-icon so far. Last updated 2026-10-09.
+sign-in), 4 (logos, favourites, service desk, light/dark, the bubble-click fix) and features 3.1
+(questions open in Claude Desktop) and 3.2 (Apps list, Uninstall, fixes) complete**. Milestone 5
+is next (§8). Last updated 2026-10-09.
 
 A Windows desktop assistant that runs in the background, shows a small circular company logo
 in the bottom-right corner of the screen, and opens a panel when clicked. It's built for Morse
@@ -363,10 +363,9 @@ Tested with unit tests (219, including reading JumpCloud's answers, connecting, 
 
 Tried for real: with the MCP Server for users turned on, the user connected Desktop Assist to Morse Micro's JumpCloud and the list of their portal apps worked. The start page and Ask Claude icon were then added at their request (end-to-end: 33 checks for 3.2, with the 3.1 (39) and built-in chat (47, 9) runs still passing; 221 unit tests). Still to try: one more auto-send in Claude Desktop with the exact-match rule.
 
-## 7g. Milestone 4 (in progress)
+## 7g. Milestone 4
 
-Milestone 4 collects improvements as they're asked for; shipping work (signing, auto-update,
-deployment) can join it later. Done so far:
+Improvements asked for after trying 3.2 day to day (merged in pull request #6):
 
 - **App logos**: Some apps showed a letter instead of their logo. Watching the installed app's requests showed why: JumpCloud serves the logos a company uploads itself (`assets.jumpcloud.com/images/applications/…`) labelled `application/octet-stream`, while its catalogue logos (`static.jumpcloud.com`) are labelled `image/png`, and only image labels were accepted. The files are ordinary PNGs and JPEGs, so Desktop Assist now recognises the image from its first bytes (PNG, JPEG, GIF, WebP, ICO, BMP, SVG) and still refuses anything that isn't one, whatever its label says. Checked against Morse Micro's real logos. Logos are also kept between refreshes.
 - **Favourites**: A small star on each app logo's top-right corner, faint until hovered. Clicking it stars the app (filled, gold) and moves it to the top of the list; clicking again takes the star away. Starred apps keep their name order among themselves. Saved in the preferences (`favoriteApps`), so they survive restarts.
@@ -386,7 +385,12 @@ Tested with unit tests (226, including recognising images from their bytes, the 
 - **3** ✅ **JumpCloud sign-in**: See §7d. Combines the earlier plan's M2 (sign-in) and M3 (backend), using the direct option (B).
 - **3.1** ✅ **Each person's own Claude**: Questions open in Claude Desktop, against each person's own usage limit. See §7e.
 - **3.2** ✅ **Apps list, Uninstall, fixes**: The user's JumpCloud portal apps in the panel; Uninstall in Settings; the bubble, notification and auto-send fixes. See §7f.
-- 4 (in progress): App logos, favourites, the service desk icon, screenshots keeping the page, the unresponsive bubble fixed, no tooltip, light/dark mode (§7g). Still to choose from: code signing, auto-update, deployment through JumpCloud, CI (GitHub Actions), version numbers, a keyboard shortcut, region screenshots, reporting a problem to IT
+- **4** ✅ **Day-to-day improvements**: App logos, favourites, the service desk icon, screenshots keeping the page, the unresponsive bubble fixed, no tooltip, light/dark mode. See §7g.
+- 5 (next): To be chosen. Candidates:
+  - Shipping: code signing (no "unrecognised app" warning), auto-update, silent deployment through JumpCloud (with Claude Desktop), CI on GitHub Actions (tests and the installer on every pull request), real version numbers with a "What's new" note
+  - Bubble and screenshots: a keyboard shortcut to open the panel and to take a screenshot, snipping a region or a window, pasting an image into the text box, hiding during full-screen apps and presentations, a first-run tour
+  - Apps and JumpCloud: recently opened apps near the top, arrow keys in the grid, company quick links that aren't JumpCloud apps, a password-expiry reminder
+  - Help and Claude: "Report a problem to IT" (a service desk ticket with the screenshot and PC details), quick prompts ("Explain this error", "Summarise this"), "Send my logs to IT"
 - later : Hiding during full-screen apps, company integrations (as claude.ai organization skills or plugins, now that questions go to Claude Desktop), macOS. For the built-in chat: Claude-requested screenshots (as a tool), saved history, a gateway for per-user audit
 
 ## 9. What we need from admins
