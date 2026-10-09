@@ -195,6 +195,25 @@ describe('clicking away (panel blur)', () => {
     expect(controller.currentMode).toBe('collapsed')
   })
 
+  it('stays closed when the press on the bubble is what closed it (the bubble took the focus)', () => {
+    openForAWhile()
+    const pressedAt = Date.now()
+    vi.advanceTimersByTime(10)
+    controller.panelBlurred() // the bubble took the focus as the button went down
+    vi.advanceTimersByTime(BLUR_CLICK_GRACE_MS + 500) // a slow click: released much later
+    controller.clickBubble(pressedAt)
+    expect(controller.currentMode).toBe('collapsed')
+  })
+
+  it('reopens straight away after clicking somewhere else, however quick the next click', () => {
+    openForAWhile()
+    controller.panelBlurred() // clicked another app
+    vi.advanceTimersByTime(100) // well inside the old 300 ms grace
+    controller.clickBubble(Date.now())
+    expect(controller.currentMode).toBe('expanded')
+    expect(panel.visible).toBe(true)
+  })
+
   it('logs a click that did nothing', () => {
     const messages: string[] = []
     controller = new BubbleController({
@@ -215,10 +234,9 @@ describe('clicking away (panel blur)', () => {
     })
     controller.start()
     controller.clickBubble()
-    vi.advanceTimersByTime(OPEN_BLUR_GRACE_MS)
-    controller.panelBlurred()
-    controller.clickBubble()
-    expect(messages).toEqual(['Bubble click ignored: the panel had just closed'])
+    void controller.whileHidden(() => new Promise(() => {})) // a screenshot that never ends
+    controller.clickBubble(Date.now())
+    expect(messages).toEqual(['Bubble click ignored while capturing'])
   })
 })
 

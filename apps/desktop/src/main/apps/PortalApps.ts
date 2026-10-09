@@ -181,6 +181,8 @@ export class PortalApps {
   private loading: Promise<AppsState> | null = null
   private listener: RedirectListener | null = null
   private loadedOnce = false
+  /** Logos already fetched, by address, so a refresh doesn't download them all again. */
+  private readonly logos = new Map<string, string>()
 
   constructor(private readonly deps: PortalAppsDeps) {
     this.auth = new SavedAuth(deps.appName, deps.redirectPort, deps.store)
@@ -315,12 +317,17 @@ export class PortalApps {
 
   private async withLogos(apps: PortalAppInfo[]): Promise<PortalApp[]> {
     return Promise.all(
-      apps.map(async ({ id, name, logoUrl }) => ({
-        id,
-        name,
-        logo: logoUrl ? await this.deps.fetchLogo(logoUrl).catch(() => null) : null,
-      })),
+      apps.map(async ({ id, name, logoUrl }) => ({ id, name, logo: await this.logo(logoUrl) })),
     )
+  }
+
+  private async logo(url: string | null): Promise<string | null> {
+    if (!url) return null
+    const known = this.logos.get(url)
+    if (known) return known
+    const logo = await this.deps.fetchLogo(url).catch(() => null)
+    if (logo) this.logos.set(url, logo) // a failure is tried again next time
+    return logo
   }
 
   private async closeSession(): Promise<void> {

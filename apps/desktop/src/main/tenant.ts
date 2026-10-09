@@ -44,6 +44,11 @@ export const PortalSchema = z.object({
 
 export type PortalConfig = z.infer<typeof PortalSchema>
 
+/** The company's IT service desk, opened by the `servicedesk` icon. */
+export const ServiceDeskSchema = z.object({
+  url: z.url({ protocol: /^https$/ }),
+})
+
 export type SignInConfig = z.infer<typeof SignInSchema>
 export type ClaudeAccessConfig = z.infer<typeof ClaudeAccessSchema>
 
@@ -79,6 +84,8 @@ export const TenantSchema = z
     systemPrompt: z.string().max(8000).optional(),
     /** Needed for the Apps action. */
     portal: PortalSchema.optional(),
+    /** Needed for the service desk icon. */
+    serviceDesk: ServiceDeskSchema.optional(),
     /** Needed for the built-in chat only. */
     signIn: SignInSchema.optional(),
     claudeAccess: ClaudeAccessSchema.optional(),
@@ -91,6 +98,9 @@ export const TenantSchema = z
   )
   .refine((tenant) => !tenant.actions.includes('apps') || tenant.portal !== undefined, {
     message: 'the apps action needs portal',
+  })
+  .refine((tenant) => !tenant.actions.includes('servicedesk') || tenant.serviceDesk !== undefined, {
+    message: 'the servicedesk action needs serviceDesk',
   })
   .refine((tenant) => tenant.startPage !== 'apps' || tenant.portal !== undefined, {
     message: 'starting on the apps list needs portal',

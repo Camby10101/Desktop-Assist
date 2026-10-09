@@ -124,6 +124,12 @@ function Panel({ state }: { state: AppState }) {
       setView(view === id ? (id === 'apps' ? 'ask' : 'apps') : id)
       return
     }
+    if (id === 'theme') {
+      setSettings(
+        await window.assist.settings.setTheme(settings.theme === 'dark' ? 'light' : 'dark'),
+      )
+      return
+    }
     if (id === 'settings') {
       setSettingsOpen(!settingsOpen)
       // Refresh: "Start with Windows" can also be changed in Windows Settings.
@@ -133,8 +139,6 @@ function Panel({ state }: { state: AppState }) {
     setSettingsOpen(false)
     const result = await window.assist.invokeAction(id)
     if (result.message) showToast(result.message, result.ok ? 'info' : 'error')
-    // A screenshot is taken to ask about it: show the text box, where it can be attached.
-    if (id === 'screenshot' && result.ok) setView('ask')
   }
 
   function changeDraft(next: string) {
@@ -168,6 +172,10 @@ function Panel({ state }: { state: AppState }) {
     } else if (result.reason !== 'empty') {
       showToast(ASK_ERRORS[result.reason], 'error')
     }
+  }
+
+  async function toggleFavorite(app: PortalApp, favorite: boolean) {
+    setSettings(await window.assist.settings.setFavoriteApp(app.id, favorite))
   }
 
   async function openApp(app: PortalApp) {
@@ -311,6 +319,8 @@ function Panel({ state }: { state: AppState }) {
               state={apps}
               appName={branding.appName}
               portalName={branding.portalName}
+              favorites={settings.favoriteApps}
+              onToggleFavorite={(app, favorite) => void toggleFavorite(app, favorite)}
               onOpenApp={(app) => void openApp(app)}
               onOpenPortal={() => void window.assist.apps.openPortal()}
               onSignIn={() => void window.assist.apps.signIn()}
@@ -340,6 +350,7 @@ function Panel({ state }: { state: AppState }) {
         actions={branding.actions}
         open={open}
         activeId={settingsOpen ? 'settings' : view !== startPage ? view : null}
+        theme={settings.theme}
         dotted={view !== 'ask' && (draft.trim() !== '' || attachments.length > 0) ? ['ask'] : []}
         onAction={(id) => void runAction(id)}
       />

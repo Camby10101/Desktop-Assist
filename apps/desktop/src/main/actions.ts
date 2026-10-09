@@ -9,9 +9,23 @@ export type ActionHandlers = Record<CommandActionId, () => Promise<ActionResult>
 export function createActionHandlers(deps: {
   controller: BubbleController
   screenshots: ScreenshotService
+  /** Opens the company's IT service desk in the browser, or null if the tenant has none. */
+  openServiceDesk: (() => Promise<void>) | null
   quit: () => void
 }): ActionHandlers {
   return {
+    async servicedesk() {
+      if (!deps.openServiceDesk) return { ok: false, message: 'No service desk is set up' }
+      try {
+        await deps.openServiceDesk()
+      } catch (error) {
+        console.error('Opening the service desk failed', error)
+        return { ok: false, message: "Couldn't open the service desk" }
+      }
+      // The browser is coming to the front; get out of its way.
+      deps.controller.collapse()
+      return { ok: true }
+    },
     async screenshot() {
       try {
         await deps.controller.whileHidden(() => deps.screenshots.capture())

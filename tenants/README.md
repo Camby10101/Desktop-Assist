@@ -12,7 +12,10 @@ A tenant folder contains:
 - `tenant.json`: Company and app names, accent colour, the action icons shown above the bubble (listed from the bubble upward), where chats happen, and the sign-in settings. Validated at startup and by `npm test`.
 - `logo.png` or `logo.svg`: The logo. `logo.png` is also the tray icon and the `.exe` icon. If both exist, `logo.png` is used.
 
-Available actions: `ask`, `apps`, `screenshot`, `settings`, `bounce`, `close`.
+Available actions: `ask`, `apps`, `servicedesk`, `screenshot`, `theme` (light or dark mode),
+`settings`, `bounce`, `close`.
+`servicedesk` needs `serviceDesk`: `{ "url": "https://…" }`, the company's IT service desk (Morse
+Micro's Jira Service Management portal), opened in the browser.
 
 `startPage`: what the panel opens on, `ask` (the text box, the default) or `apps` (the Apps list,
 Morse Micro). The other page is behind its icon: `ask` ("Ask Claude") when starting on the apps,

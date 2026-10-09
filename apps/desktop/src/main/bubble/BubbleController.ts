@@ -63,10 +63,14 @@ const DEFAULT_CORNER: Corner = 'bottom-right'
 /** Matches the panel's fade-out in the renderer, so the window hides once it's invisible. */
 export const PANEL_FADE_MS = 150
 /**
- * Clicking the bubble while the panel is open can blur the panel just before the click lands.
- * A click this soon after a blur-collapse belongs to the same gesture and must not reopen it.
+ * Clicking the bubble while the panel is open blurs the panel as the button goes down (the bubble
+ * takes the focus), so the panel has already closed when the click arrives. When the click says
+ * when it was pressed, a panel that closed after that press (give or take this much) closed
+ * because of it, and stays closed. Without that time, a click this soon after a blur-collapse is
+ * taken to be the same gesture.
  */
 export const BLUR_CLICK_GRACE_MS = 300
+export const PRESS_SLACK_MS = 50
 /**
  * A blur this soon after the panel opened doesn't close it. Another app can take the focus back
  * just as the panel opens (Claude Desktop, say, right after a question was handed to it); closing
@@ -99,7 +103,8 @@ export class BubbleController {
   private readonly random: () => number
 
   constructor(private readonly deps: BubbleControllerDeps) {
-    this.now = deps.now ?? (() => performance.now())
+    // Wall-clock time, so it compares with the time a click was pressed in the bubble's page.
+    this.now = deps.now ?? (() => Date.now())
     this.random = deps.random ?? Math.random
     // Set now, not in start(): the pages ask for the corner as soon as they load, which can be
     // before start() runs.
@@ -129,12 +134,18 @@ export class BubbleController {
     this.deps.bubble.show()
   }
 
-  clickBubble(): void {
+  /** A click on the bubble. `pressedAt` is when its mouse button went down (wall-clock ms). */
+  clickBubble(pressedAt?: number): void {
     switch (this.mode) {
-      case 'collapsed':
-        if (this.now() - this.lastBlurCollapse >= BLUR_CLICK_GRACE_MS) this.expand()
-        else this.deps.onDiagnostic?.('Bubble click ignored: the panel had just closed')
+      case 'collapsed': {
+        const closedByThisPress =
+          pressedAt === undefined
+            ? this.now() - this.lastBlurCollapse < BLUR_CLICK_GRACE_MS
+            : this.lastBlurCollapse >= pressedAt - PRESS_SLACK_MS
+        if (closedByThisPress) return // the press closed the panel: that was the click's job
+        this.expand()
         return
+      }
       case 'expanded':
         this.collapse()
         return

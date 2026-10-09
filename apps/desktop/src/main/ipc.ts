@@ -89,7 +89,9 @@ export function registerIpc(ctx: IpcContext): void {
 
   handle(IPC.getState, NoArgs, () => ctx.getState())
 
-  on(IPC.bubbleClick, NoArgs, () => ctx.controller.clickBubble())
+  on(IPC.bubbleClick, z.number().finite().optional(), (pressedAt) =>
+    ctx.controller.clickBubble(pressedAt),
+  )
   on(IPC.bubbleDragStart, NoArgs, () => ctx.controller.startDrag())
   on(IPC.bubbleDragEnd, NoArgs, () => ctx.controller.endDrag())
   on(IPC.collapse, NoArgs, () => ctx.controller.collapse())
@@ -126,6 +128,12 @@ export function registerIpc(ctx: IpcContext): void {
     ctx.settings.setEffort(effort),
   )
   handle(IPC.settingsSetAutoSend, z.boolean(), (autoSend) => ctx.settings.setAutoSend(autoSend))
+  handle(IPC.settingsSetTheme, z.enum(['dark', 'light']), (theme) => ctx.settings.setTheme(theme))
+  handle(
+    IPC.settingsSetFavoriteApp,
+    z.object({ id: z.string().min(1).max(200), favorite: z.boolean() }),
+    ({ id, favorite }) => ctx.settings.setFavoriteApp(id, favorite),
+  )
 
   if (ctx.claudeDesktop) registerClaudeDesktop(ctx.claudeDesktop)
   if (ctx.apps) registerApps(ctx.apps)

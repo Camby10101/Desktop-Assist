@@ -37,11 +37,14 @@ are complete. Next is Milestone 4: Ship.
   Copy. Usage is billed to the company's Claude Console account, through a service account IT
   sets up; there's no API key.
 - **Your apps**: the panel opens on the apps in your JumpCloud User Portal, with their logos.
-  Click one to open it in your browser, signed in through JumpCloud. The first time, **Sign in
-  with JumpCloud** connects Desktop Assist to your portal in your browser.
+  Click one to open it in your browser, signed in through JumpCloud. Star an app (the star on its
+  logo) to keep it at the top. The first time, **Sign in with JumpCloud** connects Desktop Assist
+  to your portal in your browser.
 - **Action icons** above the bubble:
   - **Ask Claude** swaps the apps for the text box (above); click it again or press Esc to go
     back. A dot on it means an unsent question is waiting.
+  - **IT service desk** opens the Morse Micro service desk in your browser.
+  - **Light or dark mode** (sun or moon) switches Desktop Assist's colours. It starts dark.
   - **Screenshot** saves the screen the bubble is on to `Pictures\Desktop Assist`.
   - **Settings**: Start with Windows, Send in Claude automatically, Open screenshots folder,
     Clear text box and **Uninstall Desktop Assist**. (With the

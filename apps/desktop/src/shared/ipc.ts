@@ -13,6 +13,7 @@ import type {
   Notes,
   SendResult,
   Settings,
+  Theme,
   UninstallResult,
 } from './types'
 
@@ -38,6 +39,8 @@ export const IPC = {
   settingsSetAutoStart: 'assist:settings-set-auto-start',
   settingsSetEffort: 'assist:settings-set-effort',
   settingsSetAutoSend: 'assist:settings-set-auto-send',
+  settingsSetFavoriteApp: 'assist:settings-set-favorite-app',
+  settingsSetTheme: 'assist:settings-set-theme',
   authSignIn: 'assist:auth-sign-in',
   authCancel: 'assist:auth-cancel',
   authSignOut: 'assist:auth-sign-out',
@@ -67,7 +70,8 @@ export const IPC = {
 /** The API the preload exposes to renderers as `window.assist`. */
 export interface AssistApi {
   getState(): Promise<AppState>
-  bubbleClick(): void
+  /** A click on the bubble; `pressedAt` is when the button went down (Date.now()). */
+  bubbleClick(pressedAt?: number): void
   /** The bubble was pressed and moved: the main process makes it follow the mouse. */
   bubbleDragStart(): void
   /** Released: the bubble snaps to the nearest corner of the display it's on. */
@@ -97,6 +101,10 @@ export interface AssistApi {
     setAutoStart(enabled: boolean): Promise<Settings>
     setEffort(effort: Effort): Promise<Settings>
     setAutoSend(autoSend: boolean): Promise<Settings>
+    /** Stars an app in the Apps list (it moves to the top), or takes its star away. */
+    setFavoriteApp(id: string, favorite: boolean): Promise<Settings>
+    /** Light or dark mode for all of Desktop Assist; saved. */
+    setTheme(theme: Theme): Promise<Settings>
   }
   auth: {
     /** Opens JumpCloud in the browser; progress arrives through `onAuthStatus`. */

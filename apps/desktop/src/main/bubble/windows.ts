@@ -32,8 +32,11 @@ export function createOverlayWindow(view: View, size: Size): BrowserWindow {
     skipTaskbar: true,
     alwaysOnTop: true,
     type: 'toolbar',
-    // The bubble never takes keyboard focus, so clicking it doesn't blur the panel.
-    focusable: view === 'panel',
+    // Both can take the focus. A bubble that couldn't had its mouse presses dropped by Windows /
+    // Chromium after clicking elsewhere (only the release arrived, so clicks did nothing).
+    // Clicking the bubble now takes the focus from an open panel; BubbleController.clickBubble
+    // knows that press closed it.
+    focusable: true,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: true,

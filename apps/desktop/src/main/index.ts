@@ -176,7 +176,7 @@ async function start(): Promise<void> {
       : null
   // Electron's fetch, so a proxy set in Windows is used.
   const netFetch = (url: string | URL, init?: RequestInit) => net.fetch(String(url), init)
-  const { portal } = tenant
+  const { portal, serviceDesk } = tenant
   let appsStatus: AppsState['status'] = 'loading'
   const portalApps = portal
     ? new PortalApps({
@@ -219,7 +219,12 @@ async function start(): Promise<void> {
     builtIn,
     claudeDesktop,
     apps: portal && portalApps ? { list: portalApps, portalUrl: portal.url } : null,
-    actions: createActionHandlers({ controller: bubble, screenshots, quit: () => app.quit() }),
+    actions: createActionHandlers({
+      controller: bubble,
+      screenshots,
+      openServiceDesk: serviceDesk ? () => shell.openExternal(serviceDesk.url) : null,
+      quit: () => app.quit(),
+    }),
     uninstall: () =>
       uninstall({
         isPackaged: app.isPackaged,

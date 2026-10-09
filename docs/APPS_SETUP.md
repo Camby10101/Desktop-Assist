@@ -32,7 +32,7 @@ to each app in JumpCloud (and "Show in User Portal").
    grid.)
 2. Click **Sign in with JumpCloud**. Their browser opens JumpCloud; if they're already signed in
    there, they just approve Desktop Assist. The browser then says they can close the tab.
-3. The Apps list appears. From then on it opens straight away; the connection is saved encrypted
+3. The Apps list appears. A star on an app's logo keeps it at the top (saved on that PC). From then on it opens straight away; the connection is saved encrypted
    for their Windows account only (`%APPDATA%\Desktop Assist\jumpcloud-apps.bin`, Windows DPAPI)
    and renewed by itself.
 
@@ -69,6 +69,10 @@ connections there). After revoking, the Apps list asks them to sign in again.
 - **"Port 47622 is in use by another program":** change `portal.redirectPort` and rebuild.
 - **An app is missing:** check it's assigned to one of the person's groups and shown in the User
   Portal; then **Refresh** (the arrow at the top of the list).
+- **An app shows a letter instead of its logo:** the logo couldn't be downloaded, or isn't an
+  image. Logos uploaded in JumpCloud come labelled as plain files rather than images; Desktop
+  Assist recognises the image itself, so check the uploaded logo is a PNG, JPEG, GIF, WebP, ICO,
+  BMP or SVG under 300 KB.
 - **"Couldn't read your apps list":** JumpCloud answered in a form Desktop Assist doesn't know. The
   log (`%APPDATA%\Desktop Assist\logs\desktop-assist.log`) names the fields it got.
 

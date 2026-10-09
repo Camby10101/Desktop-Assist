@@ -60,6 +60,10 @@ No token ever reaches the page: it only sees the list's state and the apps' name
 3. **Opening an app**: a click → `Panel.openApp()` → IPC `assist:apps-open` with the app's ID →
    `PortalApps.open()` calls `launch_application` for that app, takes the sign-in link from the
    answer, and opens it in the browser; the panel closes.
+4. **Favourites**: the star on a tile → `Panel.toggleFavorite()` →
+   `window.assist.settings.setFavoriteApp()` saves the app's ID with the user's preferences
+   (`favoriteApps` in `preferences.json`). The list shows starred apps first (`orderApps()` in
+   `src/shared/apps.ts`), and they stay starred after a restart.
 
 **Reading answers defensively.** JumpCloud documents the server's tools but not every field of
 their answers. So `portalData.ts` reads them tolerantly: it looks for the usual names for a list,
@@ -791,9 +795,9 @@ The class `index.ts` and `ipc.ts` use, with the comment that sums it up.
 
 ### `PortalApps` fields, constructor and `current`
 
-<!-- code: apps/desktop/src/main/apps/PortalApps.ts#PortalApps.state,apps,auth,loaded,session,loading,listener,loadedOnce,constructor,current -->
+<!-- code: apps/desktop/src/main/apps/PortalApps.ts#PortalApps.state,apps,auth,loaded,session,loading,listener,loadedOnce,logos,constructor,current -->
 
-[`src/main/apps/PortalApps.ts`, lines 176–192](../../apps/desktop/src/main/apps/PortalApps.ts#L176-L192)
+[`src/main/apps/PortalApps.ts`, lines 176–194](../../apps/desktop/src/main/apps/PortalApps.ts#L176-L194)
 
 ```ts
 private state: AppsState = { status: 'loading' }
@@ -811,6 +815,9 @@ private loading: Promise<AppsState> | null = null
 private listener: RedirectListener | null = null
 
 private loadedOnce = false
+
+/** Logos already fetched, by address, so a refresh doesn't download them all again. */
+private readonly logos = new Map<string, string>()
 
 constructor(private readonly deps: PortalAppsDeps) {
   this.auth = new SavedAuth(deps.appName, deps.redirectPort, deps.store)
@@ -834,13 +841,14 @@ get current(): AppsState {
 - `loading`: the list load under way, if any, so two requests at once share one load.
 - `listener`: the local web server while a sign-in is waiting for the browser.
 - `loadedOnce`: whether the list has been loaded (or found to need a sign-in) at least once.
+- `logos`: the logos already fetched, by address, as the comment says (see `logo()` below).
 - `get current()`: the state as it is now, for the tests.
 
 ### `PortalApps.get()`
 
 <!-- code: apps/desktop/src/main/apps/PortalApps.ts#PortalApps.get -->
 
-[`src/main/apps/PortalApps.ts`, lines 194–199](../../apps/desktop/src/main/apps/PortalApps.ts#L194-L199)
+[`src/main/apps/PortalApps.ts`, lines 196–201](../../apps/desktop/src/main/apps/PortalApps.ts#L196-L201)
 
 ```ts
 /** The list as it stands, loading it the first time (or again with `refresh`). */
@@ -866,7 +874,7 @@ at startup, to load the list in the background.
 
 <!-- code: apps/desktop/src/main/apps/PortalApps.ts#PortalApps.signIn -->
 
-[`src/main/apps/PortalApps.ts`, lines 201–241](../../apps/desktop/src/main/apps/PortalApps.ts#L201-L241)
+[`src/main/apps/PortalApps.ts`, lines 203–243](../../apps/desktop/src/main/apps/PortalApps.ts#L203-L243)
 
 ```ts
 /** Connects to the portal: the user signs in in the browser, then the list loads. */
@@ -942,7 +950,7 @@ the browser; the page isn't waiting on it, and follows along through the state.
 
 <!-- code: apps/desktop/src/main/apps/PortalApps.ts#PortalApps.cancelSignIn,open,dispose -->
 
-[`src/main/apps/PortalApps.ts`, lines 243–260](../../apps/desktop/src/main/apps/PortalApps.ts#L243-L260)
+[`src/main/apps/PortalApps.ts`, lines 245–262](../../apps/desktop/src/main/apps/PortalApps.ts#L245-L262)
 
 ```ts
 cancelSignIn(): void {
@@ -977,7 +985,7 @@ async dispose(): Promise<void> {
 
 <!-- code: apps/desktop/src/main/apps/PortalApps.ts#PortalApps.load,fetchList -->
 
-[`src/main/apps/PortalApps.ts`, lines 262–289](../../apps/desktop/src/main/apps/PortalApps.ts#L262-L289)
+[`src/main/apps/PortalApps.ts`, lines 264–291](../../apps/desktop/src/main/apps/PortalApps.ts#L264-L291)
 
 ```ts
 private load(): Promise<AppsState> {
@@ -1029,7 +1037,7 @@ private async fetchList(): Promise<AppsState> {
 
 <!-- code: apps/desktop/src/main/apps/PortalApps.ts#PortalApps.call -->
 
-[`src/main/apps/PortalApps.ts`, lines 291–305](../../apps/desktop/src/main/apps/PortalApps.ts#L291-L305)
+[`src/main/apps/PortalApps.ts`, lines 293–307](../../apps/desktop/src/main/apps/PortalApps.ts#L293-L307)
 
 ```ts
 /** Calls a tool, connecting first if needed and once more if the connection has gone stale. */
@@ -1062,11 +1070,11 @@ Calls a tool, connecting first if there's no open session.
   server forgets it, say), so the first failure gets one more try with a fresh connection. A
   missing sign-in, or a second failure, is passed on.
 
-### `PortalApps.launchUrl()` and `PortalApps.withLogos()`
+### `PortalApps.launchUrl()`, `PortalApps.withLogos()` and `PortalApps.logo()`
 
-<!-- code: apps/desktop/src/main/apps/PortalApps.ts#PortalApps.launchUrl,withLogos -->
+<!-- code: apps/desktop/src/main/apps/PortalApps.ts#PortalApps.launchUrl,withLogos,logo -->
 
-[`src/main/apps/PortalApps.ts`, lines 307–324](../../apps/desktop/src/main/apps/PortalApps.ts#L307-L324)
+[`src/main/apps/PortalApps.ts`, lines 309–331](../../apps/desktop/src/main/apps/PortalApps.ts#L309-L331)
 
 ```ts
 private async launchUrl(app: PortalAppInfo): Promise<string | null> {
@@ -1080,12 +1088,17 @@ private async launchUrl(app: PortalAppInfo): Promise<string | null> {
 
 private async withLogos(apps: PortalAppInfo[]): Promise<PortalApp[]> {
   return Promise.all(
-    apps.map(async ({ id, name, logoUrl }) => ({
-      id,
-      name,
-      logo: logoUrl ? await this.deps.fetchLogo(logoUrl).catch(() => null) : null,
-    })),
+    apps.map(async ({ id, name, logoUrl }) => ({ id, name, logo: await this.logo(logoUrl) })),
   )
+}
+
+private async logo(url: string | null): Promise<string | null> {
+  if (!url) return null
+  const known = this.logos.get(url)
+  if (known) return known
+  const logo = await this.deps.fetchLogo(url).catch(() => null)
+  if (logo) this.logos.set(url, logo) // a failure is tried again next time
+  return logo
 }
 ```
 
@@ -1095,15 +1108,19 @@ private async withLogos(apps: PortalAppInfo[]): Promise<PortalApp[]> {
   description, for its argument name. A server without the tool means no link this way.
 - `{ [idArgumentName(tool.inputSchema)]: app.id }`: the arguments object, with the ID under the
   name the tool's schema uses. `[...]` in an object literal computes the field's name.
-- `withLogos(apps)`: fetches every logo at the same time (`Promise.all`); one that fails is
-  `null`, and the list shows the app's first letter instead. Only `id`, `name` and `logo` go into
-  the result, which is what the page receives.
+- `withLogos(apps)`: gets every logo at the same time (`Promise.all`); one that fails is `null`,
+  and the list shows the app's first letter instead. Only `id`, `name` and `logo` go into the
+  result, which is what the page receives.
+- `logo(url)`: one logo. `const known = this.logos.get(url)`: one fetched before (on an earlier
+  load, or for another app with the same logo) is used again, so Refresh doesn't download every
+  logo again. `if (logo) this.logos.set(url, logo)`: only a logo that arrived is kept; as the
+  comment says, a failure is tried again on the next load.
 
 ### `PortalApps.closeSession()` and `PortalApps.setState()`
 
 <!-- code: apps/desktop/src/main/apps/PortalApps.ts#PortalApps.closeSession,setState -->
 
-[`src/main/apps/PortalApps.ts`, lines 326–336](../../apps/desktop/src/main/apps/PortalApps.ts#L326-L336)
+[`src/main/apps/PortalApps.ts`, lines 333–343](../../apps/desktop/src/main/apps/PortalApps.ts#L333-L343)
 
 ```ts
 private async closeSession(): Promise<void> {
@@ -1130,7 +1147,7 @@ private setState(state: AppsState): AppsState {
 
 <!-- code: apps/desktop/src/main/apps/PortalApps.ts#friendlyError -->
 
-[`src/main/apps/PortalApps.ts`, lines 339–350](../../apps/desktop/src/main/apps/PortalApps.ts#L339-L350)
+[`src/main/apps/PortalApps.ts`, lines 346–357](../../apps/desktop/src/main/apps/PortalApps.ts#L346-L357)
 
 ```ts
 /** A plain-English reason for the panel. */
@@ -1240,25 +1257,80 @@ export function mcpConnector(options: {
   does the OAuth steps: discovery, registration if needed, then either a code swap (with a code),
   a renewal, or building the sign-in address (`'REDIRECT'`).
 
-### `MAX_LOGO_BYTES` and `fetchLogo()`
+### `MAX_LOGO_BYTES` and `sniffImageType()`
 
-<!-- code: apps/desktop/src/main/apps/mcp.ts#MAX_LOGO_BYTES,fetchLogo -->
+<!-- code: apps/desktop/src/main/apps/mcp.ts#MAX_LOGO_BYTES,sniffImageType -->
 
-[`src/main/apps/mcp.ts`, lines 52–64](../../apps/desktop/src/main/apps/mcp.ts#L52-L64)
+[`src/main/apps/mcp.ts`, lines 52–75](../../apps/desktop/src/main/apps/mcp.ts#L52-L75)
 
 ```ts
 /** Largest logo fetched for the Apps list. */
 const MAX_LOGO_BYTES = 300_000
 
+/**
+ * What kind of image a file is, from its first bytes; null if it isn't one. Needed because servers
+ * don't always say: JumpCloud serves the logos a company uploads itself as
+ * application/octet-stream, while its own catalogue logos come as image/png.
+ */
+export function sniffImageType(data: Buffer): string | null {
+  const startsWith = (...bytes: number[]) => bytes.every((byte, i) => data[i] === byte)
+  if (startsWith(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a)) return 'image/png'
+  if (startsWith(0xff, 0xd8, 0xff)) return 'image/jpeg'
+  if (startsWith(0x47, 0x49, 0x46, 0x38)) return 'image/gif'
+  if (startsWith(0x52, 0x49, 0x46, 0x46) && data.toString('latin1', 8, 12) === 'WEBP') {
+    return 'image/webp'
+  }
+  if (startsWith(0x00, 0x00, 0x01, 0x00)) return 'image/x-icon'
+  if (startsWith(0x42, 0x4d)) return 'image/bmp'
+  const start = data.toString('utf8', 0, 1024).trimStart().toLowerCase()
+  if (start.startsWith('<svg') || (start.startsWith('<?xml') && start.includes('<svg'))) {
+    return 'image/svg+xml'
+  }
+  return null
+}
+```
+
+<!-- /code -->
+
+What kind of image a file is, judged from the file itself. As the comment says, the server's
+label can't be relied on: JumpCloud serves the logos a company uploads itself (from
+`assets.jumpcloud.com`) labelled `application/octet-stream`, "some bytes", while its catalogue
+logos come labelled `image/png`. Trusting the label left the uploaded logos out. Most file formats
+start with a fixed _signature_, a few bytes that are always the same, and this checks for them.
+
+- `MAX_LOGO_BYTES = 300_000`: nothing over 300 KB is fetched; a logo shown 40 pixels wide never
+  needs more.
+- `const startsWith = (...bytes: number[]) => ...`: whether the file begins with these bytes.
+  `...bytes` collects all the arguments into one list (a _rest parameter_).
+- `0x89, 0x50, 0x4e, 0x47, ...`: PNG's signature (a non-text byte, then `PNG` and line-ending
+  characters). `0xff, 0xd8, 0xff` starts every JPEG; `GIF8` (`0x47 0x49 0x46 0x38`) every GIF;
+  `0x00 0x00 0x01 0x00` an icon file; `BM` (`0x42 0x4d`) a Windows bitmap.
+- `data.toString('latin1', 8, 12) === 'WEBP'`: a WebP file starts with `RIFF`, like several other
+  formats, so bytes 8 to 11 are checked too.
+- `data.toString('utf8', 0, 1024).trimStart().toLowerCase()`: SVG is text, not a fixed signature.
+  The start of the file (ignoring spaces and case) must be an `<svg` element, or an XML
+  declaration (`<?xml`) followed by one. An SVG shown as an image can't run scripts, so it's safe
+  for the page.
+- `return null`: anything else, such as an HTML error page sent in place of a logo.
+
+### `fetchLogo()`
+
+<!-- code: apps/desktop/src/main/apps/mcp.ts#fetchLogo -->
+
+[`src/main/apps/mcp.ts`, lines 77–88](../../apps/desktop/src/main/apps/mcp.ts#L77-L88)
+
+```ts
 /** Fetches an app's logo (https only, an image, not too big) as a data: URL for the panel. */
 export async function fetchLogo(fetch: Fetch, url: string): Promise<string | null> {
   if (!url.startsWith('https://')) return null
-  const response = await fetch(url, { signal: AbortSignal.timeout(5000) })
-  const type = response.headers.get('content-type')?.split(';')[0]?.trim() ?? ''
-  if (!response.ok || !type.startsWith('image/')) return null
+  const response = await fetch(url, { signal: AbortSignal.timeout(10_000) })
+  if (!response.ok) return null
   const data = Buffer.from(await response.arrayBuffer())
-  if (data.length > MAX_LOGO_BYTES) return null
-  return `data:${type};base64,${data.toString('base64')}`
+  if (data.length === 0 || data.length > MAX_LOGO_BYTES) return null
+  // Trust the file's own bytes over the server's label: a label of image/* on something that
+  // isn't one, or a missing label on a real image, are both common.
+  const type = sniffImageType(data)
+  return type ? `data:${type};base64,${data.toString('base64')}` : null
 }
 ```
 
@@ -1268,13 +1340,15 @@ Fetches a logo and turns it into a `data:` URL for the page, which can't load im
 web itself (its Content-Security-Policy only allows the app's own images and `data:` URLs).
 
 - `if (!url.startsWith('https://')) return null`: `https` only.
-- `AbortSignal.timeout(5000)`: gives up after 5 seconds, so one slow logo can't hold up the list.
-- `type.startsWith('image/')`: only images. The media type comes from the response's
-  `content-type` header, without any `; charset=...` part.
-- `data.length > MAX_LOGO_BYTES`: nothing over 300 KB; a logo shown 40 pixels wide never needs
-  more.
+- `AbortSignal.timeout(10_000)`: gives up after 10 seconds, so one slow logo can't hold up the
+  list for long.
+- `if (!response.ok) return null`: an error answer (404, say) is no logo.
+- `data.length === 0 || data.length > MAX_LOGO_BYTES`: an empty file, or one over 300 KB, is
+  refused.
+- `const type = sniffImageType(data)`: as the comment says, the file's own bytes decide what it
+  is, not the `content-type` label: that label can be wrong both ways.
 - `` `data:${type};base64,${data.toString('base64')}` ``: the image itself, written into the
-  address.
+  address with the type that was found.
 
 ## `src/renderer/src/components/AppsList.tsx`: the list in the panel
 
@@ -1286,7 +1360,7 @@ reported, and calls back to `Panel` for everything you can do.
 
 <!-- code: apps/desktop/src/renderer/src/components/AppsList.tsx#SEARCH_FROM -->
 
-[`src/renderer/src/components/AppsList.tsx`, lines 6–7](../../apps/desktop/src/renderer/src/components/AppsList.tsx#L6-L7)
+[`src/renderer/src/components/AppsList.tsx`, lines 7–8](../../apps/desktop/src/renderer/src/components/AppsList.tsx#L7-L8)
 
 ```tsx
 /** Above this many apps, a search box appears. */
@@ -1301,19 +1375,22 @@ With more than 8 apps, a search box appears above them. Fewer fit on screen at a
 
 <!-- code: apps/desktop/src/renderer/src/components/AppsList.tsx#AppsList -->
 
-[`src/renderer/src/components/AppsList.tsx`, lines 9–156](../../apps/desktop/src/renderer/src/components/AppsList.tsx#L9-L156)
+[`src/renderer/src/components/AppsList.tsx`, lines 10–188](../../apps/desktop/src/renderer/src/components/AppsList.tsx#L10-L188)
 
 ```tsx
 /**
  * Shown in the card instead of the text box while the Apps icon is on: the apps in the user's
  * JumpCloud User Portal. Clicking one opens it in the default browser, signed in through
- * JumpCloud like it would be from the portal.
+ * JumpCloud like it would be from the portal. The star in a tile's corner puts it first.
  */
 export function AppsList(props: {
   open: boolean
   state: AppsState
   appName: string
   portalName: string
+  /** IDs of the starred apps, shown first. */
+  favorites: string[]
+  onToggleFavorite: (app: PortalApp, favorite: boolean) => void
   onOpenApp: (app: PortalApp) => void
   onOpenPortal: () => void
   onSignIn: () => void
@@ -1323,7 +1400,10 @@ export function AppsList(props: {
   const [query, setQuery] = useState('')
   const search = useRef<HTMLInputElement>(null)
   const { state } = props
-  const apps = useMemo(() => (state.status === 'ready' ? state.apps : []), [state])
+  const apps = useMemo(
+    () => (state.status === 'ready' ? orderApps(state.apps, props.favorites) : []),
+    [state, props.favorites],
+  )
 
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -1422,19 +1502,44 @@ export function AppsList(props: {
             <Message>No apps match “{query.trim()}”.</Message>
           ) : (
             <ul className="grid min-h-0 grid-cols-3 gap-1 overflow-y-auto px-2 pb-2">
-              {shown.map((app) => (
-                <li key={app.id}>
-                  <button
-                    type="button"
-                    onClick={() => props.onOpenApp(app)}
-                    title={`Open ${app.name}`}
-                    className="flex w-full flex-col items-center gap-1.5 rounded-xl px-1 py-2 text-center hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                  >
-                    <AppLogo app={app} />
-                    <span className="line-clamp-2 text-[11px] leading-tight">{app.name}</span>
-                  </button>
-                </li>
-              ))}
+              {shown.map((app) => {
+                const favorite = props.favorites.includes(app.id)
+                return (
+                  <li key={app.id} className="group/tile relative">
+                    <button
+                      type="button"
+                      onClick={() => props.onOpenApp(app)}
+                      title={`Open ${app.name}`}
+                      className="flex w-full flex-col items-center gap-1.5 rounded-xl px-1 py-2 text-center hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                    >
+                      <AppLogo app={app} />
+                      <span className="line-clamp-2 text-[11px] leading-tight">{app.name}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => props.onToggleFavorite(app, !favorite)}
+                      aria-pressed={favorite}
+                      aria-label={
+                        favorite
+                          ? `Remove ${app.name} from favourites`
+                          : `Add ${app.name} to favourites`
+                      }
+                      title={favorite ? 'Remove from favourites' : 'Add to favourites'}
+                      // On the logo's top-right corner (the 40px logo is centred in the tile).
+                      style={{ left: 'calc(50% + 9px)', top: 0 }}
+                      className={cn(
+                        'absolute grid size-6 place-items-center rounded-full',
+                        'hover:bg-zinc-200/70 dark:hover:bg-zinc-700',
+                        favorite
+                          ? 'text-amber-400'
+                          : 'text-zinc-300 opacity-60 group-hover/tile:opacity-100 hover:text-amber-400 focus-visible:opacity-100 dark:text-zinc-600',
+                      )}
+                    >
+                      <Star size={13} fill={favorite ? 'currentColor' : 'none'} aria-hidden />
+                    </button>
+                  </li>
+                )
+              })}
             </ul>
           )}
         </>
@@ -1460,9 +1565,11 @@ A heading, then one of five views depending on `state.status`, then a link to th
 bottom, always there.
 
 - `const [query, setQuery] = useState('')`: what's typed in the search box.
-- `useMemo(() => ..., [state])`: `useMemo` keeps a computed value between renders and only works it
-  out again when something in its list changes. `apps` is the list (or `[]` when there isn't one
-  yet), and `shown` the apps whose names contain the search text, ignoring case.
+- `favorites`, `onToggleFavorite`: the starred apps' IDs, and what a star click does.
+- `useMemo(() => ..., [state, props.favorites])`: `useMemo` keeps a computed value between renders
+  and only works it out again when something in its list changes. `apps` is the list with the
+  starred apps first (`orderApps()`), or `[]` when there isn't one yet, and `shown` the apps
+  whose names contain the search text, ignoring case.
 - `if (props.open && apps.length > SEARCH_FROM) search.current?.focus()`: when there's a search
   box, it gets the keyboard as the panel opens, so you can start typing an app's name at once.
 - `{state.status === 'ready' && (`: Refresh (`RotateCw`, a circular arrow) only when there's a list
@@ -1478,7 +1585,22 @@ bottom, always there.
 - `grid min-h-0 grid-cols-3 ... overflow-y-auto`: three apps per row, scrolling when there are
   more than fit. `min-h-0` lets a flex item shrink below its content's height, which is what makes
   the scrolling work inside the card's maximum height.
+- `<li key={app.id} className="group/tile relative">`: each tile holds two buttons side by side
+  in the page, the app and its star. A button can't contain another, and a click on the star
+  mustn't open the app. `relative` lets the star be placed over the tile; `group/tile` names the
+  tile as a _group_, so the star can react to the pointer being anywhere on the tile.
 - `onClick={() => props.onOpenApp(app)}`: `Panel.openApp` opens it in the browser.
+- `onClick={() => props.onToggleFavorite(app, !favorite)}`: stars the app, or takes the star away.
+- `aria-pressed={favorite}`, `aria-label`: for screen readers, a toggle button that's on or off,
+  named "Add Slack to favourites" or "Remove Slack from favourites". `title` gives the shorter
+  tooltip.
+- `style={{ left: 'calc(50% + 9px)', top: 0 }}`: as the comment says, the 40 px logo is centred
+  in the tile, so its right edge is 20 px right of the middle. The 24 px star button starting 9 px
+  right of the middle sits over the logo's top-right corner.
+- `favorite ? 'text-amber-400' : 'text-zinc-300 opacity-60 group-hover/tile:opacity-100 ...'`: a
+  starred app's star is amber and filled (`fill={favorite ? 'currentColor' : 'none'}`). Otherwise
+  it's a faint outline that becomes clearer while the pointer is over the tile, turns amber under
+  the pointer, and shows fully when reached with the keyboard (`focus-visible:opacity-100`).
 - `line-clamp-2`: a long name is cut to two lines with "…".
 - `Open the {props.portalName} portal`: opens the User Portal itself, for anything the list
   doesn't cover.
@@ -1487,7 +1609,7 @@ bottom, always there.
 
 <!-- code: apps/desktop/src/renderer/src/components/AppsList.tsx#AppLogo,Message -->
 
-[`src/renderer/src/components/AppsList.tsx`, lines 158–186](../../apps/desktop/src/renderer/src/components/AppsList.tsx#L158-L186)
+[`src/renderer/src/components/AppsList.tsx`, lines 190–218](../../apps/desktop/src/renderer/src/components/AppsList.tsx#L190-L218)
 
 ```tsx
 /** The app's logo, or its first letter on the accent colour when there isn't one. */
@@ -1541,13 +1663,17 @@ fake browser that "signs in" and comes back with a code, and an in-memory store.
   or structured content; `null` when there's no list but `[]` for an empty one; never a link that
   isn't `https`; the launch tool's ID argument found from its schema; and the sign-in link found
   in a launch answer.
-- `fetchLogo`: an `https` image becomes a `data:` URL; `http`, non-images, failed requests and
-  anything too big are refused.
+- `sniffImageType`: images known by their first bytes (PNG, JPEG, GIF, WebP, icon, bitmap,
+  SVG), and `null` for anything else.
+- `fetchLogo`: an `https` image becomes a `data:` URL, including JumpCloud's uploaded logos that
+  come labelled `application/octet-stream`; `http`, non-images (whatever their label says, such
+  as an HTML page labelled `image/png`), failed requests and anything too big are refused.
+- `orderApps`: starred apps first, each group keeping its order.
 - `PortalApps`: asking to sign in when nobody has connected, without opening the browser;
   signing in through the browser, saving the registration and tokens, then listing the apps with
   logos; remembering the list until Refresh; opening an app through its launch link; refusing a
-  sign-in that comes back with a `state` it didn't send; and Cancel going back to the Sign in
-  button.
+  sign-in that comes back with a `state` it didn't send; Cancel going back to the Sign in
+  button; and keeping the logos it already has, so a refresh doesn't download them again.
 - `SavedAuth`: a public client with the loopback redirect; tokens kept across a reload of the
   file; forgetting everything clears the file; and the `state` check.
 

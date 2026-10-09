@@ -3,9 +3,12 @@
   "companyName": "Morse Micro",
   "appName": "Desktop Assist",
   "accentColor": "#9333EA",
-  "actions": ["ask", "screenshot", "settings", "bounce", "close"],
+  "actions": ["ask", "servicedesk", "screenshot", "theme", "settings", "bounce", "close"],
   "chatApp": "claude-desktop",
   "startPage": "apps",
+  "serviceDesk": {
+    "url": "https://morsemicro.atlassian.net/servicedesk/customer/portals"
+  },
   "portal": {
     "name": "JumpCloud",
     "url": "https://console.jumpcloud.com/userconsole#/",
