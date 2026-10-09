@@ -423,8 +423,8 @@ const portalApps = portal
 
 <!-- /code -->
 
-The apps in the user's JumpCloud User Portal, shown by the Apps icon (see
-[Your apps](10-apps.md)). It's only set up when the tenant has a `portal`; otherwise
+The apps in the user's JumpCloud User Portal, which the panel opens on or shows behind the Apps
+icon (see [Your apps](10-apps.md)). It's only set up when the tenant has a `portal`; otherwise
 `portalApps` is `null` and the Apps channels aren't answered.
 
 - `netFetch`: Electron's `net.fetch()`, in the shape of the standard `fetch()`. Electron's version
@@ -452,12 +452,16 @@ The apps in the user's JumpCloud User Portal, shown by the Apps icon (see
   see the list (or why not) without clicking the bubble.
 - `onError: (message, error) => log(message, error)`: problems loading the list or connecting go
   to the problem log; the list shows its own short message.
+- `void portalApps?.get()` (the next statement): starts loading the list in the background at
+  startup, so it's ready when the panel first opens, which for Morse Micro is on the Apps list. As
+  the comment says, it never opens the browser: without a saved connection it just settles on the
+  Sign in button. `?.` skips it when there's no portal.
 
 #### IPC, the tray and display changes
 
 <!-- code: apps/desktop/src/main/index.ts#start.onDisplayChange -->
 
-[`src/main/index.ts`, line 250](../../apps/desktop/src/main/index.ts#L250)
+[`src/main/index.ts`, line 253](../../apps/desktop/src/main/index.ts#L253)
 
 ```ts
 const onDisplayChange = () => bubble.displayChanged()
@@ -502,7 +506,7 @@ Everything else in this part of `start()` is plain statements:
 
 <!-- code: apps/desktop/src/main/index.ts#start.shuttingDown -->
 
-[`src/main/index.ts`, lines 255–256](../../apps/desktop/src/main/index.ts#L255-L256)
+[`src/main/index.ts`, lines 258–259](../../apps/desktop/src/main/index.ts#L258-L259)
 
 ```ts
 // Save the text box before quitting. before-quit fires again after the second app.quit().
@@ -554,7 +558,7 @@ was part of `start()`. It returns a [`BuiltInChat`](#builtinchat): the `AuthMana
 
 <!-- code: apps/desktop/src/main/index.ts#startBuiltInChat.devBaseUrl,lastIdToken,backend,chat -->
 
-[`src/main/index.ts`, lines 291–315](../../apps/desktop/src/main/index.ts#L291-L315)
+[`src/main/index.ts`, lines 294–318](../../apps/desktop/src/main/index.ts#L294-L318)
 
 ```ts
 // Dev runs may point at a local test server; an installed app always talks to Anthropic.
@@ -627,7 +631,7 @@ const chat = new ChatSession({
 
 <!-- code: apps/desktop/src/main/index.ts#startBuiltInChat.missing,localIssuer,authState,auth -->
 
-[`src/main/index.ts`, lines 317–341](../../apps/desktop/src/main/index.ts#L317-L341)
+[`src/main/index.ts`, lines 320–344](../../apps/desktop/src/main/index.ts#L320-L344)
 
 ```ts
 const missing = missingSettings(signIn, claudeAccess)
@@ -704,7 +708,7 @@ Two statements end the function:
 
 <!-- code: apps/desktop/src/main/index.ts#safeStorageEncryptor -->
 
-[`src/main/index.ts`, lines 347–352](../../apps/desktop/src/main/index.ts#L347-L352)
+[`src/main/index.ts`, lines 350–355](../../apps/desktop/src/main/index.ts#L350-L355)
 
 ```ts
 /** Windows DPAPI through Electron: only this Windows user can decrypt what it encrypts. */
@@ -732,7 +736,7 @@ The encryption `SecretStore` uses for the saved sign-in. `SecretStore` only know
 
 <!-- code: apps/desktop/src/main/index.ts#withDevOverrides -->
 
-[`src/main/index.ts`, lines 354–372](../../apps/desktop/src/main/index.ts#L354-L372)
+[`src/main/index.ts`, lines 357–376](../../apps/desktop/src/main/index.ts#L357-L376)
 
 ```ts
 /**
@@ -747,6 +751,7 @@ async function withDevOverrides(tenant: Tenant): Promise<Tenant> {
   return TenantSchema.parse({
     ...tenant,
     chatApp: override.chatApp ?? tenant.chatApp,
+    startPage: override.startPage ?? tenant.startPage,
     portal: override.portal ? { ...tenant.portal, ...override.portal } : tenant.portal,
     signIn: override.signIn ? { ...tenant.signIn, ...override.signIn } : tenant.signIn,
     claudeAccess: override.claudeAccess
@@ -772,7 +777,7 @@ example to try the built-in chat against a test identity provider, without editi
   object's properties, and later ones win, so the override's fields replace the tenant's. The
   merge only happens when the override has a `signIn`; a Claude Desktop tenant without one keeps
   having none, rather than an empty object. `portal` and `claudeAccess` work the same way, so a
-  dev run can point the Apps list at a test server.
+  dev run can point the Apps list at a test server. `startPage` is replaced like `chatApp`.
 - `TenantSchema.parse({`: the result is checked again as a whole tenant, so an override can't
   produce an invalid config. For example, switching to the built-in chat without sign-in settings
   fails here, and the app shows the error instead of starting.
@@ -781,7 +786,7 @@ example to try the built-in chat against a test identity provider, without editi
 
 <!-- code: apps/desktop/src/main/index.ts#isLoopback -->
 
-[`src/main/index.ts`, lines 374–376](../../apps/desktop/src/main/index.ts#L374-L376)
+[`src/main/index.ts`, lines 378–380](../../apps/desktop/src/main/index.ts#L378-L380)
 
 ```ts
 function isLoopback(url: URL): boolean {
@@ -799,7 +804,7 @@ in `hostname`. Used only to decide whether plain `http` is allowed for a dev ide
 
 <!-- code: apps/desktop/src/main/index.ts#toArea,electronDisplays -->
 
-[`src/main/index.ts`, lines 378–392](../../apps/desktop/src/main/index.ts#L378-L392)
+[`src/main/index.ts`, lines 382–396](../../apps/desktop/src/main/index.ts#L382-L396)
 
 ```ts
 /** Electron's `screen`, in the shape the bubble controller uses. All coordinates are DIPs. */
@@ -844,7 +849,7 @@ method is called, which happens after `start()` has begun.
 
 <!-- code: apps/desktop/src/main/index.ts#fail -->
 
-[`src/main/index.ts`, lines 394–398](../../apps/desktop/src/main/index.ts#L394-L398)
+[`src/main/index.ts`, lines 398–402](../../apps/desktop/src/main/index.ts#L398-L402)
 
 ```ts
 function fail(error: unknown): void {
@@ -1599,8 +1604,8 @@ tenant folder the same way, so a mistake is caught by the tests before it reache
 
 Besides the branding, a tenant chooses where questions go (`chatApp`): to the Claude Desktop app,
 or to the chat built into the panel. Only the built-in chat needs the sign-in settings (`signIn`)
-and the Claude access settings (`claudeAccess`). A tenant with the Apps icon also needs its app
-portal's settings (`portal`).
+and the Claude access settings (`claudeAccess`). A tenant with the Apps list (as its start page,
+or behind the Apps icon) also needs its app portal's settings (`portal`).
 
 None of the values here are secret. The client ID and the Claude IDs identify the app; on their
 own they don't grant access to anything.
@@ -1756,11 +1761,31 @@ billed to the company.
 - `satisfies ChatApp[]`: checks every entry is a `ChatApp` (the type in `src/shared/types.ts`
   that the pages see) without changing the list's own type. A misspelt entry is a compile error.
 
+### `START_PAGES`
+
+<!-- code: apps/desktop/src/main/tenant.ts#START_PAGES -->
+
+[`src/main/tenant.ts`, lines 60–64](../../apps/desktop/src/main/tenant.ts#L60-L64)
+
+```ts
+/**
+ * What the panel opens on: the text box for asking Claude (`ask`), or the Apps list (`apps`). The
+ * other one is behind its icon (`ask` or `apps` in `actions`).
+ */
+export const START_PAGES = ['ask', 'apps'] as const satisfies StartPage[]
+```
+
+<!-- /code -->
+
+What the panel opens on, as the comment says. Written the same way as `CHAT_APPS`: `as const` for
+`z.enum()`, and `satisfies StartPage[]` to check it against the `StartPage` type the pages use.
+Morse Micro opens on the Apps list, with the text box behind the Ask Claude icon.
+
 ### `TenantSchema` and `Tenant`
 
 <!-- code: apps/desktop/src/main/tenant.ts#TenantSchema,Tenant -->
 
-[`src/main/tenant.ts`, lines 60–89](../../apps/desktop/src/main/tenant.ts#L60-L89)
+[`src/main/tenant.ts`, lines 66–102](../../apps/desktop/src/main/tenant.ts#L66-L102)
 
 ```ts
 export const TenantSchema = z
@@ -1774,6 +1799,7 @@ export const TenantSchema = z
       .min(1)
       .refine((ids) => new Set(ids).size === ids.length, 'actions must not repeat'),
     chatApp: z.enum(CHAT_APPS).default('built-in'),
+    startPage: z.enum(START_PAGES).default('ask'),
     /** Extra instructions for Claude, added to the built-in chat's system prompt. */
     systemPrompt: z.string().max(8000).optional(),
     /** Needed for the Apps action. */
@@ -1790,6 +1816,12 @@ export const TenantSchema = z
   )
   .refine((tenant) => !tenant.actions.includes('apps') || tenant.portal !== undefined, {
     message: 'the apps action needs portal',
+  })
+  .refine((tenant) => tenant.startPage !== 'apps' || tenant.portal !== undefined, {
+    message: 'starting on the apps list needs portal',
+  })
+  .refine((tenant) => tenant.startPage !== 'apps' || tenant.actions.includes('ask'), {
+    message: 'starting on the apps list needs the ask action, to reach the text box',
   })
 
 export type Tenant = z.infer<typeof TenantSchema>
@@ -1812,7 +1844,9 @@ The whole `tenant.json`.
 - `systemPrompt`: optional extra instructions for Claude, added after the built-in ones by
   `buildSystemPrompt()`. Only the built-in chat uses it; Claude Desktop has its own (claude.ai's
   organization instructions).
-- `portal: PortalSchema.optional()`: only needed with the Apps icon.
+- `startPage: z.enum(START_PAGES).default('ask')`: what the panel opens on; the text box unless
+  the tenant says otherwise.
+- `portal: PortalSchema.optional()`: only needed for the Apps list.
 - `signIn: SignInSchema.optional()`, `claudeAccess: ClaudeAccessSchema.optional()`: a Claude
   Desktop tenant can leave both out.
 - `.refine((tenant) => tenant.chatApp !== 'built-in' || ...)`: a check on the whole object, so it
@@ -1821,34 +1855,40 @@ The whole `tenant.json`.
   objects into `true` or `false`. If the check fails, parsing throws with `message`.
 - `.refine((tenant) => !tenant.actions.includes('apps') || tenant.portal !== undefined, ...)`: a
   second check of the same kind: a tenant that shows the Apps icon must say which portal it's for.
+- `.refine((tenant) => tenant.startPage !== 'apps' || tenant.portal !== undefined, ...)`: so must a
+  tenant that starts on the Apps list.
+- `.refine((tenant) => tenant.startPage !== 'apps' || tenant.actions.includes('ask'), ...)`: and it
+  must show the Ask Claude icon, or there would be no way to reach the text box.
 
 ### `brandingOf()`
 
 <!-- code: apps/desktop/src/main/tenant.ts#brandingOf -->
 
-[`src/main/tenant.ts`, lines 91–95](../../apps/desktop/src/main/tenant.ts#L91-L95)
+[`src/main/tenant.ts`, lines 104–109](../../apps/desktop/src/main/tenant.ts#L104-L109)
 
 ```ts
 export function brandingOf(tenant: Tenant): Branding {
   const { companyName, appName, accentColor, actions, chatApp } = tenant
   const portalName = tenant.portal?.name ?? null
-  return { companyName, appName, accentColor, actions, chatApp, portalName }
+  const { startPage } = tenant
+  return { companyName, appName, accentColor, actions, chatApp, portalName, startPage }
 }
 ```
 
 <!-- /code -->
 
-The part of the tenant the pages need: names, the accent colour, the action list, `chatApp`,
-which tells the panel whether to show the built-in chat or hand questions to Claude Desktop, and
-the portal's name for the Apps list (`null` without a portal; `?.` reads `name` only if there's a
-`portal`). It goes into the state snapshot from `getState`. The object is rebuilt field by field
-rather than passed as is, so the sign-in, Claude and portal settings never go to the pages.
+The part of the tenant the pages need: names, the accent colour, the action list, `chatApp`, which
+tells the panel whether to show the built-in chat or hand questions to Claude Desktop, and the
+portal's name for the Apps list (`null` without a portal; `?.` reads `name` only if there's a
+`portal`), and the start page. It goes into the state snapshot from `getState`. The object is
+rebuilt field by field rather than passed as is, so the sign-in, Claude and portal settings never go
+to the pages.
 
 ### `missingSettings()`
 
 <!-- code: apps/desktop/src/main/tenant.ts#missingSettings -->
 
-[`src/main/tenant.ts`, lines 97–108](../../apps/desktop/src/main/tenant.ts#L97-L108)
+[`src/main/tenant.ts`, lines 111–122](../../apps/desktop/src/main/tenant.ts#L111-L122)
 
 ```ts
 /** The tenant.json settings still to be filled in before anyone can sign in, by name. */
@@ -1881,16 +1921,17 @@ status is `unconfigured` and the chat box shows the list instead of a sign-in bu
 
 <!-- code: apps/desktop/src/main/tenant.ts#DevOverrideSchema -->
 
-[`src/main/tenant.ts`, lines 110–120](../../apps/desktop/src/main/tenant.ts#L110-L120)
+[`src/main/tenant.ts`, lines 124–135](../../apps/desktop/src/main/tenant.ts#L124-L135)
 
 ```ts
 /**
- * Dev runs only: a JSON file (path in DESKTOP_ASSIST_DEV_CONFIG) can override `chatApp`, `portal`,
- * `signIn` and `claudeAccess`, so the app can be pointed at a test identity provider without editing
+ * Dev runs only: a JSON file (path in DESKTOP_ASSIST_DEV_CONFIG) can override `chatApp`,
+ * `startPage`, `portal`, `signIn` and `claudeAccess`, so the app can be pointed at a test identity provider without editing
  * tenant.json. Installed builds never read it.
  */
 export const DevOverrideSchema = z.object({
   chatApp: z.enum(CHAT_APPS).optional(),
+  startPage: z.enum(START_PAGES).optional(),
   portal: PortalSchema.partial().optional(),
   signIn: SignInSchema.partial().optional(),
   claudeAccess: ClaudeAccessSchema.partial().optional(),
@@ -1905,6 +1946,7 @@ changes.
 
 - `chatApp: z.enum(CHAT_APPS).optional()`: lets a dev run try the other kind of chat, for example
   the built-in chat against a test identity provider while `tenant.json` says `claude-desktop`.
+- `startPage: z.enum(START_PAGES).optional()`: lets a dev run try the other start page.
 - `portal: PortalSchema.partial().optional()`: lets a dev run point the Apps list at a test
   server (`appsServer`), without editing `tenant.json`.
 

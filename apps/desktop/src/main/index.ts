@@ -200,6 +200,9 @@ async function start(): Promise<void> {
         onError: (message, error) => log(message, error),
       })
     : null
+  // Load the Apps list in the background, so it's there when the panel first opens. It never
+  // opens the browser: without a saved connection it just waits for "Sign in with JumpCloud".
+  void portalApps?.get()
   if (!builtIn) {
     // Chats happen in Claude Desktop: a JumpCloud sign-in saved by the built-in chat isn't needed.
     void rm(join(userData, 'jumpcloud-session.bin'), { force: true }).catch(() => {})
@@ -363,6 +366,7 @@ async function withDevOverrides(tenant: Tenant): Promise<Tenant> {
   return TenantSchema.parse({
     ...tenant,
     chatApp: override.chatApp ?? tenant.chatApp,
+    startPage: override.startPage ?? tenant.startPage,
     portal: override.portal ? { ...tenant.portal, ...override.portal } : tenant.portal,
     signIn: override.signIn ? { ...tenant.signIn, ...override.signIn } : tenant.signIn,
     claudeAccess: override.claudeAccess

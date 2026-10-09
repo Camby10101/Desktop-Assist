@@ -12,7 +12,12 @@ A tenant folder contains:
 - `tenant.json`: Company and app names, accent colour, the action icons shown above the bubble (listed from the bubble upward), where chats happen, and the sign-in settings. Validated at startup and by `npm test`.
 - `logo.png` or `logo.svg`: The logo. `logo.png` is also the tray icon and the `.exe` icon. If both exist, `logo.png` is used.
 
-Available actions: `apps`, `screenshot`, `settings`, `bounce`, `close`. `apps` needs `portal`:
+Available actions: `ask`, `apps`, `screenshot`, `settings`, `bounce`, `close`.
+
+`startPage`: what the panel opens on, `ask` (the text box, the default) or `apps` (the Apps list,
+Morse Micro). The other page is behind its icon: `ask` ("Ask Claude") when starting on the apps,
+which then needs that action; `apps` ("Your apps") when starting on the text box. The Apps list
+needs `portal`:
 
 - `portal`: the company's app portal for the Apps list (JumpCloud's User Portal): `name` (shown
   to users, e.g. `JumpCloud`), `url` (the User Portal), `appsServer` (JumpCloud's MCP Server for

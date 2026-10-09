@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { ACTION_IDS } from '@shared/actions'
-import type { Branding, ChatApp } from '@shared/types'
+import type { Branding, ChatApp, StartPage } from '@shared/types'
 
 /**
  * How users sign in: the company's OpenID Connect app (JumpCloud for Morse Micro). The client ID
@@ -57,6 +57,12 @@ export type ClaudeAccessConfig = z.infer<typeof ClaudeAccessSchema>
  */
 export const CHAT_APPS = ['built-in', 'claude-desktop'] as const satisfies ChatApp[]
 
+/**
+ * What the panel opens on: the text box for asking Claude (`ask`), or the Apps list (`apps`). The
+ * other one is behind its icon (`ask` or `apps` in `actions`).
+ */
+export const START_PAGES = ['ask', 'apps'] as const satisfies StartPage[]
+
 export const TenantSchema = z
   .object({
     id: z.string().regex(/^[a-z0-9-]+$/),
@@ -68,6 +74,7 @@ export const TenantSchema = z
       .min(1)
       .refine((ids) => new Set(ids).size === ids.length, 'actions must not repeat'),
     chatApp: z.enum(CHAT_APPS).default('built-in'),
+    startPage: z.enum(START_PAGES).default('ask'),
     /** Extra instructions for Claude, added to the built-in chat's system prompt. */
     systemPrompt: z.string().max(8000).optional(),
     /** Needed for the Apps action. */
@@ -85,13 +92,20 @@ export const TenantSchema = z
   .refine((tenant) => !tenant.actions.includes('apps') || tenant.portal !== undefined, {
     message: 'the apps action needs portal',
   })
+  .refine((tenant) => tenant.startPage !== 'apps' || tenant.portal !== undefined, {
+    message: 'starting on the apps list needs portal',
+  })
+  .refine((tenant) => tenant.startPage !== 'apps' || tenant.actions.includes('ask'), {
+    message: 'starting on the apps list needs the ask action, to reach the text box',
+  })
 
 export type Tenant = z.infer<typeof TenantSchema>
 
 export function brandingOf(tenant: Tenant): Branding {
   const { companyName, appName, accentColor, actions, chatApp } = tenant
   const portalName = tenant.portal?.name ?? null
-  return { companyName, appName, accentColor, actions, chatApp, portalName }
+  const { startPage } = tenant
+  return { companyName, appName, accentColor, actions, chatApp, portalName, startPage }
 }
 
 /** The tenant.json settings still to be filled in before anyone can sign in, by name. */
@@ -108,12 +122,13 @@ export function missingSettings(signIn: SignInConfig, access: ClaudeAccessConfig
 }
 
 /**
- * Dev runs only: a JSON file (path in DESKTOP_ASSIST_DEV_CONFIG) can override `chatApp`, `portal`,
- * `signIn` and `claudeAccess`, so the app can be pointed at a test identity provider without editing
+ * Dev runs only: a JSON file (path in DESKTOP_ASSIST_DEV_CONFIG) can override `chatApp`,
+ * `startPage`, `portal`, `signIn` and `claudeAccess`, so the app can be pointed at a test identity provider without editing
  * tenant.json. Installed builds never read it.
  */
 export const DevOverrideSchema = z.object({
   chatApp: z.enum(CHAT_APPS).optional(),
+  startPage: z.enum(START_PAGES).optional(),
   portal: PortalSchema.partial().optional(),
   signIn: SignInSchema.partial().optional(),
   claudeAccess: ClaudeAccessSchema.partial().optional(),

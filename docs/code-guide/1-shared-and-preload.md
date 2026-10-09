@@ -278,8 +278,8 @@ and in what order, nearest the bubble first. There are two kinds:
 - `command` actions run in the main process: screenshot, bounce and close (handlers in
   `createActionHandlers()`, `src/main/actions.ts`).
 - `popover` actions open some UI inside the panel and never leave the renderer: Settings (the
-  settings menu) and Apps (the Apps list, in place of the text box). `PanelView.runAction()`
-  handles them.
+  settings menu), and Ask Claude and Your apps, which switch the card between the text box and
+  the Apps list. `PanelView.runAction()` handles them.
 
 The ids are written once, as a real array, and the types are derived from it. So adding an
 action is one edit here, and then the compiler points at the rest: `ICONS` in `ActionStack.tsx`
@@ -299,7 +299,7 @@ is a `Record<ActionId, ...>` (it must have an icon for every action), and `Actio
 // - `command` actions run in the main process (see src/main/actions.ts).
 // - `popover` actions open UI inside the panel and never reach the main process.
 
-export const ACTION_IDS = ['apps', 'screenshot', 'settings', 'bounce', 'close'] as const
+export const ACTION_IDS = ['ask', 'apps', 'screenshot', 'settings', 'bounce', 'close'] as const
 
 export type ActionId = (typeof ACTION_IDS)[number]
 ```
@@ -309,9 +309,9 @@ export type ActionId = (typeof ACTION_IDS)[number]
 The list of every action that exists, and the type of one of its entries.
 
 - `as const`: without it the array's type would be `string[]`. With it, the type is a read-only
-  list of these five exact strings, which is what lets the next line work.
-- `(typeof ACTION_IDS)[number]`: "the type of whatever you get by indexing the array with a
-  number", which is the union `'apps' | 'screenshot' | 'settings' | 'bounce' | 'close'`. The type
+  list of these six exact strings, which is what lets the next line work.
+- `(typeof ACTION_IDS)[number]`: "the type of whatever you get by indexing the array with a number",
+  which is the union `'ask' | 'apps' | 'screenshot' | 'settings' | 'bounce' | 'close'`. The type
   follows the list automatically.
 - The array also exists at runtime, which a type doesn't: `TenantSchema` in `src/main/tenant.ts`
   uses `z.enum(ACTION_IDS)` to reject a `tenant.json` that lists an unknown action. **zod** is a
@@ -323,10 +323,11 @@ The list of every action that exists, and the type of one of its entries.
 
 <!-- code: apps/desktop/src/shared/actions.ts#ACTIONS -->
 
-[`src/shared/actions.ts`, lines 11–17](../../apps/desktop/src/shared/actions.ts#L11-L17)
+[`src/shared/actions.ts`, lines 11–18](../../apps/desktop/src/shared/actions.ts#L11-L18)
 
 ```ts
 export const ACTIONS = {
+  ask: { label: 'Ask Claude', kind: 'popover' },
   apps: { label: 'Your apps', kind: 'popover' },
   screenshot: { label: 'Take screenshot', kind: 'command' },
   settings: { label: 'Settings', kind: 'popover' },
@@ -353,7 +354,7 @@ announce whether the menu is open.
 
 <!-- code: apps/desktop/src/shared/actions.ts#CommandActionId -->
 
-[`src/shared/actions.ts`, lines 19–21](../../apps/desktop/src/shared/actions.ts#L19-L21)
+[`src/shared/actions.ts`, lines 20–22](../../apps/desktop/src/shared/actions.ts#L20-L22)
 
 ```ts
 export type CommandActionId = {
@@ -369,19 +370,18 @@ The type of just the command actions: `'screenshot' | 'bounce' | 'close'`. It's 
 - `[K in ActionId]:`: a _mapped type_. It builds an object type with one property per action id.
   Each property's type is the id itself if that action's kind is `'command'`, or `never` (the
   "impossible" type) if not, giving
-  `{ apps: never; screenshot: 'screenshot'; settings: never; bounce: 'bounce'; close: 'close' }`.
+  `{ ask: never; apps: never; screenshot: 'screenshot'; settings: never; bounce: 'bounce'; close: 'close' }`.
 - `}[ActionId]`: looking up every key at once gives the union of the property types. `never`
   disappears from a union, leaving the three command ids.
 - `AssistApi.invokeAction()` in `src/shared/ipc.ts` only accepts these, so a page can't even try
-  to send `settings` or `apps` to the main process. In `PanelView.runAction()`, the early returns
-  for `'apps'` and `'settings'` narrow the id to exactly this type, which is why it can then be
-  passed on.
+  to send `settings`, `ask` or `apps` to the main process. In `PanelView.runAction()`, the early
+  returns for those narrow the id to exactly this type, which is why it can then be passed on.
 
 ### `COMMAND_ACTION_IDS`
 
 <!-- code: apps/desktop/src/shared/actions.ts#COMMAND_ACTION_IDS -->
 
-[`src/shared/actions.ts`, lines 23–25](../../apps/desktop/src/shared/actions.ts#L23-L25)
+[`src/shared/actions.ts`, lines 24–26](../../apps/desktop/src/shared/actions.ts#L24-L26)
 
 ```ts
 export const COMMAND_ACTION_IDS = ACTION_IDS.filter(
@@ -552,11 +552,11 @@ Where questions are answered, set per tenant (`chatApp` in `tenant.json`, checke
   their own Claude account, so it counts against their own usage limit. Desktop Assist has no
   sign-in of its own then (see [Claude Desktop](9-claude-desktop.md)).
 
-### `Branding`
+### `Branding` and `StartPage`
 
-<!-- code: apps/desktop/src/shared/types.ts#Branding -->
+<!-- code: apps/desktop/src/shared/types.ts#Branding,StartPage -->
 
-[`src/shared/types.ts`, lines 50–58](../../apps/desktop/src/shared/types.ts#L50-L58)
+[`src/shared/types.ts`, lines 50–63](../../apps/desktop/src/shared/types.ts#L50-L63)
 
 ```ts
 export interface Branding {
@@ -567,7 +567,12 @@ export interface Branding {
   chatApp: ChatApp
   /** The identity provider's name for the Apps list ("JumpCloud"), or null without one. */
   portalName: string | null
+  /** What the card shows when the panel opens: the text box, or the Apps list. */
+  startPage: StartPage
 }
+
+/** The two things the card beside the bubble can show. */
+export type StartPage = 'ask' | 'apps'
 ```
 
 <!-- /code -->
@@ -581,11 +586,15 @@ send button, the settings menu, and whether there's a sign-in at all. `portalNam
 the company's app portal ("JumpCloud"), for the Apps list's buttons ("Sign in with JumpCloud"); it's
 `null` when the tenant has no portal, and then the Apps list never shows.
 
+`startPage` is what the card shows when the panel opens: the text box (`ask`) or the Apps list
+(`apps`). `StartPage` is the type of those two, and also of the panel's `view` (which of the two
+is showing right now).
+
 ### `SignedInUser` and `AuthStatus`
 
 <!-- code: apps/desktop/src/shared/types.ts#SignedInUser,AuthStatus -->
 
-[`src/shared/types.ts`, lines 60–79](../../apps/desktop/src/shared/types.ts#L60-L79)
+[`src/shared/types.ts`, lines 65–84](../../apps/desktop/src/shared/types.ts#L65-L84)
 
 ```ts
 export interface SignedInUser {
@@ -634,7 +643,7 @@ token ever reaches them. With Claude Desktop there is no `AuthManager` and no st
 
 <!-- code: apps/desktop/src/shared/types.ts#ChatMessage,SendResult -->
 
-[`src/shared/types.ts`, lines 81–97](../../apps/desktop/src/shared/types.ts#L81-L97)
+[`src/shared/types.ts`, lines 86–102](../../apps/desktop/src/shared/types.ts#L86-L102)
 
 ```ts
 /** One message as the chat shows it. */
@@ -681,7 +690,7 @@ draft, which the panel shows. The reply itself arrives later, through `onChatMes
 
 <!-- code: apps/desktop/src/shared/types.ts#AskResult -->
 
-[`src/shared/types.ts`, lines 99–105](../../apps/desktop/src/shared/types.ts#L99-L105)
+[`src/shared/types.ts`, lines 104–110](../../apps/desktop/src/shared/types.ts#L104-L110)
 
 ```ts
 /**
@@ -716,7 +725,7 @@ Claude Desktop has opened with the question filled in. The failures come from
 
 <!-- code: apps/desktop/src/shared/types.ts#AppState -->
 
-[`src/shared/types.ts`, lines 107–118](../../apps/desktop/src/shared/types.ts#L107-L118)
+[`src/shared/types.ts`, lines 112–123](../../apps/desktop/src/shared/types.ts#L112-L123)
 
 ```ts
 export interface AppState {
@@ -746,14 +755,14 @@ the page's own requests, so the panel takes their new values from the replies.
   Desktop, which has its own sign-in. The pages check for `null` before reading `auth.state`.
 - `chat: ChatMessage[]`: the built-in chat's messages. With Claude Desktop it's always empty.
 
-The Apps list isn't in `AppState`: the panel asks for it when the Apps icon is first clicked
+The Apps list isn't in `AppState`: the panel asks for it whenever the list shows
 (`window.assist.apps.get()`), and then keeps up through `onAppsState`.
 
 ### `PortalApp` and `AppsState`
 
 <!-- code: apps/desktop/src/shared/types.ts#PortalApp,AppsState -->
 
-[`src/shared/types.ts`, lines 120–139](../../apps/desktop/src/shared/types.ts#L120-L139)
+[`src/shared/types.ts`, lines 125–144](../../apps/desktop/src/shared/types.ts#L125-L144)
 
 ```ts
 /** One app from the user's JumpCloud User Portal, as the Apps list shows it. */
@@ -800,7 +809,7 @@ sets the state and broadcasts every change on `assist:apps-state`.
 
 <!-- code: apps/desktop/src/shared/types.ts#UninstallResult -->
 
-[`src/shared/types.ts`, lines 141–143](../../apps/desktop/src/shared/types.ts#L141-L143)
+[`src/shared/types.ts`, lines 146–148](../../apps/desktop/src/shared/types.ts#L146-L148)
 
 ```ts
 /** Settings → Uninstall. On success the app is already quitting. */
@@ -822,7 +831,7 @@ quitting, so the page has nothing more to do.
 
 <!-- code: apps/desktop/src/shared/types.ts#ActionResult,AttachResult -->
 
-[`src/shared/types.ts`, lines 145–148](../../apps/desktop/src/shared/types.ts#L145-L148)
+[`src/shared/types.ts`, lines 150–153](../../apps/desktop/src/shared/types.ts#L150-L153)
 
 ```ts
 export type ActionResult = { ok: true; message?: string } | { ok: false; message: string }

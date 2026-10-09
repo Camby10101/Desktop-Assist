@@ -10,8 +10,9 @@ Everything else lives inside the chat card: `SignInPanel` replaces the chat whil
 in, `MessageList` shows the conversation (using `Markdown` for Claude's replies), and an
 `AttachmentChip` above the text box stands for each attached screenshot. When questions go to Claude
 Desktop (the tenant's `chatApp`), there's no sign-in and no conversation in the panel, so the card
-is just the text box, with an "Ask in Claude" button. While the Apps icon is on, the card shows the
-Apps list instead; that component, `AppsList`, is covered in [Your apps](10-apps.md).
+is just the text box, with an "Ask in Claude" button. The card can show the Apps list instead,
+either from the start or behind an icon, depending on the tenant; that component, `AppsList`, is
+covered in [Your apps](10-apps.md).
 
 ## `src/renderer/src/components/ChatBox.tsx`: the chat card
 
@@ -186,8 +187,8 @@ The parts of `ChatBox` itself:
   sign-in prompt or any messages, so the card is just the text box (and sometimes a banner).
 - `autoSend: boolean`: the "Send in Claude automatically" setting, also only for `Composer`'s
   wording.
-- `apps: ReactNode`: the Apps list while the Apps icon is on, built by `Panel` like
-  `signInPrompt`; otherwise `null`.
+- `apps: ReactNode`: the Apps list while it's showing, built by `Panel` like `signInPrompt`;
+  otherwise `null`.
 - `originClass(props.corner)`: sets the CSS `transform-origin` to the bubble's corner (for
   example `origin-bottom-right`), so the zoom-in animation grows out of the bubble.
 - `'scale-95 opacity-0 transition duration-150 ease-out'`: the card is always rendered, even
@@ -1431,21 +1432,23 @@ it tells screen readers whether it's on, so the switch itself is `aria-hidden`.
 
 ## `src/renderer/src/components/ActionStack.tsx`: the action icons
 
-The column of round icon buttons that pops out of the bubble when the panel opens: apps,
-screenshot, settings, bounce and close, in the order the tenant's `tenant.json` lists them,
-nearest the bubble first. `Panel` always renders it; while closed it's simply invisible. Its props
-are the `corner`, the tenant's `actions`, `open`, `activeId` (`settings` while the settings menu
-is open, `apps` while the Apps list is showing, otherwise `null`) and `onAction`, which is
+The column of round icon buttons that pops out of the bubble when the panel opens (for Morse
+Micro: Ask Claude, screenshot, settings, bounce and close), in the order the tenant's
+`tenant.json` lists them, nearest the bubble first. `Panel` always renders it; while closed it's
+simply invisible. Its props are the `corner`, the tenant's `actions`, `open`, `activeId`
+(`settings` while the settings menu is open, `ask` or `apps` while the page that isn't the start
+page is showing, otherwise `null`), `dotted` (icons that get a small dot) and `onAction`, which is
 `Panel.runAction`.
 
 ### `ICONS`
 
 <!-- code: apps/desktop/src/renderer/src/components/ActionStack.tsx#ICONS -->
 
-[`src/renderer/src/components/ActionStack.tsx`, lines 7–13](../../apps/desktop/src/renderer/src/components/ActionStack.tsx#L7-L13)
+[`src/renderer/src/components/ActionStack.tsx`, lines 15–22](../../apps/desktop/src/renderer/src/components/ActionStack.tsx#L15-L22)
 
 ```tsx
 const ICONS: Record<ActionId, LucideIcon> = {
+  ask: MessageCircle,
   apps: LayoutGrid,
   screenshot: Camera,
   settings: Settings,
@@ -1456,8 +1459,8 @@ const ICONS: Record<ActionId, LucideIcon> = {
 
 <!-- /code -->
 
-Which lucide icon each action shows. Apps is `LayoutGrid`, a grid of four squares, the usual sign
-for "apps".
+Which lucide icon each action shows. Ask Claude is `MessageCircle`, a speech bubble, and Apps is
+`LayoutGrid`, a grid of four squares, the usual sign for "apps".
 
 - `Record<ActionId, LucideIcon>`: an object with exactly one entry for every action id. If a new
   id is added to `ACTION_IDS` in `src/shared/actions.ts` without an icon here, TypeScript reports
@@ -1467,7 +1470,7 @@ for "apps".
 
 <!-- code: apps/desktop/src/renderer/src/components/ActionStack.tsx#ActionStack -->
 
-[`src/renderer/src/components/ActionStack.tsx`, lines 15–76](../../apps/desktop/src/renderer/src/components/ActionStack.tsx#L15-L76)
+[`src/renderer/src/components/ActionStack.tsx`, lines 24–93](../../apps/desktop/src/renderer/src/components/ActionStack.tsx#L24-L93)
 
 ```tsx
 /**
@@ -1479,6 +1482,8 @@ export function ActionStack(props: {
   actions: ActionId[]
   open: boolean
   activeId: ActionId | null
+  /** Icons with a small dot, e.g. Ask Claude while an unsent question is waiting behind it. */
+  dotted?: ActionId[]
   onAction: (id: ActionId) => void
 }) {
   const top = isTopCorner(props.corner)
@@ -1511,7 +1516,7 @@ export function ActionStack(props: {
               transitionDelay: props.open ? `${index * 30}ms` : '0ms',
             }}
             className={cn(
-              'grid place-items-center rounded-full border shadow-md outline-none',
+              'relative grid place-items-center rounded-full border shadow-md outline-none',
               'transition duration-150 ease-out motion-reduce:transition-none',
               'focus-visible:ring-2 focus-visible:ring-accent',
               // Hidden icons sit tucked toward the bubble, then slide out.
@@ -1526,6 +1531,12 @@ export function ActionStack(props: {
             )}
           >
             <Icon size={18} strokeWidth={2} aria-hidden />
+            {props.dotted?.includes(id) && !active && (
+              <span
+                aria-hidden
+                className="absolute top-1 right-1 size-2.5 rounded-full border-2 border-white bg-accent dark:border-zinc-800"
+              />
+            )}
           </button>
         )
       })}
@@ -1551,11 +1562,11 @@ Lays the icons out in a column beside the bubble and animates them in and out.
 - `data-action={id}`: `Panel.closeSettingsOnOutsideClick` looks for `[data-action="settings"]`,
   so clicking the gear toggles the menu instead of counting as a click outside it.
 - `aria-expanded={ACTIONS[id].kind === 'popover' ? active : undefined}`: for a popover action
-  (Settings and Apps) it tells screen readers whether what it opens is showing. `undefined` leaves
-  the attribute off the others.
-- `onClick={() => props.onAction(id)}`: `Panel.runAction` toggles the menu for Settings and the
-  list for Apps, and asks the main process to run any other action (see `src/main/actions.ts` in
-  [Main process: startup, IPC and app plumbing](2-main-startup.md)).
+  (Settings, Ask Claude and Apps) it tells screen readers whether what it opens is showing.
+  `undefined` leaves the attribute off the others.
+- `onClick={() => props.onAction(id)}`: `Panel.runAction` toggles the menu for Settings, switches
+  the card's page for Ask Claude and Apps, and asks the main process to run any other action (see
+  `src/main/actions.ts` in [Main process: startup, IPC and app plumbing](2-main-startup.md)).
 - ``transitionDelay: props.open ? `${index * 30}ms` : '0ms'``: each icon starts its animation 30
   ms after the one before, so they pop out one after another. Closing has no delay, so they all go
   together.
@@ -1564,8 +1575,13 @@ Lays the icons out in a column beside the bubble and animates them in and out.
   (explained under `ChatBox`) move it to its place at full size when the panel opens.
 - `outline-none`: together with `'focus-visible:ring-2 focus-visible:ring-accent'`, swaps the
   usual square focus outline for an accent ring that follows the round button.
-- `active`: the active action (the gear while its menu is open, Apps while the list is showing)
-  is filled with the accent colour.
+- `active`: the active action (the gear while its menu is open, Ask Claude or Apps while its page
+  is showing) is filled with the accent colour.
+- `'relative grid ...'`: `relative` makes each button the reference box for the dot below.
+- `{props.dotted?.includes(id) && !active && (`: a small accent-coloured dot in the icon's corner
+  (`absolute top-1 right-1`), with a ring in the button's own colour so it stands out. `Panel` puts
+  one on Ask Claude while an unsent question or screenshot is waiting behind it. Not on the active
+  icon, whose page is already showing.
   Otherwise `id === 'close'` turns red on hover, as a warning that it quits the app, and the rest
   get a grey hover.
 

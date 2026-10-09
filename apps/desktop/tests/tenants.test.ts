@@ -75,6 +75,26 @@ describe('tenants', () => {
     expect(TenantSchema.safeParse({ ...desktop, portal: httpPortal }).success).toBe(false)
   })
 
+  it('can open on the apps list, with an icon to reach the text box', () => {
+    const base = { id: 'x', companyName: 'X', appName: 'X', accentColor: '#000000' }
+    const portal = {
+      name: 'JumpCloud',
+      url: 'https://console.jumpcloud.com/userconsole#/',
+      appsServer: 'https://usermcp.jumpcloud.com/v1',
+      redirectPort: 47622,
+    }
+    const tenant = { ...base, chatApp: 'claude-desktop', portal, startPage: 'apps' }
+    expect(TenantSchema.parse({ ...tenant, actions: ['ask', 'close'] }).startPage).toBe('apps')
+    // No way to reach the text box, or no portal to show:
+    expect(TenantSchema.safeParse({ ...tenant, actions: ['close'] }).success).toBe(false)
+    expect(TenantSchema.safeParse({ ...tenant, portal: undefined, actions: ['ask'] }).success).toBe(
+      false,
+    )
+    expect(
+      TenantSchema.parse({ ...base, chatApp: 'claude-desktop', actions: ['close'] }).startPage,
+    ).toBe('ask')
+  })
+
   it('lists the sign-in settings still to fill in', () => {
     expect(missingSettings(signIn, claudeAccess)).toEqual([
       'signIn.clientId',

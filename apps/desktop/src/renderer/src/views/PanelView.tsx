@@ -9,6 +9,7 @@ import type {
   Attachment,
   Effort,
   PortalApp,
+  StartPage,
   UninstallResult,
 } from '@shared/types'
 import { ActionStack } from '../components/ActionStack'
@@ -56,8 +57,10 @@ function Panel({ state }: { state: AppState }) {
   const [settings, setSettings] = useState(state.settings)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [asking, setAsking] = useState(false)
-  // The card shows the text box, or the Apps list while the Apps icon is on.
-  const [view, setView] = useState<'ask' | 'apps'>('ask')
+  // The card shows the text box or the Apps list: the tenant's start page when the panel opens,
+  // the other one while its icon (Ask Claude or Your apps) is on.
+  const { startPage } = branding
+  const [view, setView] = useState<StartPage>(startPage)
   const [apps, setApps] = useState<AppsState>({ status: 'loading' })
   /** Claude Desktop isn't installed, so questions can't be opened in it (checked on opening). */
   const [claudeMissing, setClaudeMissing] = useState(false)
@@ -66,14 +69,24 @@ function Panel({ state }: { state: AppState }) {
   useEffect(
     () =>
       window.assist.onModeChanged((mode) => {
-        if (mode !== 'expanded') {
-          setSettingsOpen(false)
-          setView('ask') // the panel always reopens on the text box
-        }
+        if (mode !== 'expanded') setSettingsOpen(false)
+        // The panel always reopens on the start page (but taking a screenshot isn't closing it).
+        if (mode === 'collapsed') setView(startPage)
       }),
-    [],
+    [startPage],
   )
   useEffect(() => window.assist.onAppsState(setApps), [])
+  // The Apps list is loaded (or remembered) by the main process; ask for it whenever it shows.
+  useEffect(() => {
+    if (!open || view !== 'apps' || !branding.portalName) return
+    let alive = true
+    void window.assist.apps.get().then((current) => {
+      if (alive) setApps(current)
+    })
+    return () => {
+      alive = false
+    }
+  }, [open, view, branding.portalName])
   useEffect(() => {
     if (!open || !inClaudeDesktop) return
     let alive = true
@@ -88,12 +101,12 @@ function Panel({ state }: { state: AppState }) {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
       if (settingsOpen) setSettingsOpen(false)
-      else if (view === 'apps') setView('ask')
+      else if (view !== startPage) setView(startPage)
       else window.assist.collapse()
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [settingsOpen, view])
+  }, [settingsOpen, view, startPage])
 
   // Not signed in: the chat box shows the sign-in instead of the chat. While a saved sign-in is
   // being renewed, or JumpCloud can't be reached, the chat stays (sending tries JumpCloud again).
@@ -105,11 +118,10 @@ function Panel({ state }: { state: AppState }) {
   const canSend = signedIn && !busy && !asking && (draft.trim() !== '' || attachments.length > 0)
 
   async function runAction(id: ActionId) {
-    if (id === 'apps') {
+    if (id === 'apps' || id === 'ask') {
+      // Swaps the card to that page, or back again.
       setSettingsOpen(false)
-      const showing = view === 'apps'
-      setView(showing ? 'ask' : 'apps')
-      if (!showing) setApps(await window.assist.apps.get())
+      setView(view === id ? (id === 'apps' ? 'ask' : 'apps') : id)
       return
     }
     if (id === 'settings') {
@@ -121,6 +133,8 @@ function Panel({ state }: { state: AppState }) {
     setSettingsOpen(false)
     const result = await window.assist.invokeAction(id)
     if (result.message) showToast(result.message, result.ok ? 'info' : 'error')
+    // A screenshot is taken to ask about it: show the text box, where it can be attached.
+    if (id === 'screenshot' && result.ok) setView('ask')
   }
 
   function changeDraft(next: string) {
@@ -325,7 +339,8 @@ function Panel({ state }: { state: AppState }) {
         corner={state.corner}
         actions={branding.actions}
         open={open}
-        activeId={settingsOpen ? 'settings' : view === 'apps' ? 'apps' : null}
+        activeId={settingsOpen ? 'settings' : view !== startPage ? view : null}
+        dotted={view !== 'ask' && (draft.trim() !== '' || attachments.length > 0) ? ['ask'] : []}
         onAction={(id) => void runAction(id)}
       />
       {open && settingsOpen && settingsIndex >= 0 && (

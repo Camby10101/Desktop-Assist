@@ -2,12 +2,14 @@
 
 [← Code Guide](CODE_GUIDE.md)
 
-Feature 3.2 adds an **Apps** icon (a grid of squares) to the stack beside the bubble. Clicking it
-swaps the card's text box for **Your apps**: the apps the user can open from their company's
-JumpCloud User Portal (Slack, Atlassian and so on), each with its logo. Clicking one opens it in
-the default browser, signed in through JumpCloud just as it would be from the portal itself. The
-tenant turns it on by listing `apps` in its `actions` and giving a `portal` (see `PortalSchema`
-in [Main process: startup, IPC and app plumbing](2-main-startup.md)).
+Feature 3.2 adds **Your apps** to the card beside the bubble: the apps the user can open from
+their company's JumpCloud User Portal (Slack, Atlassian and so on), each with its logo. Clicking
+one opens it in the default browser, signed in through JumpCloud just as it would be from the
+portal itself. A tenant gives a `portal` (see `PortalSchema` in
+[Main process: startup, IPC and app plumbing](2-main-startup.md)) and chooses where the list
+goes. With `"startPage": "apps"` (Morse Micro), the panel opens on the list, and the text box for
+asking Claude is behind the **Ask Claude** icon (a speech bubble). Otherwise the panel opens on
+the text box, and an **Apps** icon (a grid of squares) in `actions` swaps it for the list.
 
 The list comes from **JumpCloud's "MCP Server for Users"** (`https://usermcp.jumpcloud.com/v1`),
 which an admin turns on in the JumpCloud Admin Portal. _MCP_, the Model Context Protocol, is an
@@ -43,11 +45,12 @@ No token ever reaches the page: it only sees the list's state and the apps' name
 
 **How it fits together**
 
-1. **Showing the list**: Apps icon → `Panel.runAction('apps')` switches the card to the list and
-   calls `window.assist.apps.get()` → IPC `assist:apps-get` → `PortalApps.get()`. The first time,
-   it connects with the saved sign-in (`mcpConnector().connect()`), calls `list_applications`,
-   reads the answer (`parseAppList()`), fetches the logos, and broadcasts the `ready` list on
-   `assist:apps-state`. Later it answers with the list it already has, until Refresh.
+1. **Showing the list**: at startup `index.ts` already asks `PortalApps.get()` to load the list in
+   the background. It connects with the saved sign-in (`mcpConnector().connect()`), calls
+   `list_applications`, reads the answer (`parseAppList()`), fetches the logos, and broadcasts the
+   `ready` list on `assist:apps-state`. Whenever the panel shows the list (on opening, or through
+   the Apps icon), `Panel` asks again with `window.assist.apps.get()` → IPC `assist:apps-get`, and
+   gets the list already loaded, until Refresh.
 2. **Connecting**: with no saved sign-in, the list shows **Sign in with JumpCloud** →
    `apps.signIn()` → `PortalApps.signIn()`. It starts the local listener, lets the SDK register
    and build the sign-in address (`authorize()`), opens it in the browser, waits for the browser
@@ -850,7 +853,8 @@ async get(refresh = false): Promise<AppsState> {
 
 <!-- /code -->
 
-What the page gets when the Apps icon is clicked, or Refresh or Retry.
+What the page gets whenever the list shows, or on Refresh or Retry; `index.ts` also calls it once
+at startup, to load the list in the background.
 
 - `if (this.state.status === 'signing-in') return this.state`: while the user is signing in in the
   browser, nothing else happens; the list loads when that finishes.
@@ -1274,8 +1278,8 @@ web itself (its Content-Security-Policy only allows the app's own images and `da
 
 ## `src/renderer/src/components/AppsList.tsx`: the list in the panel
 
-The component `Panel` puts in the card while the Apps icon is on (through `ChatBox`'s `apps` prop;
-see [The pages](7-renderer-pages.md)). It shows whichever `AppsState` the main process last
+The component `Panel` puts in the card while the Apps list is showing (through `ChatBox`'s `apps`
+prop; see [The pages](7-renderer-pages.md)). It shows whichever `AppsState` the main process last
 reported, and calls back to `Panel` for everything you can do.
 
 ### `SEARCH_FROM`
@@ -1547,6 +1551,7 @@ fake browser that "signs in" and comes back with a code, and an in-memory store.
 - `SavedAuth`: a public client with the loopback redirect; tokens kept across a reload of the
   file; forgetting everything clears the file; and the `state` check.
 
-`tests/tenants.test.ts` checks that the Apps icon needs the portal settings, and that the portal's
-own address must be `https`. The real server and a real browser sign-in aren't part of the unit
-tests.
+`tests/tenants.test.ts` checks that the Apps icon needs the portal settings, that the portal's own
+address must be `https`, and that starting on the Apps list needs both a portal and the Ask Claude
+icon (the text box would be out of reach otherwise). The real server and a real browser sign-in
+aren't part of the unit tests.

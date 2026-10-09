@@ -68,10 +68,11 @@ it swaps a JumpCloud _ID token_ (a short-lived, signed statement of who you are)
 short-lived Claude token, using Anthropic's Workload Identity Federation. There is no API key.
 The pages only ever learn whether you're signed in and your name, never a token.
 
-**The Apps list.** If the tenant has an app portal, an Apps icon shows the apps in the user's
-JumpCloud User Portal. They come from JumpCloud's "MCP Server for Users", which each person
-connects to once in the browser (OAuth, with no secret in the app). Again, only the main process
-talks to JumpCloud, and the pages never see a token.
+**The Apps list.** If the tenant has an app portal, the card can show the apps in the user's
+JumpCloud User Portal, either as soon as the panel opens (Morse Micro, with the text box behind an
+Ask Claude icon) or behind an Apps icon. They come from JumpCloud's "MCP Server for Users", which
+each person connects to once in the browser (OAuth, with no secret in the app). Again, only the main
+process talks to JumpCloud, and the pages never see a token.
 
 ---
 
@@ -84,8 +85,8 @@ talks to JumpCloud, and the pages never see a token.
 2. Create the `BubbleController` (the bubble's state machine) and the `ScreenshotService`. Then,
    depending on the tenant's `chatApp`, either a `ClaudeDesktop` (which hands questions to
    Claude Desktop) or the built-in chat (`startBuiltInChat()`: the Claude backend, the
-   `ChatSession` and the `AuthManager`). With a `portal`, also `PortalApps` (the Apps list). Then
-   the IPC handlers and tray.
+   `ChatSession` and the `AuthManager`). With a `portal`, also `PortalApps` (the Apps list), which
+   starts loading the list in the background. Then the IPC handlers and tray.
 3. With the built-in chat, **renew the saved sign-in** (`auth.init()`): if there isn't one, or
    JumpCloud refuses it, the chat box shows **Sign in with JumpCloud** instead of the chat. If
    JumpCloud can't be reached, the sign-in is kept and a banner offers Retry.
@@ -114,11 +115,14 @@ talks to JumpCloud, and the pages never see a token.
 
 **Your apps** (when the tenant has a `portal`; see [Your apps](10-apps.md))
 
-1. Apps icon → `Panel.runAction('apps')` swaps the text box for the Apps list →
-   `window.assist.apps.get()` → IPC `assist:apps-get` → `PortalApps.get()`.
-2. The first time, `PortalApps` connects to JumpCloud's MCP server with the saved sign-in, calls
-   its `list_applications` tool, fetches the logos and broadcasts the list
-   (`assist:apps-state`).
+1. At startup, `PortalApps` connects to JumpCloud's MCP server with the saved sign-in, calls its
+   `list_applications` tool, fetches the logos and broadcasts the list (`assist:apps-state`).
+2. The panel shows the list when it opens (with `"startPage": "apps"`, as for Morse Micro) or when
+   the Apps icon is clicked, and asks for it then (`window.assist.apps.get()` → IPC
+   `assist:apps-get` → `PortalApps.get()`), getting the list already loaded. The **Ask Claude**
+   icon swaps the list for the text box and back; a dot on it means an unsent question is waiting
+   there. Closing the panel (or Esc) goes back to the start page; taking a screenshot switches to
+   the text box, ready to attach it.
 3. With no saved sign-in, the list offers **Sign in with JumpCloud**: the browser opens
    JumpCloud's sign-in page and comes back to `127.0.0.1:47622/callback`, and the MCP SDK
    registers the app, swaps the code for tokens (PKCE, no secret) and saves them encrypted
@@ -241,7 +245,7 @@ A _tenant_ is one business's branding. The build includes exactly one, chosen by
 environment variable (default `morse-micro`). This is what makes the app easy to re-brand later.
 
 - `tenants/README.md`: How tenants work, and how to change the logo.
-- `tenants/morse-micro/tenant.json`: `id` (must match the folder name), `companyName`, `appName` (also the name of the screenshots folder), `accentColor` (the highlight colour), `actions` (which icons appear above the bubble, from the bubble upward), `chatApp` (where questions go: `claude-desktop`, as for Morse Micro, or `built-in`, the default), `portal` for the Apps icon (the portal's name, its address, JumpCloud's apps server and the sign-in port), and for the built-in chat only: optionally `systemPrompt` (extra instructions for Claude), `signIn` (JumpCloud's address, the app's JumpCloud client ID and the sign-in port) and `claudeAccess` (the Claude Console organization, federation rule, service account and optional workspace IDs). The built-in chat needs `signIn` and `claudeAccess`; Claude Desktop needs neither; the Apps icon needs `portal`. None of these are secret. See `docs/CLAUDE_DESKTOP_SETUP.md`, `docs/APPS_SETUP.md` and `docs/JUMPCLOUD_SETUP.md`.
+- `tenants/morse-micro/tenant.json`: `id` (must match the folder name), `companyName`, `appName` (also the name of the screenshots folder), `accentColor` (the highlight colour), `actions` (which icons appear above the bubble, from the bubble upward), `chatApp` (where questions go: `claude-desktop`, as for Morse Micro, or `built-in`, the default), `startPage` (what the panel opens on: `ask`, the text box, by default, or `apps`, the Apps list, as for Morse Micro, whose `actions` then include `ask` to reach the text box), `portal` for the Apps list (the portal's name, its address, JumpCloud's apps server and the sign-in port), and for the built-in chat only: optionally `systemPrompt` (extra instructions for Claude), `signIn` (JumpCloud's address, the app's JumpCloud client ID and the sign-in port) and `claudeAccess` (the Claude Console organization, federation rule, service account and optional workspace IDs). The built-in chat needs `signIn` and `claudeAccess`; Claude Desktop needs neither; the Apps list needs `portal`. None of these are secret. See `docs/CLAUDE_DESKTOP_SETUP.md`, `docs/APPS_SETUP.md` and `docs/JUMPCLOUD_SETUP.md`.
 - `tenants/morse-micro/logo.png`: The logo: the Morse Micro "Mμ" mark cut to a circle (512×512, transparent corners). It's the bubble, the tray icon and the `.exe` icon. A tenant can use `logo.svg` for the bubble instead (if both exist, the PNG wins), but then the tray falls back to a plain circle in the accent colour and the `.exe` gets Electron's default icon.
 
 ---
@@ -309,7 +313,7 @@ Run with `npm test`. Each file tests code that doesn't need a real window or a r
 - `screenshotFiles.test.ts`: Screenshot names, never overwriting, finding the newest, the inside-the-folder check.
 - `screenshotStack.test.ts`: Stacking screenshots into one image for the clipboard: the width they're scaled to (the narrowest, capped), the order and the grey band between them (checked pixel by pixel), a single image left as it is, and refusing different widths, padded rows or an empty list.
 - `format.test.ts`: Chip labels.
-- `tenants.test.ts`: Every tenant folder has a valid `tenant.json` and a logo; `chatApp` defaults to the built-in chat, which needs `signIn` and `claudeAccess`, while Claude Desktop needs neither (and an unknown `chatApp` is refused); the Apps icon needs `portal`, whose address must be `https`; the list of missing sign-in settings.
+- `tenants.test.ts`: Every tenant folder has a valid `tenant.json` and a logo; `chatApp` defaults to the built-in chat, which needs `signIn` and `claudeAccess`, while Claude Desktop needs neither (and an unknown `chatApp` is refused); the Apps icon needs `portal`, whose address must be `https`; starting on the Apps list needs `portal` and the `ask` action; the list of missing sign-in settings.
 - `trayIcon.test.ts`: The tray circle.
 - `chatSession.test.ts`: The conversation with a scripted fake backend: streaming, images before text, replaying replies unchanged (thinking included), busy/empty/signed-out, Stop with and without text, Retry, an expired sign-in, refusals and length limits, the tool loop, and New conversation ignoring a late reply.
 - `authManager.test.ts`: The sign-in with a fake JumpCloud (whose refresh tokens work once, like the real one): not set up, nothing saved, renewing at startup and saving the replacement token, offline and Retry, a refused sign-in, browser sign-in, Cancel, no refresh token, a port in use, handing out a different ID token each time, never refreshing twice at once, skipping an almost-expired ID token, Log out (revoking), and logging out during a renewal.

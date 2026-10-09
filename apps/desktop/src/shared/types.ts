@@ -55,7 +55,12 @@ export interface Branding {
   chatApp: ChatApp
   /** The identity provider's name for the Apps list ("JumpCloud"), or null without one. */
   portalName: string | null
+  /** What the card shows when the panel opens: the text box, or the Apps list. */
+  startPage: StartPage
 }
+
+/** The two things the card beside the bubble can show. */
+export type StartPage = 'ask' | 'apps'
 
 export interface SignedInUser {
   name?: string

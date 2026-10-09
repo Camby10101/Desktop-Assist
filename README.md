@@ -36,10 +36,12 @@ are complete. Next is Milestone 4: Ship.
   with JumpCloud. Replies stream in with formatting and highlighted code, with Stop, Retry and
   Copy. Usage is billed to the company's Claude Console account, through a service account IT
   sets up; there's no API key.
+- **Your apps**: the panel opens on the apps in your JumpCloud User Portal, with their logos.
+  Click one to open it in your browser, signed in through JumpCloud. The first time, **Sign in
+  with JumpCloud** connects Desktop Assist to your portal in your browser.
 - **Action icons** above the bubble:
-  - **Apps** swaps the text box for the apps in your JumpCloud User Portal, with their logos.
-    Click one to open it in your browser, signed in through JumpCloud. The first time, **Sign in
-    with JumpCloud** connects Desktop Assist to your portal in your browser.
+  - **Ask Claude** swaps the apps for the text box (above); click it again or press Esc to go
+    back. A dot on it means an unsent question is waiting.
   - **Screenshot** saves the screen the bubble is on to `Pictures\Desktop Assist`.
   - **Settings**: Start with Windows, Send in Claude automatically, Open screenshots folder,
     Clear text box and **Uninstall Desktop Assist**. (With the

@@ -1,7 +1,8 @@
 # Setting up the Apps list (for IT)
 
-Since feature 3.2, the bubble has an **Apps** icon. Clicking it swaps the text box for the apps the
-person sees in their **JumpCloud User Portal**, with their logos. Clicking an app opens it in their
+Since feature 3.2, Desktop Assist shows the apps the person sees in their **JumpCloud User
+Portal**, with their logos: for Morse Micro the panel opens on them (the text box for asking
+Claude is behind the **Ask Claude** icon). Clicking an app opens it in their
 default browser, signed in through JumpCloud just as it would be from the portal.
 
 The list comes from JumpCloud's **MCP Server for Users**, the documented way for an app on the
@@ -27,7 +28,8 @@ to each app in JumpCloud (and "Show in User Portal").
 
 ## 2. What each person does (once)
 
-1. Click the bubble, then the **Apps** icon (the grid).
+1. Click the bubble. (Where the panel opens on the text box instead, click the **Apps** icon, the
+   grid.)
 2. Click **Sign in with JumpCloud**. Their browser opens JumpCloud; if they're already signed in
    there, they just approve Desktop Assist. The browser then says they can close the tab.
 3. The Apps list appears. From then on it opens straight away; the connection is saved encrypted

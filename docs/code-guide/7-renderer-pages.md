@@ -1134,14 +1134,16 @@ The panel works in one of two ways, set by the tenant's `chatApp` (`branding.cha
 built-in chat it's a chat with Claude, behind a JumpCloud sign-in. With Claude Desktop it's just
 the text box: asking opens the question in the Claude Desktop app (and, with "Send in Claude
 automatically" on, sends it there), and there's no sign-in and no conversation in the panel
-(`state.auth` is `null` and `state.chat` stays empty). Either way, if the tenant has the Apps
-icon, the card can also show the Apps list instead of the text box.
+(`state.auth` is `null` and `state.chat` stays empty). Either way, if the tenant has a portal,
+the card can also show the Apps list instead of the text box. Which of the two the panel opens on
+is the tenant's `startPage` (`branding.startPage`); the other is behind its icon in the stack:
+**Ask Claude** for the text box, **Your apps** for the list. Morse Micro opens on the Apps list.
 
 ### `ASK_ERRORS`
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#ASK_ERRORS -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 24–30](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L24-L30)
+[`src/renderer/src/views/PanelView.tsx`, lines 25–31](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L25-L31)
 
 ```tsx
 /** What to say when a question couldn't be handed to Claude Desktop. */
@@ -1171,7 +1173,7 @@ The toast for each way handing a question to Claude Desktop can fail (`AskResult
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#UNINSTALL_ERRORS -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 32–37](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L32-L37)
+[`src/renderer/src/views/PanelView.tsx`, lines 33–38](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L33-L38)
 
 ```tsx
 /** What to say when Settings → Uninstall couldn't start the uninstaller. */
@@ -1192,7 +1194,7 @@ app can always be uninstalled.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#PanelView -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 39–45](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L39-L45)
+[`src/renderer/src/views/PanelView.tsx`, lines 40–46](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L40-L46)
 
 ```tsx
 /** Everything that appears around the bubble when it's clicked. */
@@ -1223,7 +1225,7 @@ returns. The sections after it take its values and functions one at a time.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 47–353](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L47-L353)
+[`src/renderer/src/views/PanelView.tsx`, lines 48–368](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L48-L368)
 
 ```tsx
 function Panel({ state }: { state: AppState }) {
@@ -1238,8 +1240,10 @@ function Panel({ state }: { state: AppState }) {
   const [settings, setSettings] = useState(state.settings)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [asking, setAsking] = useState(false)
-  // The card shows the text box, or the Apps list while the Apps icon is on.
-  const [view, setView] = useState<'ask' | 'apps'>('ask')
+  // The card shows the text box or the Apps list: the tenant's start page when the panel opens,
+  // the other one while its icon (Ask Claude or Your apps) is on.
+  const { startPage } = branding
+  const [view, setView] = useState<StartPage>(startPage)
   const [apps, setApps] = useState<AppsState>({ status: 'loading' })
   /** Claude Desktop isn't installed, so questions can't be opened in it (checked on opening). */
   const [claudeMissing, setClaudeMissing] = useState(false)
@@ -1248,14 +1252,24 @@ function Panel({ state }: { state: AppState }) {
   useEffect(
     () =>
       window.assist.onModeChanged((mode) => {
-        if (mode !== 'expanded') {
-          setSettingsOpen(false)
-          setView('ask') // the panel always reopens on the text box
-        }
+        if (mode !== 'expanded') setSettingsOpen(false)
+        // The panel always reopens on the start page (but taking a screenshot isn't closing it).
+        if (mode === 'collapsed') setView(startPage)
       }),
-    [],
+    [startPage],
   )
   useEffect(() => window.assist.onAppsState(setApps), [])
+  // The Apps list is loaded (or remembered) by the main process; ask for it whenever it shows.
+  useEffect(() => {
+    if (!open || view !== 'apps' || !branding.portalName) return
+    let alive = true
+    void window.assist.apps.get().then((current) => {
+      if (alive) setApps(current)
+    })
+    return () => {
+      alive = false
+    }
+  }, [open, view, branding.portalName])
   useEffect(() => {
     if (!open || !inClaudeDesktop) return
     let alive = true
@@ -1270,12 +1284,12 @@ function Panel({ state }: { state: AppState }) {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
       if (settingsOpen) setSettingsOpen(false)
-      else if (view === 'apps') setView('ask')
+      else if (view !== startPage) setView(startPage)
       else window.assist.collapse()
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [settingsOpen, view])
+  }, [settingsOpen, view, startPage])
 
   // Not signed in: the chat box shows the sign-in instead of the chat. While a saved sign-in is
   // being renewed, or JumpCloud can't be reached, the chat stays (sending tries JumpCloud again).
@@ -1287,11 +1301,10 @@ function Panel({ state }: { state: AppState }) {
   const canSend = signedIn && !busy && !asking && (draft.trim() !== '' || attachments.length > 0)
 
   async function runAction(id: ActionId) {
-    if (id === 'apps') {
+    if (id === 'apps' || id === 'ask') {
+      // Swaps the card to that page, or back again.
       setSettingsOpen(false)
-      const showing = view === 'apps'
-      setView(showing ? 'ask' : 'apps')
-      if (!showing) setApps(await window.assist.apps.get())
+      setView(view === id ? (id === 'apps' ? 'ask' : 'apps') : id)
       return
     }
     if (id === 'settings') {
@@ -1303,6 +1316,8 @@ function Panel({ state }: { state: AppState }) {
     setSettingsOpen(false)
     const result = await window.assist.invokeAction(id)
     if (result.message) showToast(result.message, result.ok ? 'info' : 'error')
+    // A screenshot is taken to ask about it: show the text box, where it can be attached.
+    if (id === 'screenshot' && result.ok) setView('ask')
   }
 
   function changeDraft(next: string) {
@@ -1507,7 +1522,8 @@ function Panel({ state }: { state: AppState }) {
         corner={state.corner}
         actions={branding.actions}
         open={open}
-        activeId={settingsOpen ? 'settings' : view === 'apps' ? 'apps' : null}
+        activeId={settingsOpen ? 'settings' : view !== startPage ? view : null}
+        dotted={view !== 'ask' && (draft.trim() !== '' || attachments.length > 0) ? ['ask'] : []}
         onAction={(id) => void runAction(id)}
       />
       {open && settingsOpen && settingsIndex >= 0 && (
@@ -1552,12 +1568,13 @@ Props and state:
 - `const [asking, setAsking] = useState(false)`: true while a question is being handed to Claude
   Desktop, so it can't be sent twice. (Only for that moment: sending it in Claude carries on in
   the main process after the panel has closed.)
-- `const [view, setView] = useState<'ask' | 'apps'>('ask')`: what the card shows: the text box
-  (`ask`), or the Apps list while the Apps icon is on. `<'ask' | 'apps'>` gives the state its type,
-  since TypeScript would otherwise take it to be any string.
+- `const [view, setView] = useState<StartPage>(startPage)`: what the card shows: the text box
+  (`ask`) or the Apps list (`apps`). It starts on the tenant's start page, as the comment says,
+  and the other page shows while its icon is on. `<StartPage>` gives the state its type, since
+  TypeScript would otherwise take it to be just the starting value's type.
 - `const [apps, setApps] = useState<AppsState>({ status: 'loading' })`: the Apps list as the main
-  process last reported it. It isn't part of the app state the page loads at the start; it's
-  fetched the first time the Apps icon is clicked.
+  process last reported it. It isn't part of the app state the page loads at the start; it's asked
+  for whenever the list shows (the effect below).
 - `const [claudeMissing, setClaudeMissing] = useState(false)`: whether Claude Desktop was found
   to be missing, which shows a banner with a Download button.
 - `const [toast, showToast] = useToast()`: the current toast and the function to show one.
@@ -1565,11 +1582,18 @@ Props and state:
 Effects:
 
 - `window.assist.onModeChanged((mode) => {`: closes the settings menu whenever the panel closes,
-  so it isn't still open the next time, and goes back to the text box (`setView('ask')`), so the
-  panel always reopens ready to type. The arrow returns what `onModeChanged` returns, the
+  so it isn't still open the next time. The arrow returns what `onModeChanged` returns, the
   unsubscribe function, which React uses as the cleanup.
+- `if (mode === 'collapsed') setView(startPage)`: once the panel has really closed, the next
+  opening is on the start page again. Only `collapsed` counts: taking a screenshot hides the panel
+  too (`capturing`), and the user expects to come back to the same page afterwards.
 - `useEffect(() => window.assist.onAppsState(setApps), [])`: keeps the Apps list up to date as
   the main process reports changes (connecting, loading, ready). `setApps` itself is the callback.
+- `if (!open || view !== 'apps' || !branding.portalName) return`: whenever the panel is open on the
+  Apps list, it asks the main process for the list (`window.assist.apps.get()`). The main process
+  already started loading it at startup and keeps it, so this is usually instant; the first time,
+  it may still be on its way, and arrives through `onAppsState` too. `alive` guards against a late
+  answer, as below.
 - `if (!open || !inClaudeDesktop) return`: with Claude Desktop, each time the panel opens it asks
   whether Claude Desktop is installed (`window.assist.claudeDesktop.isInstalled()`), so a missing
   app is pointed out before anything is typed. Asking every time, rather than once, picks up
@@ -1579,12 +1603,12 @@ Effects:
   `false` and the late answer is ignored.
 - `}, [open, inClaudeDesktop])`: the effect runs again when the panel opens or closes.
 - `if (event.key !== 'Escape') return`: Esc closes the settings menu if it's open, otherwise goes
-  back from the Apps list to the text box, otherwise asks the main process to close the panel
-  (`BubbleController.collapse`). Keys reach the panel because the main process focuses it when it
-  opens.
-- `}, [settingsOpen, view])`: the listener reads `settingsOpen` and `view`, and a function only
-  sees the values from the render it was created in. Listing them here makes React remove the old
-  listener and add a fresh one whenever either changes.
+  back to the start page if the other page is showing, otherwise asks the main process to close
+  the panel (`BubbleController.collapse`). Keys reach the panel because the main process focuses
+  it when it opens.
+- `}, [settingsOpen, view, startPage])`: the listener reads these, and a function only sees the
+  values from the render it was created in. Listing them here makes React remove the old listener
+  and add a fresh one whenever one changes.
 
 The JSX it returns:
 
@@ -1608,14 +1632,19 @@ The JSX it returns:
 - `onSend={() => void send()}`: the handlers are `async`, so they return promises. Each is wrapped
   in an arrow with `void`, which marks the promise as deliberately not awaited and makes the
   callback return nothing.
-- `apps={view === 'apps' && branding.portalName ? (`: while the Apps icon is on, the card shows
-  an `AppsList` in place of everything else (see [Your apps](10-apps.md)); otherwise `null`.
+- `apps={view === 'apps' && branding.portalName ? (`: while the Apps list is showing, the card
+  shows an `AppsList` in place of everything else (see [Your apps](10-apps.md)); otherwise `null`.
   Checking `portalName` too means a tenant without a portal never shows it, and gives TypeScript
   a definite string for the `portalName` prop.
 - `onRetry={() => void window.assist.apps.get(true).then(setApps)}`: the list's Retry and Refresh
   load it again (`true` means "even if already loaded").
-- `activeId={settingsOpen ? 'settings' : view === 'apps' ? 'apps' : null}`: the gear stays
-  highlighted while its menu is open, and the Apps icon while the list is showing.
+- `activeId={settingsOpen ? 'settings' : view !== startPage ? view : null}`: the gear stays
+  highlighted while its menu is open, and otherwise the icon of the page that isn't the start page
+  while it's showing (Ask Claude while the text box is on, for a panel that starts on the Apps
+  list). The start page itself has no icon to highlight.
+- `dotted={view !== 'ask' && (draft.trim() !== '' || attachments.length > 0) ? ['ask'] : []}`: a
+  small dot on the Ask Claude icon while there's an unsent question or screenshot behind it, so it
+  isn't forgotten while the Apps list is showing.
 - `{open && settingsOpen && settingsIndex >= 0 && (`: JSX's way of saying "only if": when any part
   is false, nothing is rendered. Removing the menu also resets its own state (its "click again to
   confirm" on New conversation or Clear text box).
@@ -1637,7 +1666,7 @@ The JSX it returns:
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.signedIn,busy,canSend -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 98–105](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L98-L105)
+[`src/renderer/src/views/PanelView.tsx`, lines 111–118](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L111-L118)
 
 ```tsx
 // Not signed in: the chat box shows the sign-in instead of the chat. While a saved sign-in is
@@ -1675,15 +1704,14 @@ Values worked out on every render from the current state.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.runAction -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 107–124](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L107-L124)
+[`src/renderer/src/views/PanelView.tsx`, lines 120–138](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L120-L138)
 
 ```tsx
 async function runAction(id: ActionId) {
-  if (id === 'apps') {
+  if (id === 'apps' || id === 'ask') {
+    // Swaps the card to that page, or back again.
     setSettingsOpen(false)
-    const showing = view === 'apps'
-    setView(showing ? 'ask' : 'apps')
-    if (!showing) setApps(await window.assist.apps.get())
+    setView(view === id ? (id === 'apps' ? 'ask' : 'apps') : id)
     return
   }
   if (id === 'settings') {
@@ -1695,6 +1723,8 @@ async function runAction(id: ActionId) {
   setSettingsOpen(false)
   const result = await window.assist.invokeAction(id)
   if (result.message) showToast(result.message, result.ok ? 'info' : 'error')
+  // A screenshot is taken to ask about it: show the text box, where it can be attached.
+  if (id === 'screenshot' && result.ok) setView('ask')
 }
 ```
 
@@ -1702,12 +1732,13 @@ async function runAction(id: ActionId) {
 
 Runs when an action icon is clicked (`ActionStack`'s `onAction`).
 
-- `if (id === 'apps') {`: Apps is a "popover" action (src/shared/actions.ts): it switches the card
-  between the text box and the Apps list. It closes the settings menu if that was open.
-- `const showing = view === 'apps'`: whether the list is showing now, before the switch.
-- `if (!showing) setApps(await window.assist.apps.get())`: as the list appears, it's fetched. The
-  first time, the main process loads it from JumpCloud; after that it answers with the list it
-  already has.
+- `if (id === 'apps' || id === 'ask') {`: Your apps and Ask Claude are "popover" actions
+  (src/shared/actions.ts): they switch the card between the text box and the Apps list. They
+  close the settings menu if that was open. A tenant shows only the icon of the page it doesn't
+  start on.
+- `setView(view === id ? (id === 'apps' ? 'ask' : 'apps') : id)`: clicking the icon of the page
+  that isn't showing shows it; clicking it again (while it is) swaps back to the other page. The
+  list is fetched by the effect above as soon as it shows.
 - `if (id === 'settings') {`: Settings is a "popover" action too: it opens UI inside the panel and
   never reaches the main process.
 - `setSettingsOpen(!settingsOpen)`: setting state doesn't change the variable in this run of the
@@ -1715,17 +1746,20 @@ Runs when an action icon is clicked (`ActionStack`'s `onAction`).
   `if (!settingsOpen)` means "the menu is being opened now".
 - `setSettings(await window.assist.settings.get())`: refreshes the settings as the menu opens,
   because Start with Windows can also be changed in Windows Settings.
-- `window.assist.invokeAction(id)`: after the `apps` and `settings` branches return, TypeScript
-  knows `id` is `screenshot`, `bounce` or `close`, which is exactly the `CommandActionId` type
-  `invokeAction` accepts. The main process runs the matching handler from src/main/actions.ts.
+- `window.assist.invokeAction(id)`: after the `apps`, `ask` and `settings` branches return,
+  TypeScript knows `id` is `screenshot`, `bounce` or `close`, which is exactly the `CommandActionId`
+  type `invokeAction` accepts. The main process runs the matching handler from src/main/actions.ts.
 - `if (result.message) showToast(result.message, result.ok ? 'info' : 'error')`: for example
   "Screenshot saved", or "Couldn't take a screenshot" in red. Bounce and close return no message.
+- `if (id === 'screenshot' && result.ok) setView('ask')`: as the comment says, a screenshot is
+  taken to ask about it, so after one the card shows the text box, with **Attach latest
+  screenshot** right there, even on a panel that opened on the Apps list.
 
 #### `changeDraft`
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.changeDraft -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 126–129](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L126-L129)
+[`src/renderer/src/views/PanelView.tsx`, lines 140–143](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L140-L143)
 
 ```tsx
 function changeDraft(next: string) {
@@ -1744,7 +1778,7 @@ writes notes.json about half a second after typing stops, so an unsent message s
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.send -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 131–143](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L131-L143)
+[`src/renderer/src/views/PanelView.tsx`, lines 145–157](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L145-L157)
 
 ```tsx
 async function send() {
@@ -1784,7 +1818,7 @@ The other two reasons, `busy` and `empty`, are ignored: `canSend` already rules 
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.askInClaudeDesktop -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 145–157](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L145-L157)
+[`src/renderer/src/views/PanelView.tsx`, lines 159–171](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L159-L171)
 
 ```tsx
 async function askInClaudeDesktop() {
@@ -1829,7 +1863,7 @@ Claude automatically" on) carries on in the main process; the panel isn't told h
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.openApp -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 159–164](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L159-L164)
+[`src/renderer/src/views/PanelView.tsx`, lines 173–178](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L173-L178)
 
 ```tsx
 async function openApp(app: PortalApp) {
@@ -1851,7 +1885,7 @@ panel stays open with a toast, and the portal itself is one click away at the bo
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.attachLatest,removeAttachment,openAttachment -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 166–182](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L166-L182)
+[`src/renderer/src/views/PanelView.tsx`, lines 180–196](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L180-L196)
 
 ```tsx
 async function attachLatest() {
@@ -1891,7 +1925,7 @@ result.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.copy -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 184–187](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L184-L187)
+[`src/renderer/src/views/PanelView.tsx`, lines 198–201](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L198-L201)
 
 ```tsx
 async function copy(text: string) {
@@ -1909,7 +1943,7 @@ The Copy button on Claude's replies. The main process writes the text to the cli
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.signOut,clearText,uninstall,newConversation,setEffort,toggleAutoSend -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 189–222](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L189-L222)
+[`src/renderer/src/views/PanelView.tsx`, lines 203–236](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L203-L236)
 
 ```tsx
 async function signOut() {
@@ -1976,7 +2010,7 @@ Settings menu actions.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.closeSettingsOnOutsideClick -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 224–230](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L224-L230)
+[`src/renderer/src/views/PanelView.tsx`, lines 238–244](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L238-L244)
 
 ```tsx
 // Clicking anywhere else in the panel closes the settings menu.
@@ -2006,7 +2040,7 @@ the panel (`BubbleController.panelBlurred`), and the mode effect above closes th
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.signInPrompt,banner -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 232–277](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L232-L277)
+[`src/renderer/src/views/PanelView.tsx`, lines 246–291](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L246-L291)
 
 ```tsx
 const signInPrompt =
@@ -2105,7 +2139,7 @@ one saying Claude Desktop isn't installed. With the built-in chat, it depends on
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.settingsIndex -->
 
-[`src/renderer/src/views/PanelView.tsx`, line 279](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L279)
+[`src/renderer/src/views/PanelView.tsx`, line 293](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L293)
 
 ```tsx
 const settingsIndex = branding.actions.indexOf('settings')
