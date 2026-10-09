@@ -2,8 +2,8 @@
 
 A walk through the whole project: what every file is for, and the actual code of every function
 and method with an explanation of what it does and why. Covers Milestones 0 (Foundation), 1
-(Chat with Claude), 2.1 (bubble fixes) and 3 (JumpCloud sign-in), and feature 3.1 (questions go
-to Claude Desktop).
+(Chat with Claude), 2.1 (bubble fixes) and 3 (JumpCloud sign-in), and features 3.1 (questions go
+to Claude Desktop) and 3.2 (the Apps list, Uninstall in Settings, and fixes).
 
 This page is the overview. The code itself is in the [code walkthrough](#6-code-walkthrough),
 one page per area of the app.
@@ -68,6 +68,11 @@ it swaps a JumpCloud _ID token_ (a short-lived, signed statement of who you are)
 short-lived Claude token, using Anthropic's Workload Identity Federation. There is no API key.
 The pages only ever learn whether you're signed in and your name, never a token.
 
+**The Apps list.** If the tenant has an app portal, an Apps icon shows the apps in the user's
+JumpCloud User Portal. They come from JumpCloud's "MCP Server for Users", which each person
+connects to once in the browser (OAuth, with no secret in the app). Again, only the main process
+talks to JumpCloud, and the pages never see a token.
+
 ---
 
 ## 2. How the pieces work together
@@ -79,7 +84,8 @@ The pages only ever learn whether you're signed in and your name, never a token.
 2. Create the `BubbleController` (the bubble's state machine) and the `ScreenshotService`. Then,
    depending on the tenant's `chatApp`, either a `ClaudeDesktop` (which hands questions to
    Claude Desktop) or the built-in chat (`startBuiltInChat()`: the Claude backend, the
-   `ChatSession` and the `AuthManager`). Then the IPC handlers and tray.
+   `ChatSession` and the `AuthManager`). With a `portal`, also `PortalApps` (the Apps list). Then
+   the IPC handlers and tray.
 3. With the built-in chat, **renew the saved sign-in** (`auth.init()`): if there isn't one, or
    JumpCloud refuses it, the chat box shows **Sign in with JumpCloud** instead of the chat. If
    JumpCloud can't be reached, the sign-in is kept and a banner offers Retry.
@@ -97,12 +103,34 @@ The pages only ever learn whether you're signed in and your name, never a token.
    typed in but not sent. `ask()` returns, and the panel closes and the draft is cleared.
 5. In the background (`ClaudeDesktop.finish()`), with **Send in Claude automatically** on and a
    question typed, `sendInClaude()` runs a hidden PowerShell helper. Using Windows UI Automation,
-   it waits until the focused text box belongs to Claude Desktop and shows the question, then
-   presses Ctrl+V (if there's a screenshot) and Enter, checking again before each key. Claude
-   answers.
+   it waits until the focused text box belongs to Claude Desktop and holds exactly the question,
+   then presses Ctrl+V (if there's a screenshot) and Enter, checking again before each key.
+   Claude answers.
 6. If it can't send (or the setting is off, or there's only a screenshot), nothing is pressed
    anywhere else, and a Windows notification says what's left: press Ctrl+V to add the
-   screenshot, or press Enter in Claude.
+   screenshot, or press Enter in Claude. If Claude's box already had other text in it (an unsent
+   draft), nothing is pressed either, and the notification asks the user to check the question.
+   Clicking a notification opens the panel.
+
+**Your apps** (when the tenant has a `portal`; see [Your apps](10-apps.md))
+
+1. Apps icon → `Panel.runAction('apps')` swaps the text box for the Apps list →
+   `window.assist.apps.get()` → IPC `assist:apps-get` → `PortalApps.get()`.
+2. The first time, `PortalApps` connects to JumpCloud's MCP server with the saved sign-in, calls
+   its `list_applications` tool, fetches the logos and broadcasts the list
+   (`assist:apps-state`).
+3. With no saved sign-in, the list offers **Sign in with JumpCloud**: the browser opens
+   JumpCloud's sign-in page and comes back to `127.0.0.1:47622/callback`, and the MCP SDK
+   registers the app, swaps the code for tokens (PKCE, no secret) and saves them encrypted
+   (`jumpcloud-apps.bin`). The panel reopens on the list.
+4. Clicking an app → `PortalApps.open()` calls `launch_application` for its sign-in link and
+   opens it in the browser; the panel closes.
+
+**Uninstall**
+
+Settings → **Uninstall Desktop Assist** (click twice) → IPC `assist:app-uninstall` →
+`uninstall()` in `src/main/uninstall.ts` turns off Start with Windows, starts the installer's
+"Uninstall Desktop Assist.exe" and quits. The data folder and screenshots are kept.
 
 The rest of this section, up to **Typing in the text box**, is the built-in chat.
 
@@ -202,6 +230,7 @@ which animates it back to the corner with `bounce.glidePosition()`.
 - `scripts/code-guide.mjs`: Copies the real code into the walkthrough pages (`npm run docs`), and checks they're up to date (`npm run docs:check`, also run by `npm test`).
 - `scripts/code-guide-pdf.mjs`: Builds `docs/CODE_GUIDE.pdf` from the pages (`npm run docs:pdf`).
 - `docs/CLAUDE_DESKTOP_SETUP.md`: For IT: what each PC needs so questions open in Claude Desktop (Claude Desktop installed and signed in to the company account), and how to check it works.
+- `docs/APPS_SETUP.md`: For IT: turning on JumpCloud's MCP Server for Users for the Apps list, and what each person does to connect.
 - `docs/JUMPCLOUD_SETUP.md`: For IT, for the built-in chat only: how to create the JumpCloud app and the Claude Console federation, and which IDs to put in `tenant.json`.
 
 ---
@@ -212,7 +241,7 @@ A _tenant_ is one business's branding. The build includes exactly one, chosen by
 environment variable (default `morse-micro`). This is what makes the app easy to re-brand later.
 
 - `tenants/README.md`: How tenants work, and how to change the logo.
-- `tenants/morse-micro/tenant.json`: `id` (must match the folder name), `companyName`, `appName` (also the name of the screenshots folder), `accentColor` (the highlight colour), `actions` (which icons appear above the bubble, from the bubble upward), `chatApp` (where questions go: `claude-desktop`, as for Morse Micro, or `built-in`, the default), and for the built-in chat only: optionally `systemPrompt` (extra instructions for Claude), `signIn` (JumpCloud's address, the app's JumpCloud client ID and the sign-in port) and `claudeAccess` (the Claude Console organization, federation rule, service account and optional workspace IDs). The built-in chat needs `signIn` and `claudeAccess`; Claude Desktop needs neither. None of these are secret. See `docs/CLAUDE_DESKTOP_SETUP.md` and `docs/JUMPCLOUD_SETUP.md`.
+- `tenants/morse-micro/tenant.json`: `id` (must match the folder name), `companyName`, `appName` (also the name of the screenshots folder), `accentColor` (the highlight colour), `actions` (which icons appear above the bubble, from the bubble upward), `chatApp` (where questions go: `claude-desktop`, as for Morse Micro, or `built-in`, the default), `portal` for the Apps icon (the portal's name, its address, JumpCloud's apps server and the sign-in port), and for the built-in chat only: optionally `systemPrompt` (extra instructions for Claude), `signIn` (JumpCloud's address, the app's JumpCloud client ID and the sign-in port) and `claudeAccess` (the Claude Console organization, federation rule, service account and optional workspace IDs). The built-in chat needs `signIn` and `claudeAccess`; Claude Desktop needs neither; the Apps icon needs `portal`. None of these are secret. See `docs/CLAUDE_DESKTOP_SETUP.md`, `docs/APPS_SETUP.md` and `docs/JUMPCLOUD_SETUP.md`.
 - `tenants/morse-micro/logo.png`: The logo: the Morse Micro "Mμ" mark cut to a circle (512×512, transparent corners). It's the bubble, the tray icon and the `.exe` icon. A tenant can use `logo.svg` for the bubble instead (if both exist, the PNG wins), but then the tray falls back to a plain circle in the accent colour and the `.exe` gets Electron's default icon.
 
 ---
@@ -242,7 +271,7 @@ the area you're working on.
 1. [Shared code and the preload bridge](1-shared-and-preload.md):
    `src/shared` (sizes and layout constants, the action list, data types, the IPC contract, chip labels, the Claude Desktop download link) and `src/preload` (the `window.assist` bridge between the pages and the main process).
 2. [Main process: startup, IPC and app plumbing](2-main-startup.md):
-   `index.ts` (startup and shutdown, and choosing the built-in chat or Claude Desktop), `ipc.ts` (handling requests from the pages), `actions.ts`, `tenant.ts`, `settings.ts`, the tray icon.
+   `index.ts` (startup and shutdown, and choosing the built-in chat or Claude Desktop), `ipc.ts` (handling requests from the pages), `actions.ts`, `uninstall.ts`, `tenant.ts`, `settings.ts`, the tray icon.
 3. [JumpCloud sign-in](3-sign-in.md):
    `auth/` (`AuthManager`, OpenID Connect with JumpCloud, the loopback listener) and `storage/SecretStore.ts`.
 4. [Talking to Claude](4-claude.md):
@@ -257,6 +286,8 @@ the area you're working on.
    `src/renderer/src/components`: the chat box, messages, Markdown, sign-in panel, settings menu, action icons, screenshot chips.
 9. [Claude Desktop: handing questions over](9-claude-desktop.md):
    `claudeDesktop.ts` (feature 3.1: opening a question in the Claude Desktop app with a link, the screenshots on the clipboard, the notifications, checking it's installed), `sendInClaude.ts` (sending the question there: a hidden PowerShell helper that uses Windows UI Automation to find Claude's text box, then presses Ctrl+V and Enter) and what's tested.
+10. [Your apps: the JumpCloud apps list](10-apps.md):
+    `apps/` (`portalData.ts` reading JumpCloud's answers, `PortalApps.ts` with the list, the OAuth connection and opening apps, `mcp.ts` on the MCP SDK) and `AppsList.tsx`, the list in the panel.
 
 **Keeping it current.** The code on these pages is not typed by hand: each block is a marker
 like `<!-- code: apps/desktop/src/main/ipc.ts#registerIpc -->` that `npm run docs` fills from the
@@ -273,17 +304,19 @@ Run with `npm test`. Each file tests code that doesn't need a real window or a r
 
 - `layout.test.ts`: Home positions in all four corners (including displays not at the origin), nearest-corner snapping, window sizes, and that the panel window opens into the screen and fits on it in every corner.
 - `bounce.test.ts`: Launch direction (away from each corner) and speed, bouncing off every edge, never leaving the screen, and the glide.
-- `bubbleController.test.ts`: The bubble state machine with fake windows, a fake clock and two fake displays: open/close, blur, the saved corner, dragging (follows the mouse, snaps to the nearest corner, onto another display, panel re-placed), bouncing on the current display, screenshots, and display changes (including unplugging the bubble's display).
+- `bubbleController.test.ts`: The bubble state machine with fake windows, a fake clock and two fake displays: open/close, blur (including staying open when another app takes the focus back just as it opens, and logging a click that did nothing), the saved corner, dragging (follows the mouse, snaps to the nearest corner, onto another display, panel re-placed), bouncing on the current display, screenshots, and display changes (including unplugging the bubble's display).
 - `notesStore.test.ts`: Saving the draft, reloading, overtaken writes, damaged files, attachments.
 - `screenshotFiles.test.ts`: Screenshot names, never overwriting, finding the newest, the inside-the-folder check.
 - `screenshotStack.test.ts`: Stacking screenshots into one image for the clipboard: the width they're scaled to (the narrowest, capped), the order and the grey band between them (checked pixel by pixel), a single image left as it is, and refusing different widths, padded rows or an empty list.
 - `format.test.ts`: Chip labels.
-- `tenants.test.ts`: Every tenant folder has a valid `tenant.json` and a logo; `chatApp` defaults to the built-in chat, which needs `signIn` and `claudeAccess`, while Claude Desktop needs neither (and an unknown `chatApp` is refused); the list of missing sign-in settings.
+- `tenants.test.ts`: Every tenant folder has a valid `tenant.json` and a logo; `chatApp` defaults to the built-in chat, which needs `signIn` and `claudeAccess`, while Claude Desktop needs neither (and an unknown `chatApp` is refused); the Apps icon needs `portal`, whose address must be `https`; the list of missing sign-in settings.
 - `trayIcon.test.ts`: The tray circle.
 - `chatSession.test.ts`: The conversation with a scripted fake backend: streaming, images before text, replaying replies unchanged (thinking included), busy/empty/signed-out, Stop with and without text, Retry, an expired sign-in, refusals and length limits, the tool loop, and New conversation ignoring a late reply.
 - `authManager.test.ts`: The sign-in with a fake JumpCloud (whose refresh tokens work once, like the real one): not set up, nothing saved, renewing at startup and saving the replacement token, offline and Retry, a refused sign-in, browser sign-in, Cancel, no refresh token, a port in use, handing out a different ID token each time, never refreshing twice at once, skipping an almost-expired ID token, Log out (revoking), and logging out during a renewal.
-- `claudeDesktop.test.ts`: Handing questions to Claude Desktop, with fakes that record the order of events: the link (the documented `q`, spaces as `%20`, any text round-trips, no `q` without text), the two notifications' wording, copying screenshots before opening Claude and notifying only when there were some, a screenshot-only question, an empty question, the 12,000-character limit, Claude Desktop not installed, a missing screenshot, and a link or clipboard that fails (logged, no notification). With "Send in Claude" on: sending (pasting first when there's a screenshot) with nothing more said, `ask()` returning while sending carries on, the right notification when Claude never showed the question or the screenshot was pasted but not sent, a helper that couldn't run (logged, then the notification), and never sending a screenshot on its own.
-- `sendInClaude.test.ts`: The PowerShell helper's script, without running it: the question key (whitespace evened out, 60 characters), a question full of PowerShell code carried only as base64, no key pressed before Claude's box has been found to hold the question, Ctrl+V only with a screenshot, the process name (another for tests, but nothing that could break out of its quotes), and reading the outcome from the last line printed.
+- `claudeDesktop.test.ts`: Handing questions to Claude Desktop, with fakes that record the order of events: the link (the documented `q`, spaces as `%20`, any text round-trips, no `q` without text), the two notifications' wording, copying screenshots before opening Claude and notifying only when there were some, a screenshot-only question, an empty question, the 12,000-character limit, Claude Desktop not installed, a missing screenshot, and a link or clipboard that fails (logged, no notification). With "Send in Claude" on: sending (pasting first when there's a screenshot) with nothing more said, `ask()` returning while sending carries on, the right notification when Claude never showed the question or the screenshot was pasted but not sent, a helper that couldn't run (logged, then the notification), never sending a screenshot on its own, and sending nothing (with a "check your question" notification) when Claude's box already had other text.
+- `portalApps.test.ts`: The Apps list: reading JumpCloud's answers (sorted by name, hidden apps skipped, a bare list or structured content, no list versus an empty one, `https` links only, the launch tool's ID argument, the sign-in link in a launch answer), fetching logos (`https` images only, and not too big), and `PortalApps` against a fake portal: asking to sign in without opening the browser, signing in through the browser and saving the connection, remembering the list until Refresh, opening an app through its launch link, refusing a sign-in that comes back with the wrong `state`, and Cancel; plus `SavedAuth` as a public client that keeps only what it was given.
+- `uninstall.test.ts`: Finding the uninstaller next to the app, turning off Start with Windows before starting it and then quitting, doing nothing in a dev run or without an uninstaller, and staying open when it couldn't start.
+- `sendInClaude.test.ts`: The PowerShell helper's script, without running it: the question key (whitespace evened out, 60 characters), evening out Unicode spaces and fingerprinting the whole question (any extra text changes the hash), a question full of PowerShell code carried only as base64, no key pressed before Claude's box has been found to hold exactly the question, Ctrl+V only with a screenshot, the process name (another for tests, but nothing that could break out of its quotes), and reading the outcome from the last line printed.
 - `loopback.test.ts`: The browser-return listener: catches `/callback` and stops, 404 for anything else, shows JumpCloud's error safely escaped, Cancel, timeout, and a port in use.
 - `secretStore.test.ts`: Encrypted save and load, unreadable files, refusing to save without encryption, clear.
 - `claudeHelpers.test.ts`: Error classification (including sign-in errors wrapped by the SDK and failed swaps), what can be retried, the system prompt, and image scaling.

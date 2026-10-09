@@ -52,12 +52,21 @@ const api: AssistApi = {
     retry: () => ipcRenderer.invoke(IPC.chatRetry),
     newConversation: () => ipcRenderer.invoke(IPC.chatNew),
   },
+  apps: {
+    get: (refresh) => ipcRenderer.invoke(IPC.appsGet, refresh ?? false),
+    signIn: () => ipcRenderer.invoke(IPC.appsSignIn),
+    cancelSignIn: () => ipcRenderer.invoke(IPC.appsCancelSignIn),
+    open: (id) => ipcRenderer.invoke(IPC.appsOpen, id),
+    openPortal: () => ipcRenderer.invoke(IPC.appsOpenPortal),
+  },
+  uninstall: () => ipcRenderer.invoke(IPC.appUninstall),
   onModeChanged: (callback) => subscribe(IPC.modeChanged, callback),
   onCornerChanged: (callback) => subscribe(IPC.cornerChanged, callback),
   onClickThroughReset: (callback) => subscribe(IPC.clickThroughReset, callback),
   onAuthStatus: (callback) => subscribe(IPC.authStatus, callback),
   onChatMessage: (callback) => subscribe(IPC.chatMessage, callback),
   onChatReset: (callback) => subscribe(IPC.chatReset, () => callback()),
+  onAppsState: (callback) => subscribe(IPC.appsState, callback),
 }
 
 contextBridge.exposeInMainWorld('assist', api)

@@ -5,6 +5,7 @@ import {
   BLUR_CLICK_GRACE_MS,
   BubbleController,
   HIDE_SETTLE_MS,
+  OPEN_BLUR_GRACE_MS,
   PANEL_FADE_MS,
   type BubbleAnchor,
   type DisplayArea,
@@ -155,25 +156,69 @@ describe('clicking the bubble', () => {
 })
 
 describe('clicking away (panel blur)', () => {
-  it('collapses the panel', () => {
+  // The panel has been open a moment, as when a person clicks away from it.
+  function openForAWhile() {
     controller.clickBubble()
+    vi.advanceTimersByTime(OPEN_BLUR_GRACE_MS)
+  }
+
+  it('collapses the panel', () => {
+    openForAWhile()
     controller.panelBlurred()
     expect(controller.currentMode).toBe('collapsed')
   })
 
   it('does not reopen when the blur came from clicking the bubble itself', () => {
-    controller.clickBubble()
+    openForAWhile()
     controller.panelBlurred()
     controller.clickBubble() // the same click, arriving just after the blur
     expect(controller.currentMode).toBe('collapsed')
   })
 
   it('reopens on a later click', () => {
-    controller.clickBubble()
+    openForAWhile()
     controller.panelBlurred()
     vi.advanceTimersByTime(BLUR_CLICK_GRACE_MS)
     controller.clickBubble()
     expect(controller.currentMode).toBe('expanded')
+  })
+
+  it('stays open when another app takes the focus back just as it opens', () => {
+    controller.clickBubble()
+    vi.advanceTimersByTime(OPEN_BLUR_GRACE_MS - 50)
+    controller.panelBlurred()
+    expect(controller.currentMode).toBe('expanded')
+    expect(panel.visible).toBe(true)
+    // A real click away afterwards still closes it.
+    vi.advanceTimersByTime(100)
+    controller.panelBlurred()
+    expect(controller.currentMode).toBe('collapsed')
+  })
+
+  it('logs a click that did nothing', () => {
+    const messages: string[] = []
+    controller = new BubbleController({
+      bubble,
+      panel,
+      displays: {
+        primary: () => screens[0]!,
+        byId: (id) => screens.find((s) => s.id === id),
+        nearest: () => screens[0]!,
+        cursor: () => cursor,
+      },
+      actionCount: 4,
+      initialAnchor: null,
+      onModeChange: () => {},
+      onAnchorChange: () => {},
+      now: () => Date.now(),
+      onDiagnostic: (message) => messages.push(message),
+    })
+    controller.start()
+    controller.clickBubble()
+    vi.advanceTimersByTime(OPEN_BLUR_GRACE_MS)
+    controller.panelBlurred()
+    controller.clickBubble()
+    expect(messages).toEqual(['Bubble click ignored: the panel had just closed'])
   })
 })
 

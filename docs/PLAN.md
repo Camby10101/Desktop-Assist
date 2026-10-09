@@ -1,8 +1,8 @@
 # Desktop Assist: Plan & Tech Stack
 
 Status: **Milestones 0 (Foundation), 1 (Chat with Claude), 2.1 (bubble fixes), 3 (JumpCloud
-sign-in) and feature 3.1 (questions open in Claude Desktop) complete**. Next up: M4 (Ship). Last
-updated 2026-10-09.
+sign-in), feature 3.1 (questions open in Claude Desktop) and 3.2 (Apps list, Uninstall, fixes)
+complete**. Next up: M4 (Ship). Last updated 2026-10-09.
 
 A Windows desktop assistant that runs in the background, shows a small circular company logo
 in the bottom-right corner of the screen, and opens a panel when clicked. It's built for Morse
@@ -89,6 +89,7 @@ against their own limit. The tenant setting `chatApp` picks `claude-desktop` or 
 - **_M1:_ rendering:** react-markdown + remark-gfm + Shiki
 - **_M3:_ sign-in:** openid-client 6 (JumpCloud OIDC, PKCE) + Electron `safeStorage`. Refresh token encrypted with Windows DPAPI
 - **_M3:_ Claude access:** Anthropic SDK `oidcFederationProvider` (Workload Identity Federation). Swaps the JumpCloud ID token for a short-lived Claude token; no API key
+- **_3.2:_ Apps list:** JumpCloud's MCP Server for Users through the official MCP SDK (`@modelcontextprotocol/sdk`: Streamable HTTP client, OAuth with PKCE and dynamic client registration)
 - **_3.1:_ Claude Desktop:** its documented `claude://claude.ai/new?q=` link (`shell.openExternal`), Electron 44's async clipboard (`clipboard.write` with a `ClipboardItem`; `writeImage` is gone) for screenshots, and a Windows notification
 - **_Later:_ gateway:** Hono + jose, in a container. Optional, for per-user audit and quotas (§4)
 
@@ -194,14 +195,17 @@ Desktop-Assist/
 │  ├─ electron.vite.config.ts   TENANT=<id> picks tenants/<id> at build time
 │  ├─ electron-builder.yml
 │  ├─ src/main/                 index (lifecycle), bubble/ (windows, layout, bounce, controller),
-│  │                            claudeDesktop (3.1), auth/ (JumpCloud sign-in), claude/ (chat),
-│  │                            storage/, actions, notes/, screenshots/, settings, tray, ipc
+│  │                            claudeDesktop + sendInClaude (3.1), apps/ (3.2), auth/
+│  │                            (JumpCloud sign-in), claude/ (chat), storage/, actions, notes/,
+│  │                            screenshots/, settings, tray, uninstall, ipc
 │  ├─ src/preload/              typed contextBridge API (window.assist)
 │  ├─ src/renderer/             React views: BubbleView, PanelView (+ components)
 │  ├─ src/shared/               IPC contract, action registry, UI geometry constants, types
 │  └─ tests/                    Vitest unit tests
-├─ tenants/morse-micro/         tenant.json (names, colours, actions, chatApp, sign-in IDs) + logo.png
-└─ docs/                        PLAN.md, CLAUDE_DESKTOP_SETUP.md and JUMPCLOUD_SETUP.md (for IT),
+├─ tenants/morse-micro/         tenant.json (names, colours, actions, chatApp, portal, sign-in
+│                                IDs) + logo.png
+└─ docs/                        PLAN.md, CLAUDE_DESKTOP_SETUP.md, APPS_SETUP.md and
+                                 JUMPCLOUD_SETUP.md (for IT),
                                  code-guide/ (CODE_GUIDE.md and the walkthrough pages),
                                  CODE_GUIDE.pdf
 ```
@@ -334,6 +338,30 @@ with the setting off, a test question opened a new chat with the question filled
 a test question and screenshot were pasted and sent by themselves and Claude answered, about 10
 seconds after clicking Ask, with no notification needed.
 
+## 7f. Feature 3.2 spec: Apps list, Uninstall, and fixes
+
+**Apps list**
+
+- **Apps icon**: A new icon (a grid, "Your apps") pops out with the others, nearest the bubble. Clicking it swaps the card's text box for the user's apps; clicking it again, or Esc, swaps back. The panel always reopens on the text box.
+- **The list**: The same apps the user sees in their JumpCloud User Portal, by name, with their logos (or the first letter on the accent colour), in a grid; a search box appears above 8 apps. **Refresh** reloads it; **Open the JumpCloud portal** opens the User Portal. Clicking an app opens its sign-in link in the default browser and closes the panel.
+- **Where it comes from**: JumpCloud's **MCP Server for Users** (`usermcp.jumpcloud.com`), documented by JumpCloud for apps on the user's own PC: `list_applications` gives the apps the user can access, `launch_application` each one's sign-in link. Each user connects once: **Sign in with JumpCloud** opens the browser (OAuth with PKCE, Desktop Assist registers itself as a public client, loopback redirect `http://127.0.0.1:47622/callback`, a refresh token). There's no secret in the app. The connection is saved with Windows DPAPI (`jumpcloud-apps.bin`) and renewed by itself. The browser is only opened by that button, never just by looking at the list. JumpCloud documents the tools but not their exact fields, so the reader is tolerant: it looks for the usual names, skips apps hidden from the portal, takes only `https` links, and logs the field names if it can't find a list.
+- **Errors**: Not turned on by IT ("The apps list isn't turned on for your company yet"), offline, a cancelled or refused sign-in (with JumpCloud's reason), an unreadable answer; each with Retry or the sign-in button. Logos are fetched in the main process (https, images only, at most 300 KB) and handed to the page as `data:` URLs, so the page's content policy stays strict.
+- **Config**: `tenant.json` gains `portal` (`name`, `url`, `appsServer`, `redirectPort`), required when `actions` includes `apps`. Morse Micro: JumpCloud, US region. IT turns on the MCP Server for users once: [APPS_SETUP.md](APPS_SETUP.md).
+
+Options considered: the User Portal's own API is internal and wants the user's password; JumpCloud's admin API needs an admin key or service-account secret (not on PCs); an IT-exported list filtered by the user's groups would go stale and miss direct assignments. The MCP Server for Users is the one documented, user-scoped way.
+
+**Uninstall**: Settings → **Uninstall Desktop Assist** (click twice). It turns "Start with Windows" off, starts the installer's own uninstaller (`Uninstall Desktop Assist.exe`, next to the app) and quits. Like uninstalling from Windows Settings, it keeps `%APPDATA%\Desktop Assist` (preferences, the text box, logs) and the screenshots. Only in the installed app; in `npm run dev` it's greyed out.
+
+**Fixes**
+
+- **Clicking the bubble sometimes did nothing** after handing a question to Claude Desktop and clicking into Claude. It couldn't be reproduced on demand (about six runs with real mouse input, including the installed build under a click logger, all opened normally), but once it was caught stuck: the bubble took the hover but clicks didn't open the panel. The likeliest cause is another app taking the focus back as the panel opens, which closed it again at once. Now a blur within 0.4 s of opening doesn't close the panel, and a click on the bubble that doesn't open it is written to the log with the reason, so a next occurrence can be pinned down.
+- **The notification covered the bubble**: Windows shows notifications in the bottom-right corner, over the bubble there, for about 5 s, so clicks hit the notification. Clicking a Desktop Assist notification now opens the panel.
+- **Auto-send could send an old draft too**: Claude adds a linked question to whatever is already in its new-chat box, and the send step only checked that the box contained the question. It now presses keys only when the box holds exactly the question (compared through a SHA-256 of the whitespace-evened text, so the whole question never goes on a command line). Otherwise it presses nothing, and a notification says Claude's box already had text in it, to check it.
+
+Tested with unit tests (219, including reading JumpCloud's answers, connecting, opening an app, a forged sign-in being refused, Uninstall, the open-blur rule and the exact-match rule) and an end-to-end run of the real app (25 checks) against a local stand-in for JumpCloud's MCP server doing a real OAuth sign-in (client registration, PKCE, code for tokens): the Apps icon and list, nothing opened just by looking, signing in through the browser, the apps by name with hidden ones left out, the saved connection encrypted, opening an app through `launch_application`, the list remembered and refreshed, Esc, the portal link, Uninstall greyed out in dev, and the saved connection used after a restart. The send step was checked against a stand-in text box: exactly the question gets the paste and Enter; an old draft plus the question, or other text, gets nothing. The 3.1 (39 checks) and built-in chat (47 and 9) runs still pass.
+
+Still to try with the real services: connecting to Morse Micro's JumpCloud (the MCP Server for users is now turned on), and one more auto-send in Claude Desktop with the exact-match rule.
+
 ## 8. Milestones
 
 - **0** ✅ **Foundation**: Everything in §7 works in `npm run dev` and in the unsigned installer. Unit tests and lint pass.
@@ -341,13 +369,16 @@ seconds after clicking Ask, with no notification needed.
 - **2.1** ✅ **Bubble fixes**: See §7c.
 - **3** ✅ **JumpCloud sign-in**: See §7d. Combines the earlier plan's M2 (sign-in) and M3 (backend), using the direct option (B).
 - **3.1** ✅ **Each person's own Claude**: Questions open in Claude Desktop, against each person's own usage limit. See §7e.
+- **3.2** ✅ **Apps list, Uninstall, fixes**: The user's JumpCloud portal apps in the panel; Uninstall in Settings; the bubble, notification and auto-send fixes. See §7f.
 - 4 Ship: Code signing, MSI, auto-update, CI (GitHub Actions), pilot deployment through JumpCloud
 - later : Hiding during full-screen apps, company integrations (as claude.ai organization skills or plugins, now that questions go to Claude Desktop), macOS. For the built-in chat: Claude-requested screenshots (as a tool), saved history, a gateway for per-user audit
 
 ## 9. What we need from admins
 
-Step-by-step instructions are in [CLAUDE_DESKTOP_SETUP.md](CLAUDE_DESKTOP_SETUP.md) (3.1) and
-[JUMPCLOUD_SETUP.md](JUMPCLOUD_SETUP.md) (built-in chat).
+Step-by-step instructions are in [CLAUDE_DESKTOP_SETUP.md](CLAUDE_DESKTOP_SETUP.md) (3.1),
+[APPS_SETUP.md](APPS_SETUP.md) (3.2) and [JUMPCLOUD_SETUP.md](JUMPCLOUD_SETUP.md) (built-in chat).
+
+- **JumpCloud admin, Apps list (3.2):** turn on **MCP Server for users** (Settings → JumpCloud AI).
 
 - **Claude Desktop (3.1):** installed on each PC (MSIX, deployable machine-wide), and people
   signed in to the Morse Micro claude.ai organization. Recommended: the `forceLoginOrgUUID`
@@ -382,7 +413,10 @@ Step-by-step instructions are in [CLAUDE_DESKTOP_SETUP.md](CLAUDE_DESKTOP_SETUP.
   and limit (§7e). The built-in chat stays as a tenant option (`chatApp`)
 - 3.1 screenshots → copied to the clipboard; several stacked into one image
 - 3.1 sending → Desktop Assist sends the question (and pastes screenshots) in Claude for the user,
-  on by default, guarded by checking Claude's focused text box holds the question
+  on by default, guarded by checking Claude's focused text box holds exactly the question (3.2)
+- 3.2 apps → the user's JumpCloud User Portal apps, from JumpCloud's MCP Server for Users, each
+  user connecting once in the browser; no secret in the app
+- 3.2 uninstall → from Settings, through the installer's own uninstaller; user data kept
 
 **Open**
 

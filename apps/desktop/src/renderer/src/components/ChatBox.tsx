@@ -23,6 +23,8 @@ export function ChatBox(props: {
   inClaudeDesktop: boolean
   /** With Claude Desktop: the question (and screenshot) is sent there for the user. */
   autoSend: boolean
+  /** Replaces the text box with the Apps list while the Apps icon is on, or null. */
+  apps: ReactNode
   /** Replaces the chat (the JumpCloud sign-in), or null to show the chat. */
   signInPrompt: ReactNode
   /** A line above the text box, e.g. "Checking your sign-in…". */
@@ -76,7 +78,7 @@ export function ChatBox(props: {
         </div>
       )}
 
-      {props.signInPrompt ?? (
+      {props.apps ?? props.signInPrompt ?? (
         <>
           {props.messages.length > 0 && (
             <MessageList

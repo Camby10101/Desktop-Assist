@@ -1,10 +1,11 @@
-import { Camera, Power, Settings, Volleyball, type LucideIcon } from 'lucide-react'
+import { Camera, LayoutGrid, Power, Settings, Volleyball, type LucideIcon } from 'lucide-react'
 import { ACTIONS, type ActionId } from '@shared/actions'
 import { PANEL_LAYOUT, UI, isTopCorner, type Corner } from '@shared/geometry'
 import { anchored } from '../lib/anchor'
 import { cn } from '../lib/cn'
 
 const ICONS: Record<ActionId, LucideIcon> = {
+  apps: LayoutGrid,
   screenshot: Camera,
   settings: Settings,
   bounce: Volleyball,

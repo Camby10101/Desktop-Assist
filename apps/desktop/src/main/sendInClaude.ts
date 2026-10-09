@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 
 /**
@@ -6,11 +7,13 @@ import { join } from 'node:path'
  * - `sent`: the question left Claude's text box after Enter.
  * - `not-ready`: Claude's focused text box never showed the question (Claude didn't come to the
  *   front, or the focus is somewhere else), so nothing was pressed.
+ * - `extra-text`: Claude's text box holds the question and something else (Claude adds a linked
+ *   question to an unsent draft), so nothing was pressed: the user should check it first.
  * - `focus-lost`: the screenshot was pasted, but then the focus moved away, so Enter wasn't pressed.
  * - `not-sent`: Enter was pressed but the question stayed in the text box.
  * - `failed`: the helper couldn't run.
  */
-export type SendOutcome = 'sent' | 'not-ready' | 'focus-lost' | 'not-sent' | 'failed'
+export type SendOutcome = 'sent' | 'not-ready' | 'extra-text' | 'focus-lost' | 'not-sent' | 'failed'
 
 export interface SendOptions {
   question: string
@@ -28,11 +31,31 @@ export const READY_TIMEOUT_MS = 20_000
 export const PASTE_SETTLE_MS = 2_500
 
 /**
- * What to look for in Claude's text box: the start of the question, with every run of whitespace
- * made one space (Claude's editor may show line breaks differently from the text box here).
+ * Whitespace as the PowerShell side sees it too (spelled out, because JavaScript's `\s` and
+ * .NET's differ on a couple of rare characters).
  */
+const WHITESPACE =
+  '[\\t\\n\\v\\f\\r \\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000\\ufeff]+'
+
+/**
+ * The question as it's compared with Claude's text box: every run of whitespace made one space
+ * and the ends trimmed (Claude's editor may show line breaks differently from the text box here).
+ */
+export function normalizeQuestion(question: string): string {
+  return question.replace(new RegExp(WHITESPACE, 'g'), ' ').trim()
+}
+
+/** How to recognise the question in Claude's text box: its start, whitespace evened out. */
 export function questionKey(question: string): string {
-  return question.replace(/\s+/g, ' ').trim().slice(0, 60)
+  return normalizeQuestion(question).slice(0, 60)
+}
+
+/**
+ * A fingerprint of the whole question, so the helper can tell the text box holds exactly the
+ * question (and nothing else) without the question itself going on its command line.
+ */
+export function questionHash(question: string): string {
+  return createHash('sha256').update(normalizeQuestion(question), 'utf8').digest('hex')
 }
 
 /**
@@ -43,6 +66,7 @@ export function questionKey(question: string): string {
  */
 export function sendScript(options: SendOptions): string {
   const key = Buffer.from(questionKey(options.question), 'utf8').toString('base64')
+  const hash = questionHash(options.question)
   const processName = options.processName ?? 'claude'
   if (!/^[\w.-]+$/.test(processName)) throw new Error('Unexpected process name')
   const timeout = Math.round(options.readyTimeoutMs ?? READY_TIMEOUT_MS)
@@ -51,10 +75,13 @@ export function sendScript(options: SendOptions): string {
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, System.Windows.Forms
 $key = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${key}'))
+$hash = '${hash}'
 $processName = '${processName}'
+$sha = [Security.Cryptography.SHA256]::Create()
 
-# The focused text box, if it's in Claude Desktop and holds the question; otherwise $null.
-function QuestionBox {
+# What Claude Desktop's focused text box holds: 'exact' (just the question), 'extra' (the question
+# and other text), or $null (not Claude's box, or no question in it).
+function BoxState {
   try {
     $el = [System.Windows.Automation.AutomationElement]::FocusedElement
     if (-not $el) { return $null }
@@ -67,10 +94,15 @@ function QuestionBox {
     if (-not $text -and $el.TryGetCurrentPattern([System.Windows.Automation.TextPattern]::Pattern, [ref]$pattern)) {
       $text = $pattern.DocumentRange.GetText(20000)
     }
-    if ((($text -replace '\\s+', ' ').Trim()).Contains($key)) { return $el }
+    $text = ([string]$text -replace '${WHITESPACE}', ' ').Trim()
+    if (-not $text.Contains($key)) { return $null }
+    $digest = -join ($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($text)) | ForEach-Object { $_.ToString('x2') })
+    if ($digest -eq $hash) { return 'exact' }
+    return 'extra'
   } catch {}
   return $null
 }
+function QuestionBox { (BoxState) -eq 'exact' }
 
 function WaitFor([int]$ms, [scriptblock]$test) {
   $end = (Get-Date).AddMilliseconds($ms)
@@ -81,7 +113,9 @@ function WaitFor([int]$ms, [scriptblock]$test) {
   return $false
 }
 
-if (-not (WaitFor ${timeout} { QuestionBox })) { 'not-ready'; exit }
+if (-not (WaitFor ${timeout} { BoxState })) { 'not-ready'; exit }
+# Claude adds a linked question to whatever was already in its text box: send only the question.
+if ((BoxState) -eq 'extra') { 'extra-text'; exit }
 if (${options.paste ? '$true' : '$false'}) {
   [System.Windows.Forms.SendKeys]::SendWait('^v')
   Start-Sleep -Milliseconds ${settle}
@@ -97,7 +131,7 @@ for ($try = 0; $try -lt 3; $try++) {
 `
 }
 
-const OUTCOMES: SendOutcome[] = ['sent', 'not-ready', 'focus-lost', 'not-sent']
+const OUTCOMES: SendOutcome[] = ['sent', 'not-ready', 'extra-text', 'focus-lost', 'not-sent']
 
 /** The outcome the script printed last, or `failed`. */
 export function parseOutcome(output: string): SendOutcome {

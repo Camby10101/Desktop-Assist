@@ -277,8 +277,9 @@ and in what order, nearest the bubble first. There are two kinds:
 
 - `command` actions run in the main process: screenshot, bounce and close (handlers in
   `createActionHandlers()`, `src/main/actions.ts`).
-- `popover` actions open some UI inside the panel and never leave the renderer. Settings is the
-  only one; `PanelView.runAction()` handles it.
+- `popover` actions open some UI inside the panel and never leave the renderer: Settings (the
+  settings menu) and Apps (the Apps list, in place of the text box). `PanelView.runAction()`
+  handles them.
 
 The ids are written once, as a real array, and the types are derived from it. So adding an
 action is one edit here, and then the compiler points at the rest: `ICONS` in `ActionStack.tsx`
@@ -298,7 +299,7 @@ is a `Record<ActionId, ...>` (it must have an icon for every action), and `Actio
 // - `command` actions run in the main process (see src/main/actions.ts).
 // - `popover` actions open UI inside the panel and never reach the main process.
 
-export const ACTION_IDS = ['screenshot', 'settings', 'bounce', 'close'] as const
+export const ACTION_IDS = ['apps', 'screenshot', 'settings', 'bounce', 'close'] as const
 
 export type ActionId = (typeof ACTION_IDS)[number]
 ```
@@ -308,10 +309,10 @@ export type ActionId = (typeof ACTION_IDS)[number]
 The list of every action that exists, and the type of one of its entries.
 
 - `as const`: without it the array's type would be `string[]`. With it, the type is a read-only
-  list of these four exact strings, which is what lets the next line work.
+  list of these five exact strings, which is what lets the next line work.
 - `(typeof ACTION_IDS)[number]`: "the type of whatever you get by indexing the array with a
-  number", which is the union `'screenshot' | 'settings' | 'bounce' | 'close'`. The type follows
-  the list automatically.
+  number", which is the union `'apps' | 'screenshot' | 'settings' | 'bounce' | 'close'`. The type
+  follows the list automatically.
 - The array also exists at runtime, which a type doesn't: `TenantSchema` in `src/main/tenant.ts`
   uses `z.enum(ACTION_IDS)` to reject a `tenant.json` that lists an unknown action. **zod** is a
   validation library: you describe a shape (a _schema_) and zod checks, while the app runs, that
@@ -322,10 +323,11 @@ The list of every action that exists, and the type of one of its entries.
 
 <!-- code: apps/desktop/src/shared/actions.ts#ACTIONS -->
 
-[`src/shared/actions.ts`, lines 11–16](../../apps/desktop/src/shared/actions.ts#L11-L16)
+[`src/shared/actions.ts`, lines 11–17](../../apps/desktop/src/shared/actions.ts#L11-L17)
 
 ```ts
 export const ACTIONS = {
+  apps: { label: 'Your apps', kind: 'popover' },
   screenshot: { label: 'Take screenshot', kind: 'command' },
   settings: { label: 'Settings', kind: 'popover' },
   bounce: { label: 'Bounce', kind: 'command' },
@@ -351,7 +353,7 @@ announce whether the menu is open.
 
 <!-- code: apps/desktop/src/shared/actions.ts#CommandActionId -->
 
-[`src/shared/actions.ts`, lines 18–20](../../apps/desktop/src/shared/actions.ts#L18-L20)
+[`src/shared/actions.ts`, lines 19–21](../../apps/desktop/src/shared/actions.ts#L19-L21)
 
 ```ts
 export type CommandActionId = {
@@ -367,18 +369,19 @@ The type of just the command actions: `'screenshot' | 'bounce' | 'close'`. It's 
 - `[K in ActionId]:`: a _mapped type_. It builds an object type with one property per action id.
   Each property's type is the id itself if that action's kind is `'command'`, or `never` (the
   "impossible" type) if not, giving
-  `{ screenshot: 'screenshot'; settings: never; bounce: 'bounce'; close: 'close' }`.
+  `{ apps: never; screenshot: 'screenshot'; settings: never; bounce: 'bounce'; close: 'close' }`.
 - `}[ActionId]`: looking up every key at once gives the union of the property types. `never`
   disappears from a union, leaving the three command ids.
 - `AssistApi.invokeAction()` in `src/shared/ipc.ts` only accepts these, so a page can't even try
-  to send `settings` to the main process. In `PanelView.runAction()`, the early return for
-  `'settings'` narrows the id to exactly this type, which is why it can then be passed on.
+  to send `settings` or `apps` to the main process. In `PanelView.runAction()`, the early returns
+  for `'apps'` and `'settings'` narrow the id to exactly this type, which is why it can then be
+  passed on.
 
 ### `COMMAND_ACTION_IDS`
 
 <!-- code: apps/desktop/src/shared/actions.ts#COMMAND_ACTION_IDS -->
 
-[`src/shared/actions.ts`, lines 22–24](../../apps/desktop/src/shared/actions.ts#L22-L24)
+[`src/shared/actions.ts`, lines 23–25](../../apps/desktop/src/shared/actions.ts#L23-L25)
 
 ```ts
 export const COMMAND_ACTION_IDS = ACTION_IDS.filter(
@@ -484,7 +487,7 @@ survives a restart.
 
 <!-- code: apps/desktop/src/shared/types.ts#Effort,Settings -->
 
-[`src/shared/types.ts`, lines 29–40](../../apps/desktop/src/shared/types.ts#L29-L40)
+[`src/shared/types.ts`, lines 29–42](../../apps/desktop/src/shared/types.ts#L29-L42)
 
 ```ts
 /** How hard Claude thinks before answering (the API's `effort`), shown as Fast/Balanced/Thorough. */
@@ -498,6 +501,8 @@ export interface Settings {
   effort: Effort
   /** With Claude Desktop: send the question there too, not just fill it in. */
   autoSend: boolean
+  /** Uninstalling from Settings only works for an installed build, not `npm run dev`. */
+  canUninstall: boolean
 }
 ```
 
@@ -518,12 +523,14 @@ Thorough. `Settings` is what the settings menu shows; `SettingsService.get()` in
 - `autoSend: boolean`: used with Claude Desktop only: whether Desktop Assist also sends the
   question there (presses Ctrl+V and Enter in Claude), or only fills it in. On unless the user
   turns "Send in Claude automatically" off in the settings menu.
+- `canUninstall: boolean`: like `autoStartAvailable`, true only in the installed app, which is the
+  only copy with an uninstaller. Under `npm run dev` the menu's Uninstall item is greyed out.
 
 ### `ChatApp`
 
 <!-- code: apps/desktop/src/shared/types.ts#ChatApp -->
 
-[`src/shared/types.ts`, lines 42–46](../../apps/desktop/src/shared/types.ts#L42-L46)
+[`src/shared/types.ts`, lines 44–48](../../apps/desktop/src/shared/types.ts#L44-L48)
 
 ```ts
 /**
@@ -549,7 +556,7 @@ Where questions are answered, set per tenant (`chatApp` in `tenant.json`, checke
 
 <!-- code: apps/desktop/src/shared/types.ts#Branding -->
 
-[`src/shared/types.ts`, lines 48–54](../../apps/desktop/src/shared/types.ts#L48-L54)
+[`src/shared/types.ts`, lines 50–58](../../apps/desktop/src/shared/types.ts#L50-L58)
 
 ```ts
 export interface Branding {
@@ -558,23 +565,27 @@ export interface Branding {
   accentColor: string
   actions: ActionId[]
   chatApp: ChatApp
+  /** The identity provider's name for the Apps list ("JumpCloud"), or null without one. */
+  portalName: string | null
 }
 ```
 
 <!-- /code -->
 
-The parts of the tenant's `tenant.json` that the pages need. `brandingOf()` in
-`src/main/tenant.ts` copies just these five fields, deliberately leaving out the sign-in
-settings, the Claude access settings and the system prompt. `accentColor` becomes the page's
-accent colour (`useAccentColor()` sets the CSS variable `--color-accent`), and `actions` decides
-which icons `ActionStack` shows, in order. `chatApp` tells the panel which kind of chat it is: it
-changes the send button, the settings menu, and whether there's a sign-in at all.
+The parts of the tenant's `tenant.json` that the pages need. `brandingOf()` in `src/main/tenant.ts`
+copies just these fields, deliberately leaving out the sign-in settings, the Claude access settings,
+the portal's addresses and the system prompt. `accentColor` becomes the page's accent colour
+(`useAccentColor()` sets the CSS variable `--color-accent`), and `actions` decides which icons
+`ActionStack` shows, in order. `chatApp` tells the panel which kind of chat it is: it changes the
+send button, the settings menu, and whether there's a sign-in at all. `portalName` is the name of
+the company's app portal ("JumpCloud"), for the Apps list's buttons ("Sign in with JumpCloud"); it's
+`null` when the tenant has no portal, and then the Apps list never shows.
 
 ### `SignedInUser` and `AuthStatus`
 
 <!-- code: apps/desktop/src/shared/types.ts#SignedInUser,AuthStatus -->
 
-[`src/shared/types.ts`, lines 56–75](../../apps/desktop/src/shared/types.ts#L56-L75)
+[`src/shared/types.ts`, lines 60–79](../../apps/desktop/src/shared/types.ts#L60-L79)
 
 ```ts
 export interface SignedInUser {
@@ -623,7 +634,7 @@ token ever reaches them. With Claude Desktop there is no `AuthManager` and no st
 
 <!-- code: apps/desktop/src/shared/types.ts#ChatMessage,SendResult -->
 
-[`src/shared/types.ts`, lines 77–93](../../apps/desktop/src/shared/types.ts#L77-L93)
+[`src/shared/types.ts`, lines 81–97](../../apps/desktop/src/shared/types.ts#L81-L97)
 
 ```ts
 /** One message as the chat shows it. */
@@ -670,7 +681,7 @@ draft, which the panel shows. The reply itself arrives later, through `onChatMes
 
 <!-- code: apps/desktop/src/shared/types.ts#AskResult -->
 
-[`src/shared/types.ts`, lines 95–101](../../apps/desktop/src/shared/types.ts#L95-L101)
+[`src/shared/types.ts`, lines 99–105](../../apps/desktop/src/shared/types.ts#L99-L105)
 
 ```ts
 /**
@@ -705,7 +716,7 @@ Claude Desktop has opened with the question filled in. The failures come from
 
 <!-- code: apps/desktop/src/shared/types.ts#AppState -->
 
-[`src/shared/types.ts`, lines 103–114](../../apps/desktop/src/shared/types.ts#L103-L114)
+[`src/shared/types.ts`, lines 107–118](../../apps/desktop/src/shared/types.ts#L107-L118)
 
 ```ts
 export interface AppState {
@@ -735,11 +746,83 @@ the page's own requests, so the panel takes their new values from the replies.
   Desktop, which has its own sign-in. The pages check for `null` before reading `auth.state`.
 - `chat: ChatMessage[]`: the built-in chat's messages. With Claude Desktop it's always empty.
 
+The Apps list isn't in `AppState`: the panel asks for it when the Apps icon is first clicked
+(`window.assist.apps.get()`), and then keeps up through `onAppsState`.
+
+### `PortalApp` and `AppsState`
+
+<!-- code: apps/desktop/src/shared/types.ts#PortalApp,AppsState -->
+
+[`src/shared/types.ts`, lines 120–139](../../apps/desktop/src/shared/types.ts#L120-L139)
+
+```ts
+/** One app from the user's JumpCloud User Portal, as the Apps list shows it. */
+export interface PortalApp {
+  id: string
+  name: string
+  /** The logo as a data: URL (the pages can't load images from the web), or null. */
+  logo: string | null
+}
+
+/**
+ * The Apps list.
+ * - `sign-in`: the user hasn't connected Desktop Assist to their portal yet (or the connection
+ *   ended); a button starts it, in the browser.
+ * - `signing-in`: waiting for the user to finish in their browser.
+ */
+export type AppsState =
+  | { status: 'loading' }
+  | { status: 'sign-in'; message?: string }
+  | { status: 'signing-in' }
+  | { status: 'ready'; apps: PortalApp[] }
+  | { status: 'error'; message: string }
+```
+
+<!-- /code -->
+
+The Apps list (see [Your apps](10-apps.md)). `PortalApp` is one app as the list shows it, and
+`AppsState` is what the list as a whole is doing. `PortalApps` in `src/main/apps/PortalApps.ts`
+sets the state and broadcasts every change on `assist:apps-state`.
+
+- `id: string`: JumpCloud's ID for the app. The page sends it back to open the app
+  (`apps.open(id)`); the sign-in link itself never reaches the page.
+- `logo: string | null`: as the comment says, a `data:` URL. The page's Content-Security-Policy
+  only allows images from the app and `data:` URLs, so the main process fetches each logo and
+  hands it over already encoded.
+- `{ status: 'sign-in'; message?: string }`: the user hasn't connected Desktop Assist to their
+  portal yet, or the connection ended. `message` says why when there's a reason to (a sign-in that
+  failed, say).
+- `{ status: 'ready'; apps: PortalApp[] }`: the list, sorted by name.
+- `{ status: 'error'; message: string }`: a plain-English reason, such as the portal's apps
+  server not being turned on for the company. The list offers Retry.
+
+### `UninstallResult`
+
+<!-- code: apps/desktop/src/shared/types.ts#UninstallResult -->
+
+[`src/shared/types.ts`, lines 141–143](../../apps/desktop/src/shared/types.ts#L141-L143)
+
+```ts
+/** Settings → Uninstall. On success the app is already quitting. */
+export type UninstallResult =
+  { ok: true } | { ok: false; reason: 'not-installed' | 'missing' | 'failed' }
+```
+
+<!-- /code -->
+
+The answer to `window.assist.uninstall()` (Settings → Uninstall; see `src/main/uninstall.ts` in
+[Main process: startup, IPC and app plumbing](2-main-startup.md)). On success the app is already
+quitting, so the page has nothing more to do.
+
+- `'not-installed'`: a dev run (`npm run dev`), which has no uninstaller.
+- `'missing'`: the uninstaller isn't next to the app's `.exe`.
+- `'failed'`: it couldn't be started; the details are in the log.
+
 ### `ActionResult` and `AttachResult`
 
 <!-- code: apps/desktop/src/shared/types.ts#ActionResult,AttachResult -->
 
-[`src/shared/types.ts`, lines 116–119](../../apps/desktop/src/shared/types.ts#L116-L119)
+[`src/shared/types.ts`, lines 145–148](../../apps/desktop/src/shared/types.ts#L145-L148)
 
 ```ts
 export type ActionResult = { ok: true; message?: string } | { ok: false; message: string }
@@ -777,13 +860,13 @@ Messages come in three styles:
   frequent or one-way signals such as each keystroke in the text box. In `AssistApi`, the methods
   that return `void` are these; the ones that return a `Promise` are requests.
 - **Pushed by the main process**: `webContents.send()` to a window, which the page receives
-  through one of the `on...` listeners. These are the last six channels.
+  through one of the `on...` listeners. These are the last seven channels.
 
 ### `IPC`
 
 <!-- code: apps/desktop/src/shared/ipc.ts#IPC -->
 
-[`src/shared/ipc.ts`, lines 17–56](../../apps/desktop/src/shared/ipc.ts#L17-L56)
+[`src/shared/ipc.ts`, lines 19–65](../../apps/desktop/src/shared/ipc.ts#L19-L65)
 
 ```ts
 /** IPC channel names. The preload maps them onto `window.assist`; src/main/ipc.ts handles them. */
@@ -818,6 +901,12 @@ export const IPC = {
   chatNew: 'assist:chat-new',
   claudeDesktopAsk: 'assist:claude-desktop-ask',
   claudeDesktopInstalled: 'assist:claude-desktop-installed',
+  appUninstall: 'assist:app-uninstall',
+  appsGet: 'assist:apps-get',
+  appsSignIn: 'assist:apps-sign-in',
+  appsCancelSignIn: 'assist:apps-cancel-sign-in',
+  appsOpen: 'assist:apps-open',
+  appsOpenPortal: 'assist:apps-open-portal',
   // main → renderer
   modeChanged: 'assist:mode-changed',
   cornerChanged: 'assist:corner-changed',
@@ -825,6 +914,7 @@ export const IPC = {
   authStatus: 'assist:auth-status',
   chatMessage: 'assist:chat-message',
   chatReset: 'assist:chat-reset',
+  appsState: 'assist:apps-state',
 } as const
 ```
 
@@ -837,6 +927,9 @@ name: a typo is a compile error instead of a message nobody hears.
   Electron or a library might use.
 - `notesClear`: empties the draft, for "Clear text box" in the settings menu.
 - `settingsSetAutoSend`: the settings menu's "Send in Claude automatically" switch.
+- `appUninstall`: Settings → Uninstall.
+- `appsGet` to `appsOpenPortal`: the Apps list. Like the two chats' channels, they're only
+  answered when the tenant has a portal.
 - `authSignIn` to `chatNew`, and `claudeDesktopAsk` and `claudeDesktopInstalled`: the first group
   belongs to the built-in chat and the second to Claude Desktop. The main process only answers
   the group the tenant uses (`registerIpc()` in `src/main/ipc.ts`).
@@ -848,7 +941,7 @@ name: a typo is a compile error instead of a message nobody hears.
 
 <!-- code: apps/desktop/src/shared/ipc.ts#AssistApi -->
 
-[`src/shared/ipc.ts`, lines 58–126](../../apps/desktop/src/shared/ipc.ts#L58-L126)
+[`src/shared/ipc.ts`, lines 67–149](../../apps/desktop/src/shared/ipc.ts#L67-L149)
 
 ```ts
 /** The API the preload exposes to renderers as `window.assist`. */
@@ -911,6 +1004,19 @@ export interface AssistApi {
     retry(): Promise<void>
     newConversation(): Promise<void>
   }
+  /** The user's JumpCloud portal apps (only when the tenant has a `portal`). */
+  apps: {
+    /** The list as it stands; loads it first if needed, or again with `refresh`. */
+    get(refresh?: boolean): Promise<AppsState>
+    /** Connects Desktop Assist to the portal, in the browser; progress via onAppsState. */
+    signIn(): Promise<void>
+    cancelSignIn(): Promise<void>
+    /** Opens the app in the default browser (signed in through the portal). */
+    open(id: string): Promise<boolean>
+    openPortal(): Promise<void>
+  }
+  /** Starts Desktop Assist's uninstaller and quits (installed copies only). */
+  uninstall(): Promise<UninstallResult>
   onModeChanged(callback: (mode: Mode) => void): () => void
   onCornerChanged(callback: (corner: Corner) => void): () => void
   /** The panel was just shown with click-through reset; `pointer` is where the mouse is now. */
@@ -919,6 +1025,7 @@ export interface AssistApi {
   /** A message was added or changed (streamed text arrives this way). */
   onChatMessage(callback: (message: ChatMessage) => void): () => void
   onChatReset(callback: () => void): () => void
+  onAppsState(callback: (state: AppsState) => void): () => void
 }
 ```
 
@@ -926,9 +1033,9 @@ export interface AssistApi {
 
 The API a page sees as `window.assist`. Each method maps onto one channel in `IPC`. Related calls
 are grouped into nested objects (`notes`, `screenshots`, `settings`, `auth`, `claudeDesktop`,
-`chat`), which is only for readability. Every page gets all of them, but `auth` and `chat` only
-work with the built-in chat and `claudeDesktop` only with Claude Desktop; the panel checks
-`branding.chatApp` to know which to call.
+`chat`, `apps`), which is only for readability. Every page gets all of them, but `auth` and
+`chat` only work with the built-in chat, `claudeDesktop` only with Claude Desktop, and `apps`
+only when the tenant has a portal; the panel checks `branding` to know which to call.
 
 - `getState(): Promise<AppState>`: called once when a page loads (`useAssistState()`).
 - `bubbleClick(): void`: this and the next three are fire-and-forget calls into
@@ -962,6 +1069,13 @@ work with the built-in chat and `claudeDesktop` only with Claude Desktop; the pa
   panel asks each time it opens, to warn before anything is typed.
 - `send(text: string): Promise<SendResult>`: sends the draft. The promise only says whether it
   was accepted; Claude's reply streams in through `onChatMessage`.
+- `get(refresh?: boolean): Promise<AppsState>`: the Apps list. The first call loads it (which can
+  take a few seconds), later ones return the list already loaded unless `refresh` is true.
+- `apps.signIn(): Promise<void>`: like `auth.signIn()`, resolves straight away; connecting happens
+  in the browser and progress arrives through `onAppsState`.
+- `open(id: string): Promise<boolean>`: asks the main process to open the app in the browser.
+  `false` means it had no link for it.
+- `uninstall(): Promise<UninstallResult>`: starts the uninstaller; the app quits if it worked.
 - `onModeChanged(callback: (mode: Mode) => void): () => void`: each `on...` method starts
   listening and returns a function that stops. That suits React's `useEffect`, whose cleanup
   step can simply call it (see `useAssistState()`).
@@ -1099,7 +1213,7 @@ listening. Every `on...` method in `api` uses it.
 
 <!-- code: apps/desktop/src/preload/index.ts#api -->
 
-[`src/preload/index.ts`, lines 12–61](../../apps/desktop/src/preload/index.ts#L12-L61)
+[`src/preload/index.ts`, lines 12–70](../../apps/desktop/src/preload/index.ts#L12-L70)
 
 ```ts
 const api: AssistApi = {
@@ -1145,12 +1259,21 @@ const api: AssistApi = {
     retry: () => ipcRenderer.invoke(IPC.chatRetry),
     newConversation: () => ipcRenderer.invoke(IPC.chatNew),
   },
+  apps: {
+    get: (refresh) => ipcRenderer.invoke(IPC.appsGet, refresh ?? false),
+    signIn: () => ipcRenderer.invoke(IPC.appsSignIn),
+    cancelSignIn: () => ipcRenderer.invoke(IPC.appsCancelSignIn),
+    open: (id) => ipcRenderer.invoke(IPC.appsOpen, id),
+    openPortal: () => ipcRenderer.invoke(IPC.appsOpenPortal),
+  },
+  uninstall: () => ipcRenderer.invoke(IPC.appUninstall),
   onModeChanged: (callback) => subscribe(IPC.modeChanged, callback),
   onCornerChanged: (callback) => subscribe(IPC.cornerChanged, callback),
   onClickThroughReset: (callback) => subscribe(IPC.clickThroughReset, callback),
   onAuthStatus: (callback) => subscribe(IPC.authStatus, callback),
   onChatMessage: (callback) => subscribe(IPC.chatMessage, callback),
   onChatReset: (callback) => subscribe(IPC.chatReset, () => callback()),
+  onAppsState: (callback) => subscribe(IPC.appsState, callback),
 }
 ```
 
@@ -1168,6 +1291,9 @@ The implementation of `AssistApi`: one line per method, each sending its channel
 - `ipcRenderer.send(IPC.bubbleClick)`: fire and forget, as for the other `void` methods.
 - `subscribe(IPC.chatReset, () => callback())`: the reset carries no data, so the page's callback
   is called with no arguments, matching its `() => void` type.
+- `ipcRenderer.invoke(IPC.appsGet, refresh ?? false)`: `refresh` is optional for the page, but
+  the main process's check for this channel wants a real `true` or `false`, so a missing one is
+  sent as `false`.
 
 ### `contextBridge.exposeInMainWorld()`
 

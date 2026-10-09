@@ -60,6 +60,21 @@ describe('tenants', () => {
     expect(TenantSchema.safeParse({ ...base, chatApp: 'teams' }).success).toBe(false)
   })
 
+  it('needs the portal settings for the Apps icon', () => {
+    const base = { id: 'x', companyName: 'X', appName: 'X', accentColor: '#000000' }
+    const desktop = { ...base, chatApp: 'claude-desktop', actions: ['apps', 'close'] }
+    expect(TenantSchema.safeParse(desktop).success).toBe(false)
+    const portal = {
+      name: 'JumpCloud',
+      url: 'https://console.jumpcloud.com/userconsole#/',
+      appsServer: 'https://usermcp.jumpcloud.com/v1',
+      redirectPort: 47622,
+    }
+    expect(TenantSchema.safeParse({ ...desktop, portal }).success).toBe(true)
+    const httpPortal = { ...portal, url: 'http://console.jumpcloud.com/userconsole' }
+    expect(TenantSchema.safeParse({ ...desktop, portal: httpPortal }).success).toBe(false)
+  })
+
   it('lists the sign-in settings still to fill in', () => {
     expect(missingSettings(signIn, claudeAccess)).toEqual([
       'signIn.clientId',

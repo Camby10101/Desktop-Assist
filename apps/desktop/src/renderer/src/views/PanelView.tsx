@@ -2,8 +2,17 @@ import { useEffect, useState, type PointerEvent } from 'react'
 import type { ActionId } from '@shared/actions'
 import { CLAUDE_DOWNLOAD_PAGE } from '@shared/claudeDesktop'
 import { actionOffset } from '@shared/geometry'
-import type { AppState, AskResult, Attachment, Effort } from '@shared/types'
+import type {
+  AppsState,
+  AppState,
+  AskResult,
+  Attachment,
+  Effort,
+  PortalApp,
+  UninstallResult,
+} from '@shared/types'
 import { ActionStack } from '../components/ActionStack'
+import { AppsList } from '../components/AppsList'
 import { Banner, ChatBox } from '../components/ChatBox'
 import { SettingsMenu } from '../components/SettingsMenu'
 import { SignInPanel } from '../components/SignInPanel'
@@ -18,6 +27,13 @@ const ASK_ERRORS: Record<Exclude<Extract<AskResult, { ok: false }>['reason'], 'e
   'not-installed': "Claude Desktop isn't installed on this PC. Ask IT to install it.",
   'missing-screenshot': 'An attached screenshot is missing. Remove it and try again.',
   failed: "Couldn't open Claude Desktop. Try again.",
+}
+
+/** What to say when Settings → Uninstall couldn't start the uninstaller. */
+const UNINSTALL_ERRORS: Record<Extract<UninstallResult, { ok: false }>['reason'], string> = {
+  'not-installed': 'Only the installed app can be uninstalled from here.',
+  missing: 'The uninstaller is missing. Uninstall from Windows Settings → Apps.',
+  failed: "Couldn't start the uninstaller. Uninstall from Windows Settings → Apps.",
 }
 
 /** Everything that appears around the bubble when it's clicked. */
@@ -40,6 +56,9 @@ function Panel({ state }: { state: AppState }) {
   const [settings, setSettings] = useState(state.settings)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [asking, setAsking] = useState(false)
+  // The card shows the text box, or the Apps list while the Apps icon is on.
+  const [view, setView] = useState<'ask' | 'apps'>('ask')
+  const [apps, setApps] = useState<AppsState>({ status: 'loading' })
   /** Claude Desktop isn't installed, so questions can't be opened in it (checked on opening). */
   const [claudeMissing, setClaudeMissing] = useState(false)
   const [toast, showToast] = useToast()
@@ -47,10 +66,14 @@ function Panel({ state }: { state: AppState }) {
   useEffect(
     () =>
       window.assist.onModeChanged((mode) => {
-        if (mode !== 'expanded') setSettingsOpen(false)
+        if (mode !== 'expanded') {
+          setSettingsOpen(false)
+          setView('ask') // the panel always reopens on the text box
+        }
       }),
     [],
   )
+  useEffect(() => window.assist.onAppsState(setApps), [])
   useEffect(() => {
     if (!open || !inClaudeDesktop) return
     let alive = true
@@ -65,11 +88,12 @@ function Panel({ state }: { state: AppState }) {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
       if (settingsOpen) setSettingsOpen(false)
+      else if (view === 'apps') setView('ask')
       else window.assist.collapse()
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [settingsOpen])
+  }, [settingsOpen, view])
 
   // Not signed in: the chat box shows the sign-in instead of the chat. While a saved sign-in is
   // being renewed, or JumpCloud can't be reached, the chat stays (sending tries JumpCloud again).
@@ -81,6 +105,13 @@ function Panel({ state }: { state: AppState }) {
   const canSend = signedIn && !busy && !asking && (draft.trim() !== '' || attachments.length > 0)
 
   async function runAction(id: ActionId) {
+    if (id === 'apps') {
+      setSettingsOpen(false)
+      const showing = view === 'apps'
+      setView(showing ? 'ask' : 'apps')
+      if (!showing) setApps(await window.assist.apps.get())
+      return
+    }
     if (id === 'settings') {
       setSettingsOpen(!settingsOpen)
       // Refresh: "Start with Windows" can also be changed in Windows Settings.
@@ -125,6 +156,13 @@ function Panel({ state }: { state: AppState }) {
     }
   }
 
+  async function openApp(app: PortalApp) {
+    // On success the main process closes the panel; the browser opens the app.
+    if (!(await window.assist.apps.open(app.id))) {
+      showToast(`Couldn't open ${app.name}. Try it from the portal.`, 'error')
+    }
+  }
+
   async function attachLatest() {
     const result = await window.assist.notes.attachLatestScreenshot()
     if (result.ok) setAttachments(result.notes.attachments)
@@ -160,6 +198,13 @@ function Panel({ state }: { state: AppState }) {
     setAttachments(notes.attachments)
     setSettingsOpen(false)
     showToast('Text box cleared')
+  }
+
+  async function uninstall() {
+    setSettingsOpen(false)
+    const result = await window.assist.uninstall()
+    // On success the uninstaller has started and the app is quitting.
+    if (!result.ok) showToast(UNINSTALL_ERRORS[result.reason], 'error')
   }
 
   async function newConversation() {
@@ -245,6 +290,21 @@ function Panel({ state }: { state: AppState }) {
         toast={toast}
         inClaudeDesktop={inClaudeDesktop}
         autoSend={settings.autoSend}
+        apps={
+          view === 'apps' && branding.portalName ? (
+            <AppsList
+              open={open}
+              state={apps}
+              appName={branding.appName}
+              portalName={branding.portalName}
+              onOpenApp={(app) => void openApp(app)}
+              onOpenPortal={() => void window.assist.apps.openPortal()}
+              onSignIn={() => void window.assist.apps.signIn()}
+              onCancelSignIn={() => void window.assist.apps.cancelSignIn()}
+              onRetry={() => void window.assist.apps.get(true).then(setApps)}
+            />
+          ) : null
+        }
         signInPrompt={signInPrompt}
         banner={banner}
         messages={state.chat}
@@ -265,7 +325,7 @@ function Panel({ state }: { state: AppState }) {
         corner={state.corner}
         actions={branding.actions}
         open={open}
-        activeId={settingsOpen ? 'settings' : null}
+        activeId={settingsOpen ? 'settings' : view === 'apps' ? 'apps' : null}
         onAction={(id) => void runAction(id)}
       />
       {open && settingsOpen && settingsIndex >= 0 && (
@@ -285,6 +345,7 @@ function Panel({ state }: { state: AppState }) {
           onOpenScreenshotsFolder={() => void window.assist.screenshots.openFolder()}
           onNewConversation={() => void newConversation()}
           onClearText={() => void clearText()}
+          onUninstall={() => void uninstall()}
         />
       )}
     </div>

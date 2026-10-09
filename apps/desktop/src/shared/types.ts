@@ -37,6 +37,8 @@ export interface Settings {
   effort: Effort
   /** With Claude Desktop: send the question there too, not just fill it in. */
   autoSend: boolean
+  /** Uninstalling from Settings only works for an installed build, not `npm run dev`. */
+  canUninstall: boolean
 }
 
 /**
@@ -51,6 +53,8 @@ export interface Branding {
   accentColor: string
   actions: ActionId[]
   chatApp: ChatApp
+  /** The identity provider's name for the Apps list ("JumpCloud"), or null without one. */
+  portalName: string | null
 }
 
 export interface SignedInUser {
@@ -112,6 +116,31 @@ export interface AppState {
   auth: AuthStatus | null
   chat: ChatMessage[]
 }
+
+/** One app from the user's JumpCloud User Portal, as the Apps list shows it. */
+export interface PortalApp {
+  id: string
+  name: string
+  /** The logo as a data: URL (the pages can't load images from the web), or null. */
+  logo: string | null
+}
+
+/**
+ * The Apps list.
+ * - `sign-in`: the user hasn't connected Desktop Assist to their portal yet (or the connection
+ *   ended); a button starts it, in the browser.
+ * - `signing-in`: waiting for the user to finish in their browser.
+ */
+export type AppsState =
+  | { status: 'loading' }
+  | { status: 'sign-in'; message?: string }
+  | { status: 'signing-in' }
+  | { status: 'ready'; apps: PortalApp[] }
+  | { status: 'error'; message: string }
+
+/** Settings → Uninstall. On success the app is already quitting. */
+export type UninstallResult =
+  { ok: true } | { ok: false; reason: 'not-installed' | 'missing' | 'failed' }
 
 export type ActionResult = { ok: true; message?: string } | { ok: false; message: string }
 

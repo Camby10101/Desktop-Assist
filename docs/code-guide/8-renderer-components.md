@@ -2,15 +2,16 @@
 
 [← Code Guide](CODE_GUIDE.md)
 
-These seven files draw everything that appears around the bubble when you click it. `Panel` in
-`PanelView.tsx` (see [The pages](7-renderer-pages.md)) renders three of them directly: the
-`ActionStack` of round icons in a column beside the bubble, the `ChatBox` card next to the bubble
-on the side facing the middle of the screen, and the `SettingsMenu`, which opens beside the gear
-icon. Everything else lives inside the chat card: `SignInPanel` replaces the chat while nobody is
-signed in, `MessageList` shows the conversation (using `Markdown` for Claude's replies), and an
-`AttachmentChip` above the text box stands for each attached screenshot. When questions go to
-Claude Desktop (the tenant's `chatApp`), there's no sign-in and no conversation in the panel, so
-the card is just the text box, with an "Ask in Claude" button.
+These seven files draw almost everything that appears around the bubble when you click it. `Panel`
+in `PanelView.tsx` (see [The pages](7-renderer-pages.md)) renders three of them directly: the
+`ActionStack` of round icons in a column beside the bubble, the `ChatBox` card next to the bubble on
+the side facing the middle of the screen, and the `SettingsMenu`, which opens beside the gear icon.
+Everything else lives inside the chat card: `SignInPanel` replaces the chat while nobody is signed
+in, `MessageList` shows the conversation (using `Markdown` for Claude's replies), and an
+`AttachmentChip` above the text box stands for each attached screenshot. When questions go to Claude
+Desktop (the tenant's `chatApp`), there's no sign-in and no conversation in the panel, so the card
+is just the text box, with an "Ask in Claude" button. While the Apps icon is on, the card shows the
+Apps list instead; that component, `AppsList`, is covered in [Your apps](10-apps.md).
 
 ## `src/renderer/src/components/ChatBox.tsx`: the chat card
 
@@ -28,7 +29,7 @@ to this file) and `Banner` (exported, used by `Panel`).
 
 <!-- code: apps/desktop/src/renderer/src/components/ChatBox.tsx#ChatBox -->
 
-[`src/renderer/src/components/ChatBox.tsx`, lines 11–95](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L11-L95)
+[`src/renderer/src/components/ChatBox.tsx`, lines 11–97](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L11-L97)
 
 ```tsx
 /**
@@ -46,6 +47,8 @@ export function ChatBox(props: {
   inClaudeDesktop: boolean
   /** With Claude Desktop: the question (and screenshot) is sent there for the user. */
   autoSend: boolean
+  /** Replaces the text box with the Apps list while the Apps icon is on, or null. */
+  apps: ReactNode
   /** Replaces the chat (the JumpCloud sign-in), or null to show the chat. */
   signInPrompt: ReactNode
   /** A line above the text box, e.g. "Checking your sign-in…". */
@@ -99,7 +102,7 @@ export function ChatBox(props: {
         </div>
       )}
 
-      {props.signInPrompt ?? (
+      {props.apps ?? props.signInPrompt ?? (
         <>
           {props.messages.length > 0 && (
             <MessageList
@@ -183,6 +186,8 @@ The parts of `ChatBox` itself:
   sign-in prompt or any messages, so the card is just the text box (and sometimes a banner).
 - `autoSend: boolean`: the "Send in Claude automatically" setting, also only for `Composer`'s
   wording.
+- `apps: ReactNode`: the Apps list while the Apps icon is on, built by `Panel` like
+  `signInPrompt`; otherwise `null`.
 - `originClass(props.corner)`: sets the CSS `transform-origin` to the bubble's corner (for
   example `origin-bottom-right`), so the zoom-in animation grows out of the bubble.
 - `'scale-95 opacity-0 transition duration-150 ease-out'`: the card is always rendered, even
@@ -212,9 +217,10 @@ The parts of `ChatBox` itself:
   height (`UI.toastRoom`), so the toast always fits.
 - `isLeftCorner(props.corner) ? 'left-0' : 'right-0'`: lines the toast up with the card's edge
   nearest the bubble.
-- `{props.signInPrompt ?? (`: `??` uses the left side unless it's `null` or `undefined`. `Panel`
-  passes a `SignInPanel` when nobody is signed in and `null` otherwise, so the card shows either
-  the sign-in or the chat, never both.
+- `{props.apps ?? props.signInPrompt ?? (`: `??` uses the left side unless it's `null` or
+  `undefined`, so the first of the three that isn't `null` is shown: the Apps list if it's on,
+  otherwise the sign-in if nobody is signed in, otherwise the chat. Never more than one. The toast
+  above stays outside this choice, so it shows over the Apps list too.
 - `<>`: a _fragment_. It groups several elements without adding an extra `<div>` to the page.
 - `props.messages.length > 0 &&`: before the first message there's no list, so the card is just
   the text box.
@@ -227,7 +233,7 @@ The parts of `ChatBox` itself:
 
 <!-- code: apps/desktop/src/renderer/src/components/ChatBox.tsx#Composer -->
 
-[`src/renderer/src/components/ChatBox.tsx`, lines 97–208](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L97-L208)
+[`src/renderer/src/components/ChatBox.tsx`, lines 99–210](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L99-L210)
 
 ```tsx
 /** The text box: attached screenshots, the text, and the attach / send / stop buttons. */
@@ -425,7 +431,7 @@ first appears. Effects are for work outside drawing the UI, such as moving the k
 
 <!-- code: apps/desktop/src/renderer/src/components/ChatBox.tsx#Banner -->
 
-[`src/renderer/src/components/ChatBox.tsx`, lines 210–219](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L210-L219)
+[`src/renderer/src/components/ChatBox.tsx`, lines 212–221](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L212-L221)
 
 ```tsx
 /** A one-line status above the text box, with an optional action. */
@@ -1033,18 +1039,18 @@ passed as `children`.
 
 ## `src/renderer/src/components/SettingsMenu.tsx`: the settings menu
 
-The small menu that opens beside the gear icon. `Panel` renders it only while the panel is open,
-the gear has toggled it on, and the tenant's list of actions includes `settings`. Its props are
-the `corner` and `offset` for positioning; the current `settings`, `branding` (app and company
-name, and which kind of chat), `version` and signed-in `user` to display; and one callback per
-menu item. `Panel` closes it on Esc, on a click anywhere else in the panel, and when the panel
-closes.
+The small menu that opens beside the gear icon. `Panel` renders it only while the panel is open, the
+gear has toggled it on, and the tenant's list of actions includes `settings`. Its props are the
+`corner` and `offset` for positioning; the current `settings`, `branding` (app and company name, and
+which kind of chat), `version` and signed-in `user` to display; and one callback per menu item,
+`onUninstall` included. `Panel` closes it on Esc, on a click anywhere else in the panel, and when
+the panel closes.
 
 ### `CONFIRM_MS`, `EFFORTS`
 
 <!-- code: apps/desktop/src/renderer/src/components/SettingsMenu.tsx#CONFIRM_MS,EFFORTS -->
 
-[`src/renderer/src/components/SettingsMenu.tsx`, lines 8–14](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L8-L14)
+[`src/renderer/src/components/SettingsMenu.tsx`, lines 15–21](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L15-L21)
 
 ```tsx
 const CONFIRM_MS = 3000
@@ -1069,7 +1075,7 @@ const EFFORTS: { value: Effort; label: string; hint: string }[] = [
 
 <!-- code: apps/desktop/src/renderer/src/components/SettingsMenu.tsx#SettingsMenu -->
 
-[`src/renderer/src/components/SettingsMenu.tsx`, lines 16–170](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L16-L170)
+[`src/renderer/src/components/SettingsMenu.tsx`, lines 23–203](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L23-L203)
 
 ```tsx
 /** The menu that opens beside the gear icon, on the side facing the middle of the screen. */
@@ -1089,6 +1095,7 @@ export function SettingsMenu(props: {
   onOpenScreenshotsFolder: () => void
   onNewConversation: () => void
   onClearText: () => void
+  onUninstall: () => void
 }) {
   // "New conversation" (or "Clear text box") needs a second click within a few seconds.
   const [confirmingNew, setConfirmingNew] = useState(false)
@@ -1097,6 +1104,13 @@ export function SettingsMenu(props: {
     const timer = setTimeout(() => setConfirmingNew(false), CONFIRM_MS)
     return () => clearTimeout(timer)
   }, [confirmingNew])
+  // So does "Uninstall".
+  const [confirmingUninstall, setConfirmingUninstall] = useState(false)
+  useEffect(() => {
+    if (!confirmingUninstall) return
+    const timer = setTimeout(() => setConfirmingUninstall(false), CONFIRM_MS)
+    return () => clearTimeout(timer)
+  }, [confirmingUninstall])
 
   const { settings, branding } = props
   // With Claude Desktop, the chat and its settings live there; only the text box is here.
@@ -1221,6 +1235,24 @@ export function SettingsMenu(props: {
         </div>
       )}
 
+      <div className="mt-1 border-t border-black/10 pt-1 dark:border-white/10">
+        <MenuItem
+          icon={Trash2}
+          danger={confirmingUninstall}
+          disabled={!settings.canUninstall}
+          onClick={() => {
+            if (!confirmingUninstall) return setConfirmingUninstall(true)
+            setConfirmingUninstall(false)
+            props.onUninstall()
+          }}
+        >
+          {confirmingUninstall ? 'Click again to uninstall' : `Uninstall ${branding.appName}`}
+          {!settings.canUninstall && (
+            <span className="block text-[11px] text-zinc-500">Only in the installed app</span>
+          )}
+        </MenuItem>
+      </div>
+
       <div className="mt-1 border-t border-black/10 px-2.5 pt-1.5 pb-0.5 text-[11px] text-zinc-500 dark:border-white/10">
         {branding.appName} {props.version} · {branding.companyName}
       </div>
@@ -1235,12 +1267,14 @@ Draws the menu's rows. With the built-in chat: Start with Windows, Response styl
 screenshots folder, New conversation, who's signed in with Log out, and the version. With Claude
 Desktop the chat and its settings live in Claude Desktop, so there's no Response style and no
 sign-in; instead there's a "Send in Claude automatically" switch, and New conversation becomes
-Clear text box. It keeps one piece of its own state.
+Clear text box. Both kinds end with Uninstall, then the version. It keeps two pieces of its own
+state.
 
 **State.** `useState(initial)` returns the current value and a function that changes it. Calling
 that function makes React run the component again with the new value, which redraws it. Use a ref
 for values that don't affect what's shown, and state for values that do. Here `confirmingNew`
-switches the "New conversation" (or "Clear text box") row into its "Click again" form.
+switches the "New conversation" (or "Clear text box") row into its "Click again" form, and
+`confirmingUninstall` does the same for Uninstall.
 
 - `offset: number`: `Panel` passes `actionOffset()` of the gear's place in the icon stack.
 - `...anchored(props.corner, PANEL_LAYOUT.settingsX, props.offset)`: `settingsX` (64 px) puts the
@@ -1259,6 +1293,8 @@ switches the "New conversation" (or "Clear text box") row into its "Click again"
   timer that turns it off again. The function an effect returns is its _cleanup_: React calls it
   before running the effect again and when the component disappears. So the timer is cancelled
   after a confirming second click, or when the menu closes.
+- `// So does "Uninstall".`: the same pair of state and timer for the Uninstall row, kept separate
+  so arming one row never arms the other.
 - `const { settings, branding } = props`: shorthand for two props used often below.
 - `const builtInChat = branding.chatApp === 'built-in'`: which rows to show. The rest of the menu
   checks this one value.
@@ -1296,6 +1332,13 @@ switches the "New conversation" (or "Clear text box") row into its "Click again"
 - `props.user.name ?? props.user.email ?? 'you'`: the first of the name or the email that
   JumpCloud provided. `truncate` cuts a long one short with "…", and `title={props.user.email}`
   shows the email as a tooltip.
+- `icon={Trash2}`, `danger={confirmingUninstall}`: Uninstall, in a section of its own below a
+  line, needs the same second click within 3 seconds, and turns red while armed. The second click
+  calls `onUninstall`; `Panel.uninstall` starts the uninstaller and the app quits.
+- `disabled={!settings.canUninstall}`: only the installed app has an uninstaller. In `npm run dev`
+  the row is greyed out, with "Only in the installed app" under its label (the same note as Start
+  with Windows).
+- `` `Uninstall ${branding.appName}` ``: the label names the app, "Uninstall Desktop Assist".
 - `{branding.appName} {props.version} · {branding.companyName}`: the footer, for example
   "Desktop Assist 0.1.0 · Morse Micro".
 
@@ -1303,12 +1346,13 @@ switches the "New conversation" (or "Clear text box") row into its "Click again"
 
 <!-- code: apps/desktop/src/renderer/src/components/SettingsMenu.tsx#MenuItem -->
 
-[`src/renderer/src/components/SettingsMenu.tsx`, lines 172–193](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L172-L193)
+[`src/renderer/src/components/SettingsMenu.tsx`, lines 205–232](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L205-L232)
 
 ```tsx
 function MenuItem(props: {
   icon: LucideIcon
   danger?: boolean
+  disabled?: boolean
   onClick: () => void
   children: ReactNode
 }) {
@@ -1317,10 +1361,15 @@ function MenuItem(props: {
     <button
       type="button"
       role="menuitem"
+      disabled={props.disabled}
       onClick={props.onClick}
       className={cn(
         'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm',
-        props.danger ? 'bg-red-600 text-white' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800',
+        props.danger
+          ? 'bg-red-600 text-white'
+          : props.disabled
+            ? 'cursor-default opacity-60'
+            : 'hover:bg-zinc-100 dark:hover:bg-zinc-800',
       )}
     >
       <Icon size={16} aria-hidden />
@@ -1338,14 +1387,17 @@ One row of the menu: an icon and a label, as a button.
   (`<FolderOpen />`), so `MenuItem` decides the size.
 - `const Icon = props.icon`: JSX treats a lowercase tag as an HTML element, so the component has
   to be in a capitalised variable before it can be written as `<Icon size={16} aria-hidden />`.
+- `disabled?: boolean`: a greyed-out row that can't be clicked (`disabled={props.disabled}` on the
+  button), used for Uninstall in a dev run.
 - `props.danger ? 'bg-red-600 text-white'`: the red version, used for the armed "New
-  conversation" or "Clear text box".
+  conversation", "Clear text box" or Uninstall. Otherwise a disabled row is faded
+  (`opacity-60`) with no hover, and an enabled one gets the grey hover.
 
 ### `Switch`
 
 <!-- code: apps/desktop/src/renderer/src/components/SettingsMenu.tsx#Switch -->
 
-[`src/renderer/src/components/SettingsMenu.tsx`, lines 195–212](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L195-L212)
+[`src/renderer/src/components/SettingsMenu.tsx`, lines 234–251](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L234-L251)
 
 ```tsx
 function Switch({ on }: { on: boolean }) {
@@ -1379,20 +1431,22 @@ it tells screen readers whether it's on, so the switch itself is `aria-hidden`.
 
 ## `src/renderer/src/components/ActionStack.tsx`: the action icons
 
-The column of round icon buttons that pops out of the bubble when the panel opens: screenshot,
-settings, bounce and close, in the order the tenant's `tenant.json` lists them, nearest the bubble
-first. `Panel` always renders it; while closed it's simply invisible. Its props are the `corner`,
-the tenant's `actions`, `open`, `activeId` (`settings` while the settings menu is open, otherwise
-`null`) and `onAction`, which is `Panel.runAction`.
+The column of round icon buttons that pops out of the bubble when the panel opens: apps,
+screenshot, settings, bounce and close, in the order the tenant's `tenant.json` lists them,
+nearest the bubble first. `Panel` always renders it; while closed it's simply invisible. Its props
+are the `corner`, the tenant's `actions`, `open`, `activeId` (`settings` while the settings menu
+is open, `apps` while the Apps list is showing, otherwise `null`) and `onAction`, which is
+`Panel.runAction`.
 
 ### `ICONS`
 
 <!-- code: apps/desktop/src/renderer/src/components/ActionStack.tsx#ICONS -->
 
-[`src/renderer/src/components/ActionStack.tsx`, lines 7–12](../../apps/desktop/src/renderer/src/components/ActionStack.tsx#L7-L12)
+[`src/renderer/src/components/ActionStack.tsx`, lines 7–13](../../apps/desktop/src/renderer/src/components/ActionStack.tsx#L7-L13)
 
 ```tsx
 const ICONS: Record<ActionId, LucideIcon> = {
+  apps: LayoutGrid,
   screenshot: Camera,
   settings: Settings,
   bounce: Volleyball,
@@ -1402,7 +1456,8 @@ const ICONS: Record<ActionId, LucideIcon> = {
 
 <!-- /code -->
 
-Which lucide icon each action shows.
+Which lucide icon each action shows. Apps is `LayoutGrid`, a grid of four squares, the usual sign
+for "apps".
 
 - `Record<ActionId, LucideIcon>`: an object with exactly one entry for every action id. If a new
   id is added to `ACTION_IDS` in `src/shared/actions.ts` without an icon here, TypeScript reports
@@ -1412,7 +1467,7 @@ Which lucide icon each action shows.
 
 <!-- code: apps/desktop/src/renderer/src/components/ActionStack.tsx#ActionStack -->
 
-[`src/renderer/src/components/ActionStack.tsx`, lines 14–75](../../apps/desktop/src/renderer/src/components/ActionStack.tsx#L14-L75)
+[`src/renderer/src/components/ActionStack.tsx`, lines 15–76](../../apps/desktop/src/renderer/src/components/ActionStack.tsx#L15-L76)
 
 ```tsx
 /**
@@ -1496,10 +1551,10 @@ Lays the icons out in a column beside the bubble and animates them in and out.
 - `data-action={id}`: `Panel.closeSettingsOnOutsideClick` looks for `[data-action="settings"]`,
   so clicking the gear toggles the menu instead of counting as a click outside it.
 - `aria-expanded={ACTIONS[id].kind === 'popover' ? active : undefined}`: for a popover action
-  (only Settings) it tells screen readers whether its menu is open. `undefined` leaves the
-  attribute off the others.
-- `onClick={() => props.onAction(id)}`: `Panel.runAction` toggles the menu for Settings, and asks
-  the main process to run any other action (see `src/main/actions.ts` in
+  (Settings and Apps) it tells screen readers whether what it opens is showing. `undefined` leaves
+  the attribute off the others.
+- `onClick={() => props.onAction(id)}`: `Panel.runAction` toggles the menu for Settings and the
+  list for Apps, and asks the main process to run any other action (see `src/main/actions.ts` in
   [Main process: startup, IPC and app plumbing](2-main-startup.md)).
 - ``transitionDelay: props.open ? `${index * 30}ms` : '0ms'``: each icon starts its animation 30
   ms after the one before, so they pop out one after another. Closing has no delay, so they all go
@@ -1509,7 +1564,8 @@ Lays the icons out in a column beside the bubble and animates them in and out.
   (explained under `ChatBox`) move it to its place at full size when the panel opens.
 - `outline-none`: together with `'focus-visible:ring-2 focus-visible:ring-accent'`, swaps the
   usual square focus outline for an accent ring that follows the round button.
-- `active`: the active action (the gear while its menu is open) is filled with the accent colour.
+- `active`: the active action (the gear while its menu is open, Apps while the list is showing)
+  is filled with the accent colour.
   Otherwise `id === 'close'` turns red on hover, as a warning that it quits the app, and the rest
   get a grey hover.
 

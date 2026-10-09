@@ -9,12 +9,14 @@ screen and opens a panel when clicked. Built for Morse Micro first. Branding liv
   function shown and explained.
 - [docs/CLAUDE_DESKTOP_SETUP.md](docs/CLAUDE_DESKTOP_SETUP.md): for IT, what each PC needs so
   questions open in Claude Desktop.
+- [docs/APPS_SETUP.md](docs/APPS_SETUP.md): for IT, turning on the Apps list (JumpCloud's MCP
+  Server for users).
 - [docs/JUMPCLOUD_SETUP.md](docs/JUMPCLOUD_SETUP.md): for IT, setting up JumpCloud sign-in and
   Claude access for the built-in chat (not used by Morse Micro since 3.1).
 
 **Status:** Milestones 0 (Foundation), 1 (Chat with Claude), 2.1 (bubble fixes) and 3 (JumpCloud
-sign-in) and feature 3.1 (questions open in Claude Desktop) are complete. Next is Milestone 4:
-Ship.
+sign-in), feature 3.1 (questions open in Claude Desktop) and feature 3.2 (Apps list, Uninstall)
+are complete. Next is Milestone 4: Ship.
 
 ## Features
 
@@ -35,9 +37,12 @@ Ship.
   Copy. Usage is billed to the company's Claude Console account, through a service account IT
   sets up; there's no API key.
 - **Action icons** above the bubble:
+  - **Apps** swaps the text box for the apps in your JumpCloud User Portal, with their logos.
+    Click one to open it in your browser, signed in through JumpCloud. The first time, **Sign in
+    with JumpCloud** connects Desktop Assist to your portal in your browser.
   - **Screenshot** saves the screen the bubble is on to `Pictures\Desktop Assist`.
-  - **Settings**: Start with Windows, Send in Claude automatically, Open screenshots folder and
-    Clear text box. (With the
+  - **Settings**: Start with Windows, Send in Claude automatically, Open screenshots folder,
+    Clear text box and **Uninstall Desktop Assist**. (With the
     built-in chat: Response style (Fast / Balanced / Thorough), New conversation, and who you're
     signed in as with **Log out**.)
   - **Bounce** sends the bubble bouncing around the screen; click it to send it gliding home.
@@ -92,8 +97,8 @@ For testing without real accounts, dev runs (never installed builds) read three 
 variables:
 
 - `ANTHROPIC_BASE_URL`: point the app at a local mock of the Claude API.
-- `DESKTOP_ASSIST_DEV_CONFIG`: a JSON file whose `chatApp`, `signIn` and `claudeAccess` settings
-  replace tenant.json's, for example to try the built-in chat against a local test sign-in
+- `DESKTOP_ASSIST_DEV_CONFIG`: a JSON file whose `chatApp`, `portal`, `signIn` and `claudeAccess`
+  settings replace tenant.json's, for example to try the built-in chat against a local test sign-in
   server.
 - `DESKTOP_ASSIST_DEV_USER_DATA`: a separate data folder, so tests never touch your own dev
   sign-in or notes.
@@ -109,8 +114,9 @@ icon. See [tenants/README.md](tenants/README.md) for tips.
 ```
 apps/desktop/
   src/main/       Electron main process: windows, bubble state machine, handing questions to
-                  Claude Desktop (claudeDesktop.ts), the built-in chat (claude/) and its
-                  JumpCloud sign-in (auth/), draft, screenshots, IPC
+                  Claude Desktop (claudeDesktop.ts, sendInClaude.ts), the Apps list (apps/),
+                  the built-in chat (claude/) and its JumpCloud sign-in (auth/), draft,
+                  screenshots, uninstall, IPC
   src/preload/    the typed `window.assist` bridge
   src/renderer/   React views: the bubble, and the panel (actions, settings, chat, sign-in)
   src/shared/     code both sides use: IPC contract, action registry, layout constants, types

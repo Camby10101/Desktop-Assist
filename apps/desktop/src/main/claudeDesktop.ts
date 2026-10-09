@@ -27,6 +27,18 @@ export function sendHint(): { title: string; body: string } {
   return { title: 'Your question is in Claude', body: 'Press Enter in Claude to send it.' }
 }
 
+/** What to tell the user when Claude's text box already had something else in it. */
+export function extraTextHint(screenshots: number): { title: string; body: string } {
+  return {
+    title: 'Check your question in Claude',
+    body:
+      "Claude's message box already had text in it, so it wasn't sent." +
+      (screenshots > 0
+        ? ' Press Ctrl+V to add the screenshot, then send.'
+        : ' Send it when ready.'),
+  }
+}
+
 export type AskOutcome = { ok: true; screenshots: number } | Extract<AskResult, { ok: false }>
 
 export interface ClaudeDesktopDeps {
@@ -110,6 +122,7 @@ export class ClaudeDesktop {
         return 'failed'
       })
     if (outcome === 'sent') return
+    if (outcome === 'extra-text') return this.deps.notify(extraTextHint(screenshots))
     // Nothing was pressed: the screenshot (if any) still needs pasting. Otherwise it was pasted
     // and only Enter is left.
     const pasted = outcome === 'focus-lost' || outcome === 'not-sent'

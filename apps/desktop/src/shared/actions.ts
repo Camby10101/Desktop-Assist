@@ -4,11 +4,12 @@
 // - `command` actions run in the main process (see src/main/actions.ts).
 // - `popover` actions open UI inside the panel and never reach the main process.
 
-export const ACTION_IDS = ['screenshot', 'settings', 'bounce', 'close'] as const
+export const ACTION_IDS = ['apps', 'screenshot', 'settings', 'bounce', 'close'] as const
 
 export type ActionId = (typeof ACTION_IDS)[number]
 
 export const ACTIONS = {
+  apps: { label: 'Your apps', kind: 'popover' },
   screenshot: { label: 'Take screenshot', kind: 'command' },
   settings: { label: 'Settings', kind: 'popover' },
   bounce: { label: 'Bounce', kind: 'command' },

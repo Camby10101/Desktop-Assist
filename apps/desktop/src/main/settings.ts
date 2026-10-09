@@ -50,6 +50,7 @@ export class SettingsService {
       screenshotsDir: this.screenshotsDir,
       effort: this.prefs.effort ?? DEFAULT_EFFORT,
       autoSend: this.prefs.autoSend ?? true,
+      canUninstall: available,
     }
   }
 

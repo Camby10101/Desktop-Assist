@@ -37,9 +37,10 @@ pages: `start()` in `index.ts` creates the `ClaudeDesktop` and wires in the Elec
 6. `ask()` returns straight away, and `ipc.ts` closes the panel and empties the draft. The rest
    carries on in the background (`ClaudeDesktop.finish()`).
 7. With **Send in Claude automatically** on and a question typed, `sendInClaude()` runs a hidden
-   PowerShell helper. It waits until Claude's focused text box shows the question, presses Ctrl+V
-   if there's a screenshot, then Enter, and Claude answers. If it can't, a Windows notification
-   says what's left to do (paste, or press Enter).
+   PowerShell helper. It waits until Claude's focused text box holds exactly the question, presses
+   Ctrl+V if there's a screenshot, then Enter, and Claude answers. If it can't, a Windows
+   notification says what's left to do (paste, press Enter, or check the question). Clicking a
+   notification opens the panel, as the bubble would.
 8. With the setting off, or for a screenshot without a question, nothing is pressed. If
    screenshots were copied, a notification says to press Ctrl+V in Claude; the user then sends the
    question there.
@@ -58,8 +59,14 @@ person would. Pressing keys into whatever window is in front would be dangerous,
 different app could have come to the front, or the same Claude Desktop window could be showing
 another Claude text box (it can also hold a Claude Code session). So before every key press the
 helper asks Windows which element has the keyboard focus, and only goes ahead when that element
-belongs to Claude Desktop **and** already shows the question. A screenshot on its own is never
-sent, because there would be no question to recognise the right box by.
+belongs to Claude Desktop **and** holds exactly the question, nothing more. A screenshot on its
+own is never sent, because there would be no question to recognise the right box by.
+
+**Why exactly the question?** If the new chat's box already had something typed in it (a draft
+the user left unsent), Claude Desktop adds the linked question to that text rather than replacing
+it. Pressing Enter would then send the old draft too. So when the box holds the question _and_
+other text, the helper presses nothing (`extra-text`), and a notification asks the user to check
+the question in Claude and send it themselves.
 
 **Is Claude Desktop installed?** When it's installed, Claude Desktop registers itself with Windows
 as the app that opens `claude://` links. Electron's `app.getApplicationNameForProtocol()` asks
@@ -135,11 +142,11 @@ Builds the link for a question.
 - `text.trim() ? ... : NEW_CHAT_LINK`: a question that's only screenshots (or only spaces) opens
   an empty new chat, ready for the paste. Otherwise the text goes in exactly as typed, untrimmed.
 
-### `pasteHint()` and `sendHint()`
+### `pasteHint()`, `sendHint()` and `extraTextHint()`
 
-<!-- code: apps/desktop/src/main/claudeDesktop.ts#pasteHint,sendHint -->
+<!-- code: apps/desktop/src/main/claudeDesktop.ts#pasteHint,sendHint,extraTextHint -->
 
-[`src/main/claudeDesktop.ts`, lines 17–28](../../apps/desktop/src/main/claudeDesktop.ts#L17-L28)
+[`src/main/claudeDesktop.ts`, lines 17–40](../../apps/desktop/src/main/claudeDesktop.ts#L17-L40)
 
 ```ts
 /** What to tell the user when their screenshots are on the clipboard, still to be pasted. */
@@ -154,24 +161,39 @@ export function pasteHint(count: number): { title: string; body: string } {
 export function sendHint(): { title: string; body: string } {
   return { title: 'Your question is in Claude', body: 'Press Enter in Claude to send it.' }
 }
+
+/** What to tell the user when Claude's text box already had something else in it. */
+export function extraTextHint(screenshots: number): { title: string; body: string } {
+  return {
+    title: 'Check your question in Claude',
+    body:
+      "Claude's message box already had text in it, so it wasn't sent." +
+      (screenshots > 0
+        ? ' Press Ctrl+V to add the screenshot, then send.'
+        : ' Send it when ready.'),
+  }
+}
 ```
 
 <!-- /code -->
 
-The two Windows notifications, for when there's something left for the user to do in Claude. The
-panel can't say it, because it closes as Claude Desktop opens. `finish()` (below) picks one.
+The three Windows notifications, for when there's something left for the user to do in Claude.
+The panel can't say it, because it closes as Claude Desktop opens. `finish()` (below) picks one.
 
 - `pasteHint`: the screenshots are on the clipboard but haven't been pasted, so the user pastes
   them and sends. The title says how many, and that several became one image, so pasting a single
   image isn't a surprise.
 - `sendHint`: the question (and the screenshot, if any) is already in Claude's message box, and
   only Enter is left.
+- `extraTextHint`: Claude's box already had other text in it, so nothing was sent. The user
+  should check the question and send it when ready, pasting the screenshot first if there is one
+  (nothing was pressed, so it's still on the clipboard).
 
 ### `AskOutcome` and `ClaudeDesktopDeps`
 
 <!-- code: apps/desktop/src/main/claudeDesktop.ts#AskOutcome,ClaudeDesktopDeps -->
 
-[`src/main/claudeDesktop.ts`, lines 30–48](../../apps/desktop/src/main/claudeDesktop.ts#L30-L48)
+[`src/main/claudeDesktop.ts`, lines 42–60](../../apps/desktop/src/main/claudeDesktop.ts#L42-L60)
 
 ```ts
 export type AskOutcome = { ok: true; screenshots: number } | Extract<AskResult, { ok: false }>
@@ -213,14 +235,15 @@ draft is `ipc.ts`'s job, once it knows Claude Desktop has opened.
   a change in the settings menu applies to the next one.
 - `sendInClaude(question, paste)`: [`sendInClaude()`](#sendinclaude) below, wrapped so that any
   outcome but `sent` is written to the log.
-- `notify(message)`: a Windows notification, if Windows can show one.
+- `notify(message)`: a Windows notification, if Windows can show one. Clicking it opens the panel
+  (the notification appears over the bubble's usual corner).
 - `onError?(error)`: writes a failure to the problem log. The `?` makes it optional.
 
 ### `ClaudeDesktop`
 
 <!-- code: apps/desktop/src/main/claudeDesktop.ts#ClaudeDesktop.class -->
 
-[`src/main/claudeDesktop.ts`, lines 50–56](../../apps/desktop/src/main/claudeDesktop.ts#L50-L56)
+[`src/main/claudeDesktop.ts`, lines 62–68](../../apps/desktop/src/main/claudeDesktop.ts#L62-L68)
 
 ```ts
 /**
@@ -244,7 +267,7 @@ and `ask()`.
 
 <!-- code: apps/desktop/src/main/claudeDesktop.ts#ClaudeDesktop.finishing,constructor,isInstalled -->
 
-[`src/main/claudeDesktop.ts`, lines 57–64](../../apps/desktop/src/main/claudeDesktop.ts#L57-L64)
+[`src/main/claudeDesktop.ts`, lines 69–76](../../apps/desktop/src/main/claudeDesktop.ts#L69-L76)
 
 ```ts
 private finishing: Promise<void> = Promise.resolve()
@@ -272,7 +295,7 @@ isInstalled(): boolean {
 
 <!-- code: apps/desktop/src/main/claudeDesktop.ts#ClaudeDesktop.ask -->
 
-[`src/main/claudeDesktop.ts`, lines 66–88](../../apps/desktop/src/main/claudeDesktop.ts#L66-L88)
+[`src/main/claudeDesktop.ts`, lines 78–100](../../apps/desktop/src/main/claudeDesktop.ts#L78-L100)
 
 ```ts
 /**
@@ -332,7 +355,7 @@ touched until they've all passed.
 
 <!-- code: apps/desktop/src/main/claudeDesktop.ts#ClaudeDesktop.idle -->
 
-[`src/main/claudeDesktop.ts`, lines 90–93](../../apps/desktop/src/main/claudeDesktop.ts#L90-L93)
+[`src/main/claudeDesktop.ts`, lines 102–105](../../apps/desktop/src/main/claudeDesktop.ts#L102-L105)
 
 ```ts
 /** Resolves when the last question has been sent in Claude, or the user told what to do. */
@@ -351,7 +374,7 @@ for the tests, which `await claude.idle()` before checking what happened.
 
 <!-- code: apps/desktop/src/main/claudeDesktop.ts#ClaudeDesktop.finish -->
 
-[`src/main/claudeDesktop.ts`, lines 95–117](../../apps/desktop/src/main/claudeDesktop.ts#L95-L117)
+[`src/main/claudeDesktop.ts`, lines 107–130](../../apps/desktop/src/main/claudeDesktop.ts#L107-L130)
 
 ```ts
 /**
@@ -372,6 +395,7 @@ private async finish(text: string, screenshots: number): Promise<void> {
       return 'failed'
     })
   if (outcome === 'sent') return
+  if (outcome === 'extra-text') return this.deps.notify(extraTextHint(screenshots))
   // Nothing was pressed: the screenshot (if any) still needs pasting. Otherwise it was pasted
   // and only Enter is left.
   const pasted = outcome === 'focus-lost' || outcome === 'not-sent'
@@ -397,6 +421,8 @@ reaches the panel (which has closed by now); it turns into a notification instea
   missing or blocked, the script failing), the error is logged and treated as `failed`, so the
   user still gets told what to do.
 - `if (outcome === 'sent') return`: the question went and Claude is answering; nothing to say.
+- `if (outcome === 'extra-text') return this.deps.notify(extraTextHint(screenshots))`: Claude's
+  box held other text as well, so nothing was pressed; the user checks the question and sends it.
 - `const pasted = outcome === 'focus-lost' || outcome === 'not-sent'`: these two come after the
   screenshot, if there was one, has been pasted, so only Enter is left. `not-ready` means nothing
   was pressed, and `failed` is treated the same.
@@ -426,7 +452,7 @@ Two parts of Windows do the work:
 
 <!-- code: apps/desktop/src/main/sendInClaude.ts#SendOutcome,SendOptions -->
 
-[`src/main/sendInClaude.ts`, lines 4–25](../../apps/desktop/src/main/sendInClaude.ts#L4-L25)
+[`src/main/sendInClaude.ts`, lines 5–28](../../apps/desktop/src/main/sendInClaude.ts#L5-L28)
 
 ```ts
 /**
@@ -434,11 +460,13 @@ Two parts of Windows do the work:
  * - `sent`: the question left Claude's text box after Enter.
  * - `not-ready`: Claude's focused text box never showed the question (Claude didn't come to the
  *   front, or the focus is somewhere else), so nothing was pressed.
+ * - `extra-text`: Claude's text box holds the question and something else (Claude adds a linked
+ *   question to an unsent draft), so nothing was pressed: the user should check it first.
  * - `focus-lost`: the screenshot was pasted, but then the focus moved away, so Enter wasn't pressed.
  * - `not-sent`: Enter was pressed but the question stayed in the text box.
  * - `failed`: the helper couldn't run.
  */
-export type SendOutcome = 'sent' | 'not-ready' | 'focus-lost' | 'not-sent' | 'failed'
+export type SendOutcome = 'sent' | 'not-ready' | 'extra-text' | 'focus-lost' | 'not-sent' | 'failed'
 
 export interface SendOptions {
   question: string
@@ -457,9 +485,11 @@ export interface SendOptions {
 
 `SendOutcome` is the word the script ends with (the comment explains each). `failed` is never
 printed by the script itself: it's what anything else (an error, no output) comes to.
+`extra-text` is the "why exactly the question?" case from the top of this page.
 
-- `question: string`: the question as typed. The script only uses its start
-  ([`questionKey()`](#questionkey)).
+- `question: string`: the question as typed. The script gets only its start
+  ([`questionKey()`](#questionkey)) and a fingerprint of the whole of it
+  ([`questionHash()`](#questionhash)), never the question itself.
 - `paste: boolean`: whether to press Ctrl+V before Enter. `ClaudeDesktop.finish()` sets it when
   screenshots were copied.
 - `processName?: string`: the program whose text box must hold the question: `claude`, Claude
@@ -470,7 +500,7 @@ printed by the script itself: it's what anything else (an error, no output) come
 
 <!-- code: apps/desktop/src/main/sendInClaude.ts#READY_TIMEOUT_MS,PASTE_SETTLE_MS -->
 
-[`src/main/sendInClaude.ts`, lines 27–28](../../apps/desktop/src/main/sendInClaude.ts#L27-L28)
+[`src/main/sendInClaude.ts`, lines 30–31](../../apps/desktop/src/main/sendInClaude.ts#L30-L31)
 
 ```ts
 export const READY_TIMEOUT_MS = 20_000
@@ -486,39 +516,101 @@ export const PASTE_SETTLE_MS = 2_500
 - `PASTE_SETTLE_MS = 2_500`: after Ctrl+V, Claude needs a moment to take the image in. Pressing
   Enter too soon could send the question without it.
 
-### `questionKey()`
+### `WHITESPACE` and `normalizeQuestion()`
 
-<!-- code: apps/desktop/src/main/sendInClaude.ts#questionKey -->
+<!-- code: apps/desktop/src/main/sendInClaude.ts#WHITESPACE,normalizeQuestion -->
 
-[`src/main/sendInClaude.ts`, lines 30–36](../../apps/desktop/src/main/sendInClaude.ts#L30-L36)
+[`src/main/sendInClaude.ts`, lines 33–46](../../apps/desktop/src/main/sendInClaude.ts#L33-L46)
 
 ```ts
 /**
- * What to look for in Claude's text box: the start of the question, with every run of whitespace
- * made one space (Claude's editor may show line breaks differently from the text box here).
+ * Whitespace as the PowerShell side sees it too (spelled out, because JavaScript's `\s` and
+ * .NET's differ on a couple of rare characters).
  */
-export function questionKey(question: string): string {
-  return question.replace(/\s+/g, ' ').trim().slice(0, 60)
+const WHITESPACE =
+  '[\\t\\n\\v\\f\\r \\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000\\ufeff]+'
+
+/**
+ * The question as it's compared with Claude's text box: every run of whitespace made one space
+ * and the ends trimmed (Claude's editor may show line breaks differently from the text box here).
+ */
+export function normalizeQuestion(question: string): string {
+  return question.replace(new RegExp(WHITESPACE, 'g'), ' ').trim()
 }
 ```
 
 <!-- /code -->
 
-What the script looks for in Claude's text box to know it's the right one: the start of the
-question.
+The question in the form it's compared with Claude's text box. The script reads the box's text,
+evens it out the same way, and compares the two, so both sides must agree exactly on what counts
+as whitespace.
 
-- `.replace(/\s+/g, ' ')`: every run of spaces, tabs and line breaks becomes one space. The script
-  does the same to the text it reads from Claude's box, so the two match even if Claude's editor
-  shows line breaks differently.
-- `.trim()`: no spaces at either end.
-- `.slice(0, 60)`: the first 60 characters, plenty to tell this question from anything else in a
-  text box.
+- `WHITESPACE`: a _character class_ (`[...]`, "any one of these") listing every whitespace
+  character by its code: tab, line breaks, the ordinary space, non-breaking spaces and other
+  Unicode spaces. `+` means "one or more in a row". As the comment says, it's spelled out because
+  JavaScript's shorthand `\s` and .NET's (which PowerShell uses) disagree on a few rare
+  characters; written out, the same text means the same thing to both.
+- `'[\\t\\n...'`: the backslashes are doubled because this is a JavaScript string: the string
+  itself holds `\t`, `\u00a0` and so on, which is what both regular-expression engines expect.
+  The same text is pasted into the PowerShell script.
+- `question.replace(new RegExp(WHITESPACE, 'g'), ' ').trim()`: every run of whitespace becomes one
+  space (`'g'` means every match, not just the first), and the ends are trimmed. Claude's editor
+  may show line breaks differently from the text box here, and this makes that not matter.
+
+### `questionKey()`
+
+<!-- code: apps/desktop/src/main/sendInClaude.ts#questionKey -->
+
+[`src/main/sendInClaude.ts`, lines 48–51](../../apps/desktop/src/main/sendInClaude.ts#L48-L51)
+
+```ts
+/** How to recognise the question in Claude's text box: its start, whitespace evened out. */
+export function questionKey(question: string): string {
+  return normalizeQuestion(question).slice(0, 60)
+}
+```
+
+<!-- /code -->
+
+How the script spots the question in Claude's text box: the first 60 characters of the evened-out
+question, plenty to tell it from anything else in a text box. The script only looks closer (with
+the hash below) at a box that contains this.
+
+### `questionHash()`
+
+<!-- code: apps/desktop/src/main/sendInClaude.ts#questionHash -->
+
+[`src/main/sendInClaude.ts`, lines 53–59](../../apps/desktop/src/main/sendInClaude.ts#L53-L59)
+
+```ts
+/**
+ * A fingerprint of the whole question, so the helper can tell the text box holds exactly the
+ * question (and nothing else) without the question itself going on its command line.
+ */
+export function questionHash(question: string): string {
+  return createHash('sha256').update(normalizeQuestion(question), 'utf8').digest('hex')
+}
+```
+
+<!-- /code -->
+
+A _fingerprint_ of the whole evened-out question: SHA-256, a hash function that turns any text
+into 64 hexadecimal characters. The same text always gives the same hash, and any change, even one
+extra character, gives a completely different one. The script hashes the text it finds in
+Claude's box and compares: equal means the box holds exactly the question.
+
+- Why not pass the whole question and compare the text? As the comment says, so the question
+  itself never goes on PowerShell's command line, where other programs on the PC can see the
+  command lines of running processes. The hash can't be turned back into the question.
+- `createHash('sha256').update(..., 'utf8').digest('hex')`: Node's built-in hashing: hash the text
+  as UTF-8 bytes and write the result in hexadecimal. The script does the same with .NET's
+  `SHA256` class.
 
 ### `sendScript()`
 
 <!-- code: apps/desktop/src/main/sendInClaude.ts#sendScript -->
 
-[`src/main/sendInClaude.ts`, lines 38–98](../../apps/desktop/src/main/sendInClaude.ts#L38-L98)
+[`src/main/sendInClaude.ts`, lines 61–132](../../apps/desktop/src/main/sendInClaude.ts#L61-L132)
 
 ```ts
 /**
@@ -529,6 +621,7 @@ question.
  */
 export function sendScript(options: SendOptions): string {
   const key = Buffer.from(questionKey(options.question), 'utf8').toString('base64')
+  const hash = questionHash(options.question)
   const processName = options.processName ?? 'claude'
   if (!/^[\w.-]+$/.test(processName)) throw new Error('Unexpected process name')
   const timeout = Math.round(options.readyTimeoutMs ?? READY_TIMEOUT_MS)
@@ -537,10 +630,13 @@ export function sendScript(options: SendOptions): string {
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, System.Windows.Forms
 $key = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${key}'))
+$hash = '${hash}'
 $processName = '${processName}'
+$sha = [Security.Cryptography.SHA256]::Create()
 
-# The focused text box, if it's in Claude Desktop and holds the question; otherwise $null.
-function QuestionBox {
+# What Claude Desktop's focused text box holds: 'exact' (just the question), 'extra' (the question
+# and other text), or $null (not Claude's box, or no question in it).
+function BoxState {
   try {
     $el = [System.Windows.Automation.AutomationElement]::FocusedElement
     if (-not $el) { return $null }
@@ -553,10 +649,15 @@ function QuestionBox {
     if (-not $text -and $el.TryGetCurrentPattern([System.Windows.Automation.TextPattern]::Pattern, [ref]$pattern)) {
       $text = $pattern.DocumentRange.GetText(20000)
     }
-    if ((($text -replace '\\s+', ' ').Trim()).Contains($key)) { return $el }
+    $text = ([string]$text -replace '${WHITESPACE}', ' ').Trim()
+    if (-not $text.Contains($key)) { return $null }
+    $digest = -join ($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($text)) | ForEach-Object { $_.ToString('x2') })
+    if ($digest -eq $hash) { return 'exact' }
+    return 'extra'
   } catch {}
   return $null
 }
+function QuestionBox { (BoxState) -eq 'exact' }
 
 function WaitFor([int]$ms, [scriptblock]$test) {
   $end = (Get-Date).AddMilliseconds($ms)
@@ -567,7 +668,9 @@ function WaitFor([int]$ms, [scriptblock]$test) {
   return $false
 }
 
-if (-not (WaitFor ${timeout} { QuestionBox })) { 'not-ready'; exit }
+if (-not (WaitFor ${timeout} { BoxState })) { 'not-ready'; exit }
+# Claude adds a linked question to whatever was already in its text box: send only the question.
+if ((BoxState) -eq 'extra') { 'extra-text'; exit }
 if (${options.paste ? '$true' : '$false'}) {
   [System.Windows.Forms.SendKeys]::SendWait('^v')
   Start-Sleep -Milliseconds ${settle}
@@ -586,7 +689,7 @@ for ($try = 0; $try -lt 3; $try++) {
 
 <!-- /code -->
 
-Builds the PowerShell script, as one string. The TypeScript at the top fills in four values; the
+Builds the PowerShell script, as one string. The TypeScript at the top fills in a few values; the
 rest is the script itself, in a template literal (the backquoted string, where `${...}` inserts a
 value).
 
@@ -600,7 +703,11 @@ value).
   never PowerShell code.
 - `if (!/^[\w.-]+$/.test(processName)) throw`: the process name is written into the script as it
   is, so it may only be letters, digits, `_`, `.` and `-`. A name with a quote in it is refused.
+- `const hash = questionHash(options.question)`: the whole question's fingerprint, written in as
+  `$hash`. It's only hexadecimal digits, so it can't break out of its quotes either.
 - `Math.round(...)`: the two waits are written in as whole numbers.
+- `'${WHITESPACE}'`: the same whitespace class as `normalizeQuestion()`, so the script evens out
+  the box's text exactly as the question was.
 - `${options.paste ? '$true' : '$false'}`: writes PowerShell's `$true` or `$false` into the `if`
   that decides whether to paste.
 
@@ -611,12 +718,16 @@ value).
   `failed` rather than a half-run script carrying on.
 - `Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, System.Windows.Forms`: loads
   UI Automation and Windows Forms (for SendKeys) into PowerShell.
-- `$key = ...`, `$processName = ...`: the question's start and the process name, from above.
+- `$key = ...`, `$hash = ...`, `$processName = ...`: the question's start, its fingerprint and
+  the process name, from above.
+- `$sha = [Security.Cryptography.SHA256]::Create()`: .NET's SHA-256, created once and used for
+  every check.
 
-**The script: `QuestionBox`**
+**The script: `BoxState` and `QuestionBox`**
 
-The check made before every key press. It returns the focused element if it's Claude's text box
-holding the question, and `$null` otherwise.
+`BoxState` is the check made before every key press. As its comment says, it answers `'exact'`
+(Claude's focused box holds just the question), `'extra'` (the question and other text) or `$null`
+(not Claude's box, or no question in it). `QuestionBox` is the yes/no form: is it `'exact'`?
 
 - `[System.Windows.Automation.AutomationElement]::FocusedElement`: the element that has the
   keyboard focus right now, in whichever app is in front.
@@ -626,21 +737,33 @@ holding the question, and `$null` otherwise.
   plain box has a `Value`; a rich editor has a document, read here up to 20,000 characters.
   `TryGetCurrentPattern(..., [ref]$pattern)` asks whether the element supports one, and fills in
   `$pattern` if it does. The second is only tried if the first gave no text.
-- `(($text -replace '\\s+', ' ').Trim()).Contains($key)`: the box's text with whitespace evened
-  out as in `questionKey()`, and whether the question's start is in it. (In the TypeScript source
-  the backslash is doubled, `'\\s+'`, so the script receives `\s+`.) This is what tells the new
-  chat's box apart from any other Claude box, such as a Claude Code session in the same window.
+- `([string]$text -replace '${WHITESPACE}', ' ').Trim()`: the box's text evened out exactly as
+  `normalizeQuestion()` evens out the question. `[string]` turns a missing value into empty text.
+- `if (-not $text.Contains($key)) { return $null }`: the question's start isn't in the box, so this
+  isn't the new chat's box. This tells it apart from any other Claude box, such as a Claude Code
+  session in the same window.
+- `$sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($text))`: the box's text hashed as UTF-8.
+  `ForEach-Object { $_.ToString('x2') }` writes each byte as two hexadecimal digits, and `-join`
+  strings them together, the same form as `questionHash()` produces.
+- `if ($digest -eq $hash) { return 'exact' }`, `return 'extra'`: the same fingerprint means the box
+  holds exactly the question; otherwise it holds the question plus something else.
 - `try { ... } catch {}`: if anything goes wrong while looking (the element vanishes, the process
   has just ended), the answer is simply "not Claude's box".
+- `function QuestionBox { (BoxState) -eq 'exact' }`: true only for exactly the question. The paste
+  and Enter steps use this, so any extra text that appears stops them too.
 
 **The script: waiting and pressing**
 
 - `function WaitFor([int]$ms, [scriptblock]$test)`: runs `$test` every 200 ms until it's true
   (then returns `$true`) or the time is up (`$false`). A `scriptblock`, `{ ... }`, is PowerShell's
   way to pass code to run later.
-- `if (-not (WaitFor ${timeout} { QuestionBox })) { 'not-ready'; exit }`: waits up to 20 seconds
-  for Claude to come to the front with the question in its focused box. If it never does, nothing
-  is pressed. A bare string, such as `'not-ready'`, is PowerShell's way of printing it.
+- `if (-not (WaitFor ${timeout} { BoxState })) { 'not-ready'; exit }`: waits up to 20 seconds
+  for Claude to come to the front with the question in its focused box (exactly, or with other
+  text). If it never does, nothing is pressed. A bare string, such as `'not-ready'`, is
+  PowerShell's way of printing it.
+- `if ((BoxState) -eq 'extra') { 'extra-text'; exit }`: as the comment says, Claude added the
+  question to text that was already in its box. Nothing is pressed, so an unsent draft is never
+  sent along with the question.
 - `[System.Windows.Forms.SendKeys]::SendWait('^v')`: Ctrl+V (`^` means Ctrl in SendKeys) pastes
   the screenshot from the clipboard. `SendWait` waits until the app has processed the keys.
 - `Start-Sleep -Milliseconds ${settle}`, then `if (-not (QuestionBox)) { 'focus-lost'; exit }`:
@@ -659,10 +782,10 @@ holding the question, and `$null` otherwise.
 
 <!-- code: apps/desktop/src/main/sendInClaude.ts#OUTCOMES,parseOutcome -->
 
-[`src/main/sendInClaude.ts`, lines 100–106](../../apps/desktop/src/main/sendInClaude.ts#L100-L106)
+[`src/main/sendInClaude.ts`, lines 134–140](../../apps/desktop/src/main/sendInClaude.ts#L134-L140)
 
 ```ts
-const OUTCOMES: SendOutcome[] = ['sent', 'not-ready', 'focus-lost', 'not-sent']
+const OUTCOMES: SendOutcome[] = ['sent', 'not-ready', 'extra-text', 'focus-lost', 'not-sent']
 
 /** The outcome the script printed last, or `failed`. */
 export function parseOutcome(output: string): SendOutcome {
@@ -684,7 +807,7 @@ Reads the script's answer from everything it printed.
 
 <!-- code: apps/desktop/src/main/sendInClaude.ts#sendInClaude -->
 
-[`src/main/sendInClaude.ts`, lines 108–143](../../apps/desktop/src/main/sendInClaude.ts#L108-L143)
+[`src/main/sendInClaude.ts`, lines 142–177](../../apps/desktop/src/main/sendInClaude.ts#L142-L177)
 
 ```ts
 /**
@@ -773,16 +896,20 @@ says what sending comes to.
   screenshots are copied before opening and pasted when sending; `ask()` returns while sending
   carries on (`idle()` waits for it); when Claude never showed the question, the right hint
   (paste, or Enter); when the screenshot was pasted but not sent, press Enter; a helper that
-  couldn't run is logged and falls back to the hint; and a screenshot alone is never sent.
+  couldn't run is logged and falls back to the hint; a screenshot alone is never sent; and when
+  Claude's box already had other text, nothing is sent and the "check your question" notification
+  says so.
 
 `tests/sendInClaude.test.ts` checks the helper without running it:
 
 - `questionKey`: whitespace evened out, and at most 60 characters.
+- `normalizeQuestion`, `questionHash`: non-breaking and other Unicode spaces are evened out too;
+  the hash covers the whole evened-out question, so any extra text changes it.
 - `sendScript`: a question full of PowerShell (`$(Remove-Item ...)`, quotes, backticks) appears in
   the script only as base64, which decodes back to its start; the script looks for process
-  `claude` and waits 20 seconds; no key is pressed before the `not-ready` check; Ctrl+V only when
-  there's a screenshot; another process name can be given, but not one that could break out of
-  its quotes.
+  `claude` and waits 20 seconds; no key is pressed before the `not-ready` check, nor before the
+  `extra-text` one; Ctrl+V only when there's a screenshot; another process name can be given, but
+  not one that could break out of its quotes.
 - `parseOutcome`: the last line is the outcome, and anything else is `failed`.
 
 Two other test files cover the rest of 3.1. `tests/screenshotStack.test.ts` checks the stacking

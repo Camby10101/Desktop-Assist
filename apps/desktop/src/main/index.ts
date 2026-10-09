@@ -4,20 +4,25 @@ import {
   ClipboardItem,
   dialog,
   Menu,
+  net,
   Notification,
   safeStorage,
   screen,
   shell,
   type Tray,
 } from 'electron'
+import { spawn } from 'node:child_process'
 import { once } from 'node:events'
+import { existsSync } from 'node:fs'
 import { readFile, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { BUBBLE_BOX, panelWindowSize } from '@shared/geometry'
 import { IPC } from '@shared/ipc'
-import type { AuthStatus } from '@shared/types'
+import type { AppsState, AuthStatus } from '@shared/types'
 import tenantConfig from '@tenant/tenant.json'
 import { createActionHandlers } from './actions'
+import { fetchLogo, mcpConnector } from './apps/mcp'
+import { PortalApps } from './apps/PortalApps'
 import { AuthManager } from './auth/AuthManager'
 import { summarizeIdToken, type IdTokenSummary } from './auth/idToken'
 import { listenForRedirect } from './auth/loopback'
@@ -32,6 +37,7 @@ import { ClaudeDesktop, NEW_CHAT_LINK } from './claudeDesktop'
 import { registerIpc, type BuiltInChat } from './ipc'
 import { createLog, type Log } from './log'
 import { sendInClaude } from './sendInClaude'
+import { uninstall } from './uninstall'
 import { NotesStore } from './notes/NotesStore'
 import { ScreenshotService } from './screenshots/ScreenshotService'
 import { SettingsService } from './settings'
@@ -48,6 +54,8 @@ import {
 import { createTray } from './tray'
 
 const SHUTDOWN_TIMEOUT_MS = 2000
+/** The installer's product name (electron-builder.cjs): its uninstaller is named after it. */
+const PRODUCT_NAME = 'Desktop Assist'
 
 // Keep dev runs (`npm run dev`) from sharing notes, the sign-in and the single-instance lock with
 // an installed copy. Must happen before anything reads the userData path. Automated tests give
@@ -108,6 +116,7 @@ async function start(): Promise<void> {
     displays: electronDisplays,
     actionCount,
     initialAnchor: settings.bubbleAnchor,
+    onDiagnostic: (message) => log(message),
     onModeChange: (mode) => broadcast(IPC.modeChanged, mode),
     onAnchorChange: (anchor) => {
       broadcast(IPC.cornerChanged, anchor.corner)
@@ -155,11 +164,42 @@ async function start(): Promise<void> {
             return outcome
           },
           notify: ({ title, body }) => {
-            if (Notification.isSupported()) new Notification({ title, body }).show()
+            if (!Notification.isSupported()) return
+            const notification = new Notification({ title, body })
+            // Windows shows it in the bottom-right corner, over the bubble when it's there:
+            // clicking it should do what clicking the bubble would.
+            notification.on('click', () => bubble.expand())
+            notification.show()
           },
           onError: (error) => log('Handing a question to Claude Desktop failed:', error),
         })
       : null
+  // Electron's fetch, so a proxy set in Windows is used.
+  const netFetch = (url: string | URL, init?: RequestInit) => net.fetch(String(url), init)
+  const { portal } = tenant
+  let appsStatus: AppsState['status'] = 'loading'
+  const portalApps = portal
+    ? new PortalApps({
+        appName: tenant.appName,
+        redirectPort: portal.redirectPort,
+        connector: mcpConnector({
+          serverUrl: portal.appsServer,
+          client: { name: tenant.appName, version: app.getVersion() },
+          fetch: netFetch,
+        }),
+        store: new SecretStore(join(userData, 'jumpcloud-apps.bin'), safeStorageEncryptor),
+        listen: (port) => listenForRedirect(port),
+        openBrowser: (url) => shell.openExternal(url),
+        fetchLogo: (url) => fetchLogo(netFetch, url),
+        onState: (state) => {
+          broadcast(IPC.appsState, state)
+          // Connecting took the user to their browser; bring the list back once it's done.
+          if (appsStatus === 'signing-in' && state.status !== 'signing-in') bubble.expand()
+          appsStatus = state.status
+        },
+        onError: (message, error) => log(message, error),
+      })
+    : null
   if (!builtIn) {
     // Chats happen in Claude Desktop: a JumpCloud sign-in saved by the built-in chat isn't needed.
     void rm(join(userData, 'jumpcloud-session.bin'), { force: true }).catch(() => {})
@@ -175,7 +215,19 @@ async function start(): Promise<void> {
     settings,
     builtIn,
     claudeDesktop,
+    apps: portal && portalApps ? { list: portalApps, portalUrl: portal.url } : null,
     actions: createActionHandlers({ controller: bubble, screenshots, quit: () => app.quit() }),
+    uninstall: () =>
+      uninstall({
+        isPackaged: app.isPackaged,
+        exePath: app.getPath('exe'),
+        productName: PRODUCT_NAME,
+        exists: existsSync,
+        stopStartingWithWindows: () => app.setLoginItemSettings({ openAtLogin: false }),
+        runDetached: (path) => spawn(path, [], { detached: true, stdio: 'ignore' }).unref(),
+        quit: () => app.quit(),
+        onError: (error) => log('Starting the uninstaller failed:', error),
+      }),
     getState: () => ({
       mode: bubble.currentMode,
       corner: bubble.corner,
@@ -208,6 +260,7 @@ async function start(): Promise<void> {
     event.preventDefault()
     bubble.dispose()
     builtIn?.chat.stop()
+    void portalApps?.dispose()
     tray?.destroy() // otherwise the icon lingers in the tray until hovered
     const timeout = new Promise((resolve) => setTimeout(resolve, SHUTDOWN_TIMEOUT_MS))
     void Promise.race([notes.flush(), timeout]).finally(() => app.quit())
@@ -310,6 +363,7 @@ async function withDevOverrides(tenant: Tenant): Promise<Tenant> {
   return TenantSchema.parse({
     ...tenant,
     chatApp: override.chatApp ?? tenant.chatApp,
+    portal: override.portal ? { ...tenant.portal, ...override.portal } : tenant.portal,
     signIn: override.signIn ? { ...tenant.signIn, ...override.signIn } : tenant.signIn,
     claudeAccess: override.claudeAccess
       ? { ...tenant.claudeAccess, ...override.claudeAccess }

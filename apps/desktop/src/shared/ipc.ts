@@ -2,6 +2,7 @@ import type { CommandActionId } from './actions'
 import type { Corner, Point } from './geometry'
 import type {
   ActionResult,
+  AppsState,
   AppState,
   AskResult,
   AttachResult,
@@ -12,6 +13,7 @@ import type {
   Notes,
   SendResult,
   Settings,
+  UninstallResult,
 } from './types'
 
 /** IPC channel names. The preload maps them onto `window.assist`; src/main/ipc.ts handles them. */
@@ -46,6 +48,12 @@ export const IPC = {
   chatNew: 'assist:chat-new',
   claudeDesktopAsk: 'assist:claude-desktop-ask',
   claudeDesktopInstalled: 'assist:claude-desktop-installed',
+  appUninstall: 'assist:app-uninstall',
+  appsGet: 'assist:apps-get',
+  appsSignIn: 'assist:apps-sign-in',
+  appsCancelSignIn: 'assist:apps-cancel-sign-in',
+  appsOpen: 'assist:apps-open',
+  appsOpenPortal: 'assist:apps-open-portal',
   // main → renderer
   modeChanged: 'assist:mode-changed',
   cornerChanged: 'assist:corner-changed',
@@ -53,6 +61,7 @@ export const IPC = {
   authStatus: 'assist:auth-status',
   chatMessage: 'assist:chat-message',
   chatReset: 'assist:chat-reset',
+  appsState: 'assist:apps-state',
 } as const
 
 /** The API the preload exposes to renderers as `window.assist`. */
@@ -115,6 +124,19 @@ export interface AssistApi {
     retry(): Promise<void>
     newConversation(): Promise<void>
   }
+  /** The user's JumpCloud portal apps (only when the tenant has a `portal`). */
+  apps: {
+    /** The list as it stands; loads it first if needed, or again with `refresh`. */
+    get(refresh?: boolean): Promise<AppsState>
+    /** Connects Desktop Assist to the portal, in the browser; progress via onAppsState. */
+    signIn(): Promise<void>
+    cancelSignIn(): Promise<void>
+    /** Opens the app in the default browser (signed in through the portal). */
+    open(id: string): Promise<boolean>
+    openPortal(): Promise<void>
+  }
+  /** Starts Desktop Assist's uninstaller and quits (installed copies only). */
+  uninstall(): Promise<UninstallResult>
   onModeChanged(callback: (mode: Mode) => void): () => void
   onCornerChanged(callback: (corner: Corner) => void): () => void
   /** The panel was just shown with click-through reset; `pointer` is where the mouse is now. */
@@ -123,4 +145,5 @@ export interface AssistApi {
   /** A message was added or changed (streamed text arrives this way). */
   onChatMessage(callback: (message: ChatMessage) => void): () => void
   onChatReset(callback: () => void): () => void
+  onAppsState(callback: (state: AppsState) => void): () => void
 }

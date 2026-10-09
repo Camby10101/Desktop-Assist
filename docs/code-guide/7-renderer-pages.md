@@ -1126,20 +1126,22 @@ argument (see `Panel` below).
 
 The page shown in the panel window: the chat card, the action icons and the settings menu. All the
 panel's shared state and handlers live in `Panel`; the components it renders (`ChatBox`,
-`ActionStack`, `SettingsMenu`, `SignInPanel`, `Banner`) get their data and callbacks from it as
-props. Those are covered in [the components part](8-renderer-components.md).
+`ActionStack`, `SettingsMenu`, `SignInPanel`, `Banner`, `AppsList`) get their data and callbacks
+from it as props. Those are covered in [the components part](8-renderer-components.md), except
+`AppsList`, which is in [Your apps](10-apps.md).
 
 The panel works in one of two ways, set by the tenant's `chatApp` (`branding.chatApp`). With the
 built-in chat it's a chat with Claude, behind a JumpCloud sign-in. With Claude Desktop it's just
 the text box: asking opens the question in the Claude Desktop app (and, with "Send in Claude
 automatically" on, sends it there), and there's no sign-in and no conversation in the panel
-(`state.auth` is `null` and `state.chat` stays empty).
+(`state.auth` is `null` and `state.chat` stays empty). Either way, if the tenant has the Apps
+icon, the card can also show the Apps list instead of the text box.
 
 ### `ASK_ERRORS`
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#ASK_ERRORS -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 15–21](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L15-L21)
+[`src/renderer/src/views/PanelView.tsx`, lines 24–30](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L24-L30)
 
 ```tsx
 /** What to say when a question couldn't be handed to Claude Desktop. */
@@ -1165,11 +1167,32 @@ The toast for each way handing a question to Claude Desktop can fail (`AskResult
 - `'not-installed'`: the panel already shows a banner when it opens on a PC without Claude
   Desktop; this toast is for asking anyway.
 
+### `UNINSTALL_ERRORS`
+
+<!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#UNINSTALL_ERRORS -->
+
+[`src/renderer/src/views/PanelView.tsx`, lines 32–37](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L32-L37)
+
+```tsx
+/** What to say when Settings → Uninstall couldn't start the uninstaller. */
+const UNINSTALL_ERRORS: Record<Extract<UninstallResult, { ok: false }>['reason'], string> = {
+  'not-installed': 'Only the installed app can be uninstalled from here.',
+  missing: 'The uninstaller is missing. Uninstall from Windows Settings → Apps.',
+  failed: "Couldn't start the uninstaller. Uninstall from Windows Settings → Apps.",
+}
+```
+
+<!-- /code -->
+
+The toast for each way Settings → Uninstall can fail (`UninstallResult`), built the same way as
+`ASK_ERRORS`. The two that can happen in an installed copy point to Windows Settings, where the
+app can always be uninstalled.
+
 ### `<PanelView>`
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#PanelView -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 23–29](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L23-L29)
+[`src/renderer/src/views/PanelView.tsx`, lines 39–45](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L39-L45)
 
 ```tsx
 /** Everything that appears around the bubble when it's clicked. */
@@ -1200,7 +1223,7 @@ returns. The sections after it take its values and functions one at a time.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 31–292](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L31-L292)
+[`src/renderer/src/views/PanelView.tsx`, lines 47–353](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L47-L353)
 
 ```tsx
 function Panel({ state }: { state: AppState }) {
@@ -1215,6 +1238,9 @@ function Panel({ state }: { state: AppState }) {
   const [settings, setSettings] = useState(state.settings)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [asking, setAsking] = useState(false)
+  // The card shows the text box, or the Apps list while the Apps icon is on.
+  const [view, setView] = useState<'ask' | 'apps'>('ask')
+  const [apps, setApps] = useState<AppsState>({ status: 'loading' })
   /** Claude Desktop isn't installed, so questions can't be opened in it (checked on opening). */
   const [claudeMissing, setClaudeMissing] = useState(false)
   const [toast, showToast] = useToast()
@@ -1222,10 +1248,14 @@ function Panel({ state }: { state: AppState }) {
   useEffect(
     () =>
       window.assist.onModeChanged((mode) => {
-        if (mode !== 'expanded') setSettingsOpen(false)
+        if (mode !== 'expanded') {
+          setSettingsOpen(false)
+          setView('ask') // the panel always reopens on the text box
+        }
       }),
     [],
   )
+  useEffect(() => window.assist.onAppsState(setApps), [])
   useEffect(() => {
     if (!open || !inClaudeDesktop) return
     let alive = true
@@ -1240,11 +1270,12 @@ function Panel({ state }: { state: AppState }) {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
       if (settingsOpen) setSettingsOpen(false)
+      else if (view === 'apps') setView('ask')
       else window.assist.collapse()
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [settingsOpen])
+  }, [settingsOpen, view])
 
   // Not signed in: the chat box shows the sign-in instead of the chat. While a saved sign-in is
   // being renewed, or JumpCloud can't be reached, the chat stays (sending tries JumpCloud again).
@@ -1256,6 +1287,13 @@ function Panel({ state }: { state: AppState }) {
   const canSend = signedIn && !busy && !asking && (draft.trim() !== '' || attachments.length > 0)
 
   async function runAction(id: ActionId) {
+    if (id === 'apps') {
+      setSettingsOpen(false)
+      const showing = view === 'apps'
+      setView(showing ? 'ask' : 'apps')
+      if (!showing) setApps(await window.assist.apps.get())
+      return
+    }
     if (id === 'settings') {
       setSettingsOpen(!settingsOpen)
       // Refresh: "Start with Windows" can also be changed in Windows Settings.
@@ -1300,6 +1338,13 @@ function Panel({ state }: { state: AppState }) {
     }
   }
 
+  async function openApp(app: PortalApp) {
+    // On success the main process closes the panel; the browser opens the app.
+    if (!(await window.assist.apps.open(app.id))) {
+      showToast(`Couldn't open ${app.name}. Try it from the portal.`, 'error')
+    }
+  }
+
   async function attachLatest() {
     const result = await window.assist.notes.attachLatestScreenshot()
     if (result.ok) setAttachments(result.notes.attachments)
@@ -1335,6 +1380,13 @@ function Panel({ state }: { state: AppState }) {
     setAttachments(notes.attachments)
     setSettingsOpen(false)
     showToast('Text box cleared')
+  }
+
+  async function uninstall() {
+    setSettingsOpen(false)
+    const result = await window.assist.uninstall()
+    // On success the uninstaller has started and the app is quitting.
+    if (!result.ok) showToast(UNINSTALL_ERRORS[result.reason], 'error')
   }
 
   async function newConversation() {
@@ -1420,6 +1472,21 @@ function Panel({ state }: { state: AppState }) {
         toast={toast}
         inClaudeDesktop={inClaudeDesktop}
         autoSend={settings.autoSend}
+        apps={
+          view === 'apps' && branding.portalName ? (
+            <AppsList
+              open={open}
+              state={apps}
+              appName={branding.appName}
+              portalName={branding.portalName}
+              onOpenApp={(app) => void openApp(app)}
+              onOpenPortal={() => void window.assist.apps.openPortal()}
+              onSignIn={() => void window.assist.apps.signIn()}
+              onCancelSignIn={() => void window.assist.apps.cancelSignIn()}
+              onRetry={() => void window.assist.apps.get(true).then(setApps)}
+            />
+          ) : null
+        }
         signInPrompt={signInPrompt}
         banner={banner}
         messages={state.chat}
@@ -1440,7 +1507,7 @@ function Panel({ state }: { state: AppState }) {
         corner={state.corner}
         actions={branding.actions}
         open={open}
-        activeId={settingsOpen ? 'settings' : null}
+        activeId={settingsOpen ? 'settings' : view === 'apps' ? 'apps' : null}
         onAction={(id) => void runAction(id)}
       />
       {open && settingsOpen && settingsIndex >= 0 && (
@@ -1460,6 +1527,7 @@ function Panel({ state }: { state: AppState }) {
           onOpenScreenshotsFolder={() => void window.assist.screenshots.openFolder()}
           onNewConversation={() => void newConversation()}
           onClearText={() => void clearText()}
+          onUninstall={() => void uninstall()}
         />
       )}
     </div>
@@ -1484,6 +1552,12 @@ Props and state:
 - `const [asking, setAsking] = useState(false)`: true while a question is being handed to Claude
   Desktop, so it can't be sent twice. (Only for that moment: sending it in Claude carries on in
   the main process after the panel has closed.)
+- `const [view, setView] = useState<'ask' | 'apps'>('ask')`: what the card shows: the text box
+  (`ask`), or the Apps list while the Apps icon is on. `<'ask' | 'apps'>` gives the state its type,
+  since TypeScript would otherwise take it to be any string.
+- `const [apps, setApps] = useState<AppsState>({ status: 'loading' })`: the Apps list as the main
+  process last reported it. It isn't part of the app state the page loads at the start; it's
+  fetched the first time the Apps icon is clicked.
 - `const [claudeMissing, setClaudeMissing] = useState(false)`: whether Claude Desktop was found
   to be missing, which shows a banner with a Download button.
 - `const [toast, showToast] = useToast()`: the current toast and the function to show one.
@@ -1491,8 +1565,11 @@ Props and state:
 Effects:
 
 - `window.assist.onModeChanged((mode) => {`: closes the settings menu whenever the panel closes,
-  so it isn't still open the next time. The arrow returns what `onModeChanged` returns, the
+  so it isn't still open the next time, and goes back to the text box (`setView('ask')`), so the
+  panel always reopens ready to type. The arrow returns what `onModeChanged` returns, the
   unsubscribe function, which React uses as the cleanup.
+- `useEffect(() => window.assist.onAppsState(setApps), [])`: keeps the Apps list up to date as
+  the main process reports changes (connecting, loading, ready). `setApps` itself is the callback.
 - `if (!open || !inClaudeDesktop) return`: with Claude Desktop, each time the panel opens it asks
   whether Claude Desktop is installed (`window.assist.claudeDesktop.isInstalled()`), so a missing
   app is pointed out before anything is typed. Asking every time, rather than once, picks up
@@ -1501,12 +1578,13 @@ Effects:
   `useAssistState`. If the panel closes before the answer arrives, the cleanup sets `alive` to
   `false` and the late answer is ignored.
 - `}, [open, inClaudeDesktop])`: the effect runs again when the panel opens or closes.
-- `if (event.key !== 'Escape') return`: Esc closes the settings menu if it's open, otherwise asks
-  the main process to close the panel (`BubbleController.collapse`). Keys reach the panel because
-  the main process focuses it when it opens.
-- `}, [settingsOpen])`: the listener reads `settingsOpen`, and a function only sees the values from
-  the render it was created in. Listing it here makes React remove the old listener and add a fresh
-  one whenever the menu opens or closes.
+- `if (event.key !== 'Escape') return`: Esc closes the settings menu if it's open, otherwise goes
+  back from the Apps list to the text box, otherwise asks the main process to close the panel
+  (`BubbleController.collapse`). Keys reach the panel because the main process focuses it when it
+  opens.
+- `}, [settingsOpen, view])`: the listener reads `settingsOpen` and `view`, and a function only
+  sees the values from the render it was created in. Listing them here makes React remove the old
+  listener and add a fresh one whenever either changes.
 
 The JSX it returns:
 
@@ -1530,7 +1608,14 @@ The JSX it returns:
 - `onSend={() => void send()}`: the handlers are `async`, so they return promises. Each is wrapped
   in an arrow with `void`, which marks the promise as deliberately not awaited and makes the
   callback return nothing.
-- `activeId={settingsOpen ? 'settings' : null}`: the gear stays highlighted while its menu is open.
+- `apps={view === 'apps' && branding.portalName ? (`: while the Apps icon is on, the card shows
+  an `AppsList` in place of everything else (see [Your apps](10-apps.md)); otherwise `null`.
+  Checking `portalName` too means a tenant without a portal never shows it, and gives TypeScript
+  a definite string for the `portalName` prop.
+- `onRetry={() => void window.assist.apps.get(true).then(setApps)}`: the list's Retry and Refresh
+  load it again (`true` means "even if already loaded").
+- `activeId={settingsOpen ? 'settings' : view === 'apps' ? 'apps' : null}`: the gear stays
+  highlighted while its menu is open, and the Apps icon while the list is showing.
 - `{open && settingsOpen && settingsIndex >= 0 && (`: JSX's way of saying "only if": when any part
   is false, nothing is rendered. Removing the menu also resets its own state (its "click again to
   confirm" on New conversation or Clear text box).
@@ -1546,12 +1631,13 @@ The JSX it returns:
   switch, offered with Claude Desktop instead of Response style.
 - `onClearText={() => void clearText()}`: the menu's Clear text box, offered instead of New
   conversation with Claude Desktop.
+- `onUninstall={() => void uninstall()}`: the menu's Uninstall.
 
 #### `signedIn`, `busy`, `canSend`
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.signedIn,busy,canSend -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 74–81](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L74-L81)
+[`src/renderer/src/views/PanelView.tsx`, lines 98–105](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L98-L105)
 
 ```tsx
 // Not signed in: the chat box shows the sign-in instead of the chat. While a saved sign-in is
@@ -1589,10 +1675,17 @@ Values worked out on every render from the current state.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.runAction -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 83–93](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L83-L93)
+[`src/renderer/src/views/PanelView.tsx`, lines 107–124](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L107-L124)
 
 ```tsx
 async function runAction(id: ActionId) {
+  if (id === 'apps') {
+    setSettingsOpen(false)
+    const showing = view === 'apps'
+    setView(showing ? 'ask' : 'apps')
+    if (!showing) setApps(await window.assist.apps.get())
+    return
+  }
   if (id === 'settings') {
     setSettingsOpen(!settingsOpen)
     // Refresh: "Start with Windows" can also be changed in Windows Settings.
@@ -1609,16 +1702,22 @@ async function runAction(id: ActionId) {
 
 Runs when an action icon is clicked (`ActionStack`'s `onAction`).
 
-- `if (id === 'settings') {`: Settings is a "popover" action (src/shared/actions.ts): it opens UI
-  inside the panel and never reaches the main process.
+- `if (id === 'apps') {`: Apps is a "popover" action (src/shared/actions.ts): it switches the card
+  between the text box and the Apps list. It closes the settings menu if that was open.
+- `const showing = view === 'apps'`: whether the list is showing now, before the switch.
+- `if (!showing) setApps(await window.assist.apps.get())`: as the list appears, it's fetched. The
+  first time, the main process loads it from JumpCloud; after that it answers with the list it
+  already has.
+- `if (id === 'settings') {`: Settings is a "popover" action too: it opens UI inside the panel and
+  never reaches the main process.
 - `setSettingsOpen(!settingsOpen)`: setting state doesn't change the variable in this run of the
   function. `settingsOpen` still holds the value from before the toggle, so the next line's
   `if (!settingsOpen)` means "the menu is being opened now".
 - `setSettings(await window.assist.settings.get())`: refreshes the settings as the menu opens,
   because Start with Windows can also be changed in Windows Settings.
-- `window.assist.invokeAction(id)`: after the `settings` branch returns, TypeScript knows `id` is
-  `screenshot`, `bounce` or `close`, which is exactly the `CommandActionId` type `invokeAction`
-  accepts. The main process runs the matching handler from src/main/actions.ts.
+- `window.assist.invokeAction(id)`: after the `apps` and `settings` branches return, TypeScript
+  knows `id` is `screenshot`, `bounce` or `close`, which is exactly the `CommandActionId` type
+  `invokeAction` accepts. The main process runs the matching handler from src/main/actions.ts.
 - `if (result.message) showToast(result.message, result.ok ? 'info' : 'error')`: for example
   "Screenshot saved", or "Couldn't take a screenshot" in red. Bounce and close return no message.
 
@@ -1626,7 +1725,7 @@ Runs when an action icon is clicked (`ActionStack`'s `onAction`).
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.changeDraft -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 95–98](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L95-L98)
+[`src/renderer/src/views/PanelView.tsx`, lines 126–129](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L126-L129)
 
 ```tsx
 function changeDraft(next: string) {
@@ -1645,7 +1744,7 @@ writes notes.json about half a second after typing stops, so an unsent message s
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.send -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 100–112](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L100-L112)
+[`src/renderer/src/views/PanelView.tsx`, lines 131–143](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L131-L143)
 
 ```tsx
 async function send() {
@@ -1685,7 +1784,7 @@ The other two reasons, `busy` and `empty`, are ignored: `canSend` already rules 
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.askInClaudeDesktop -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 114–126](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L114-L126)
+[`src/renderer/src/views/PanelView.tsx`, lines 145–157](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L145-L157)
 
 ```tsx
 async function askInClaudeDesktop() {
@@ -1726,11 +1825,33 @@ Claude automatically" on) carries on in the main process; the panel isn't told h
   [`ASK_ERRORS`](#ask_errors) as a red toast. Once `empty` is ruled out, TypeScript knows
   `result.reason` is one of `ASK_ERRORS`'s keys.
 
+#### `openApp`
+
+<!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.openApp -->
+
+[`src/renderer/src/views/PanelView.tsx`, lines 159–164](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L159-L164)
+
+```tsx
+async function openApp(app: PortalApp) {
+  // On success the main process closes the panel; the browser opens the app.
+  if (!(await window.assist.apps.open(app.id))) {
+    showToast(`Couldn't open ${app.name}. Try it from the portal.`, 'error')
+  }
+}
+```
+
+<!-- /code -->
+
+A click on an app in the Apps list. Only the app's ID goes to the main process, which asks
+JumpCloud for the app's sign-in link and opens it in the browser (see [Your apps](10-apps.md)).
+As the comment says, if it works the main process closes the panel; if there was no link, the
+panel stays open with a toast, and the portal itself is one click away at the bottom of the list.
+
 #### `attachLatest`, `removeAttachment`, `openAttachment`
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.attachLatest,removeAttachment,openAttachment -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 128–144](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L128-L144)
+[`src/renderer/src/views/PanelView.tsx`, lines 166–182](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L166-L182)
 
 ```tsx
 async function attachLatest() {
@@ -1770,7 +1891,7 @@ result.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.copy -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 146–149](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L146-L149)
+[`src/renderer/src/views/PanelView.tsx`, lines 184–187](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L184-L187)
 
 ```tsx
 async function copy(text: string) {
@@ -1784,11 +1905,11 @@ async function copy(text: string) {
 The Copy button on Claude's replies. The main process writes the text to the clipboard
 (`clipboard.writeText` in src/main/ipc.ts).
 
-#### `signOut`, `clearText`, `newConversation`, `setEffort`, `toggleAutoSend`
+#### `signOut`, `clearText`, `uninstall`, `newConversation`, `setEffort`, `toggleAutoSend`
 
-<!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.signOut,clearText,newConversation,setEffort,toggleAutoSend -->
+<!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.signOut,clearText,uninstall,newConversation,setEffort,toggleAutoSend -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 151–177](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L151-L177)
+[`src/renderer/src/views/PanelView.tsx`, lines 189–222](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L189-L222)
 
 ```tsx
 async function signOut() {
@@ -1803,6 +1924,13 @@ async function clearText() {
   setAttachments(notes.attachments)
   setSettingsOpen(false)
   showToast('Text box cleared')
+}
+
+async function uninstall() {
+  setSettingsOpen(false)
+  const result = await window.assist.uninstall()
+  // On success the uninstaller has started and the app is quitting.
+  if (!result.ok) showToast(UNINSTALL_ERRORS[result.reason], 'error')
 }
 
 async function newConversation() {
@@ -1832,6 +1960,10 @@ Settings menu actions.
   Claude Desktop instead of New conversation (there's no conversation in the panel to clear).
   The main process empties the draft and its screenshots and returns it; the box and the chips
   adopt it.
+- `const result = await window.assist.uninstall()`: starts the uninstaller (see
+  `src/main/uninstall.ts` in [Main process: startup, IPC and app plumbing](2-main-startup.md)).
+  If it worked, the app is already quitting; otherwise the toast from `UNINSTALL_ERRORS` says
+  what to do instead.
 - `await window.assist.chat.newConversation()`: `ChatSession` forgets the conversation and
   broadcasts a reset, which empties the chat in `useAssistState`.
 - `setSettings(await window.assist.settings.setEffort(effort))`: saves the response style (Fast,
@@ -1844,7 +1976,7 @@ Settings menu actions.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.closeSettingsOnOutsideClick -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 179–185](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L179-L185)
+[`src/renderer/src/views/PanelView.tsx`, lines 224–230](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L224-L230)
 
 ```tsx
 // Clicking anywhere else in the panel closes the settings menu.
@@ -1874,7 +2006,7 @@ the panel (`BubbleController.panelBlurred`), and the mode effect above closes th
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.signInPrompt,banner -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 187–232](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L187-L232)
+[`src/renderer/src/views/PanelView.tsx`, lines 232–277](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L232-L277)
 
 ```tsx
 const signInPrompt =
@@ -1973,7 +2105,7 @@ one saying Claude Desktop isn't installed. With the built-in chat, it depends on
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.settingsIndex -->
 
-[`src/renderer/src/views/PanelView.tsx`, line 234](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L234)
+[`src/renderer/src/views/PanelView.tsx`, line 279](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L279)
 
 ```tsx
 const settingsIndex = branding.actions.indexOf('settings')

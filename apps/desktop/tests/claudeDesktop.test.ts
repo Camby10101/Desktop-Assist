@@ -4,6 +4,7 @@ import {
   ClaudeDesktop,
   MAX_PROMPT_LENGTH,
   newChatLink,
+  extraTextHint,
   pasteHint,
   sendHint,
   type ClaudeDesktopDeps,
@@ -209,6 +210,13 @@ describe('ClaudeDesktop.ask with "Send in Claude" on', () => {
     expect(withShot.events.at(-1)).toBe('notify Screenshot copied')
     const textOnly = await ask('Why?', [], 'not-ready')
     expect(textOnly.events.at(-1)).toBe(`notify ${sendHint().title}`)
+  })
+
+  it("when Claude's box already had other text, sends nothing and says to check it", async () => {
+    const { events } = await ask('Why?', [attachment('a.png')], 'extra-text')
+    expect(events.at(-1)).toBe(`notify ${extraTextHint(1).title}`)
+    expect(extraTextHint(1).body).toContain('Ctrl+V')
+    expect(extraTextHint(0).body).not.toContain('Ctrl+V')
   })
 
   it('when the screenshot was pasted but not sent, says to press Enter', async () => {
