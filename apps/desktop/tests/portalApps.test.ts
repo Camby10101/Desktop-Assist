@@ -157,7 +157,7 @@ describe('orderApps', () => {
  * A portal with two apps and a launch tool; `signedIn` decides whether connecting works. With
  * `forgeState`, the "browser" comes back with a state this app didn't send.
  */
-function fakePortal(options: { forgeState?: boolean } = {}) {
+function fakePortal(options: { forgeState?: boolean; slowLaunch?: boolean } = {}) {
   const world = {
     signedIn: false,
     registered: false,
@@ -165,25 +165,30 @@ function fakePortal(options: { forgeState?: boolean } = {}) {
     browser: [] as string[],
     saved: null as string | null,
     states: [] as AppsState['status'][],
+    toolLists: 0,
   }
   const session: McpSession = {
-    listTools: async () => [
-      { name: 'list_applications' },
-      {
-        name: 'launch_application',
-        inputSchema: { properties: { applicationId: {} }, required: ['applicationId'] },
-      },
-    ],
+    listTools: async () => (
+      world.toolLists++,
+      [
+        { name: 'list_applications' },
+        {
+          name: 'launch_application',
+          inputSchema: { properties: { applicationId: {} }, required: ['applicationId'] },
+        },
+      ]
+    ),
     callTool: async (name, args) => {
       world.calls.push(`${name} ${JSON.stringify(args)}`)
       if (name === 'list_applications') {
         return json({
           applications: [
             { id: '2', name: 'Slack', logo: { url: 'https://cdn.example/slack.png' } },
-            { id: '1', name: 'Atlassian' },
+            { id: '1', name: 'Atlassian', ssoUrl: 'https://sso.example/list/1' },
           ],
         })
       }
+      if (options.slowLaunch) return new Promise(() => {}) // JumpCloud never answers
       return json({ url: `https://sso.example/launch/${String(args['applicationId'])}` })
     },
     close: async () => {},
@@ -243,6 +248,7 @@ function fakePortal(options: { forgeState?: boolean } = {}) {
     },
     fetchLogo: async (url) => (url.includes('slack') ? 'data:image/png;base64,AAAA' : null),
     onState: (state) => world.states.push(state.status),
+    launchTimeoutMs: 30,
   })
   return { portal, world, backTo: (url: string) => backTo(url) }
 }
@@ -308,6 +314,25 @@ describe('PortalApps', () => {
     expect(world.calls.at(-1)).toBe('launch_application {"applicationId":"2"}')
     expect(world.browser).toEqual(['https://sso.example/launch/2'])
     expect(await portal.open('nope')).toBe(false)
+  })
+
+  it('asks for the launch tool once, so each open is a single request', async () => {
+    const { portal, world } = fakePortal()
+    world.signedIn = true
+    await portal.get()
+    await portal.open('2')
+    await portal.open('1')
+    expect(world.toolLists).toBe(1)
+    expect(world.browser).toEqual(['https://sso.example/launch/2', 'https://sso.example/launch/1'])
+  })
+
+  it("uses the list's own link when JumpCloud is slow to give one", async () => {
+    const { portal, world } = fakePortal({ slowLaunch: true })
+    world.signedIn = true
+    await portal.get()
+    expect(await portal.open('1')).toBe(true)
+    expect(world.browser).toEqual(['https://sso.example/list/1'])
+    expect(await portal.open('2')).toBe(false) // no link in the list for Slack
   })
 
   it('refuses a sign-in that comes back with a state it did not send', async () => {

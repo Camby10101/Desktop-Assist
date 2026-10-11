@@ -1242,7 +1242,7 @@ returns. The sections after it take its values and functions one at a time.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 48–379](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L48-L379)
+[`src/renderer/src/views/PanelView.tsx`, lines 48–387](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L48-L387)
 
 ```tsx
 function Panel({ state }: { state: AppState }) {
@@ -1262,6 +1262,7 @@ function Panel({ state }: { state: AppState }) {
   const { startPage } = branding
   const [view, setView] = useState<StartPage>(startPage)
   const [apps, setApps] = useState<AppsState>({ status: 'loading' })
+  const [openingApp, setOpeningApp] = useState<string | null>(null)
   /** Claude Desktop isn't installed, so questions can't be opened in it (checked on opening). */
   const [claudeMissing, setClaudeMissing] = useState(false)
   const [toast, showToast] = useToast()
@@ -1379,9 +1380,15 @@ function Panel({ state }: { state: AppState }) {
   }
 
   async function openApp(app: PortalApp) {
-    // On success the main process closes the panel; the browser opens the app.
-    if (!(await window.assist.apps.open(app.id))) {
-      showToast(`Couldn't open ${app.name}. Try it from the portal.`, 'error')
+    // The tile spins until the browser is opening (JumpCloud can take a few seconds to give the
+    // sign-in link); on success the main process closes the panel.
+    setOpeningApp(app.id)
+    try {
+      if (!(await window.assist.apps.open(app.id))) {
+        showToast(`Couldn't open ${app.name}. Try it from the portal.`, 'error')
+      }
+    } finally {
+      setOpeningApp((current) => (current === app.id ? null : current))
     }
   }
 
@@ -1522,6 +1529,7 @@ function Panel({ state }: { state: AppState }) {
               favorites={settings.favoriteApps}
               onToggleFavorite={(app, favorite) => void toggleFavorite(app, favorite)}
               onOpenApp={(app) => void openApp(app)}
+              openingId={openingApp}
               onOpenPortal={() => void window.assist.apps.openPortal()}
               onSignIn={() => void window.assist.apps.signIn()}
               onCancelSignIn={() => void window.assist.apps.cancelSignIn()}
@@ -1603,6 +1611,8 @@ Props and state:
 - `const [apps, setApps] = useState<AppsState>({ status: 'loading' })`: the Apps list as the main
   process last reported it. It isn't part of the app state the page loads at the start; it's asked
   for whenever the list shows (the effect below).
+- `const [openingApp, setOpeningApp] = useState<string | null>(null)`: the ID of the app being
+  opened, so its tile can show a spinner, or `null`.
 - `const [claudeMissing, setClaudeMissing] = useState(false)`: whether Claude Desktop was found
   to be missing, which shows a banner with a Download button.
 - `const [toast, showToast] = useToast()`: the current toast and the function to show one.
@@ -1664,6 +1674,7 @@ The JSX it returns:
   shows an `AppsList` in place of everything else (see [Your apps](10-apps.md)); otherwise `null`.
   Checking `portalName` too means a tenant without a portal never shows it, and gives TypeScript
   a definite string for the `portalName` prop.
+- `openingId={openingApp}`: which tile shows the "opening" spinner.
 - `favorites={settings.favoriteApps}`, `onToggleFavorite={...}`: the starred apps, from the
   panel's own copy of the settings, and what a star click does (`toggleFavorite`, below).
 - `onRetry={() => void window.assist.apps.get(true).then(setApps)}`: the list's Retry and Refresh
@@ -1697,7 +1708,7 @@ The JSX it returns:
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.signedIn,busy,canSend -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 111–118](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L111-L118)
+[`src/renderer/src/views/PanelView.tsx`, lines 112–119](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L112-L119)
 
 ```tsx
 // Not signed in: the chat box shows the sign-in instead of the chat. While a saved sign-in is
@@ -1735,7 +1746,7 @@ Values worked out on every render from the current state.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.runAction -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 120–142](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L120-L142)
+[`src/renderer/src/views/PanelView.tsx`, lines 121–143](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L121-L143)
 
 ```tsx
 async function runAction(id: ActionId) {
@@ -1799,7 +1810,7 @@ Runs when an action icon is clicked (`ActionStack`'s `onAction`).
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.changeDraft -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 144–147](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L144-L147)
+[`src/renderer/src/views/PanelView.tsx`, lines 145–148](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L145-L148)
 
 ```tsx
 function changeDraft(next: string) {
@@ -1818,7 +1829,7 @@ writes notes.json about half a second after typing stops, so an unsent message s
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.send -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 149–161](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L149-L161)
+[`src/renderer/src/views/PanelView.tsx`, lines 150–162](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L150-L162)
 
 ```tsx
 async function send() {
@@ -1858,7 +1869,7 @@ The other two reasons, `busy` and `empty`, are ignored: `canSend` already rules 
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.askInClaudeDesktop -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 163–175](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L163-L175)
+[`src/renderer/src/views/PanelView.tsx`, lines 164–176](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L164-L176)
 
 ```tsx
 async function askInClaudeDesktop() {
@@ -1903,7 +1914,7 @@ Claude automatically" on) carries on in the main process; the panel isn't told h
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.toggleFavorite -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 177–179](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L177-L179)
+[`src/renderer/src/views/PanelView.tsx`, lines 178–180](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L178-L180)
 
 ```tsx
 async function toggleFavorite(app: PortalApp, favorite: boolean) {
@@ -1921,13 +1932,19 @@ with the starred apps first.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.openApp -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 181–186](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L181-L186)
+[`src/renderer/src/views/PanelView.tsx`, lines 182–193](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L182-L193)
 
 ```tsx
 async function openApp(app: PortalApp) {
-  // On success the main process closes the panel; the browser opens the app.
-  if (!(await window.assist.apps.open(app.id))) {
-    showToast(`Couldn't open ${app.name}. Try it from the portal.`, 'error')
+  // The tile spins until the browser is opening (JumpCloud can take a few seconds to give the
+  // sign-in link); on success the main process closes the panel.
+  setOpeningApp(app.id)
+  try {
+    if (!(await window.assist.apps.open(app.id))) {
+      showToast(`Couldn't open ${app.name}. Try it from the portal.`, 'error')
+    }
+  } finally {
+    setOpeningApp((current) => (current === app.id ? null : current))
   }
 }
 ```
@@ -1939,11 +1956,18 @@ JumpCloud for the app's sign-in link and opens it in the browser (see [Your apps
 As the comment says, if it works the main process closes the panel; if there was no link, the
 panel stays open with a toast, and the portal itself is one click away at the bottom of the list.
 
+- `setOpeningApp(app.id)`: JumpCloud can take a few seconds to give the link, so the app's tile
+  shows a spinner meanwhile, and the user can see the click worked.
+- `finally {`: runs whether opening worked, failed or threw, so the spinner never stays on.
+- `setOpeningApp((current) => (current === app.id ? null : current))`: passing a function gives
+  the latest value. The spinner is cleared only if it's still this app's: if the user clicked a
+  second app meanwhile, its spinner stays.
+
 #### `attachLatest`, `removeAttachment`, `openAttachment`
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.attachLatest,removeAttachment,openAttachment -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 188–204](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L188-L204)
+[`src/renderer/src/views/PanelView.tsx`, lines 195–211](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L195-L211)
 
 ```tsx
 async function attachLatest() {
@@ -1983,7 +2007,7 @@ result.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.copy -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 206–209](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L206-L209)
+[`src/renderer/src/views/PanelView.tsx`, lines 213–216](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L213-L216)
 
 ```tsx
 async function copy(text: string) {
@@ -2001,7 +2025,7 @@ The Copy button on Claude's replies. The main process writes the text to the cli
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.signOut,clearText,uninstall,newConversation,setEffort,toggleAutoSend -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 211–244](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L211-L244)
+[`src/renderer/src/views/PanelView.tsx`, lines 218–251](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L218-L251)
 
 ```tsx
 async function signOut() {
@@ -2068,7 +2092,7 @@ Settings menu actions.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.closeSettingsOnOutsideClick -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 246–252](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L246-L252)
+[`src/renderer/src/views/PanelView.tsx`, lines 253–259](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L253-L259)
 
 ```tsx
 // Clicking anywhere else in the panel closes the settings menu.
@@ -2098,7 +2122,7 @@ the panel (`BubbleController.panelBlurred`), and the mode effect above closes th
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.signInPrompt,banner -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 254–299](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L254-L299)
+[`src/renderer/src/views/PanelView.tsx`, lines 261–306](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L261-L306)
 
 ```tsx
 const signInPrompt =
@@ -2197,7 +2221,7 @@ one saying Claude Desktop isn't installed. With the built-in chat, it depends on
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.settingsIndex -->
 
-[`src/renderer/src/views/PanelView.tsx`, line 301](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L301)
+[`src/renderer/src/views/PanelView.tsx`, line 308](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L308)
 
 ```tsx
 const settingsIndex = branding.actions.indexOf('settings')

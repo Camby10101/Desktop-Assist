@@ -20,6 +20,12 @@ import {
 export const LIST_TOOL = 'list_applications'
 export const LAUNCH_TOOL = 'launch_application'
 
+/**
+ * How long opening an app waits for JumpCloud's sign-in link before using the link the list gave
+ * (so the spinner on the tile can't go on for ever).
+ */
+export const LAUNCH_TIMEOUT_MS = 15_000
+
 /** Everything JumpCloud's apps server offers; offline_access keeps the user connected. */
 const SCOPE = 'openid profile email offline_access organization userconsole'
 
@@ -65,6 +71,8 @@ export interface PortalAppsDeps {
   fetchLogo(url: string): Promise<string | null>
   onState(state: AppsState): void
   onError?(message: string, error?: unknown): void
+  /** Tests make it short. */
+  launchTimeoutMs?: number
 }
 
 interface Saved {
@@ -183,6 +191,11 @@ export class PortalApps {
   private loadedOnce = false
   /** Logos already fetched, by address, so a refresh doesn't download them all again. */
   private readonly logos = new Map<string, string>()
+  /**
+   * The launch tool's argument for the app ID, once known (null: the server has no launch tool).
+   * Remembered so opening an app is one request to JumpCloud, not two.
+   */
+  private launchArgument: string | null | undefined
 
   constructor(private readonly deps: PortalAppsDeps) {
     this.auth = new SavedAuth(deps.appName, deps.redirectPort, deps.store)
@@ -246,11 +259,18 @@ export class PortalApps {
     this.listener?.close()
   }
 
-  /** Opens the app in the browser through its sign-in link. False if there's no link for it. */
+  /**
+   * Opens the app in the browser through its sign-in link. False if there's no link for it. If
+   * JumpCloud is slow to give the link, the one from the list is used instead.
+   */
   async open(id: string): Promise<boolean> {
     const app = this.apps.find((a) => a.id === id)
     if (!app) return false
-    const url = (await this.launchUrl(app).catch(() => null)) ?? app.launchUrl
+    const launched = await withTimeout(
+      this.launchUrl(app).catch(() => null),
+      this.deps.launchTimeoutMs ?? LAUNCH_TIMEOUT_MS,
+    )
+    const url = launched ?? app.launchUrl
     if (!url) return false
     await this.deps.openBrowser(url)
     return true
@@ -308,10 +328,13 @@ export class PortalApps {
 
   private async launchUrl(app: PortalAppInfo): Promise<string | null> {
     await this.loaded
-    this.session ??= await this.deps.connector.connect(this.auth)
-    const tool = (await this.session.listTools()).find((t) => t.name === LAUNCH_TOOL)
-    if (!tool) return null
-    const result = await this.call(LAUNCH_TOOL, { [idArgumentName(tool.inputSchema)]: app.id })
+    if (this.launchArgument === undefined) {
+      this.session ??= await this.deps.connector.connect(this.auth)
+      const tool = (await this.session.listTools()).find((t) => t.name === LAUNCH_TOOL)
+      this.launchArgument = tool ? idArgumentName(tool.inputSchema) : null
+    }
+    if (this.launchArgument === null) return null
+    const result = await this.call(LAUNCH_TOOL, { [this.launchArgument]: app.id })
     return findLaunchUrl(result)
   }
 
@@ -341,6 +364,17 @@ export class PortalApps {
     this.deps.onState(state)
     return state
   }
+}
+
+/** The promise's value, or null if it takes longer than `ms`. */
+function withTimeout<T>(promise: Promise<T | null>, ms: number): Promise<T | null> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(null), ms)
+    void promise.then((value) => {
+      clearTimeout(timer)
+      resolve(value)
+    })
+  })
 }
 
 /** A plain-English reason for the panel. */

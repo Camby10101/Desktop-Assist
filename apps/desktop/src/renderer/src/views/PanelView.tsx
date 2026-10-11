@@ -62,6 +62,7 @@ function Panel({ state }: { state: AppState }) {
   const { startPage } = branding
   const [view, setView] = useState<StartPage>(startPage)
   const [apps, setApps] = useState<AppsState>({ status: 'loading' })
+  const [openingApp, setOpeningApp] = useState<string | null>(null)
   /** Claude Desktop isn't installed, so questions can't be opened in it (checked on opening). */
   const [claudeMissing, setClaudeMissing] = useState(false)
   const [toast, showToast] = useToast()
@@ -179,9 +180,15 @@ function Panel({ state }: { state: AppState }) {
   }
 
   async function openApp(app: PortalApp) {
-    // On success the main process closes the panel; the browser opens the app.
-    if (!(await window.assist.apps.open(app.id))) {
-      showToast(`Couldn't open ${app.name}. Try it from the portal.`, 'error')
+    // The tile spins until the browser is opening (JumpCloud can take a few seconds to give the
+    // sign-in link); on success the main process closes the panel.
+    setOpeningApp(app.id)
+    try {
+      if (!(await window.assist.apps.open(app.id))) {
+        showToast(`Couldn't open ${app.name}. Try it from the portal.`, 'error')
+      }
+    } finally {
+      setOpeningApp((current) => (current === app.id ? null : current))
     }
   }
 
@@ -322,6 +329,7 @@ function Panel({ state }: { state: AppState }) {
               favorites={settings.favoriteApps}
               onToggleFavorite={(app, favorite) => void toggleFavorite(app, favorite)}
               onOpenApp={(app) => void openApp(app)}
+              openingId={openingApp}
               onOpenPortal={() => void window.assist.apps.openPortal()}
               onSignIn={() => void window.assist.apps.signIn()}
               onCancelSignIn={() => void window.assist.apps.cancelSignIn()}

@@ -59,7 +59,9 @@ No token ever reaches the page: it only sees the list's state and the apps' name
    when it's done.
 3. **Opening an app**: a click → `Panel.openApp()` → IPC `assist:apps-open` with the app's ID →
    `PortalApps.open()` calls `launch_application` for that app, takes the sign-in link from the
-   answer, and opens it in the browser; the panel closes.
+   answer, and opens it in the browser; the panel closes. JumpCloud can take a few seconds, so
+   meanwhile a spinner turns over the app's logo. If it takes more than 15 seconds, the link the
+   list itself gave is used instead.
 4. **Favourites**: the star on a tile → `Panel.toggleFavorite()` →
    `window.assist.settings.setFavoriteApp()` saves the app's ID with the user's preferences
    (`favoriteApps` in `preferences.json`). The list shows starred apps first (`orderApps()` in
@@ -433,17 +435,23 @@ and logo fetching all come in through `PortalAppsDeps`, so `tests/portalApps.tes
 against a fake portal. `start()` in `index.ts` creates the one instance when the tenant has a
 `portal`, and `registerApps()` in `ipc.ts` calls it.
 
-### `LIST_TOOL`, `LAUNCH_TOOL` and `SCOPE`
+### `LIST_TOOL`, `LAUNCH_TOOL`, `LAUNCH_TIMEOUT_MS` and `SCOPE`
 
-<!-- code: apps/desktop/src/main/apps/PortalApps.ts#LIST_TOOL,LAUNCH_TOOL,SCOPE -->
+<!-- code: apps/desktop/src/main/apps/PortalApps.ts#LIST_TOOL,LAUNCH_TOOL,LAUNCH_TIMEOUT_MS,SCOPE -->
 
-[`src/main/apps/PortalApps.ts`, lines 19–24](../../apps/desktop/src/main/apps/PortalApps.ts#L19-L24)
+[`src/main/apps/PortalApps.ts`, lines 19–30](../../apps/desktop/src/main/apps/PortalApps.ts#L19-L30)
 
 ```ts
 /** The portal's tools, from JumpCloud's MCP Server for Users. */
 export const LIST_TOOL = 'list_applications'
 
 export const LAUNCH_TOOL = 'launch_application'
+
+/**
+ * How long opening an app waits for JumpCloud's sign-in link before using the link the list gave
+ * (so the spinner on the tile can't go on for ever).
+ */
+export const LAUNCH_TIMEOUT_MS = 15_000
 
 /** Everything JumpCloud's apps server offers; offline_access keeps the user connected. */
 const SCOPE = 'openid profile email offline_access organization userconsole'
@@ -453,6 +461,9 @@ const SCOPE = 'openid profile email offline_access organization userconsole'
 
 - `LIST_TOOL`, `LAUNCH_TOOL`: the names of the two tools used, from JumpCloud's documentation of
   the server.
+- `LAUNCH_TIMEOUT_MS = 15_000`: how long opening an app waits for `launch_application` before
+  falling back on the link from the list, so, as the comment says, the spinner on the tile can't
+  turn for ever.
 - `SCOPE`: what the app asks to be allowed to do when the user connects. As the comment says, it's
   everything the apps server offers: the user's identity (`openid profile email`), `organization`
   and `userconsole`, and `offline_access`, which asks for a refresh token, so the user doesn't have
@@ -462,7 +473,7 @@ const SCOPE = 'openid profile email offline_access organization userconsole'
 
 <!-- code: apps/desktop/src/main/apps/PortalApps.ts#McpSession,NeedsSignInError,McpConnector -->
 
-[`src/main/apps/PortalApps.ts`, lines 26–50](../../apps/desktop/src/main/apps/PortalApps.ts#L26-L50)
+[`src/main/apps/PortalApps.ts`, lines 32–56](../../apps/desktop/src/main/apps/PortalApps.ts#L32-L56)
 
 ```ts
 /** A connection to the apps server, signed in as the user. */
@@ -511,7 +522,7 @@ the tests use fakes.
 
 <!-- code: apps/desktop/src/main/apps/PortalApps.ts#PortalAppsDeps,Saved -->
 
-[`src/main/apps/PortalApps.ts`, lines 52–73](../../apps/desktop/src/main/apps/PortalApps.ts#L52-L73)
+[`src/main/apps/PortalApps.ts`, lines 58–81](../../apps/desktop/src/main/apps/PortalApps.ts#L58-L81)
 
 ```ts
 export interface PortalAppsDeps {
@@ -530,6 +541,8 @@ export interface PortalAppsDeps {
   fetchLogo(url: string): Promise<string | null>
   onState(state: AppsState): void
   onError?(message: string, error?: unknown): void
+  /** Tests make it short. */
+  launchTimeoutMs?: number
 }
 
 interface Saved {
@@ -549,6 +562,7 @@ the real ones (see [Main process: startup, IPC and app plumbing](2-main-startup.
 - `listen(port)`: starts the local web server for the browser to come back to.
 - `onState(state)`: called on every change of the list's state; `index.ts` broadcasts it.
 - `onError?(message, error?)`: a line for the problem log.
+- `launchTimeoutMs?`: replaces `LAUNCH_TIMEOUT_MS`, so the tests don't have to wait 15 seconds.
 - `Saved`: what goes in the file: the app's registration with JumpCloud (`client`) and the user's
   tokens. Both are optional, since either may not exist yet.
 
@@ -556,7 +570,7 @@ the real ones (see [Main process: startup, IPC and app plumbing](2-main-startup.
 
 <!-- code: apps/desktop/src/main/apps/PortalApps.ts#SavedAuth.class -->
 
-[`src/main/apps/PortalApps.ts`, lines 75–80](../../apps/desktop/src/main/apps/PortalApps.ts#L75-L80)
+[`src/main/apps/PortalApps.ts`, lines 83–88](../../apps/desktop/src/main/apps/PortalApps.ts#L83-L88)
 
 ```ts
 /**
@@ -584,7 +598,7 @@ list can't pop up a browser window; only the Sign in button does, through `Porta
 
 <!-- code: apps/desktop/src/main/apps/PortalApps.ts#SavedAuth.saved,verifier,expectedState,authorizationUrl,constructor,load -->
 
-[`src/main/apps/PortalApps.ts`, lines 81–100](../../apps/desktop/src/main/apps/PortalApps.ts#L81-L100)
+[`src/main/apps/PortalApps.ts`, lines 89–108](../../apps/desktop/src/main/apps/PortalApps.ts#L89-L108)
 
 ```ts
 private saved: Saved = {}
@@ -627,7 +641,7 @@ async load(): Promise<void> {
 
 <!-- code: apps/desktop/src/main/apps/PortalApps.ts#SavedAuth.redirectUrl,clientMetadata -->
 
-[`src/main/apps/PortalApps.ts`, lines 102–115](../../apps/desktop/src/main/apps/PortalApps.ts#L102-L115)
+[`src/main/apps/PortalApps.ts`, lines 110–123](../../apps/desktop/src/main/apps/PortalApps.ts#L110-L123)
 
 ```ts
 get redirectUrl(): string {
@@ -661,7 +675,7 @@ What the app registers as. Both are _getters_, read like fields.
 
 <!-- code: apps/desktop/src/main/apps/PortalApps.ts#SavedAuth.state,isExpectedState -->
 
-[`src/main/apps/PortalApps.ts`, lines 117–125](../../apps/desktop/src/main/apps/PortalApps.ts#L117-L125)
+[`src/main/apps/PortalApps.ts`, lines 125–133](../../apps/desktop/src/main/apps/PortalApps.ts#L125-L133)
 
 ```ts
 state(): string {
@@ -689,7 +703,7 @@ browser came back from the sign-in this app started, not a link someone else sen
 
 <!-- code: apps/desktop/src/main/apps/PortalApps.ts#SavedAuth.clientInformation,saveClientInformation,tokens,saveTokens -->
 
-[`src/main/apps/PortalApps.ts`, lines 127–143](../../apps/desktop/src/main/apps/PortalApps.ts#L127-L143)
+[`src/main/apps/PortalApps.ts`, lines 135–151](../../apps/desktop/src/main/apps/PortalApps.ts#L135-L151)
 
 ```ts
 clientInformation(): OAuthClientInformationMixed | undefined {
@@ -721,7 +735,7 @@ token isn't lost if the app quits.
 
 <!-- code: apps/desktop/src/main/apps/PortalApps.ts#SavedAuth.redirectToAuthorization,saveCodeVerifier,codeVerifier -->
 
-[`src/main/apps/PortalApps.ts`, lines 145–155](../../apps/desktop/src/main/apps/PortalApps.ts#L145-L155)
+[`src/main/apps/PortalApps.ts`, lines 153–163](../../apps/desktop/src/main/apps/PortalApps.ts#L153-L163)
 
 ```ts
 redirectToAuthorization(authorizationUrl: URL): void {
@@ -748,7 +762,7 @@ codeVerifier(): string {
 
 <!-- code: apps/desktop/src/main/apps/PortalApps.ts#SavedAuth.invalidateCredentials,persist -->
 
-[`src/main/apps/PortalApps.ts`, lines 157–167](../../apps/desktop/src/main/apps/PortalApps.ts#L157-L167)
+[`src/main/apps/PortalApps.ts`, lines 165–175](../../apps/desktop/src/main/apps/PortalApps.ts#L165-L175)
 
 ```ts
 async invalidateCredentials(scope: 'all' | 'client' | 'tokens' | 'verifier' | 'discovery') {
@@ -776,7 +790,7 @@ private async persist(): Promise<void> {
 
 <!-- code: apps/desktop/src/main/apps/PortalApps.ts#PortalApps.class -->
 
-[`src/main/apps/PortalApps.ts`, lines 170–175](../../apps/desktop/src/main/apps/PortalApps.ts#L170-L175)
+[`src/main/apps/PortalApps.ts`, lines 178–183](../../apps/desktop/src/main/apps/PortalApps.ts#L178-L183)
 
 ```ts
 /**
@@ -795,9 +809,9 @@ The class `index.ts` and `ipc.ts` use, with the comment that sums it up.
 
 ### `PortalApps` fields, constructor and `current`
 
-<!-- code: apps/desktop/src/main/apps/PortalApps.ts#PortalApps.state,apps,auth,loaded,session,loading,listener,loadedOnce,logos,constructor,current -->
+<!-- code: apps/desktop/src/main/apps/PortalApps.ts#PortalApps.state,apps,auth,loaded,session,loading,listener,loadedOnce,logos,launchArgument,constructor,current -->
 
-[`src/main/apps/PortalApps.ts`, lines 176–194](../../apps/desktop/src/main/apps/PortalApps.ts#L176-L194)
+[`src/main/apps/PortalApps.ts`, lines 184–207](../../apps/desktop/src/main/apps/PortalApps.ts#L184-L207)
 
 ```ts
 private state: AppsState = { status: 'loading' }
@@ -818,6 +832,12 @@ private loadedOnce = false
 
 /** Logos already fetched, by address, so a refresh doesn't download them all again. */
 private readonly logos = new Map<string, string>()
+
+/**
+ * The launch tool's argument for the app ID, once known (null: the server has no launch tool).
+ * Remembered so opening an app is one request to JumpCloud, not two.
+ */
+private launchArgument: string | null | undefined
 
 constructor(private readonly deps: PortalAppsDeps) {
   this.auth = new SavedAuth(deps.appName, deps.redirectPort, deps.store)
@@ -842,13 +862,16 @@ get current(): AppsState {
 - `listener`: the local web server while a sign-in is waiting for the browser.
 - `loadedOnce`: whether the list has been loaded (or found to need a sign-in) at least once.
 - `logos`: the logos already fetched, by address, as the comment says (see `logo()` below).
+- `launchArgument: string | null | undefined`: the name of the launch tool's ID argument, found the
+  first time an app is opened (see `launchUrl()` below). Three states: `undefined` means "not
+  looked up yet", `null` "the server has no launch tool", and a string the name itself.
 - `get current()`: the state as it is now, for the tests.
 
 ### `PortalApps.get()`
 
 <!-- code: apps/desktop/src/main/apps/PortalApps.ts#PortalApps.get -->
 
-[`src/main/apps/PortalApps.ts`, lines 196–201](../../apps/desktop/src/main/apps/PortalApps.ts#L196-L201)
+[`src/main/apps/PortalApps.ts`, lines 209–214](../../apps/desktop/src/main/apps/PortalApps.ts#L209-L214)
 
 ```ts
 /** The list as it stands, loading it the first time (or again with `refresh`). */
@@ -874,7 +897,7 @@ at startup, to load the list in the background.
 
 <!-- code: apps/desktop/src/main/apps/PortalApps.ts#PortalApps.signIn -->
 
-[`src/main/apps/PortalApps.ts`, lines 203–243](../../apps/desktop/src/main/apps/PortalApps.ts#L203-L243)
+[`src/main/apps/PortalApps.ts`, lines 216–256](../../apps/desktop/src/main/apps/PortalApps.ts#L216-L256)
 
 ```ts
 /** Connects to the portal: the user signs in in the browser, then the list loads. */
@@ -950,18 +973,25 @@ the browser; the page isn't waiting on it, and follows along through the state.
 
 <!-- code: apps/desktop/src/main/apps/PortalApps.ts#PortalApps.cancelSignIn,open,dispose -->
 
-[`src/main/apps/PortalApps.ts`, lines 245–262](../../apps/desktop/src/main/apps/PortalApps.ts#L245-L262)
+[`src/main/apps/PortalApps.ts`, lines 258–282](../../apps/desktop/src/main/apps/PortalApps.ts#L258-L282)
 
 ```ts
 cancelSignIn(): void {
   this.listener?.close()
 }
 
-/** Opens the app in the browser through its sign-in link. False if there's no link for it. */
+/**
+ * Opens the app in the browser through its sign-in link. False if there's no link for it. If
+ * JumpCloud is slow to give the link, the one from the list is used instead.
+ */
 async open(id: string): Promise<boolean> {
   const app = this.apps.find((a) => a.id === id)
   if (!app) return false
-  const url = (await this.launchUrl(app).catch(() => null)) ?? app.launchUrl
+  const launched = await withTimeout(
+    this.launchUrl(app).catch(() => null),
+    this.deps.launchTimeoutMs ?? LAUNCH_TIMEOUT_MS,
+  )
+  const url = launched ?? app.launchUrl
   if (!url) return false
   await this.deps.openBrowser(url)
   return true
@@ -977,15 +1007,17 @@ async dispose(): Promise<void> {
 
 - `cancelSignIn()`: closing the listener makes `signIn()`'s wait end with `SignInCancelledError`.
 - `open(id)`: only an ID from the last list is accepted. The link from `launch_application` is
-  asked for first; if that fails (`.catch(() => null)`), the link the list itself gave is used, if
-  any. With no link at all, `false` lets the panel say so.
+  asked for first, through `withTimeout()` (below): if that fails (`.catch(() => null)`) or takes
+  longer than `LAUNCH_TIMEOUT_MS`, the link the list itself gave (`app.launchUrl`) is used, if
+  any. With no link at all, `false` lets the panel say so. Either way the call ends within about
+  15 seconds, so the tile's spinner always stops.
 - `dispose()`: when the app quits, a waiting sign-in is stopped and the connection closed.
 
 ### `PortalApps.load()` and `PortalApps.fetchList()`
 
 <!-- code: apps/desktop/src/main/apps/PortalApps.ts#PortalApps.load,fetchList -->
 
-[`src/main/apps/PortalApps.ts`, lines 264–291](../../apps/desktop/src/main/apps/PortalApps.ts#L264-L291)
+[`src/main/apps/PortalApps.ts`, lines 284–311](../../apps/desktop/src/main/apps/PortalApps.ts#L284-L311)
 
 ```ts
 private load(): Promise<AppsState> {
@@ -1037,7 +1069,7 @@ private async fetchList(): Promise<AppsState> {
 
 <!-- code: apps/desktop/src/main/apps/PortalApps.ts#PortalApps.call -->
 
-[`src/main/apps/PortalApps.ts`, lines 293–307](../../apps/desktop/src/main/apps/PortalApps.ts#L293-L307)
+[`src/main/apps/PortalApps.ts`, lines 313–327](../../apps/desktop/src/main/apps/PortalApps.ts#L313-L327)
 
 ```ts
 /** Calls a tool, connecting first if needed and once more if the connection has gone stale. */
@@ -1074,15 +1106,18 @@ Calls a tool, connecting first if there's no open session.
 
 <!-- code: apps/desktop/src/main/apps/PortalApps.ts#PortalApps.launchUrl,withLogos,logo -->
 
-[`src/main/apps/PortalApps.ts`, lines 309–331](../../apps/desktop/src/main/apps/PortalApps.ts#L309-L331)
+[`src/main/apps/PortalApps.ts`, lines 329–354](../../apps/desktop/src/main/apps/PortalApps.ts#L329-L354)
 
 ```ts
 private async launchUrl(app: PortalAppInfo): Promise<string | null> {
   await this.loaded
-  this.session ??= await this.deps.connector.connect(this.auth)
-  const tool = (await this.session.listTools()).find((t) => t.name === LAUNCH_TOOL)
-  if (!tool) return null
-  const result = await this.call(LAUNCH_TOOL, { [idArgumentName(tool.inputSchema)]: app.id })
+  if (this.launchArgument === undefined) {
+    this.session ??= await this.deps.connector.connect(this.auth)
+    const tool = (await this.session.listTools()).find((t) => t.name === LAUNCH_TOOL)
+    this.launchArgument = tool ? idArgumentName(tool.inputSchema) : null
+  }
+  if (this.launchArgument === null) return null
+  const result = await this.call(LAUNCH_TOOL, { [this.launchArgument]: app.id })
   return findLaunchUrl(result)
 }
 
@@ -1104,10 +1139,13 @@ private async logo(url: string | null): Promise<string | null> {
 
 <!-- /code -->
 
-- `(await this.session.listTools()).find((t) => t.name === LAUNCH_TOOL)`: the launch tool's
-  description, for its argument name. A server without the tool means no link this way.
-- `{ [idArgumentName(tool.inputSchema)]: app.id }`: the arguments object, with the ID under the
-  name the tool's schema uses. `[...]` in an object literal computes the field's name.
+- `if (this.launchArgument === undefined) {`: only the first time. The server's list of tools
+  (`listTools()`) gives the launch tool's description, and its schema the name of the ID argument.
+  It's remembered, so every later open is a single request to JumpCloud instead of two.
+- `this.launchArgument = tool ? idArgumentName(tool.inputSchema) : null`: `null` when the server
+  has no launch tool; then `return null`, and `open()` uses the list's own link.
+- `{ [this.launchArgument]: app.id }`: the arguments object, with the ID under the name the tool's
+  schema uses. `[...]` in an object literal computes the field's name.
 - `withLogos(apps)`: gets every logo at the same time (`Promise.all`); one that fails is `null`,
   and the list shows the app's first letter instead. Only `id`, `name` and `logo` go into the
   result, which is what the page receives.
@@ -1120,7 +1158,7 @@ private async logo(url: string | null): Promise<string | null> {
 
 <!-- code: apps/desktop/src/main/apps/PortalApps.ts#PortalApps.closeSession,setState -->
 
-[`src/main/apps/PortalApps.ts`, lines 333–343](../../apps/desktop/src/main/apps/PortalApps.ts#L333-L343)
+[`src/main/apps/PortalApps.ts`, lines 356–366](../../apps/desktop/src/main/apps/PortalApps.ts#L356-L366)
 
 ```ts
 private async closeSession(): Promise<void> {
@@ -1143,11 +1181,44 @@ private setState(state: AppsState): AppsState {
 - `setState(state)`: records the new state, reports it (`onState`), and returns it, so
   `fetchList()` can `return this.setState(...)`.
 
+### `withTimeout()`
+
+<!-- code: apps/desktop/src/main/apps/PortalApps.ts#withTimeout -->
+
+[`src/main/apps/PortalApps.ts`, lines 369–378](../../apps/desktop/src/main/apps/PortalApps.ts#L369-L378)
+
+```ts
+/** The promise's value, or null if it takes longer than `ms`. */
+function withTimeout<T>(promise: Promise<T | null>, ms: number): Promise<T | null> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(null), ms)
+    void promise.then((value) => {
+      clearTimeout(timer)
+      resolve(value)
+    })
+  })
+}
+```
+
+<!-- /code -->
+
+The promise's value if it arrives within `ms`, otherwise `null`. `open()` uses it so a slow
+JumpCloud can't keep the user waiting.
+
+- `new Promise((resolve) => {`: a promise this function resolves itself, whichever comes first.
+- `setTimeout(() => resolve(null), ms)`: when the time is up, it resolves with `null`.
+- `promise.then((value) => { clearTimeout(timer); resolve(value) })`: if the value comes first,
+  the timer is cancelled and the value passed on. A promise resolves only once, so whichever
+  happens second changes nothing. The slow request isn't cancelled; its late answer is just
+  ignored.
+- `promise: Promise<T | null>`: the promise must not fail, since nothing here catches an error;
+  `open()` passes one with `.catch(() => null)` already on it.
+
 ### `friendlyError()`
 
 <!-- code: apps/desktop/src/main/apps/PortalApps.ts#friendlyError -->
 
-[`src/main/apps/PortalApps.ts`, lines 346–357](../../apps/desktop/src/main/apps/PortalApps.ts#L346-L357)
+[`src/main/apps/PortalApps.ts`, lines 380–391](../../apps/desktop/src/main/apps/PortalApps.ts#L380-L391)
 
 ```ts
 /** A plain-English reason for the panel. */
@@ -1375,7 +1446,7 @@ With more than 8 apps, a search box appears above them. Fewer fit on screen at a
 
 <!-- code: apps/desktop/src/renderer/src/components/AppsList.tsx#AppsList -->
 
-[`src/renderer/src/components/AppsList.tsx`, lines 10–188](../../apps/desktop/src/renderer/src/components/AppsList.tsx#L10-L188)
+[`src/renderer/src/components/AppsList.tsx`, lines 10–206](../../apps/desktop/src/renderer/src/components/AppsList.tsx#L10-L206)
 
 ```tsx
 /**
@@ -1392,6 +1463,8 @@ export function AppsList(props: {
   favorites: string[]
   onToggleFavorite: (app: PortalApp, favorite: boolean) => void
   onOpenApp: (app: PortalApp) => void
+  /** The app being opened (its tile shows a spinner until the browser is opening), or null. */
+  openingId: string | null
   onOpenPortal: () => void
   onSignIn: () => void
   onCancelSignIn: () => void
@@ -1510,9 +1583,25 @@ export function AppsList(props: {
                       type="button"
                       onClick={() => props.onOpenApp(app)}
                       title={`Open ${app.name}`}
+                      aria-busy={props.openingId === app.id}
                       className="flex w-full flex-col items-center gap-1.5 rounded-xl px-1 py-2 text-center hover:bg-zinc-100 dark:hover:bg-zinc-800"
                     >
-                      <AppLogo app={app} />
+                      <span className="relative">
+                        <AppLogo app={app} />
+                        {props.openingId === app.id && (
+                          <span
+                            role="status"
+                            aria-label={`Opening ${app.name}`}
+                            className="absolute inset-0 grid place-items-center rounded-lg bg-white/75 dark:bg-zinc-900/75"
+                          >
+                            <LoaderCircle
+                              size={22}
+                              className="animate-spin text-accent dark:text-accent-soft"
+                              aria-hidden
+                            />
+                          </span>
+                        )}
+                      </span>
                       <span className="line-clamp-2 text-[11px] leading-tight">{app.name}</span>
                     </button>
                     <button
@@ -1589,7 +1678,18 @@ bottom, always there.
   in the page, the app and its star. A button can't contain another, and a click on the star
   mustn't open the app. `relative` lets the star be placed over the tile; `group/tile` names the
   tile as a _group_, so the star can react to the pointer being anywhere on the tile.
+- `openingId`: the app being opened, or `null`. `Panel` sets it while the main process gets the
+  app's sign-in link, which can take a few seconds.
 - `onClick={() => props.onOpenApp(app)}`: `Panel.openApp` opens it in the browser.
+- `aria-busy={props.openingId === app.id}`: tells screen readers the tile is busy while its app
+  opens.
+- `<span className="relative">`: wraps the logo, so the spinner can be laid over exactly the logo
+  (`absolute inset-0`, the same size).
+- `{props.openingId === app.id && (`: only that app's tile shows the spinner: a `LoaderCircle`
+  turning in the accent colour on a translucent white layer (zinc in dark mode,
+  `bg-white/75 dark:bg-zinc-900/75`), so the logo shows faintly through. `role="status"` with
+  `aria-label` "Opening Slack" is read out by screen readers. It disappears when `Panel` clears
+  `openingId`: as the browser opens, or when opening fails.
 - `onClick={() => props.onToggleFavorite(app, !favorite)}`: stars the app, or takes the star away.
 - `aria-pressed={favorite}`, `aria-label`: for screen readers, a toggle button that's on or off,
   named "Add Slack to favourites" or "Remove Slack from favourites". `title` gives the shorter
@@ -1609,7 +1709,7 @@ bottom, always there.
 
 <!-- code: apps/desktop/src/renderer/src/components/AppsList.tsx#AppLogo,Message -->
 
-[`src/renderer/src/components/AppsList.tsx`, lines 190–218](../../apps/desktop/src/renderer/src/components/AppsList.tsx#L190-L218)
+[`src/renderer/src/components/AppsList.tsx`, lines 208–236](../../apps/desktop/src/renderer/src/components/AppsList.tsx#L208-L236)
 
 ```tsx
 /** The app's logo, or its first letter on the accent colour when there isn't one. */
@@ -1671,9 +1771,11 @@ fake browser that "signs in" and comes back with a code, and an in-memory store.
 - `orderApps`: starred apps first, each group keeping its order.
 - `PortalApps`: asking to sign in when nobody has connected, without opening the browser;
   signing in through the browser, saving the registration and tokens, then listing the apps with
-  logos; remembering the list until Refresh; opening an app through its launch link; refusing a
-  sign-in that comes back with a `state` it didn't send; Cancel going back to the Sign in
-  button; and keeping the logos it already has, so a refresh doesn't download them again.
+  logos; remembering the list until Refresh; opening an app through its launch link; asking for
+  the launch tool once, so each later open is one request; using the list's own link when
+  JumpCloud is slow (the fake portal's launch can be made slow, and the timeout is cut to 30 ms);
+  refusing a sign-in that comes back with a `state` it didn't send; Cancel going back to the Sign
+  in button; and keeping the logos it already has, so a refresh doesn't download them again.
 - `SavedAuth`: a public client with the loopback redirect; tokens kept across a reload of the
   file; forgetting everything clears the file; and the `state` check.
 

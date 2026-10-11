@@ -2,8 +2,8 @@
 
 Status: **Milestones 0 (Foundation), 1 (Chat with Claude), 2.1 (bubble fixes), 3 (JumpCloud
 sign-in), 4 (logos, favourites, service desk, light/dark, the bubble-click fix) and features 3.1
-(questions open in Claude Desktop) and 3.2 (Apps list, Uninstall, fixes) complete**. Milestone 5
-is next (§8). Last updated 2026-10-09.
+(questions open in Claude Desktop) and 3.2 (Apps list, Uninstall, fixes) complete**. Milestone 5 is
+in progress (§7h). Last updated 2026-10-12.
 
 A Windows desktop assistant that runs in the background, shows a small circular company logo
 in the bottom-right corner of the screen, and opens a panel when clicked. It's built for Morse
@@ -377,6 +377,34 @@ Improvements asked for after trying 3.2 day to day (merged in pull request #6):
 
 Tested with unit tests (226, including recognising images from their bytes, the octet-stream logos, a page of HTML labelled as an image, the favourites order and the logo cache) and end-to-end (44 checks for the Apps list, now including starring an app, the order surviving a restart, unstarring, and the service desk link; the 3.1 (39) and built-in chat (47, 9) runs still pass).
 
+## 7h. Milestone 5 (in progress)
+
+Done so far:
+
+- **A spinner while an app opens**: Clicking an app in the Apps list could seem to do nothing for a few seconds while JumpCloud gives its sign-in link. Now a loading circle spins over that app's logo from the click until the browser is opening (then the panel closes as before). Opening is also quicker: the launch tool's details are remembered, so each open is one request to JumpCloud instead of two. If JumpCloud takes more than 15 s, the sign-in link the list itself gave is used, so the spinner can't go on for ever. Tested with unit tests (the single request, the slow-JumpCloud fallback) and end-to-end against a stand-in that takes 1.5 s to answer (53 checks: the tile spins, only that tile, gone once the panel closes).
+
+### Jira and Atlassian: ideas
+
+Staff sign in to Atlassian (morsemicro.atlassian.net) through JumpCloud. Atlassian's remote MCP server (`mcp.atlassian.com`) offers the same kind of per-person connection as JumpCloud's apps server: dynamic client registration, PKCE, a public client with no secret, and refresh tokens. So Desktop Assist could connect each person to Jira and Confluence once, in the browser, where JumpCloud's single sign-on usually makes it an approve click, reusing the Apps list's connection code. An Atlassian admin may need to allow it for the site.
+
+Quick wins, no connection needed:
+
+1. **Report a problem to IT**: the service desk button (or a new one) opens the request form with the problem typed in the bubble, the screenshot copied for Ctrl+V, and the PC's details (Windows version, Desktop Assist version, PC name) added. Whether Jira Service Management can fill the form's fields from a link needs checking; if not, the details go on the clipboard.
+2. **Open a ticket by its key**: typing a key such as `HW-1234` in the text box offers **Open in Jira**.
+3. **Ask Claude about a ticket**: quick prompts such as "Summarise HW-1234" or "Draft a reply to HW-1234", handed to Claude Desktop, whose own Atlassian connector (if the organisation turns it on) reads the ticket.
+4. **Search Jira and Confluence** from the bubble, opening Atlassian's search page with the words.
+
+With a per-person Atlassian connection:
+
+5. **My work**: the Jira issues assigned to the person, by priority and recent change, opened with a click; a dot on the bubble when something new is assigned or they're mentioned.
+6. **My IT requests**: the status of their service desk tickets, with a notification when IT replies or resolves one.
+7. **Raise a ticket from the panel**: choose the request type, describe it, attach the screenshot, without opening the browser.
+8. **Quick actions on an issue**: move it to In Progress or Done, comment, or log time from the panel.
+9. **Company knowledge**: search Confluence from the bubble, and show matching IT how-to articles before a ticket is raised ("These might fix it").
+10. **Stand-up helper**: what the person updated yesterday, handed to Claude to draft their stand-up.
+
+Suggested order: 1 and 2 first (small, useful every day, no new sign-in), then the Atlassian connection with 5 and 6.
+
 ## 8. Milestones
 
 - **0** ✅ **Foundation**: Everything in §7 works in `npm run dev` and in the unsigned installer. Unit tests and lint pass.
@@ -386,7 +414,7 @@ Tested with unit tests (226, including recognising images from their bytes, the 
 - **3.1** ✅ **Each person's own Claude**: Questions open in Claude Desktop, against each person's own usage limit. See §7e.
 - **3.2** ✅ **Apps list, Uninstall, fixes**: The user's JumpCloud portal apps in the panel; Uninstall in Settings; the bubble, notification and auto-send fixes. See §7f.
 - **4** ✅ **Day-to-day improvements**: App logos, favourites, the service desk icon, screenshots keeping the page, the unresponsive bubble fixed, no tooltip, light/dark mode. See §7g.
-- 5 (next): To be chosen. Candidates:
+- 5 (in progress): The app-opening spinner (§7h), with the Jira and Atlassian ideas listed there. Other candidates:
   - Shipping: code signing (no "unrecognised app" warning), auto-update, silent deployment through JumpCloud (with Claude Desktop), CI on GitHub Actions (tests and the installer on every pull request), real version numbers with a "What's new" note
   - Bubble and screenshots: a keyboard shortcut to open the panel and to take a screenshot, snipping a region or a window, pasting an image into the text box, hiding during full-screen apps and presentations, a first-run tour
   - Apps and JumpCloud: recently opened apps near the top, arrow keys in the grid, company quick links that aren't JumpCloud apps, a password-expiry reminder

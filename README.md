@@ -17,7 +17,7 @@ screen and opens a panel when clicked. Built for Morse Micro first. Branding liv
 **Status:** Milestones 0 (Foundation), 1 (Chat with Claude), 2.1 (bubble fixes), 3 (JumpCloud
 sign-in) and 4 (logos, favourites, service desk, light/dark mode, bubble-click fix), and features
 3.1 (questions open in Claude Desktop) and 3.2 (Apps list, Uninstall) are complete. Next is
-Milestone 5 (see [PLAN.md](docs/PLAN.md) §8).
+Milestone 5 is in progress (see [PLAN.md](docs/PLAN.md) §7h).
 
 ## Features
 
@@ -38,7 +38,8 @@ Milestone 5 (see [PLAN.md](docs/PLAN.md) §8).
   Copy. Usage is billed to the company's Claude Console account, through a service account IT
   sets up; there's no API key.
 - **Your apps**: the panel opens on the apps in your JumpCloud User Portal, with their logos.
-  Click one to open it in your browser, signed in through JumpCloud. Star an app (the star on its
+  Click one to open it in your browser, signed in through JumpCloud (a spinner shows on it while
+  it opens). Star an app (the star on its
   logo) to keep it at the top. The first time, **Sign in with JumpCloud** connects Desktop Assist
   to your portal in your browser.
 - **Action icons** above the bubble:
