@@ -437,12 +437,18 @@ tab, as asked). IT's setup guide: [ATLASSIAN_SETUP.md](ATLASSIAN_SETUP.md).
   next where they meet and bouncing off any edge with no monitor beyond it (such as the part of a
   taller monitor's side a shorter one doesn't reach). A click still glides it back to its own
   corner on its own display, wherever it has got to. If a monitor goes mid-bounce, it carries on
-  from the nearest place on the others.
+  from the nearest place on the others. The first version never left the laptop on the user's
+  desk: the ultrawide monitor sits above the laptop with its taskbar along the shared edge, and
+  only the work areas (screens minus taskbars) counted, so that taskbar was a wall. Now a taskbar
+  between two monitors can be crossed (only along the stretch where the other monitor lies
+  beyond it). Checked live on that desk: the bubble went up onto the ultrawide, stayed on screen
+  throughout, and a click brought it back to its corner on the laptop.
 
-  These three are tested with unit tests (266 in all now: going back through the screenshots one
-  click at a time, crossing between monitors, the walls where only one monitor reaches, roaming two
-  monitors without leaving them, a monitor going mid-bounce) and end-to-end (attaching twice, the
-  placeholder, Bounce and its glide home on the real screen).
+  These three are tested with unit tests (271 in all now: going back through the screenshots one
+  click at a time, crossing between monitors, over a taskbar between stacked monitors, the walls
+  where only one monitor reaches, roaming two monitors without leaving them, a monitor going
+  mid-bounce) and end-to-end (attaching twice, the placeholder, and Bounce onto the other monitor
+  and home again on the real screens: 10 checks).
 
 Found along the way: Atlassian's Rovo search (`search`) uses Rovo credits, so Desktop Assist only
 uses the Jira (JQL) and Confluence (CQL) searches; Jira can find mentions of the user with

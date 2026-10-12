@@ -69,7 +69,7 @@ bounce can be checked in milliseconds without opening a window.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#Surface,PanelSurface -->
 
-[`src/main/bubble/BubbleController.ts`, lines 6–15](../../apps/desktop/src/main/bubble/BubbleController.ts#L6-L15)
+[`src/main/bubble/BubbleController.ts`, lines 12–21](../../apps/desktop/src/main/bubble/BubbleController.ts#L12-L21)
 
 ```ts
 /** The parts of a window the controller drives. Electron windows are adapted in windows.ts. */
@@ -99,12 +99,13 @@ What the controller needs from a window, and nothing more.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#DisplayArea,Displays -->
 
-[`src/main/bubble/BubbleController.ts`, lines 17–33](../../apps/desktop/src/main/bubble/BubbleController.ts#L17-L33)
+[`src/main/bubble/BubbleController.ts`, lines 23–40](../../apps/desktop/src/main/bubble/BubbleController.ts#L23-L40)
 
 ```ts
-/** One display: its id and work area (the screen minus the taskbar). */
+/** One display: its id, its whole screen, and its work area (the screen minus the taskbar). */
 export interface DisplayArea {
   id: number
+  bounds: Rect
   workArea: Rect
 }
 
@@ -123,9 +124,10 @@ export interface Displays {
 
 <!-- /code -->
 
-The controller's view of the monitors. Each display has an id (a number Electron assigns) and a
-_work area_: the part of the screen that windows may use, which is the screen minus the taskbar.
-The bubble rests inside the work area, so it never sits on top of the taskbar.
+The controller's view of the monitors. Each display has an id (a number Electron assigns), its
+`bounds` (the whole screen) and a _work area_: the part of the screen that windows may use, which
+is the screen minus the taskbar. The bubble rests inside the work area, so it never sits on top of
+the taskbar. The bounds are only needed for Bounce, to find taskbars that lie between two monitors.
 
 All coordinates are DIPs (device-independent pixels). Windows scales the desktop up on high-DPI
 screens: at 150 % scaling, a 1920×1080 monitor is 1280×720 DIPs. Electron's window and screen
@@ -152,7 +154,7 @@ In `index.ts`, `electronDisplays` implements these five with Electron's `screen`
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleAnchor -->
 
-[`src/main/bubble/BubbleController.ts`, lines 35–39](../../apps/desktop/src/main/bubble/BubbleController.ts#L35-L39)
+[`src/main/bubble/BubbleController.ts`, lines 42–46](../../apps/desktop/src/main/bubble/BubbleController.ts#L42-L46)
 
 ```ts
 /** Where the bubble rests: a corner of a particular display. */
@@ -174,7 +176,7 @@ taskbar has changed since. Whenever the anchor changes, `index.ts` saves it to `
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleControllerDeps -->
 
-[`src/main/bubble/BubbleController.ts`, lines 41–55](../../apps/desktop/src/main/bubble/BubbleController.ts#L41-L55)
+[`src/main/bubble/BubbleController.ts`, lines 48–62](../../apps/desktop/src/main/bubble/BubbleController.ts#L48-L62)
 
 ```ts
 export interface BubbleControllerDeps {
@@ -220,7 +222,7 @@ Everything the constructor needs, passed as one object (its _dependencies_).
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#FRAME_MS,DEFAULT_CORNER,PANEL_FADE_MS,BLUR_CLICK_GRACE_MS,PRESS_SLACK_MS,OPEN_BLUR_GRACE_MS,HIDE_SETTLE_MS -->
 
-[`src/main/bubble/BubbleController.ts`, lines 57–77](../../apps/desktop/src/main/bubble/BubbleController.ts#L57-L77)
+[`src/main/bubble/BubbleController.ts`, lines 64–84](../../apps/desktop/src/main/bubble/BubbleController.ts#L64-L84)
 
 ```ts
 const FRAME_MS = 16
@@ -274,7 +276,7 @@ The class, with the comment that describes it:
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.class -->
 
-[`src/main/bubble/BubbleController.ts`, lines 79–88](../../apps/desktop/src/main/bubble/BubbleController.ts#L79-L88)
+[`src/main/bubble/BubbleController.ts`, lines 86–95](../../apps/desktop/src/main/bubble/BubbleController.ts#L86-L95)
 
 ```ts
 /**
@@ -298,7 +300,7 @@ long version. These are the class's fields:
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.mode,position,anchor,motion,ticker,hideTimer,lastBlurCollapse,expandedAt,expandAfterReturn,now,random -->
 
-[`src/main/bubble/BubbleController.ts`, lines 89–99](../../apps/desktop/src/main/bubble/BubbleController.ts#L89-L99)
+[`src/main/bubble/BubbleController.ts`, lines 96–106](../../apps/desktop/src/main/bubble/BubbleController.ts#L96-L106)
 
 ```ts
 private mode: Mode = 'collapsed'
@@ -354,7 +356,7 @@ private readonly random: () => number
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.constructor -->
 
-[`src/main/bubble/BubbleController.ts`, lines 101–112](../../apps/desktop/src/main/bubble/BubbleController.ts#L101-L112)
+[`src/main/bubble/BubbleController.ts`, lines 108–119](../../apps/desktop/src/main/bubble/BubbleController.ts#L108-L119)
 
 ```ts
 constructor(private readonly deps: BubbleControllerDeps) {
@@ -402,7 +404,7 @@ appears on screen until `start()`.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.currentMode,bubblePosition,corner -->
 
-[`src/main/bubble/BubbleController.ts`, lines 114–124](../../apps/desktop/src/main/bubble/BubbleController.ts#L114-L124)
+[`src/main/bubble/BubbleController.ts`, lines 121–131](../../apps/desktop/src/main/bubble/BubbleController.ts#L121-L131)
 
 ```ts
 get currentMode(): Mode {
@@ -431,7 +433,7 @@ a page that has just loaded learns the current state.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.start -->
 
-[`src/main/bubble/BubbleController.ts`, lines 126–131](../../apps/desktop/src/main/bubble/BubbleController.ts#L126-L131)
+[`src/main/bubble/BubbleController.ts`, lines 133–138](../../apps/desktop/src/main/bubble/BubbleController.ts#L133-L138)
 
 ```ts
 /** Puts the bubble in its saved corner (or bottom-right of the main display) and shows it. */
@@ -458,7 +460,7 @@ anchor was already chosen in the constructor; this just puts the windows there.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.clickBubble -->
 
-[`src/main/bubble/BubbleController.ts`, lines 133–157](../../apps/desktop/src/main/bubble/BubbleController.ts#L133-L157)
+[`src/main/bubble/BubbleController.ts`, lines 140–164](../../apps/desktop/src/main/bubble/BubbleController.ts#L140-L164)
 
 ```ts
 /** A click on the bubble. `pressedAt` is when its mouse button went down (wall-clock ms). */
@@ -524,7 +526,7 @@ which knows the mode and when the panel last closed.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.expand -->
 
-[`src/main/bubble/BubbleController.ts`, lines 159–183](../../apps/desktop/src/main/bubble/BubbleController.ts#L159-L183)
+[`src/main/bubble/BubbleController.ts`, lines 166–190](../../apps/desktop/src/main/bubble/BubbleController.ts#L166-L190)
 
 ```ts
 /** Opens the panel. While bouncing, glides home first and then opens. */
@@ -577,7 +579,7 @@ the browser, and clicking one of the app's Windows notifications (all in `index.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.collapse -->
 
-[`src/main/bubble/BubbleController.ts`, lines 185–193](../../apps/desktop/src/main/bubble/BubbleController.ts#L185-L193)
+[`src/main/bubble/BubbleController.ts`, lines 192–200](../../apps/desktop/src/main/bubble/BubbleController.ts#L192-L200)
 
 ```ts
 collapse(): void {
@@ -607,7 +609,7 @@ has been handed to Claude Desktop, by `ipc.ts`.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.panelBlurred -->
 
-[`src/main/bubble/BubbleController.ts`, lines 195–203](../../apps/desktop/src/main/bubble/BubbleController.ts#L195-L203)
+[`src/main/bubble/BubbleController.ts`, lines 202–210](../../apps/desktop/src/main/bubble/BubbleController.ts#L202-L210)
 
 ```ts
 panelBlurred(): void {
@@ -640,7 +642,7 @@ behaves like a popup and closes.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.startDrag -->
 
-[`src/main/bubble/BubbleController.ts`, lines 205–217](../../apps/desktop/src/main/bubble/BubbleController.ts#L205-L217)
+[`src/main/bubble/BubbleController.ts`, lines 212–224](../../apps/desktop/src/main/bubble/BubbleController.ts#L212-L224)
 
 ```ts
 /** The mouse pressed on the bubble and moved: the bubble follows the pointer until released. */
@@ -683,7 +685,7 @@ it.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.endDrag -->
 
-[`src/main/bubble/BubbleController.ts`, lines 219–233](../../apps/desktop/src/main/bubble/BubbleController.ts#L219-L233)
+[`src/main/bubble/BubbleController.ts`, lines 226–240](../../apps/desktop/src/main/bubble/BubbleController.ts#L226-L240)
 
 ```ts
 /** Released: snap to the nearest corner of the display the bubble was dropped on. */
@@ -723,7 +725,7 @@ whichever display it was dropped on.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.startBounce -->
 
-[`src/main/bubble/BubbleController.ts`, lines 235–248](../../apps/desktop/src/main/bubble/BubbleController.ts#L235-L248)
+[`src/main/bubble/BubbleController.ts`, lines 242–254](../../apps/desktop/src/main/bubble/BubbleController.ts#L242-L254)
 
 ```ts
 startBounce(): void {
@@ -735,8 +737,7 @@ startBounce(): void {
   this.runTicker((dtMs) => {
     if (!this.motion) return
     // Across every display. The anchor doesn't change, so a click brings it home.
-    const areas = this.deps.displays.all().map((display) => display.workArea)
-    this.motion = step(this.motion, dtMs, areas)
+    this.motion = step(this.motion, dtMs, travelAreas(this.deps.displays.all()))
     this.moveBubble({ x: this.motion.x, y: this.motion.y })
   })
 }
@@ -755,10 +756,10 @@ changes the anchor.
   heading away from the bubble's corner into the screen (`bounce.ts`).
 - `if (!this.motion) return`: mostly for TypeScript. `motion` is typed `Motion | null`, and inside
   the callback TypeScript can't assume it's still set.
-- `this.deps.displays.all().map((display) => display.workArea)`: the work areas of all the
-  displays, read again every frame. If a monitor is unplugged or the resolution or taskbar changes
-  mid-bounce, the bubble carries on within the displays as they are now (`displayChanged()`
-  deliberately leaves a bounce alone).
+- `travelAreas(this.deps.displays.all())`: where the bubble may go: every display's work area,
+  plus any taskbar lying between two displays (`layout.ts`), read again every frame. If a monitor
+  is unplugged or the resolution or taskbar changes mid-bounce, the bubble carries on within the
+  displays as they are now (`displayChanged()` deliberately leaves a bounce alone).
 - `step(this.motion, dtMs,`: moves the bubble by the real time since the last frame.
 - `this.moveBubble(`: moves only the bubble window. The panel is hidden, and is put back next to
   the bubble when it settles.
@@ -767,7 +768,7 @@ changes the anchor.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.whileHidden -->
 
-[`src/main/bubble/BubbleController.ts`, lines 250–266](../../apps/desktop/src/main/bubble/BubbleController.ts#L250-L266)
+[`src/main/bubble/BubbleController.ts`, lines 256–272](../../apps/desktop/src/main/bubble/BubbleController.ts#L256-L272)
 
 ```ts
 /** Hides both windows, runs `task` (a screenshot), then reopens the panel. */
@@ -814,7 +815,7 @@ hidden first and brought back afterwards.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.displayChanged -->
 
-[`src/main/bubble/BubbleController.ts`, lines 268–279](../../apps/desktop/src/main/bubble/BubbleController.ts#L268-L279)
+[`src/main/bubble/BubbleController.ts`, lines 274–285](../../apps/desktop/src/main/bubble/BubbleController.ts#L274-L285)
 
 ```ts
 /**
@@ -854,7 +855,7 @@ display's travel box, so it reappears there.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.dispose -->
 
-[`src/main/bubble/BubbleController.ts`, lines 281–284](../../apps/desktop/src/main/bubble/BubbleController.ts#L281-L284)
+[`src/main/bubble/BubbleController.ts`, lines 287–290](../../apps/desktop/src/main/bubble/BubbleController.ts#L287-L290)
 
 ```ts
 dispose(): void {
@@ -872,7 +873,7 @@ against a window that is being destroyed. The tests call it after each test.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.display,home -->
 
-[`src/main/bubble/BubbleController.ts`, lines 286–293](../../apps/desktop/src/main/bubble/BubbleController.ts#L286-L293)
+[`src/main/bubble/BubbleController.ts`, lines 292–299](../../apps/desktop/src/main/bubble/BubbleController.ts#L292-L299)
 
 ```ts
 /** The anchor's display, or the main display if it's gone. */
@@ -897,7 +898,7 @@ private home(): Point {
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.glideHome -->
 
-[`src/main/bubble/BubbleController.ts`, lines 295–319](../../apps/desktop/src/main/bubble/BubbleController.ts#L295-L319)
+[`src/main/bubble/BubbleController.ts`, lines 301–325](../../apps/desktop/src/main/bubble/BubbleController.ts#L301-L325)
 
 ```ts
 /** Glides the bubble into its anchor corner, then switches to collapsed. */
@@ -950,7 +951,7 @@ Used after a drag (`endDrag()`) and to end a bounce (`clickBubble()`, `expand()`
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.runTicker,stopTicker -->
 
-[`src/main/bubble/BubbleController.ts`, lines 321–334](../../apps/desktop/src/main/bubble/BubbleController.ts#L321-L334)
+[`src/main/bubble/BubbleController.ts`, lines 327–340](../../apps/desktop/src/main/bubble/BubbleController.ts#L327-L340)
 
 ```ts
 private runTicker(onFrame: (dtMs: number) => void): void {
@@ -986,7 +987,7 @@ time.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.moveBubble,placeWindows -->
 
-[`src/main/bubble/BubbleController.ts`, lines 336–346](../../apps/desktop/src/main/bubble/BubbleController.ts#L336-L346)
+[`src/main/bubble/BubbleController.ts`, lines 342–352](../../apps/desktop/src/main/bubble/BubbleController.ts#L342-L352)
 
 ```ts
 private moveBubble(position: Point): void {
@@ -1017,7 +1018,7 @@ private placeWindows(): void {
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.setAnchor,cancelHide,setMode -->
 
-[`src/main/bubble/BubbleController.ts`, lines 348–363](../../apps/desktop/src/main/bubble/BubbleController.ts#L348-L363)
+[`src/main/bubble/BubbleController.ts`, lines 354–369](../../apps/desktop/src/main/bubble/BubbleController.ts#L354-L369)
 
 ```ts
 private setAnchor(anchor: BubbleAnchor): void {
@@ -1151,11 +1152,129 @@ quarter the bubble's centre is in.
 - `` `${top ? 'top' : 'bottom'}-${left ? 'left' : 'right'}` ``: builds the corner's name.
   TypeScript works out that this can only produce the four `Corner` values, so it needs no cast.
 
+### `travelAreas()`
+
+<!-- code: apps/desktop/src/main/bubble/layout.ts#travelAreas -->
+
+[`src/main/bubble/layout.ts`, lines 42–83](../../apps/desktop/src/main/bubble/layout.ts#L42-L83)
+
+```ts
+/**
+ * Where a bouncing bubble may go: every display's work area, plus the parts of a taskbar that lie
+ * between two displays (where a monitor stacked above another has its taskbar along the edge they
+ * share, say), so the bubble can pass over that taskbar from one display to the other. A taskbar
+ * on an outer edge stays a wall.
+ */
+export function travelAreas(displays: { bounds: Rect; workArea: Rect }[]): Rect[] {
+  const areas = displays.map((display) => display.workArea)
+  for (const { bounds: b, workArea: w } of displays) {
+    // The strips of the screen outside its work area (normally just the taskbar's).
+    const strips = [
+      { side: 'top', rect: { x: b.x, y: b.y, width: b.width, height: w.y - b.y } },
+      {
+        side: 'bottom',
+        rect: {
+          x: b.x,
+          y: w.y + w.height,
+          width: b.width,
+          height: b.y + b.height - (w.y + w.height),
+        },
+      },
+      { side: 'left', rect: { x: b.x, y: b.y, width: w.x - b.x, height: b.height } },
+      {
+        side: 'right',
+        rect: {
+          x: w.x + w.width,
+          y: b.y,
+          width: b.x + b.width - (w.x + w.width),
+          height: b.height,
+        },
+      },
+    ].filter((strip) => strip.rect.width > 0 && strip.rect.height > 0)
+    for (const { side, rect } of strips) {
+      for (const { bounds: n } of displays) {
+        if (n === b) continue
+        const bridge = bridgeTo(side, rect, b, n)
+        if (bridge) areas.push(bridge)
+      }
+    }
+  }
+  return areas
+}
+```
+
+<!-- /code -->
+
+Where a bouncing bubble may go, as a list of rectangles. Mostly that's each display's work area, but
+a taskbar can sit right between two monitors: on a laptop with a monitor stacked above it, for
+example, the upper monitor's taskbar runs along the edge they share. Work areas alone would make
+that taskbar a wall the bubble could never get past, so the stretch of it that another display lies
+right beyond is added too. A taskbar on an outer edge, with no display beyond, stays a wall.
+
+- `strips`: the four bands of the screen outside its work area (top, bottom, left and right).
+  Normally only one has any size, the taskbar's; `.filter(...)` drops the empty ones.
+- `if (n === b) continue`: a display isn't its own neighbour.
+- `bridgeTo(side, rect, b, n)`: the part of that band with display `n` right beyond it, if any.
+
+### `bridgeTo()`, `TOUCHING`
+
+<!-- code: apps/desktop/src/main/bubble/layout.ts#TOUCHING,bridgeTo -->
+
+[`src/main/bubble/layout.ts`, lines 85–113](../../apps/desktop/src/main/bubble/layout.ts#L85-L113)
+
+```ts
+/** Edges this close count as touching (scaled displays can be a pixel out). */
+const TOUCHING = 1
+
+/**
+ * The part of `strip` (on `side` of the display with `bounds`) that another display (`other`)
+ * lies right beyond, or null if `other` isn't there.
+ */
+function bridgeTo(side: string, strip: Rect, bounds: Rect, other: Rect): Rect | null {
+  const near = (a: number, b: number) => Math.abs(a - b) <= TOUCHING
+  const vertical = side === 'top' || side === 'bottom'
+  const touching =
+    side === 'top'
+      ? near(other.y + other.height, bounds.y)
+      : side === 'bottom'
+        ? near(other.y, bounds.y + bounds.height)
+        : side === 'left'
+          ? near(other.x + other.width, bounds.x)
+          : near(other.x, bounds.x + bounds.width)
+  if (!touching) return null
+  // Only as far along the edge as the other display reaches.
+  if (vertical) {
+    const from = Math.max(strip.x, other.x)
+    const to = Math.min(strip.x + strip.width, other.x + other.width)
+    return to > from ? { ...strip, x: from, width: to - from } : null
+  }
+  const from = Math.max(strip.y, other.y)
+  const to = Math.min(strip.y + strip.height, other.y + other.height)
+  return to > from ? { ...strip, y: from, height: to - from } : null
+}
+```
+
+<!-- /code -->
+
+The part of a taskbar band that another display lies right beyond. Not exported; `travelAreas()`
+uses it.
+
+- `TOUCHING = 1`: two edges within a pixel of each other count as touching. Windows lays the
+  monitors out in real pixels and Electron converts that to DIPs, so a scaled monitor's edge can
+  come out a fraction of a pixel away from its neighbour's.
+- `touching`: whether `other` starts where this display ends, on the band's side: for a band along
+  the bottom, `other`'s top edge must be at this display's bottom edge, and so on.
+- `Math.max(strip.x, other.x)` and `Math.min(...)`: only as far along the edge as the other display
+  reaches. Past the end of the laptop under a wide monitor, there's nothing below its taskbar, so
+  that part stays a wall.
+- `to > from ? ... : null`: the two don't overlap along the edge at all (they only meet at a
+  corner, say).
+
 ### `travelBox()`
 
 <!-- code: apps/desktop/src/main/bubble/layout.ts#travelBox -->
 
-[`src/main/bubble/layout.ts`, lines 42–50](../../apps/desktop/src/main/bubble/layout.ts#L42-L50)
+[`src/main/bubble/layout.ts`, lines 115–123](../../apps/desktop/src/main/bubble/layout.ts#L115-L123)
 
 ```ts
 /** Every position where the bubble is fully inside the work area. */
@@ -1184,7 +1303,7 @@ off the screen.
 
 <!-- code: apps/desktop/src/main/bubble/layout.ts#bubbleWindowBounds -->
 
-[`src/main/bubble/layout.ts`, lines 52–59](../../apps/desktop/src/main/bubble/layout.ts#L52-L59)
+[`src/main/bubble/layout.ts`, lines 125–132](../../apps/desktop/src/main/bubble/layout.ts#L125-L132)
 
 ```ts
 export function bubbleWindowBounds(bubble: Point): Rect {
@@ -1208,7 +1327,7 @@ The bubble window's rectangle: 8 DIPs up and to the left of the circle, 72×72.
 
 <!-- code: apps/desktop/src/main/bubble/layout.ts#panelWindowBounds -->
 
-[`src/main/bubble/layout.ts`, lines 61–77](../../apps/desktop/src/main/bubble/layout.ts#L61-L77)
+[`src/main/bubble/layout.ts`, lines 134–150](../../apps/desktop/src/main/bubble/layout.ts#L134-L150)
 
 ```ts
 /**
@@ -1342,14 +1461,15 @@ Sets the bubble off: away from the corner it rests in, into the screen, at a ran
 
 <!-- code: apps/desktop/src/main/bubble/bounce.ts#step -->
 
-[`src/main/bubble/bounce.ts`, lines 34–47](../../apps/desktop/src/main/bubble/bounce.ts#L34-L47)
+[`src/main/bubble/bounce.ts`, lines 34–48](../../apps/desktop/src/main/bubble/bounce.ts#L34-L48)
 
 ```ts
 /**
- * Advances the motion by `dtMs` across `areas` (the work areas of all the displays), reflecting
- * off their outer edges. The bubble can be anywhere it's wholly on screen, so it crosses from one
- * display to the next where they meet, and bounces off an edge with no display beyond it (such as
- * the part of a taller monitor's side that a shorter one doesn't reach).
+ * Advances the motion by `dtMs` across `areas` (where the bubble may go: the displays' work areas
+ * and the taskbars between them, from travelAreas()), reflecting off their outer edges. The bubble
+ * can be anywhere it's wholly inside them, so it crosses from one display to the next where they
+ * meet, and bounces off an edge with no display beyond it (such as the part of a taller monitor's
+ * side that a shorter one doesn't reach).
  */
 export function step(motion: Motion, dtMs: number, areas: Rect[]): Motion {
   const dt = Math.min(Math.max(dtMs, 0), MAX_STEP_MS) / 1000
@@ -1365,8 +1485,8 @@ export function step(motion: Motion, dtMs: number, areas: Rect[]): Motion {
 
 Advances one frame: moves by velocity × time on each axis, bouncing off any edge it would have
 crossed. `startBounce()` calls it every frame with the real milliseconds since the last one and
-the work areas of all the displays. Where two monitors meet, the bubble passes from one to the
-other; an edge with no monitor beyond it is a wall.
+the areas from `travelAreas()`. Where two monitors meet, the bubble passes from one to the other
+(over a taskbar between them, if there is one); an edge with no monitor beyond it is a wall.
 
 - `Math.min(Math.max(dtMs, 0), MAX_STEP_MS) / 1000`: clamps the elapsed time to 0–100 ms (it
   should never be negative, but that costs nothing to rule out), then converts it to seconds to
@@ -1384,7 +1504,7 @@ other; an edge with no monitor beyond it is a wall.
 
 <!-- code: apps/desktop/src/main/bubble/bounce.ts#reflect -->
 
-[`src/main/bubble/bounce.ts`, lines 64–86](../../apps/desktop/src/main/bubble/bounce.ts#L64-L86)
+[`src/main/bubble/bounce.ts`, lines 65–87](../../apps/desktop/src/main/bubble/bounce.ts#L65-L87)
 
 ```ts
 /**
@@ -1433,7 +1553,7 @@ different sizes the walls aren't one simple box, so instead of comparing with li
 
 <!-- code: apps/desktop/src/main/bubble/bounce.ts#fits -->
 
-[`src/main/bubble/bounce.ts`, lines 49–62](../../apps/desktop/src/main/bubble/bounce.ts#L49-L62)
+[`src/main/bubble/bounce.ts`, lines 50–63](../../apps/desktop/src/main/bubble/bounce.ts#L50-L63)
 
 ```ts
 /** Whether the bubble at (x, y) is wholly inside the displays' work areas. */
@@ -1467,7 +1587,7 @@ it.
 
 <!-- code: apps/desktop/src/main/bubble/bounce.ts#onScreen -->
 
-[`src/main/bubble/bounce.ts`, lines 88–102](../../apps/desktop/src/main/bubble/bounce.ts#L88-L102)
+[`src/main/bubble/bounce.ts`, lines 89–107](../../apps/desktop/src/main/bubble/bounce.ts#L89-L107)
 
 ```ts
 /**
@@ -1475,13 +1595,17 @@ it.
  * mid-bounce) the nearest place on the closest display.
  */
 function onScreen(position: Point, areas: Rect[]): Point {
-  if (areas.length === 0 || fits(position.x, position.y, areas)) return position
-  const placed = areas.map((area) => {
-    const box = travelBox(area)
-    const x = Math.min(Math.max(position.x, box.minX), Math.max(box.minX, box.maxX))
-    const y = Math.min(Math.max(position.y, box.minY), Math.max(box.minY, box.maxY))
-    return { x, y, distance: Math.hypot(x - position.x, y - position.y) }
-  })
+  if (fits(position.x, position.y, areas)) return position
+  // Only areas the bubble fits in on its own (a strip over a taskbar is too thin).
+  const placed = areas
+    .map(travelBox)
+    .filter((box) => box.maxX >= box.minX && box.maxY >= box.minY)
+    .map((box) => {
+      const x = Math.min(Math.max(position.x, box.minX), box.maxX)
+      const y = Math.min(Math.max(position.y, box.minY), box.maxY)
+      return { x, y, distance: Math.hypot(x - position.x, y - position.y) }
+    })
+  if (placed.length === 0) return position
   const nearest = placed.reduce((best, p) => (p.distance < best.distance ? p : best))
   return { x: nearest.x, y: nearest.y }
 }
@@ -1492,17 +1616,20 @@ function onScreen(position: Point, areas: Rect[]): Point {
 Where to carry on from. Normally that's simply where the bubble is; but if a monitor was unplugged
 or shrank mid-bounce, the bubble may be somewhere no display covers any more.
 
-- `travelBox(area)`: the positions where the bubble is wholly on that display (`layout.ts`).
-- `Math.min(Math.max(position.x, box.minX), Math.max(box.minX, box.maxX))`: the closest such
-  position to where the bubble is (clamping each coordinate into the box). The inner `Math.max`
-  covers a display narrower than the bubble.
-- `placed.reduce(...)`: picks the display whose closest position is the least distance away.
+- `.map(travelBox)`: for each area, the positions where the bubble is wholly inside it
+  (`layout.ts`).
+- `.filter((box) => box.maxX >= box.minX && box.maxY >= box.minY)`: leaves out areas too small to
+  hold the bubble on their own, such as the strip over a taskbar between two monitors, which the
+  bubble only passes over.
+- `Math.min(Math.max(position.x, box.minX), box.maxX)`: the closest such position to where the
+  bubble is (clamping each coordinate into the box).
+- `placed.reduce(...)`: picks the area whose closest position is the least distance away.
 
 ### `glideDuration()`
 
 <!-- code: apps/desktop/src/main/bubble/bounce.ts#glideDuration -->
 
-[`src/main/bubble/bounce.ts`, lines 104–108](../../apps/desktop/src/main/bubble/bounce.ts#L104-L108)
+[`src/main/bubble/bounce.ts`, lines 109–113](../../apps/desktop/src/main/bubble/bounce.ts#L109-L113)
 
 ```ts
 /** Glide length scales with distance, kept between 0.3 s and 0.9 s. */
@@ -1522,7 +1649,7 @@ short hop still looks deliberate, and a long trip across the screen doesn't drag
 
 <!-- code: apps/desktop/src/main/bubble/bounce.ts#glidePosition -->
 
-[`src/main/bubble/bounce.ts`, lines 110–115](../../apps/desktop/src/main/bubble/bounce.ts#L110-L115)
+[`src/main/bubble/bounce.ts`, lines 115–120](../../apps/desktop/src/main/bubble/bounce.ts#L115-L120)
 
 ```ts
 /** Position at progress `t` (0–1) along the glide home, easing out as it settles. */

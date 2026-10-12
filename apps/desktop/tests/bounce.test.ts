@@ -8,6 +8,7 @@ import {
   step,
   type Motion,
 } from '../src/main/bubble/bounce'
+import { travelAreas } from '../src/main/bubble/layout'
 
 const box = { minX: 0, minY: 0, maxX: 1000, maxY: 500 }
 /** The work area where the bubble's top-left corner can be anywhere in `box`. */
@@ -126,6 +127,26 @@ describe('step', () => {
       if (motion.x > 1920) visitedSecond = true
     }
     expect(visitedSecond).toBe(true)
+  })
+
+  it('crosses over a taskbar between stacked monitors', () => {
+    const stacked = travelAreas([
+      {
+        bounds: { x: 0, y: 0, width: 1536, height: 864 },
+        workArea: { x: 0, y: 0, width: 1536, height: 816 },
+      },
+      {
+        bounds: { x: -750, y: -1440, width: 3440, height: 1440 },
+        workArea: { x: -750, y: -1440, width: 3440, height: 1392 },
+      },
+    ])
+    let motion: Motion = { x: 700, y: 20, vx: 0, vy: -280 }
+    for (let i = 0; i < 20; i++) motion = step(motion, 50, stacked)
+    expect(motion.y).toBeLessThan(-48 - UI.bubbleSize) // wholly on the monitor above
+    expect(motion.vy).toBe(-280)
+    // Beside the laptop there's nothing below the taskbar, so there it's a wall.
+    const beside = step({ x: 2000, y: -110, vx: 0, vy: 280 }, 50, stacked)
+    expect(beside.vy).toBe(-280)
   })
 
   it('moves back on screen if its display went away mid-bounce', () => {

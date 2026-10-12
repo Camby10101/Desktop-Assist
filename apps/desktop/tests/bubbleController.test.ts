@@ -32,8 +32,16 @@ class FakeSurface {
 }
 
 // Two monitors: the main one, and a smaller one to its right.
-const PRIMARY: DisplayArea = { id: 1, workArea: { x: 0, y: 0, width: 1920, height: 1040 } }
-const SECOND: DisplayArea = { id: 2, workArea: { x: 1920, y: 0, width: 1280, height: 984 } }
+const PRIMARY: DisplayArea = {
+  id: 1,
+  bounds: { x: 0, y: 0, width: 1920, height: 1080 },
+  workArea: { x: 0, y: 0, width: 1920, height: 1040 },
+}
+const SECOND: DisplayArea = {
+  id: 2,
+  bounds: { x: 1920, y: 0, width: 1280, height: 1024 },
+  workArea: { x: 1920, y: 0, width: 1280, height: 984 },
+}
 
 let screens: DisplayArea[]
 let cursor: Point
@@ -69,7 +77,10 @@ function makeController(initialAnchor: BubbleAnchor | null = null) {
 
 beforeEach(() => {
   vi.useFakeTimers()
-  screens = [{ ...PRIMARY, workArea: { ...PRIMARY.workArea } }, SECOND]
+  screens = [
+    { ...PRIMARY, bounds: { ...PRIMARY.bounds }, workArea: { ...PRIMARY.workArea } },
+    SECOND,
+  ]
   cursor = { x: 0, y: 0 }
   bubble = new FakeSurface()
   panel = new FakeSurface()
@@ -350,6 +361,34 @@ describe('bounce', () => {
     expect(anchors).toEqual([]) // its home never moved
   })
 
+  it('crosses the taskbar between a monitor and the one stacked above it', () => {
+    // Like the user's desk: a laptop with a wide monitor above it, whose taskbar runs along the
+    // edge they share.
+    screens = [
+      {
+        id: 1,
+        bounds: { x: 0, y: 0, width: 1536, height: 864 },
+        workArea: { x: 0, y: 0, width: 1536, height: 816 },
+      },
+      {
+        id: 2,
+        bounds: { x: -750, y: -1440, width: 3440, height: 1440 },
+        workArea: { x: -750, y: -1440, width: 3440, height: 1392 },
+      },
+    ]
+    controller.displayChanged()
+    controller.startBounce()
+    let visitedAbove = false
+    for (let i = 0; i < 20_000 && !visitedAbove; i++) {
+      vi.advanceTimersByTime(16)
+      if (bubble.bounds!.y + 64 <= -48) visitedAbove = true // wholly on the monitor above
+    }
+    expect(visitedAbove).toBe(true)
+    controller.clickBubble()
+    vi.advanceTimersByTime(1000)
+    expect(bubble.bounds).toEqual(home(screens[0]!.workArea, 'bottom-right'))
+  })
+
   it('returns to its corner of the second display when that is where it lives', () => {
     drag({ x: 2100, y: 100 }) // second display, top-left
     vi.advanceTimersByTime(1000)
@@ -428,6 +467,7 @@ describe('whileHidden (screenshots)', () => {
 
 describe('display changes', () => {
   it('moves the bubble to its corner of the resized display', () => {
+    screens[0]!.bounds = { x: 0, y: 0, width: 2560, height: 1440 }
     screens[0]!.workArea = { x: 0, y: 0, width: 2560, height: 1400 }
     controller.displayChanged()
     expect(bubble.bounds).toEqual(home())
@@ -444,6 +484,8 @@ describe('display changes', () => {
 
   it('lets a bounce carry on, on the displays as they are now', () => {
     controller.startBounce()
+    // A lower resolution on the main display.
+    screens[0]!.bounds = { x: 0, y: 0, width: 1280, height: 720 }
     screens[0]!.workArea = { x: 0, y: 0, width: 1280, height: 680 }
     controller.displayChanged()
     expect(controller.currentMode).toBe('bouncing')

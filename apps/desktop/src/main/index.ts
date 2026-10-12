@@ -469,6 +469,7 @@ function isLoopback(url: URL): boolean {
 /** Electron's `screen`, in the shape the bubble controller uses. All coordinates are DIPs. */
 const toArea = (display: Electron.Display): DisplayArea => ({
   id: display.id,
+  bounds: display.bounds,
   workArea: display.workArea,
 })
 const electronDisplays: Displays = {

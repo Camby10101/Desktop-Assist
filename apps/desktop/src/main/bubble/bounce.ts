@@ -32,10 +32,11 @@ export function launch(
 }
 
 /**
- * Advances the motion by `dtMs` across `areas` (the work areas of all the displays), reflecting
- * off their outer edges. The bubble can be anywhere it's wholly on screen, so it crosses from one
- * display to the next where they meet, and bounces off an edge with no display beyond it (such as
- * the part of a taller monitor's side that a shorter one doesn't reach).
+ * Advances the motion by `dtMs` across `areas` (where the bubble may go: the displays' work areas
+ * and the taskbars between them, from travelAreas()), reflecting off their outer edges. The bubble
+ * can be anywhere it's wholly inside them, so it crosses from one display to the next where they
+ * meet, and bounces off an edge with no display beyond it (such as the part of a taller monitor's
+ * side that a shorter one doesn't reach).
  */
 export function step(motion: Motion, dtMs: number, areas: Rect[]): Motion {
   const dt = Math.min(Math.max(dtMs, 0), MAX_STEP_MS) / 1000
@@ -90,13 +91,17 @@ function reflect(
  * mid-bounce) the nearest place on the closest display.
  */
 function onScreen(position: Point, areas: Rect[]): Point {
-  if (areas.length === 0 || fits(position.x, position.y, areas)) return position
-  const placed = areas.map((area) => {
-    const box = travelBox(area)
-    const x = Math.min(Math.max(position.x, box.minX), Math.max(box.minX, box.maxX))
-    const y = Math.min(Math.max(position.y, box.minY), Math.max(box.minY, box.maxY))
-    return { x, y, distance: Math.hypot(x - position.x, y - position.y) }
-  })
+  if (fits(position.x, position.y, areas)) return position
+  // Only areas the bubble fits in on its own (a strip over a taskbar is too thin).
+  const placed = areas
+    .map(travelBox)
+    .filter((box) => box.maxX >= box.minX && box.maxY >= box.minY)
+    .map((box) => {
+      const x = Math.min(Math.max(position.x, box.minX), box.maxX)
+      const y = Math.min(Math.max(position.y, box.minY), box.maxY)
+      return { x, y, distance: Math.hypot(x - position.x, y - position.y) }
+    })
+  if (placed.length === 0) return position
   const nearest = placed.reduce((best, p) => (p.distance < best.distance ? p : best))
   return { x: nearest.x, y: nearest.y }
 }

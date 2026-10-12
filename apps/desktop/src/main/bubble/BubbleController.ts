@@ -1,7 +1,13 @@
 import { UI, type Corner, type Point, type Rect } from '@shared/geometry'
 import type { Mode } from '@shared/types'
 import { glideDuration, glidePosition, launch, step, type Motion } from './bounce'
-import { bubbleWindowBounds, homePosition, nearestCorner, panelWindowBounds } from './layout'
+import {
+  bubbleWindowBounds,
+  homePosition,
+  nearestCorner,
+  panelWindowBounds,
+  travelAreas,
+} from './layout'
 
 /** The parts of a window the controller drives. Electron windows are adapted in windows.ts. */
 export interface Surface {
@@ -14,9 +20,10 @@ export interface PanelSurface extends Surface {
   focus(): void
 }
 
-/** One display: its id and work area (the screen minus the taskbar). */
+/** One display: its id, its whole screen, and its work area (the screen minus the taskbar). */
 export interface DisplayArea {
   id: number
+  bounds: Rect
   workArea: Rect
 }
 
@@ -241,8 +248,7 @@ export class BubbleController {
     this.runTicker((dtMs) => {
       if (!this.motion) return
       // Across every display. The anchor doesn't change, so a click brings it home.
-      const areas = this.deps.displays.all().map((display) => display.workArea)
-      this.motion = step(this.motion, dtMs, areas)
+      this.motion = step(this.motion, dtMs, travelAreas(this.deps.displays.all()))
       this.moveBubble({ x: this.motion.x, y: this.motion.y })
     })
   }

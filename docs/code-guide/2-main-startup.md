@@ -944,12 +944,13 @@ in `hostname`. Used only to decide whether plain `http` is allowed for a dev ide
 
 <!-- code: apps/desktop/src/main/index.ts#toArea,electronDisplays -->
 
-[`src/main/index.ts`, lines 469–484](../../apps/desktop/src/main/index.ts#L469-L484)
+[`src/main/index.ts`, lines 469–485](../../apps/desktop/src/main/index.ts#L469-L485)
 
 ```ts
 /** Electron's `screen`, in the shape the bubble controller uses. All coordinates are DIPs. */
 const toArea = (display: Electron.Display): DisplayArea => ({
   id: display.id,
+  bounds: display.bounds,
   workArea: display.workArea,
 })
 
@@ -972,8 +973,8 @@ The adapter between Electron's `screen` module and the `Displays` interface `Bub
 uses (see [The bubble](5-bubble.md)). Keeping Electron behind this small interface is what lets
 `tests/bubbleController.test.ts` run the controller with two fake displays.
 
-- `toArea`: keeps only what the controller needs from a display: its ID and its work area (the
-  screen minus the taskbar).
+- `toArea`: keeps only what the controller needs from a display: its ID, its bounds (the whole
+  screen) and its work area (the screen minus the taskbar).
 - `DIPs`: device-independent pixels. On a display scaled to 150%, one DIP is 1.5 physical pixels.
   Electron's window positions and display sizes are all in DIPs, so the controller never has to
   think about scaling.
@@ -992,7 +993,7 @@ method is called, which happens after `start()` has begun.
 
 <!-- code: apps/desktop/src/main/index.ts#fail -->
 
-[`src/main/index.ts`, lines 486–490](../../apps/desktop/src/main/index.ts#L486-L490)
+[`src/main/index.ts`, lines 487–491](../../apps/desktop/src/main/index.ts#L487-L491)
 
 ```ts
 function fail(error: unknown): void {
