@@ -33,8 +33,9 @@ export class ScreenshotService {
     return saveScreenshot(this.dir, source.thumbnail.toPNG(), new Date())
   }
 
-  latest(): Promise<string | null> {
-    return findLatestScreenshot(this.dir)
+  /** The newest screenshot, passing over any that `skip` says to (e.g. already attached). */
+  latest(skip?: (path: string) => boolean): Promise<string | null> {
+    return findLatestScreenshot(this.dir, skip)
   }
 
   /** A small preview as a data URL, or null if the file is missing or not one of ours. */

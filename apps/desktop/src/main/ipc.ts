@@ -136,11 +136,16 @@ export function registerIpc(ctx: IpcContext): void {
   handle(IPC.copyText, z.string().max(1_000_000), (text) => clipboard.writeText(text))
 
   on(IPC.notesSetText, z.string().max(MAX_NOTE_LENGTH), (text) => ctx.notes.setText(text))
+  // Each click attaches the newest screenshot that isn't attached yet, so clicking again goes one
+  // further back.
   handle(IPC.notesAttachLatest, NoArgs, async (): Promise<AttachResult> => {
-    const latest = await ctx.screenshots.latest()
-    if (!latest) return { ok: false, reason: 'no-screenshots' }
-    const notes = ctx.notes.addAttachment(latest)
-    return notes ? { ok: true, notes } : { ok: false, reason: 'already-attached' }
+    const next = await ctx.screenshots.latest((path) => ctx.notes.isAttached(path))
+    if (!next) {
+      const anyAttached = ctx.notes.get().attachments.length > 0
+      return { ok: false, reason: anyAttached ? 'no-more' : 'no-screenshots' }
+    }
+    const notes = ctx.notes.addAttachment(next)
+    return notes ? { ok: true, notes } : { ok: false, reason: 'no-more' }
   })
   handle(IPC.notesRemoveAttachment, z.string().min(1).max(64), (id) =>
     ctx.notes.removeAttachment(id),

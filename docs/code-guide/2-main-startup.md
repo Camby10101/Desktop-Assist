@@ -944,7 +944,7 @@ in `hostname`. Used only to decide whether plain `http` is allowed for a dev ide
 
 <!-- code: apps/desktop/src/main/index.ts#toArea,electronDisplays -->
 
-[`src/main/index.ts`, lines 469–483](../../apps/desktop/src/main/index.ts#L469-L483)
+[`src/main/index.ts`, lines 469–484](../../apps/desktop/src/main/index.ts#L469-L484)
 
 ```ts
 /** Electron's `screen`, in the shape the bubble controller uses. All coordinates are DIPs. */
@@ -955,6 +955,7 @@ const toArea = (display: Electron.Display): DisplayArea => ({
 
 const electronDisplays: Displays = {
   primary: () => toArea(screen.getPrimaryDisplay()),
+  all: () => screen.getAllDisplays().map(toArea),
   byId: (id) => {
     const display = screen.getAllDisplays().find((d) => d.id === id)
     return display && toArea(display)
@@ -976,6 +977,8 @@ uses (see [The bubble](5-bubble.md)). Keeping Electron behind this small interfa
 - `DIPs`: device-independent pixels. On a display scaled to 150%, one DIP is 1.5 physical pixels.
   Electron's window positions and display sizes are all in DIPs, so the controller never has to
   think about scaling.
+- `screen.getAllDisplays().map(toArea)`: every connected display, for Bounce, which roams across
+  them all.
 - `return display && toArea(display)`: if no display has that ID any more (it was unplugged),
   this returns `undefined` rather than throwing.
 - `Math.round(point.x)`: the bubble's position can be fractional while it animates, but this
@@ -989,7 +992,7 @@ method is called, which happens after `start()` has begun.
 
 <!-- code: apps/desktop/src/main/index.ts#fail -->
 
-[`src/main/index.ts`, lines 485–489](../../apps/desktop/src/main/index.ts#L485-L489)
+[`src/main/index.ts`, lines 486–490](../../apps/desktop/src/main/index.ts#L486-L490)
 
 ```ts
 function fail(error: unknown): void {
@@ -1328,7 +1331,7 @@ Schemas used by several channels.
 
 <!-- code: apps/desktop/src/main/ipc.ts#registerIpc -->
 
-[`src/main/ipc.ts`, lines 92–318](../../apps/desktop/src/main/ipc.ts#L92-L318)
+[`src/main/ipc.ts`, lines 92–323](../../apps/desktop/src/main/ipc.ts#L92-L323)
 
 ```ts
 /** Wires every renderer request to the main process. All arguments are validated with zod. */
@@ -1378,11 +1381,16 @@ export function registerIpc(ctx: IpcContext): void {
   handle(IPC.copyText, z.string().max(1_000_000), (text) => clipboard.writeText(text))
 
   on(IPC.notesSetText, z.string().max(MAX_NOTE_LENGTH), (text) => ctx.notes.setText(text))
+  // Each click attaches the newest screenshot that isn't attached yet, so clicking again goes one
+  // further back.
   handle(IPC.notesAttachLatest, NoArgs, async (): Promise<AttachResult> => {
-    const latest = await ctx.screenshots.latest()
-    if (!latest) return { ok: false, reason: 'no-screenshots' }
-    const notes = ctx.notes.addAttachment(latest)
-    return notes ? { ok: true, notes } : { ok: false, reason: 'already-attached' }
+    const next = await ctx.screenshots.latest((path) => ctx.notes.isAttached(path))
+    if (!next) {
+      const anyAttached = ctx.notes.get().attachments.length > 0
+      return { ok: false, reason: anyAttached ? 'no-more' : 'no-screenshots' }
+    }
+    const notes = ctx.notes.addAttachment(next)
+    return notes ? { ok: true, notes } : { ok: false, reason: 'no-more' }
   })
   handle(IPC.notesRemoveAttachment, z.string().min(1).max(64), (id) =>
     ctx.notes.removeAttachment(id),
@@ -1615,9 +1623,10 @@ have inner functions of their own too.
 
 - `on(IPC.notesSetText, ...)`: sent on every keystroke, so it's one-way. The length cap matches
   what `NotesStore` keeps (`MAX_NOTE_LENGTH`).
-- `IPC.notesAttachLatest`: finds the newest screenshot in the folder and attaches it to the draft.
-  It answers `no-screenshots` if there are none and `already-attached` if `addAttachment()`
-  returns `null` because that file is already attached.
+- `IPC.notesAttachLatest`: attaches the newest screenshot in the folder that isn't attached yet
+  (`ctx.notes.isAttached` tells `latest()` which to pass over), so each click goes one screenshot
+  further back. With nothing left it answers `no-more` if some are attached (every screenshot
+  is), or `no-screenshots` if there are none at all; the page shows either as an error.
 - `z.string().min(1).max(64)`: an attachment ID (a UUID, 36 characters).
 - `IPC.notesClear`: empties the text box and removes its screenshots (Clear text box in the
   Settings menu, with Claude Desktop). It returns the empty draft, which the panel shows.

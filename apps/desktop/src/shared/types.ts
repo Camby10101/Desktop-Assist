@@ -303,5 +303,9 @@ export type RaiseResult =
 
 export type ActionResult = { ok: true; message?: string } | { ok: false; message: string }
 
+/**
+ * Attaching a screenshot: the newest one not attached yet. `no-more` when every screenshot is
+ * already attached.
+ */
 export type AttachResult =
-  { ok: true; notes: Notes } | { ok: false; reason: 'no-screenshots' | 'already-attached' }
+  { ok: true; notes: Notes } | { ok: false; reason: 'no-screenshots' | 'no-more' }

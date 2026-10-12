@@ -1,13 +1,7 @@
 import { UI, type Corner, type Point, type Rect } from '@shared/geometry'
 import type { Mode } from '@shared/types'
 import { glideDuration, glidePosition, launch, step, type Motion } from './bounce'
-import {
-  bubbleWindowBounds,
-  homePosition,
-  nearestCorner,
-  panelWindowBounds,
-  travelBox,
-} from './layout'
+import { bubbleWindowBounds, homePosition, nearestCorner, panelWindowBounds } from './layout'
 
 /** The parts of a window the controller drives. Electron windows are adapted in windows.ts. */
 export interface Surface {
@@ -29,6 +23,8 @@ export interface DisplayArea {
 /** What the controller needs to know about the screens. Electron's `screen` is adapted in index.ts. */
 export interface Displays {
   primary(): DisplayArea
+  /** Every display (Bounce roams across them all). */
+  all(): DisplayArea[]
   byId(id: number): DisplayArea | undefined
   /** The display containing `point`, or the closest one. */
   nearest(point: Point): DisplayArea
@@ -244,7 +240,9 @@ export class BubbleController {
     this.setMode('bouncing')
     this.runTicker((dtMs) => {
       if (!this.motion) return
-      this.motion = step(this.motion, dtMs, travelBox(this.display().workArea))
+      // Across every display. The anchor doesn't change, so a click brings it home.
+      const areas = this.deps.displays.all().map((display) => display.workArea)
+      this.motion = step(this.motion, dtMs, areas)
       this.moveBubble({ x: this.motion.x, y: this.motion.y })
     })
   }

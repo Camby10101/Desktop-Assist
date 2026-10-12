@@ -1309,7 +1309,7 @@ The page, with the comment that sums it up.
 
 <!-- code: apps/desktop/src/renderer/src/components/ServiceDeskPage.tsx#NewRequestForm -->
 
-[`src/renderer/src/components/ServiceDeskPage.tsx`, lines 106–269](../../apps/desktop/src/renderer/src/components/ServiceDeskPage.tsx#L106-L269)
+[`src/renderer/src/components/ServiceDeskPage.tsx`, lines 106–270](../../apps/desktop/src/renderer/src/components/ServiceDeskPage.tsx#L106-L270)
 
 ```tsx
 function NewRequestForm(props: Parameters<typeof ServiceDeskPage>[0] & { connected: boolean }) {
@@ -1433,6 +1433,7 @@ function NewRequestForm(props: Parameters<typeof ServiceDeskPage>[0] & { connect
           <button
             type="button"
             onClick={props.onAttachLatest}
+            title="Attach the latest screenshot (click again for the one before)"
             className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-white"
           >
             <Paperclip size={14} aria-hidden />
@@ -1516,7 +1517,7 @@ New request: the request filled in here, then finished on the portal.
 
 <!-- code: apps/desktop/src/renderer/src/components/ServiceDeskPage.tsx#MyRequests -->
 
-[`src/renderer/src/components/ServiceDeskPage.tsx`, lines 271–355](../../apps/desktop/src/renderer/src/components/ServiceDeskPage.tsx#L271-L355)
+[`src/renderer/src/components/ServiceDeskPage.tsx`, lines 272–356](../../apps/desktop/src/renderer/src/components/ServiceDeskPage.tsx#L272-L356)
 
 ```tsx
 function MyRequests(props: {
@@ -1624,7 +1625,7 @@ My requests: the user's requests, newest change first.
 
 <!-- code: apps/desktop/src/renderer/src/components/ServiceDeskPage.tsx#Field,firstLine -->
 
-[`src/renderer/src/components/ServiceDeskPage.tsx`, lines 357–370](../../apps/desktop/src/renderer/src/components/ServiceDeskPage.tsx#L357-L370)
+[`src/renderer/src/components/ServiceDeskPage.tsx`, lines 358–371](../../apps/desktop/src/renderer/src/components/ServiceDeskPage.tsx#L358-L371)
 
 ```tsx
 function Field(props: { label: string; children: ReactNode }) {

@@ -1145,13 +1145,17 @@ The service desk page's form, and the answer to sending it (see `ServiceDesk.rai
 
 <!-- code: apps/desktop/src/shared/types.ts#ActionResult,AttachResult -->
 
-[`src/shared/types.ts`, lines 304–307](../../apps/desktop/src/shared/types.ts#L304-L307)
+[`src/shared/types.ts`, lines 304–311](../../apps/desktop/src/shared/types.ts#L304-L311)
 
 ```ts
 export type ActionResult = { ok: true; message?: string } | { ok: false; message: string }
 
+/**
+ * Attaching a screenshot: the newest one not attached yet. `no-more` when every screenshot is
+ * already attached.
+ */
 export type AttachResult =
-  { ok: true; notes: Notes } | { ok: false; reason: 'no-screenshots' | 'already-attached' }
+  { ok: true; notes: Notes } | { ok: false; reason: 'no-screenshots' | 'no-more' }
 ```
 
 <!-- /code -->
@@ -1162,9 +1166,9 @@ The answers to two more requests.
   returns (`src/main/actions.ts`). `PanelView.runAction()` shows `message` as a toast, styled as
   an error when `ok` is false. A failure must carry a message; a success may (the screenshot
   action says "Screenshot saved", Bounce says nothing).
-- `reason: 'no-screenshots' | 'already-attached'`: why **Attach screenshot** did nothing:
-  the folder has no screenshots, or the newest one is already in the draft
-  (`NotesStore.addAttachment()` refuses duplicates).
+- `reason: 'no-screenshots' | 'no-more'`: why **Attach screenshot** did nothing: the folder has
+  no screenshots, or every one of them is already in the draft (each click attaches the newest
+  one that isn't, going one further back each time).
 
 ## `src/shared/ipc.ts`: the IPC contract
 
@@ -1294,7 +1298,7 @@ name: a typo is a compile error instead of a message nobody hears.
 
 <!-- code: apps/desktop/src/shared/ipc.ts#AssistApi -->
 
-[`src/shared/ipc.ts`, lines 100–231](../../apps/desktop/src/shared/ipc.ts#L100-L231)
+[`src/shared/ipc.ts`, lines 100–232](../../apps/desktop/src/shared/ipc.ts#L100-L232)
 
 ```ts
 /** The API the preload exposes to renderers as `window.assist`. */
@@ -1315,6 +1319,7 @@ export interface AssistApi {
   copyText(text: string): Promise<void>
   notes: {
     setText(text: string): void
+    /** Attaches the newest screenshot that isn't attached yet (each click goes one further back). */
     attachLatestScreenshot(): Promise<AttachResult>
     removeAttachment(id: string): Promise<Notes>
     /** Empties the text box and removes the attached screenshots (the files are kept). */

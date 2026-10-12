@@ -115,6 +115,7 @@ export interface AssistApi {
   copyText(text: string): Promise<void>
   notes: {
     setText(text: string): void
+    /** Attaches the newest screenshot that isn't attached yet (each click goes one further back). */
     attachLatestScreenshot(): Promise<AttachResult>
     removeAttachment(id: string): Promise<Notes>
     /** Empties the text box and removes the attached screenshots (the files are kept). */

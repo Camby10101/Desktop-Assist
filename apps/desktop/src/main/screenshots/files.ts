@@ -33,8 +33,14 @@ export async function saveScreenshot(dir: string, png: Buffer, date: Date): Prom
   throw new Error('Too many screenshots with the same timestamp')
 }
 
-/** The most recently written screenshot in `dir`, ignoring files we didn't name. */
-export async function findLatestScreenshot(dir: string): Promise<string | null> {
+/**
+ * The most recently written screenshot in `dir`, ignoring files we didn't name and any that
+ * `skip` says to pass over (those already attached, so each click goes one further back).
+ */
+export async function findLatestScreenshot(
+  dir: string,
+  skip: (path: string) => boolean = () => false,
+): Promise<string | null> {
   let names: string[]
   try {
     names = await fs.readdir(dir)
@@ -45,6 +51,7 @@ export async function findLatestScreenshot(dir: string): Promise<string | null> 
   let latest: { path: string; mtimeMs: number } | null = null
   for (const name of names.filter(isScreenshotFileName)) {
     const path = join(dir, name)
+    if (skip(path)) continue
     try {
       const { mtimeMs } = await fs.stat(path)
       if (!latest || mtimeMs > latest.mtimeMs) latest = { path, mtimeMs }

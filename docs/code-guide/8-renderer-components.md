@@ -320,7 +320,7 @@ function Composer(props: Parameters<typeof ChatBox>[0]) {
         value={props.draft}
         onChange={(event) => props.onDraftChange(event.target.value)}
         onKeyDown={onKeyDown}
-        placeholder="Ask Claude anything…"
+        placeholder="Ask anything…"
         aria-label="Message Claude"
         spellCheck
         className={cn(
@@ -333,7 +333,7 @@ function Composer(props: Parameters<typeof ChatBox>[0]) {
         <button
           type="button"
           onClick={props.onAttachLatest}
-          title="Attach the latest screenshot"
+          title="Attach the latest screenshot (click again for the one before)"
           className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-white"
         >
           <Paperclip size={14} aria-hidden />

@@ -473,6 +473,7 @@ const toArea = (display: Electron.Display): DisplayArea => ({
 })
 const electronDisplays: Displays = {
   primary: () => toArea(screen.getPrimaryDisplay()),
+  all: () => screen.getAllDisplays().map(toArea),
   byId: (id) => {
     const display = screen.getAllDisplays().find((d) => d.id === id)
     return display && toArea(display)

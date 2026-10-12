@@ -1483,8 +1483,8 @@ function Panel({ state }: { state: AppState }) {
     const result = await window.assist.notes.attachLatestScreenshot()
     if (result.ok) setAttachments(result.notes.attachments)
     else if (result.reason === 'no-screenshots') {
-      showToast('No screenshots yet. Take one with the camera button.')
-    } else showToast('That screenshot is already attached')
+      showToast('No screenshots yet. Take one with the camera button.', 'error')
+    } else showToast('No more screenshots to attach', 'error')
   }
 
   async function removeAttachment(attachment: Attachment) {
@@ -2212,8 +2212,8 @@ async function attachLatest() {
   const result = await window.assist.notes.attachLatestScreenshot()
   if (result.ok) setAttachments(result.notes.attachments)
   else if (result.reason === 'no-screenshots') {
-    showToast('No screenshots yet. Take one with the camera button.')
-  } else showToast('That screenshot is already attached')
+    showToast('No screenshots yet. Take one with the camera button.', 'error')
+  } else showToast('No more screenshots to attach', 'error')
 }
 
 async function removeAttachment(attachment: Attachment) {
@@ -2232,10 +2232,11 @@ async function openAttachment(attachment: Attachment) {
 The screenshot chips on the draft. Each asks the main process, which owns the draft, and shows the
 result.
 
-- `window.assist.notes.attachLatestScreenshot()`: the main process finds the newest file in the
-  screenshots folder and adds it to the draft.
-- `else showToast('That screenshot is already attached')`: the only other failure,
-  `already-attached`.
+- `window.assist.notes.attachLatestScreenshot()`: the main process adds the newest screenshot
+  that isn't attached yet, so each click goes one further back.
+- `'no-screenshots'`: there are none at all, so the toast says how to take one.
+- `else showToast('No more screenshots to attach', 'error')`: the only other failure, `no-more`:
+  every screenshot is already attached. Both are shown in red, as errors.
 - `window.assist.notes.removeAttachment(attachment.id)`: returns the updated draft, whose
   attachment list the panel adopts.
 - `window.assist.screenshots.open(attachment.path)`: opens the file in the default image viewer;

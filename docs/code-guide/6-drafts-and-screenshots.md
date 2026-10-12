@@ -241,16 +241,37 @@ every change in the text box.
 - `if (next !== this.notes.text)`: unchanged text does nothing, so it doesn't move `updatedAt` or
   trigger a pointless save.
 
+### `NotesStore.isAttached()`
+
+<!-- code: apps/desktop/src/main/notes/NotesStore.ts#NotesStore.isAttached -->
+
+[`src/main/notes/NotesStore.ts`, lines 67–71](../../apps/desktop/src/main/notes/NotesStore.ts#L67-L71)
+
+```ts
+/** Adds a screenshot to the text box. Returns null if that file is already attached. */
+/** Whether the screenshot is already attached to the draft. */
+isAttached(path: string): boolean {
+  return this.notes.attachments.some((a) => samePath(a.path, path))
+}
+```
+
+<!-- /code -->
+
+Whether a screenshot is already on the draft. The **Attach screenshot** handler in `ipc.ts` passes
+it to `ScreenshotService.latest()` so the screenshots already attached are passed over, and
+`addAttachment()` uses it to refuse a second copy.
+
+- `samePath(a.path, path)`: compares the paths the way Windows does (see `samePath` below).
+
 ### `NotesStore.addAttachment()`
 
 <!-- code: apps/desktop/src/main/notes/NotesStore.ts#NotesStore.addAttachment -->
 
-[`src/main/notes/NotesStore.ts`, lines 67–78](../../apps/desktop/src/main/notes/NotesStore.ts#L67-L78)
+[`src/main/notes/NotesStore.ts`, lines 73–83](../../apps/desktop/src/main/notes/NotesStore.ts#L73-L83)
 
 ```ts
-/** Adds a screenshot to the text box. Returns null if that file is already attached. */
 addAttachment(path: string): Notes | null {
-  if (this.notes.attachments.some((a) => samePath(a.path, path))) return null
+  if (this.isAttached(path)) return null
   const attachment = {
     id: randomUUID(),
     path,
@@ -268,8 +289,8 @@ Attaches a screenshot file to the draft. `ipc.ts` calls it from the **Attach scr
 handler (`notesAttachLatest`) with the path from `ScreenshotService.latest()`, so the page never
 supplies the path.
 
-- `samePath(a.path, path)`: refuses a file that's already attached. The `null` lets `ipc.ts` answer
-  `already-attached`, and the page shows "That screenshot is already attached".
+- `this.isAttached(path)`: refuses a file that's already attached, answering `null`. The handler
+  already skips attached screenshots, so this is a second line of defence.
 - `randomUUID()`: a random unique ID from Node's `crypto` module, used later to remove this
   attachment.
 - `basename(path)`: the file name without its folder, e.g. `Screenshot 2026-10-02 140311.png`. The
@@ -280,7 +301,7 @@ supplies the path.
 
 <!-- code: apps/desktop/src/main/notes/NotesStore.ts#NotesStore.removeAttachment,clear -->
 
-[`src/main/notes/NotesStore.ts`, lines 80–88](../../apps/desktop/src/main/notes/NotesStore.ts#L80-L88)
+[`src/main/notes/NotesStore.ts`, lines 85–93](../../apps/desktop/src/main/notes/NotesStore.ts#L85-L93)
 
 ```ts
 removeAttachment(id: string): Notes {
@@ -310,7 +331,7 @@ after a message is sent.
 
 <!-- code: apps/desktop/src/main/notes/NotesStore.ts#NotesStore.flush -->
 
-[`src/main/notes/NotesStore.ts`, lines 90–100](../../apps/desktop/src/main/notes/NotesStore.ts#L90-L100)
+[`src/main/notes/NotesStore.ts`, lines 95–105](../../apps/desktop/src/main/notes/NotesStore.ts#L95-L105)
 
 ```ts
 /** Writes any pending change now and waits for all writes to finish. */
@@ -346,7 +367,7 @@ app is quitting (giving it at most 2 seconds before quitting anyway).
 
 <!-- code: apps/desktop/src/main/notes/NotesStore.ts#NotesStore.flushSync -->
 
-[`src/main/notes/NotesStore.ts`, lines 102–110](../../apps/desktop/src/main/notes/NotesStore.ts#L102-L110)
+[`src/main/notes/NotesStore.ts`, lines 107–115](../../apps/desktop/src/main/notes/NotesStore.ts#L107-L115)
 
 ```ts
 /** Blocking write for when the OS is ending the session and async work may never finish. */
@@ -378,7 +399,7 @@ Unlike `write()`, it doesn't catch errors: a failure is thrown from the event ha
 
 <!-- code: apps/desktop/src/main/notes/NotesStore.ts#NotesStore.update -->
 
-[`src/main/notes/NotesStore.ts`, lines 112–117](../../apps/desktop/src/main/notes/NotesStore.ts#L112-L117)
+[`src/main/notes/NotesStore.ts`, lines 117–122](../../apps/desktop/src/main/notes/NotesStore.ts#L117-L122)
 
 ```ts
 private update(patch: Partial<Notes>): void {
@@ -410,7 +431,7 @@ the autosave timer; this is where the debounce happens.
 
 <!-- code: apps/desktop/src/main/notes/NotesStore.ts#NotesStore.write -->
 
-[`src/main/notes/NotesStore.ts`, lines 119–128](../../apps/desktop/src/main/notes/NotesStore.ts#L119-L128)
+[`src/main/notes/NotesStore.ts`, lines 124–133](../../apps/desktop/src/main/notes/NotesStore.ts#L124-L133)
 
 ```ts
 private async write(snapshot: object, seq: number): Promise<void> {
@@ -450,7 +471,7 @@ new one, never a mix. See `writeFileAtomic()` below.
 
 <!-- code: apps/desktop/src/main/notes/NotesStore.ts#NotesStore.toFile -->
 
-[`src/main/notes/NotesStore.ts`, lines 130–132](../../apps/desktop/src/main/notes/NotesStore.ts#L130-L132)
+[`src/main/notes/NotesStore.ts`, lines 135–137](../../apps/desktop/src/main/notes/NotesStore.ts#L135-L137)
 
 ```ts
 private toFile() {
@@ -472,7 +493,7 @@ The object that gets written to disk: the draft plus `version: 1`.
 
 <!-- code: apps/desktop/src/main/notes/NotesStore.ts#NotesStore.setAsideCorruptFile -->
 
-[`src/main/notes/NotesStore.ts`, lines 134–141](../../apps/desktop/src/main/notes/NotesStore.ts#L134-L141)
+[`src/main/notes/NotesStore.ts`, lines 139–146](../../apps/desktop/src/main/notes/NotesStore.ts#L139-L146)
 
 ```ts
 private async setAsideCorruptFile(): Promise<void> {
@@ -498,7 +519,7 @@ app starts with an empty draft.
 
 <!-- code: apps/desktop/src/main/notes/NotesStore.ts#NotesStore.clearTimer,now -->
 
-[`src/main/notes/NotesStore.ts`, lines 143–150](../../apps/desktop/src/main/notes/NotesStore.ts#L143-L150)
+[`src/main/notes/NotesStore.ts`, lines 148–155](../../apps/desktop/src/main/notes/NotesStore.ts#L148-L155)
 
 ```ts
 private clearTimer(): void {
@@ -520,7 +541,7 @@ Two small helpers. `clearTimer()` cancels any pending autosave. `now()` takes th
 
 <!-- code: apps/desktop/src/main/notes/NotesStore.ts#samePath -->
 
-[`src/main/notes/NotesStore.ts`, lines 153–156](../../apps/desktop/src/main/notes/NotesStore.ts#L153-L156)
+[`src/main/notes/NotesStore.ts`, lines 158–161](../../apps/desktop/src/main/notes/NotesStore.ts#L158-L161)
 
 ```ts
 function samePath(a: string, b: string): boolean {
@@ -666,25 +687,27 @@ screenshot.
 
 <!-- code: apps/desktop/src/main/screenshots/ScreenshotService.ts#ScreenshotService.latest -->
 
-[`src/main/screenshots/ScreenshotService.ts`, lines 36–38](../../apps/desktop/src/main/screenshots/ScreenshotService.ts#L36-L38)
+[`src/main/screenshots/ScreenshotService.ts`, lines 36–39](../../apps/desktop/src/main/screenshots/ScreenshotService.ts#L36-L39)
 
 ```ts
-latest(): Promise<string | null> {
-  return findLatestScreenshot(this.dir)
+/** The newest screenshot, passing over any that `skip` says to (e.g. already attached). */
+latest(skip?: (path: string) => boolean): Promise<string | null> {
+  return findLatestScreenshot(this.dir, skip)
 }
 ```
 
 <!-- /code -->
 
 The newest screenshot in the folder, or `null` if there isn't one. The **Attach screenshot**
-handler in `ipc.ts` calls it and passes the result to `NotesStore.addAttachment()`. The work is done
-by `findLatestScreenshot()` in `files.ts`.
+handler in `ipc.ts` calls it with `skip` set to "already attached", so each click attaches the
+next one back, and passes the result to `NotesStore.addAttachment()`. The work is done by
+`findLatestScreenshot()` in `files.ts`.
 
 ### `ScreenshotService.thumbnail()`
 
 <!-- code: apps/desktop/src/main/screenshots/ScreenshotService.ts#ScreenshotService.thumbnail -->
 
-[`src/main/screenshots/ScreenshotService.ts`, lines 40–60](../../apps/desktop/src/main/screenshots/ScreenshotService.ts#L40-L60)
+[`src/main/screenshots/ScreenshotService.ts`, lines 41–61](../../apps/desktop/src/main/screenshots/ScreenshotService.ts#L41-L61)
 
 ```ts
 /** A small preview as a data URL, or null if the file is missing or not one of ours. */
@@ -739,7 +762,7 @@ it, and encode it as PNG, JPEG or a data URL.
 
 <!-- code: apps/desktop/src/main/screenshots/ScreenshotService.ts#ScreenshotService.forClaude -->
 
-[`src/main/screenshots/ScreenshotService.ts`, lines 62–75](../../apps/desktop/src/main/screenshots/ScreenshotService.ts#L62-L75)
+[`src/main/screenshots/ScreenshotService.ts`, lines 63–76](../../apps/desktop/src/main/screenshots/ScreenshotService.ts#L63-L76)
 
 ```ts
 /**
@@ -786,7 +809,7 @@ pixels beyond what Claude uses only make the request bigger and slower (see `ima
 
 <!-- code: apps/desktop/src/main/screenshots/ScreenshotService.ts#ScreenshotService.forClipboard -->
 
-[`src/main/screenshots/ScreenshotService.ts`, lines 77–102](../../apps/desktop/src/main/screenshots/ScreenshotService.ts#L77-L102)
+[`src/main/screenshots/ScreenshotService.ts`, lines 78–103](../../apps/desktop/src/main/screenshots/ScreenshotService.ts#L78-L103)
 
 ```ts
 /**
@@ -855,7 +878,7 @@ copies them as a lossless PNG.
 
 <!-- code: apps/desktop/src/main/screenshots/ScreenshotService.ts#ScreenshotService.open,openFolder -->
 
-[`src/main/screenshots/ScreenshotService.ts`, lines 104–118](../../apps/desktop/src/main/screenshots/ScreenshotService.ts#L104-L118)
+[`src/main/screenshots/ScreenshotService.ts`, lines 105–119](../../apps/desktop/src/main/screenshots/ScreenshotService.ts#L105-L119)
 
 ```ts
 /** Opens a screenshot in the default image viewer. Returns false if it no longer exists. */
@@ -894,7 +917,7 @@ clicked. `openFolder()` opens the screenshots folder in File Explorer, from the 
 
 <!-- code: apps/desktop/src/main/screenshots/ScreenshotService.ts#ScreenshotService.owns -->
 
-[`src/main/screenshots/ScreenshotService.ts`, lines 120–123](../../apps/desktop/src/main/screenshots/ScreenshotService.ts#L120-L123)
+[`src/main/screenshots/ScreenshotService.ts`, lines 121–124](../../apps/desktop/src/main/screenshots/ScreenshotService.ts#L121-L124)
 
 ```ts
 /** Renderers may only ask about files inside the screenshots folder. */
@@ -990,11 +1013,17 @@ incomplete new image.
 
 <!-- code: apps/desktop/src/main/screenshots/files.ts#findLatestScreenshot -->
 
-[`src/main/screenshots/files.ts`, lines 36–56](../../apps/desktop/src/main/screenshots/files.ts#L36-L56)
+[`src/main/screenshots/files.ts`, lines 36–63](../../apps/desktop/src/main/screenshots/files.ts#L36-L63)
 
 ```ts
-/** The most recently written screenshot in `dir`, ignoring files we didn't name. */
-export async function findLatestScreenshot(dir: string): Promise<string | null> {
+/**
+ * The most recently written screenshot in `dir`, ignoring files we didn't name and any that
+ * `skip` says to pass over (those already attached, so each click goes one further back).
+ */
+export async function findLatestScreenshot(
+  dir: string,
+  skip: (path: string) => boolean = () => false,
+): Promise<string | null> {
   let names: string[]
   try {
     names = await fs.readdir(dir)
@@ -1005,6 +1034,7 @@ export async function findLatestScreenshot(dir: string): Promise<string | null> 
   let latest: { path: string; mtimeMs: number } | null = null
   for (const name of names.filter(isScreenshotFileName)) {
     const path = join(dir, name)
+    if (skip(path)) continue
     try {
       const { mtimeMs } = await fs.stat(path)
       if (!latest || mtimeMs > latest.mtimeMs) latest = { path, mtimeMs }
@@ -1018,12 +1048,16 @@ export async function findLatestScreenshot(dir: string): Promise<string | null> 
 
 <!-- /code -->
 
-Returns the path of the most recently written screenshot in the folder, or `null` if there are none.
+Returns the path of the most recently written screenshot in the folder, or `null` if there are none
+(or none that aren't skipped).
 
 - `isErrno(err, 'ENOENT')`: `ENOENT` means "no such file or directory". Before the first screenshot
   the folder doesn't exist, which just means there are no screenshots.
 - `names.filter(isScreenshotFileName)`: only files with our names count, so other pictures dropped
   into the folder are never attached by accident.
+- `skip = () => false`: by default nothing is passed over. `if (skip(path)) continue` leaves out the
+  ones the caller names, so with the attached ones skipped, clicking **Attach screenshot** again
+  and again goes back through the screenshots, newest first (a test checks this).
 - `mtimeMs > latest.mtimeMs`: picks by the time each file was last written, not by its name, so the
   file written last wins even if its name says otherwise (a test checks this).
 - `// Deleted between readdir and stat.`: a file can disappear between listing the folder and
@@ -1034,7 +1068,7 @@ Returns the path of the most recently written screenshot in the folder, or `null
 
 <!-- code: apps/desktop/src/main/screenshots/files.ts#isInsideDir -->
 
-[`src/main/screenshots/files.ts`, lines 58–62](../../apps/desktop/src/main/screenshots/files.ts#L58-L62)
+[`src/main/screenshots/files.ts`, lines 65–69](../../apps/desktop/src/main/screenshots/files.ts#L65-L69)
 
 ```ts
 /** True if `file` is inside `dir` (not `dir` itself). Case-insensitive on Windows. */

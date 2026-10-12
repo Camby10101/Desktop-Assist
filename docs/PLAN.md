@@ -428,6 +428,22 @@ tab, as asked). IT's setup guide: [ATLASSIAN_SETUP.md](ATLASSIAN_SETUP.md).
   issues, not service desk requests, so a ticket made that way would have no request type, wouldn't
   show on the portal for the person, and couldn't carry the screenshot.
 
+- **Attach screenshot goes back through the screenshots**: Each click attaches the newest screenshot
+  that isn't attached yet, so clicking again adds the one before, and so on. When every screenshot
+  is attached, it says "No more screenshots to attach" (in red); before the first screenshot,
+  that there are none yet. (Before, a second click just said the newest was already attached.)
+- **"Ask anything…"**: The text box's placeholder no longer says "Ask Claude anything…".
+- **Bounce across monitors**: The bubble now bounces across every monitor, passing from one to the
+  next where they meet and bouncing off any edge with no monitor beyond it (such as the part of a
+  taller monitor's side a shorter one doesn't reach). A click still glides it back to its own
+  corner on its own display, wherever it has got to. If a monitor goes mid-bounce, it carries on
+  from the nearest place on the others.
+
+  These three are tested with unit tests (266 in all now: going back through the screenshots one
+  click at a time, crossing between monitors, the walls where only one monitor reaches, roaming two
+  monitors without leaving them, a monitor going mid-bounce) and end-to-end (attaching twice, the
+  placeholder, Bounce and its glide home on the real screen).
+
 Found along the way: Atlassian's Rovo search (`search`) uses Rovo credits, so Desktop Assist only
 uses the Jira (JQL) and Confluence (CQL) searches; Jira can find mentions of the user with
 `comment ~ currentUser()`, and the comments themselves (in Jira's own format) say whose account was

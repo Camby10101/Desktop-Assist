@@ -269,8 +269,8 @@ function Panel({ state }: { state: AppState }) {
     const result = await window.assist.notes.attachLatestScreenshot()
     if (result.ok) setAttachments(result.notes.attachments)
     else if (result.reason === 'no-screenshots') {
-      showToast('No screenshots yet. Take one with the camera button.')
-    } else showToast('That screenshot is already attached')
+      showToast('No screenshots yet. Take one with the camera button.', 'error')
+    } else showToast('No more screenshots to attach', 'error')
   }
 
   async function removeAttachment(attachment: Attachment) {

@@ -63,9 +63,11 @@ sign-in) and 4 (logos, favourites, service desk, light/dark mode, bubble-click f
     Clear text box and **Uninstall Desktop Assist**. (With the
     built-in chat: Response style (Fast / Balanced / Thorough), New conversation, and who you're
     signed in as with **Log out**.)
-  - **Bounce** sends the bubble bouncing around the screen; click it to send it gliding home.
+  - **Bounce** sends the bubble bouncing around the screen, across all your monitors; click it to
+    send it gliding home to its corner.
   - **Close** quits the app.
-- **Attach screenshot** adds the newest screenshot to your next question. **Report to IT** turns
+- **Attach screenshot** adds the newest screenshot to your next question; click it again to add
+  the one before, and so on (it says when there are no more). **Report to IT** turns
   what you've typed (and the screenshot) into a new IT request.
 - **Issue keys**: type a Jira key like `ISD-1234` and an **Open ISD-1234** button appears.
 - A tray icon (the same logo) with Open and Quit.

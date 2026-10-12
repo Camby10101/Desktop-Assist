@@ -77,6 +77,8 @@ describe('NotesStore', () => {
     expect(first?.attachments).toHaveLength(1)
     expect(first?.attachments[0]?.fileName).toBe('Shot.png')
     expect(store.addAttachment('c:\\pics\\shot.png')).toBeNull()
+    expect(store.isAttached('C:\\PICS\\SHOT.PNG')).toBe(true)
+    expect(store.isAttached('C:\\Pics\\Other.png')).toBe(false)
   })
 
   it('removes attachments and clears everything', async () => {

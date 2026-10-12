@@ -49,6 +49,7 @@ function makeController(initialAnchor: BubbleAnchor | null = null) {
     panel,
     displays: {
       primary: () => screens[0]!,
+      all: () => screens,
       byId: (id) => screens.find((s) => s.id === id),
       nearest: (p) =>
         screens.find(
@@ -221,6 +222,7 @@ describe('clicking away (panel blur)', () => {
       panel,
       displays: {
         primary: () => screens[0]!,
+        all: () => screens,
         byId: (id) => screens.find((s) => s.id === id),
         nearest: () => screens[0]!,
         cursor: () => cursor,
@@ -303,7 +305,21 @@ describe('dragging', () => {
 })
 
 describe('bounce', () => {
-  it('hides the panel and moves the bubble around the work area', () => {
+  /** Whether the visible bubble (inside the window's padding) is wholly on the displays. */
+  const onScreens = ({ x, y, width, height }: Rect) =>
+    [
+      [x + 8, y + 8],
+      [x + width - 8, y + 8],
+      [x + 8, y + height - 8],
+      [x + width - 8, y + height - 8],
+    ].every(([px, py]) =>
+      screens.some(
+        ({ workArea: a }) =>
+          px! >= a.x && px! <= a.x + a.width && py! >= a.y && py! <= a.y + a.height,
+      ),
+    )
+
+  it('hides the panel and moves the bubble around, staying on screen', () => {
     controller.clickBubble()
     controller.startBounce()
     expect(controller.currentMode).toBe('bouncing')
@@ -312,25 +328,33 @@ describe('bounce', () => {
     const seen = new Set<string>()
     for (let i = 0; i < 600; i++) {
       vi.advanceTimersByTime(16)
-      const { x, y, width, height } = bubble.bounds!
-      seen.add(`${x},${y}`)
-      // The visible bubble (inside the padding) stays within the work area.
-      expect(x + 8).toBeGreaterThanOrEqual(workArea().x)
-      expect(y + 8).toBeGreaterThanOrEqual(workArea().y)
-      expect(x + width - 8).toBeLessThanOrEqual(workArea().x + workArea().width)
-      expect(y + height - 8).toBeLessThanOrEqual(workArea().y + workArea().height)
+      seen.add(`${bubble.bounds!.x},${bubble.bounds!.y}`)
+      expect(onScreens(bubble.bounds!)).toBe(true)
     }
     expect(seen.size).toBeGreaterThan(100)
   })
 
-  it('stays on the display the bubble is on, and returns to its corner there', () => {
+  it('roams onto the other display, and a click brings it back to its corner on its own', () => {
+    controller.startBounce()
+    let visitedSecond = false
+    for (let i = 0; i < 20_000 && !visitedSecond; i++) {
+      vi.advanceTimersByTime(16)
+      expect(onScreens(bubble.bounds!)).toBe(true)
+      if (bubble.bounds!.x + 8 >= SECOND.workArea.x) visitedSecond = true
+    }
+    expect(visitedSecond).toBe(true)
+    vi.advanceTimersByTime(500) // well onto the second display
+    controller.clickBubble()
+    vi.advanceTimersByTime(1000)
+    expect(bubble.bounds).toEqual(home(PRIMARY.workArea, 'bottom-right'))
+    expect(anchors).toEqual([]) // its home never moved
+  })
+
+  it('returns to its corner of the second display when that is where it lives', () => {
     drag({ x: 2100, y: 100 }) // second display, top-left
     vi.advanceTimersByTime(1000)
     controller.startBounce()
-    for (let i = 0; i < 300; i++) {
-      vi.advanceTimersByTime(16)
-      expect(bubble.bounds!.x + 8).toBeGreaterThanOrEqual(SECOND.workArea.x)
-    }
+    vi.advanceTimersByTime(8000)
     controller.clickBubble()
     vi.advanceTimersByTime(1000)
     expect(bubble.bounds).toEqual(home(SECOND.workArea, 'top-left'))
@@ -418,12 +442,18 @@ describe('display changes', () => {
     expect(anchors.at(-1)).toEqual({ displayId: 1, corner: 'top-left' })
   })
 
-  it('lets a bounce carry on in the new area', () => {
+  it('lets a bounce carry on, on the displays as they are now', () => {
     controller.startBounce()
     screens[0]!.workArea = { x: 0, y: 0, width: 1280, height: 680 }
     controller.displayChanged()
     expect(controller.currentMode).toBe('bouncing')
-    vi.advanceTimersByTime(3000)
-    expect(bubble.bounds!.x + 8).toBeLessThanOrEqual(1280 - 56)
+    for (let i = 0; i < 200; i++) {
+      vi.advanceTimersByTime(16)
+      const { x, y } = bubble.bounds!
+      // Wholly on one display or the other (the shrunken main one no longer reaches the second).
+      const on = ({ workArea: a }: DisplayArea) =>
+        x + 8 >= a.x && x + 64 <= a.x + a.width && y + 8 >= a.y && y + 64 <= a.y + a.height
+      expect(screens.some(on)).toBe(true)
+    }
   })
 })
