@@ -1,4 +1,5 @@
 import {
+  Bell,
   Camera,
   Headset,
   LayoutGrid,
@@ -19,6 +20,7 @@ import { cn } from '../lib/cn'
 const ICONS: Record<ActionId, LucideIcon> = {
   ask: MessageCircle,
   apps: LayoutGrid,
+  jira: Bell,
   servicedesk: Headset,
   screenshot: Camera,
   theme: Sun,
@@ -40,6 +42,8 @@ export function ActionStack(props: {
   theme: Theme
   /** Icons with a small dot, e.g. Ask Claude while an unsent question is waiting behind it. */
   dotted?: ActionId[]
+  /** Command icons that open a page in the panel instead (the service desk, with a form). */
+  pages?: ActionId[]
   onAction: (id: ActionId) => void
 }) {
   const top = isTopCorner(props.corner)
@@ -68,7 +72,9 @@ export function ActionStack(props: {
             type="button"
             title={label}
             aria-label={label}
-            aria-expanded={ACTIONS[id].kind === 'popover' ? active : undefined}
+            aria-expanded={
+              ACTIONS[id].kind === 'popover' || props.pages?.includes(id) ? active : undefined
+            }
             onClick={() => props.onAction(id)}
             style={{
               width: UI.actionSize,

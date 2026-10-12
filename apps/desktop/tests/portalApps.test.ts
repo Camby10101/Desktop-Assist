@@ -2,21 +2,16 @@ import { describe, expect, it, vi } from 'vitest'
 import type { AppsState } from '@shared/types'
 import { SignInCancelledError, type RedirectListener } from '../src/main/auth/loopback'
 import { orderApps } from '@shared/apps'
-import { fetchLogo, sniffImageType } from '../src/main/apps/mcp'
-import {
-  findLaunchUrl,
-  httpsUrl,
-  idArgumentName,
-  parseAppList,
-  payloadOf,
-} from '../src/main/apps/portalData'
+import { fetchLogo, sniffImageType } from '../src/main/apps/logos'
+import { findLaunchUrl, httpsUrl, idArgumentName, parseAppList } from '../src/main/apps/portalData'
+import { PortalApps } from '../src/main/apps/PortalApps'
 import {
   NeedsSignInError,
-  PortalApps,
   SavedAuth,
   type McpConnector,
   type McpSession,
-} from '../src/main/apps/PortalApps'
+} from '../src/main/mcp/McpAccount'
+import { payloadOf } from '../src/main/mcp/toolResult'
 
 const json = (value: unknown) => ({ content: [{ type: 'text', text: JSON.stringify(value) }] })
 

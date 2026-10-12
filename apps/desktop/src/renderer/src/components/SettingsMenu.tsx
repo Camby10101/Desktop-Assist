@@ -2,6 +2,7 @@ import {
   Eraser,
   FolderOpen,
   LogOut,
+  Unplug,
   MessageSquarePlus,
   Trash2,
   type LucideIcon,
@@ -30,6 +31,9 @@ export function SettingsMenu(props: {
   version: string
   /** Who's signed in, or null when nobody is. */
   user: SignedInUser | null
+  /** Who's connected to Atlassian, or null when nobody is. */
+  atlassianUser: { name: string; email?: string } | null
+  onDisconnectAtlassian: () => void
   onToggleAutoStart: () => void
   onSetEffort: (effort: Effort) => void
   onToggleAutoSend: () => void
@@ -173,6 +177,20 @@ export function SettingsMenu(props: {
           </p>
           <MenuItem icon={LogOut} onClick={props.onSignOut}>
             Log out
+          </MenuItem>
+        </div>
+      )}
+
+      {props.atlassianUser && (
+        <div className="mt-1 border-t border-black/10 pt-1 dark:border-white/10">
+          <p
+            className="truncate px-2.5 pt-1 text-[11px] text-zinc-500"
+            title={props.atlassianUser.email}
+          >
+            Connected to Atlassian as {props.atlassianUser.name}
+          </p>
+          <MenuItem icon={Unplug} onClick={props.onDisconnectAtlassian}>
+            Disconnect Atlassian
           </MenuItem>
         </div>
       )}

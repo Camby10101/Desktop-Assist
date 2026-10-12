@@ -62,6 +62,30 @@ const api: AssistApi = {
     open: (id) => ipcRenderer.invoke(IPC.appsOpen, id),
     openPortal: () => ipcRenderer.invoke(IPC.appsOpenPortal),
   },
+  atlassian: {
+    get: () => ipcRenderer.invoke(IPC.atlassianGet),
+    signIn: () => ipcRenderer.invoke(IPC.atlassianSignIn),
+    cancelSignIn: () => ipcRenderer.invoke(IPC.atlassianCancelSignIn),
+    signOut: () => ipcRenderer.invoke(IPC.atlassianSignOut),
+    retry: () => ipcRenderer.invoke(IPC.atlassianRetry),
+    feed: (refresh) => ipcRenderer.invoke(IPC.atlassianFeed, refresh ?? false),
+    markNotificationsRead: () => ipcRenderer.invoke(IPC.atlassianMarkNotificationsRead),
+    markRequestsRead: (key) => ipcRenderer.invoke(IPC.atlassianMarkRequestsRead, key),
+    search: (query) => ipcRenderer.invoke(IPC.atlassianSearch, query),
+    issue: (key) => ipcRenderer.invoke(IPC.atlassianIssue, key),
+    transition: (key, transitionId) =>
+      ipcRenderer.invoke(IPC.atlassianTransition, { key, transitionId }),
+    comment: (key, body) => ipcRenderer.invoke(IPC.atlassianComment, { key, body }),
+    logWork: (key, timeSpent) => ipcRenderer.invoke(IPC.atlassianLogWork, { key, timeSpent }),
+    articles: (text) => ipcRenderer.invoke(IPC.atlassianArticles, text),
+    projectKeys: () => ipcRenderer.invoke(IPC.atlassianProjectKeys),
+    ask: (key, prompt) => ipcRenderer.invoke(IPC.atlassianAsk, { key, prompt }),
+  },
+  serviceDesk: {
+    pcDetails: () => ipcRenderer.invoke(IPC.serviceDeskPcDetails),
+    raise: (request) => ipcRenderer.invoke(IPC.serviceDeskRaise, request),
+    openMyRequests: () => ipcRenderer.invoke(IPC.serviceDeskOpenMyRequests),
+  },
   uninstall: () => ipcRenderer.invoke(IPC.appUninstall),
   onModeChanged: (callback) => subscribe(IPC.modeChanged, callback),
   onCornerChanged: (callback) => subscribe(IPC.cornerChanged, callback),
@@ -70,6 +94,8 @@ const api: AssistApi = {
   onChatMessage: (callback) => subscribe(IPC.chatMessage, callback),
   onChatReset: (callback) => subscribe(IPC.chatReset, () => callback()),
   onAppsState: (callback) => subscribe(IPC.appsState, callback),
+  onAtlassianState: (callback) => subscribe(IPC.atlassianState, callback),
+  onJiraFeed: (callback) => subscribe(IPC.jiraFeed, callback),
 }
 
 contextBridge.exposeInMainWorld('assist', api)

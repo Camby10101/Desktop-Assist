@@ -15,14 +15,16 @@ import { spawn } from 'node:child_process'
 import { once } from 'node:events'
 import { existsSync } from 'node:fs'
 import { readFile, rm } from 'node:fs/promises'
+import { hostname, release, version as osVersion } from 'node:os'
 import { join } from 'node:path'
 import { BUBBLE_BOX, panelWindowSize } from '@shared/geometry'
 import { IPC } from '@shared/ipc'
-import type { AppsState, AuthStatus } from '@shared/types'
+import type { AppsState, AtlassianState, AuthStatus } from '@shared/types'
 import tenantConfig from '@tenant/tenant.json'
 import { createActionHandlers } from './actions'
-import { fetchLogo, mcpConnector } from './apps/mcp'
+import { fetchLogo } from './apps/logos'
 import { PortalApps } from './apps/PortalApps'
+import { Atlassian, AtlassianMemorySchema } from './atlassian/Atlassian'
 import { AuthManager } from './auth/AuthManager'
 import { summarizeIdToken, type IdTokenSummary } from './auth/idToken'
 import { listenForRedirect } from './auth/loopback'
@@ -36,11 +38,14 @@ import { API_BASE_URL, buildSystemPrompt } from './claude/model'
 import { ClaudeDesktop, NEW_CHAT_LINK } from './claudeDesktop'
 import { registerIpc, type BuiltInChat } from './ipc'
 import { createLog, type Log } from './log'
+import { mcpConnector } from './mcp/connector'
 import { sendInClaude } from './sendInClaude'
 import { uninstall } from './uninstall'
 import { NotesStore } from './notes/NotesStore'
 import { ScreenshotService } from './screenshots/ScreenshotService'
+import { myRequestsUrl, ServiceDesk, windowsVersion } from './serviceDesk'
 import { SettingsService } from './settings'
+import { readJsonFile, writeJsonFile } from './storage/jsonFile'
 import { SecretStore, type Encryptor } from './storage/SecretStore'
 import {
   brandingOf,
@@ -130,6 +135,25 @@ async function start(): Promise<void> {
     screen.getDisplayMatching(bubbleWindow.getBounds()),
   )
 
+  /**
+   * A Windows notification. Windows shows it in the bottom-right corner, over the bubble when it's
+   * there: clicking it does what clicking the bubble would.
+   */
+  const notify = ({ title, body }: { title: string; body: string }) => {
+    if (!Notification.isSupported()) return
+    const notification = new Notification({ title, body })
+    notification.on('click', () => bubble.expand())
+    notification.show()
+  }
+  /** Screenshots go on the clipboard as one image, for pasting where a link can't carry them. */
+  const copyScreenshots = async (paths: string[]) => {
+    const image = screenshots.forClipboard(paths)
+    if (!image) return false
+    const png = new Blob([image.toPNG()], { type: 'image/png' })
+    await clipboard.write([new ClipboardItem({ 'image/png': png })])
+    return true
+  }
+
   const { chatApp, signIn, claudeAccess } = tenant
   const builtIn =
     chatApp === 'built-in' && signIn && claudeAccess
@@ -149,13 +173,7 @@ async function start(): Promise<void> {
       ? new ClaudeDesktop({
           isInstalled: () => app.getApplicationNameForProtocol(NEW_CHAT_LINK) !== '',
           openLink: (url) => shell.openExternal(url),
-          copyScreenshots: async (paths) => {
-            const image = screenshots.forClipboard(paths)
-            if (!image) return false
-            const png = new Blob([image.toPNG()], { type: 'image/png' })
-            await clipboard.write([new ClipboardItem({ 'image/png': png })])
-            return true
-          },
+          copyScreenshots,
           autoSend: () => settings.get().autoSend,
           sendInClaude: async (question, paste) => {
             const outcome = await sendInClaude({ question, paste })
@@ -163,14 +181,7 @@ async function start(): Promise<void> {
             if (outcome !== 'sent') log(`Sending in Claude Desktop stopped: ${outcome}`)
             return outcome
           },
-          notify: ({ title, body }) => {
-            if (!Notification.isSupported()) return
-            const notification = new Notification({ title, body })
-            // Windows shows it in the bottom-right corner, over the bubble when it's there:
-            // clicking it should do what clicking the bubble would.
-            notification.on('click', () => bubble.expand())
-            notification.show()
-          },
+          notify,
           onError: (error) => log('Handing a question to Claude Desktop failed:', error),
         })
       : null
@@ -203,6 +214,70 @@ async function start(): Promise<void> {
   // Load the Apps list in the background, so it's there when the panel first opens. It never
   // opens the browser: without a saved connection it just waits for "Sign in with JumpCloud".
   void portalApps?.get()
+
+  const requests = serviceDesk?.requests
+  const memoryPath = join(userData, 'atlassian.json')
+  let atlassianStatus: AtlassianState['status'] = 'loading'
+  const atlassian = tenant.atlassian
+    ? new Atlassian({
+        appName: tenant.appName,
+        site: tenant.atlassian.site,
+        redirectPort: tenant.atlassian.redirectPort,
+        knowledgeSpaces: tenant.atlassian.knowledgeSpaces,
+        requests:
+          serviceDesk && requests
+            ? {
+                helpCentre: serviceDesk.url,
+                portalId: requests.portalId,
+                projectKey: requests.projectKey,
+              }
+            : null,
+        connector: mcpConnector({
+          serverUrl: tenant.atlassian.mcpServer,
+          client: { name: tenant.appName, version: app.getVersion() },
+          fetch: netFetch,
+        }),
+        store: new SecretStore(join(userData, 'atlassian.bin'), safeStorageEncryptor),
+        memory: {
+          load: async () => {
+            const read = await readJsonFile(memoryPath, AtlassianMemorySchema)
+            return read.status === 'ok' ? read.value : {}
+          },
+          save: async (memory) => void (await writeJsonFile(memoryPath, memory)),
+        },
+        listen: (port) => listenForRedirect(port),
+        openBrowser: (url) => shell.openExternal(url),
+        onState: (state) => {
+          broadcast(IPC.atlassianState, state)
+          // Connecting took the user to their browser; bring the panel back once it's done.
+          if (atlassianStatus === 'signing-in' && state.status !== 'signing-in') bubble.expand()
+          atlassianStatus = state.status
+        },
+        onFeed: (feed) => broadcast(IPC.jiraFeed, feed),
+        notify,
+        onError: (message, error) => log(message, error),
+      })
+    : null
+  // Uses a saved connection to Atlassian, if there is one, and starts checking notifications.
+  void atlassian?.init()
+  const desk =
+    serviceDesk && requests
+      ? new ServiceDesk({
+          helpCentre: serviceDesk.url,
+          portalId: requests.portalId,
+          requestTypeIds: requests.requestTypes.map((type) => type.id),
+          pcInfo: () => ({
+            computerName: hostname(),
+            windows: windowsVersion(osVersion(), release()),
+            appName: tenant.appName,
+            appVersion: app.getVersion(),
+          }),
+          openLink: (url) => shell.openExternal(url),
+          copyScreenshots,
+          notify,
+          onError: (error) => log('Opening the request form failed:', error),
+        })
+      : null
   if (!builtIn) {
     // Chats happen in Claude Desktop: a JumpCloud sign-in saved by the built-in chat isn't needed.
     void rm(join(userData, 'jumpcloud-session.bin'), { force: true }).catch(() => {})
@@ -219,6 +294,9 @@ async function start(): Promise<void> {
     builtIn,
     claudeDesktop,
     apps: portal && portalApps ? { list: portalApps, portalUrl: portal.url } : null,
+    atlassian,
+    serviceDesk:
+      serviceDesk && desk ? { desk, myRequestsUrl: myRequestsUrl(serviceDesk.url) } : null,
     actions: createActionHandlers({
       controller: bubble,
       screenshots,
@@ -269,6 +347,7 @@ async function start(): Promise<void> {
     bubble.dispose()
     builtIn?.chat.stop()
     void portalApps?.dispose()
+    atlassian?.dispose()
     tray?.destroy() // otherwise the icon lingers in the tray until hovered
     const timeout = new Promise((resolve) => setTimeout(resolve, SHUTDOWN_TIMEOUT_MS))
     void Promise.race([notes.flush(), timeout]).finally(() => app.quit())
@@ -373,6 +452,9 @@ async function withDevOverrides(tenant: Tenant): Promise<Tenant> {
     chatApp: override.chatApp ?? tenant.chatApp,
     startPage: override.startPage ?? tenant.startPage,
     portal: override.portal ? { ...tenant.portal, ...override.portal } : tenant.portal,
+    atlassian: override.atlassian
+      ? { ...tenant.atlassian, ...override.atlassian }
+      : tenant.atlassian,
     signIn: override.signIn ? { ...tenant.signIn, ...override.signIn } : tenant.signIn,
     claudeAccess: override.claudeAccess
       ? { ...tenant.claudeAccess, ...override.claudeAccess }

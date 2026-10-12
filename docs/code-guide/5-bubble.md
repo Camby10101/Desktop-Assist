@@ -23,8 +23,8 @@ What moves the controller from one mode to another:
 - `collapsed` → `expanded`: a click on the bubble (`clickBubble()`), or the tray icon, launching
   the app a second time, or finishing sign-in in the browser (all `expand()`).
 - `expanded` → `collapsed`: a click on the bubble, Esc in the panel (`collapse()`), handing a
-  question to Claude Desktop, opening an app from the Apps list or the IT service desk (also
-  `collapse()`), or clicking
+  question to Claude Desktop, opening an app from the Apps list, the IT service desk or an IT
+  request's form on the portal (also `collapse()`), or clicking
   somewhere else so the panel loses focus (`panelBlurred()`, except in the panel's first 400 ms).
 - `collapsed` or `expanded` → `dragging` → `returning`: pressing and moving the bubble
   (`startDrag()`), then letting go (`endDrag()`).
@@ -52,7 +52,9 @@ Who calls it:
   quitting to `dispose()`.
 - `src/main/ipc.ts` forwards the pages' requests: the bubble's click and drag (`clickBubble()`,
   `startDrag()`, `endDrag()`) and the panel's Esc (`collapse()`). It also calls `collapse()`
-  after handing a question to Claude Desktop or opening an app from the Apps list.
+  after handing a question to Claude Desktop (from the text box, or about a Jira issue), opening an
+  app from the Apps list, and opening an IT request's form or the user's requests on the service
+  desk portal.
 - `src/main/actions.ts` calls `startBounce()` for the Bounce icon, `whileHidden()` for the
   screenshot icon, and `collapse()` once the IT service desk has opened in the browser.
 

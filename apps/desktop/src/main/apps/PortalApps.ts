@@ -1,19 +1,18 @@
-import { randomBytes } from 'node:crypto'
-import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js'
-import type {
-  OAuthClientInformationMixed,
-  OAuthClientMetadata,
-  OAuthTokens,
-} from '@modelcontextprotocol/sdk/shared/auth.js'
 import type { AppsState, PortalApp } from '@shared/types'
 import { SignInCancelledError, SignInTimeoutError, type RedirectListener } from '../auth/loopback'
+import {
+  McpAccount,
+  NeedsSignInError,
+  type McpConnector,
+  type SavedSecret,
+} from '../mcp/McpAccount'
+import type { ToolResult } from '../mcp/toolResult'
 import {
   describeShape,
   findLaunchUrl,
   idArgumentName,
   parseAppList,
   type PortalAppInfo,
-  type ToolResult,
 } from './portalData'
 
 /** The portal's tools, from JumpCloud's MCP Server for Users. */
@@ -29,42 +28,12 @@ export const LAUNCH_TIMEOUT_MS = 15_000
 /** Everything JumpCloud's apps server offers; offline_access keeps the user connected. */
 const SCOPE = 'openid profile email offline_access organization userconsole'
 
-/** A connection to the apps server, signed in as the user. */
-export interface McpSession {
-  listTools(): Promise<{ name: string; inputSchema?: unknown }[]>
-  callTool(name: string, args: Record<string, unknown>): Promise<ToolResult>
-  close(): Promise<void>
-}
-
-/** Thrown when there's no usable sign-in: the user has to connect, in the browser. */
-export class NeedsSignInError extends Error {
-  constructor() {
-    super('Sign-in needed')
-  }
-}
-
-/** Talks to the apps server (src/main/apps/mcp.ts; tests use a fake). */
-export interface McpConnector {
-  /** Connects with the saved sign-in (renewing it if needed); throws NeedsSignInError if none. */
-  connect(provider: OAuthClientProvider): Promise<McpSession>
-  /**
-   * The OAuth steps. Without a code: registers Desktop Assist with the server if it isn't yet,
-   * and asks the provider to send the user to the sign-in page ('REDIRECT'). With the code from
-   * the browser: swaps it for tokens ('AUTHORIZED').
-   */
-  authorize(provider: OAuthClientProvider, code?: string): Promise<'AUTHORIZED' | 'REDIRECT'>
-}
-
 export interface PortalAppsDeps {
   appName: string
   redirectPort: number
   connector: McpConnector
   /** The connection to the portal, saved encrypted (Windows DPAPI). */
-  store: {
-    load(): Promise<string | null>
-    save(secret: string): Promise<void>
-    clear(): Promise<void>
-  }
+  store: SavedSecret
   listen(port: number): Promise<RedirectListener>
   openBrowser(url: string): Promise<void>
   /** An app's logo as a data: URL, or null. */
@@ -75,106 +44,6 @@ export interface PortalAppsDeps {
   launchTimeoutMs?: number
 }
 
-interface Saved {
-  client?: OAuthClientInformationMixed
-  tokens?: OAuthTokens
-}
-
-/**
- * The OAuth client the MCP SDK drives: Desktop Assist as a public client (PKCE, no secret) with a
- * loopback redirect. It remembers the registration and the tokens; the sign-in page is only opened
- * by PortalApps.signIn(), never by just looking at the list.
- */
-export class SavedAuth implements OAuthClientProvider {
-  private saved: Saved = {}
-  private verifier = ''
-  private expectedState = ''
-  /** Where the user has to go to sign in, once the SDK has asked for it. */
-  authorizationUrl: URL | null = null
-
-  constructor(
-    private readonly appName: string,
-    private readonly redirectPort: number,
-    private readonly store: PortalAppsDeps['store'],
-  ) {}
-
-  async load(): Promise<void> {
-    try {
-      const text = await this.store.load()
-      this.saved = text ? (JSON.parse(text) as Saved) : {}
-    } catch {
-      this.saved = {}
-    }
-  }
-
-  get redirectUrl(): string {
-    return `http://127.0.0.1:${this.redirectPort}/callback`
-  }
-
-  get clientMetadata(): OAuthClientMetadata {
-    return {
-      client_name: this.appName,
-      redirect_uris: [this.redirectUrl],
-      grant_types: ['authorization_code', 'refresh_token'],
-      response_types: ['code'],
-      token_endpoint_auth_method: 'none',
-      scope: SCOPE,
-    }
-  }
-
-  state(): string {
-    this.expectedState = randomBytes(16).toString('base64url')
-    return this.expectedState
-  }
-
-  /** Whether the browser came back from the sign-in this app started. */
-  isExpectedState(state: string | null): boolean {
-    return state !== null && this.expectedState !== '' && state === this.expectedState
-  }
-
-  clientInformation(): OAuthClientInformationMixed | undefined {
-    return this.saved.client
-  }
-
-  async saveClientInformation(client: OAuthClientInformationMixed): Promise<void> {
-    this.saved = { ...this.saved, client }
-    await this.persist()
-  }
-
-  tokens(): OAuthTokens | undefined {
-    return this.saved.tokens
-  }
-
-  async saveTokens(tokens: OAuthTokens): Promise<void> {
-    this.saved = { ...this.saved, tokens }
-    await this.persist()
-  }
-
-  redirectToAuthorization(authorizationUrl: URL): void {
-    this.authorizationUrl = authorizationUrl
-  }
-
-  saveCodeVerifier(verifier: string): void {
-    this.verifier = verifier
-  }
-
-  codeVerifier(): string {
-    return this.verifier
-  }
-
-  async invalidateCredentials(scope: 'all' | 'client' | 'tokens' | 'verifier' | 'discovery') {
-    if (scope === 'all' || scope === 'client') this.saved = {}
-    else if (scope === 'tokens') this.saved = { client: this.saved.client }
-    if (scope === 'all' || scope === 'verifier') this.verifier = ''
-    await this.persist()
-  }
-
-  private async persist(): Promise<void> {
-    if (this.saved.client || this.saved.tokens) await this.store.save(JSON.stringify(this.saved))
-    else await this.store.clear()
-  }
-}
-
 /**
  * The Apps list: the apps in the user's JumpCloud User Portal, from JumpCloud's MCP Server for
  * Users, and opening one in the browser through its sign-in link. The user connects once, in the
@@ -183,11 +52,8 @@ export class SavedAuth implements OAuthClientProvider {
 export class PortalApps {
   private state: AppsState = { status: 'loading' }
   private apps: PortalAppInfo[] = []
-  private readonly auth: SavedAuth
-  private loaded: Promise<void>
-  private session: McpSession | null = null
+  private readonly account: McpAccount
   private loading: Promise<AppsState> | null = null
-  private listener: RedirectListener | null = null
   private loadedOnce = false
   /** Logos already fetched, by address, so a refresh doesn't download them all again. */
   private readonly logos = new Map<string, string>()
@@ -198,8 +64,15 @@ export class PortalApps {
   private launchArgument: string | null | undefined
 
   constructor(private readonly deps: PortalAppsDeps) {
-    this.auth = new SavedAuth(deps.appName, deps.redirectPort, deps.store)
-    this.loaded = this.auth.load()
+    this.account = new McpAccount({
+      appName: deps.appName,
+      redirectPort: deps.redirectPort,
+      scope: SCOPE,
+      connector: deps.connector,
+      store: deps.store,
+      listen: (port) => this.deps.listen(port),
+      openBrowser: (url) => this.deps.openBrowser(url),
+    })
   }
 
   get current(): AppsState {
@@ -218,30 +91,10 @@ export class PortalApps {
     if (this.state.status === 'signing-in') return
     this.setState({ status: 'signing-in' })
     try {
-      await this.loaded
-      this.listener = await this.deps.listen(this.deps.redirectPort)
-      this.auth.authorizationUrl = null
-      if ((await this.deps.connector.authorize(this.auth)) === 'REDIRECT') {
-        const url = this.auth.authorizationUrl as URL | null
-        if (!url) throw new Error('The sign-in page address is missing')
-        await this.deps.openBrowser(url.href)
-        const back = new URL(await this.listener.result)
-        const problem = back.searchParams.get('error_description') ?? back.searchParams.get('error')
-        if (problem) throw new Error(problem)
-        if (!this.auth.isExpectedState(back.searchParams.get('state'))) {
-          throw new Error("The sign-in didn't come from this app")
-        }
-        const code = back.searchParams.get('code')
-        if (!code) throw new Error('The sign-in came back without a code')
-        await this.deps.connector.authorize(this.auth, code)
-      }
-      await this.closeSession()
-      this.listener = null
+      await this.account.signIn()
       this.state = { status: 'loading' }
       await this.load()
     } catch (error) {
-      this.listener?.close()
-      this.listener = null
       if (error instanceof SignInCancelledError) {
         this.setState({ status: 'sign-in' })
         return
@@ -256,7 +109,7 @@ export class PortalApps {
   }
 
   cancelSignIn(): void {
-    this.listener?.close()
+    this.account.cancelSignIn()
   }
 
   /**
@@ -277,8 +130,7 @@ export class PortalApps {
   }
 
   async dispose(): Promise<void> {
-    this.listener?.close()
-    await this.closeSession()
+    await this.account.dispose()
   }
 
   private load(): Promise<AppsState> {
@@ -310,27 +162,13 @@ export class PortalApps {
     }
   }
 
-  /** Calls a tool, connecting first if needed and once more if the connection has gone stale. */
-  private async call(name: string, args: Record<string, unknown>): Promise<ToolResult> {
-    await this.loaded
-    for (let attempt = 0; ; attempt++) {
-      try {
-        this.session ??= await this.deps.connector.connect(this.auth)
-        const result = await this.session.callTool(name, args)
-        if (result.isError) throw new Error(`The ${name} tool reported an error`)
-        return result
-      } catch (error) {
-        await this.closeSession()
-        if (error instanceof NeedsSignInError || attempt > 0) throw error
-      }
-    }
+  private call(name: string, args: Record<string, unknown>): Promise<ToolResult> {
+    return this.account.call(name, args)
   }
 
   private async launchUrl(app: PortalAppInfo): Promise<string | null> {
-    await this.loaded
     if (this.launchArgument === undefined) {
-      this.session ??= await this.deps.connector.connect(this.auth)
-      const tool = (await this.session.listTools()).find((t) => t.name === LAUNCH_TOOL)
+      const tool = (await this.account.listTools()).find((t) => t.name === LAUNCH_TOOL)
       this.launchArgument = tool ? idArgumentName(tool.inputSchema) : null
     }
     if (this.launchArgument === null) return null
@@ -351,12 +189,6 @@ export class PortalApps {
     const logo = await this.deps.fetchLogo(url).catch(() => null)
     if (logo) this.logos.set(url, logo) // a failure is tried again next time
     return logo
-  }
-
-  private async closeSession(): Promise<void> {
-    const session = this.session
-    this.session = null
-    await session?.close().catch(() => {})
   }
 
   private setState(state: AppsState): AppsState {

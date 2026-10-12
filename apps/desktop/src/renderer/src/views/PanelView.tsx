@@ -2,12 +2,15 @@ import { useEffect, useState, type PointerEvent } from 'react'
 import type { ActionId } from '@shared/actions'
 import { CLAUDE_DOWNLOAD_PAGE } from '@shared/claudeDesktop'
 import { actionOffset } from '@shared/geometry'
+import { browseUrl, findIssueKeys } from '@shared/jira'
 import type {
   AppsState,
   AppState,
   AskResult,
+  AtlassianState,
   Attachment,
   Effort,
+  JiraFeed,
   PortalApp,
   StartPage,
   UninstallResult,
@@ -15,6 +18,9 @@ import type {
 import { ActionStack } from '../components/ActionStack'
 import { AppsList } from '../components/AppsList'
 import { Banner, ChatBox } from '../components/ChatBox'
+import { IssueView } from '../components/IssueView'
+import { JiraPage } from '../components/JiraPage'
+import { ServiceDeskPage, type ServiceDeskTab } from '../components/ServiceDeskPage'
 import { SettingsMenu } from '../components/SettingsMenu'
 import { SignInPanel } from '../components/SignInPanel'
 import { useAccentColor, useAssistState } from '../hooks/useAssistState'
@@ -37,6 +43,16 @@ const UNINSTALL_ERRORS: Record<Extract<UninstallResult, { ok: false }>['reason']
   failed: "Couldn't start the uninstaller. Uninstall from Windows Settings → Apps.",
 }
 
+/**
+ * What the card shows: the text box (`ask`), or a page in its place while that page's icon is on.
+ */
+type View = StartPage | 'jira' | 'servicedesk'
+
+const EMPTY_FEED: JiraFeed = {
+  notifications: { status: 'loading', items: [] },
+  requests: { status: 'loading', items: [] },
+}
+
 /** Everything that appears around the bubble when it's clicked. */
 export function PanelView() {
   useClickThrough()
@@ -57,12 +73,19 @@ function Panel({ state }: { state: AppState }) {
   const [settings, setSettings] = useState(state.settings)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [asking, setAsking] = useState(false)
-  // The card shows the text box or the Apps list: the tenant's start page when the panel opens,
-  // the other one while its icon (Ask Claude or Your apps) is on.
-  const { startPage } = branding
-  const [view, setView] = useState<StartPage>(startPage)
+  // The card shows the tenant's start page (the text box or the Apps list) when the panel opens,
+  // and another page while its icon is on (Ask Claude, Your apps, Jira, the service desk).
+  const { startPage, atlassianSite, requestTypes } = branding
+  const [view, setView] = useState<View>(startPage)
   const [apps, setApps] = useState<AppsState>({ status: 'loading' })
   const [openingApp, setOpeningApp] = useState<string | null>(null)
+  const [atlassian, setAtlassian] = useState<AtlassianState>({ status: 'loading' })
+  const [feed, setFeed] = useState<JiraFeed>(EMPTY_FEED)
+  /** The Jira issue shown in the card (over whichever page it was opened from), or null. */
+  const [issueKey, setIssueKey] = useState<string | null>(null)
+  const [serviceDeskTab, setServiceDeskTab] = useState<ServiceDeskTab>('new')
+  /** The Jira projects' keys, to only offer real issue keys from the text box. */
+  const [projectKeys, setProjectKeys] = useState<string[] | null>(null)
   /** Claude Desktop isn't installed, so questions can't be opened in it (checked on opening). */
   const [claudeMissing, setClaudeMissing] = useState(false)
   const [toast, showToast] = useToast()
@@ -72,11 +95,33 @@ function Panel({ state }: { state: AppState }) {
       window.assist.onModeChanged((mode) => {
         if (mode !== 'expanded') setSettingsOpen(false)
         // The panel always reopens on the start page (but taking a screenshot isn't closing it).
-        if (mode === 'collapsed') setView(startPage)
+        if (mode === 'collapsed') {
+          setView(startPage)
+          setIssueKey(null)
+        }
       }),
     [startPage],
   )
   useEffect(() => window.assist.onAppsState(setApps), [])
+  useEffect(() => {
+    if (!atlassianSite) return
+    const unsubscribe = [
+      window.assist.onAtlassianState(setAtlassian),
+      window.assist.onJiraFeed(setFeed),
+    ]
+    void window.assist.atlassian.get().then(setAtlassian)
+    void window.assist.atlassian.feed().then(setFeed)
+    return () => unsubscribe.forEach((stop) => stop())
+  }, [atlassianSite])
+  const atlassianConnected = atlassian.status === 'connected'
+  useEffect(() => {
+    if (!atlassianConnected) return
+    let alive = true
+    void window.assist.atlassian.projectKeys().then((keys) => alive && setProjectKeys(keys))
+    return () => {
+      alive = false
+    }
+  }, [atlassianConnected])
   // The Apps list is loaded (or remembered) by the main process; ask for it whenever it shows.
   useEffect(() => {
     if (!open || view !== 'apps' || !branding.portalName) return
@@ -102,12 +147,13 @@ function Panel({ state }: { state: AppState }) {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
       if (settingsOpen) setSettingsOpen(false)
+      else if (issueKey) setIssueKey(null)
       else if (view !== startPage) setView(startPage)
       else window.assist.collapse()
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [settingsOpen, view, startPage])
+  }, [settingsOpen, issueKey, view, startPage])
 
   // Not signed in: the chat box shows the sign-in instead of the chat. While a saved sign-in is
   // being renewed, or JumpCloud can't be reached, the chat stays (sending tries JumpCloud again).
@@ -119,10 +165,15 @@ function Panel({ state }: { state: AppState }) {
   const canSend = signedIn && !busy && !asking && (draft.trim() !== '' || attachments.length > 0)
 
   async function runAction(id: ActionId) {
-    if (id === 'apps' || id === 'ask') {
-      // Swaps the card to that page, or back again.
+    // With request types, the service desk icon opens a page for them instead of the portal.
+    if (id === 'apps' || id === 'ask' || id === 'jira' || (id === 'servicedesk' && requestTypes)) {
+      // Swaps the card to that page, or back again: the text box and the Apps list swap with
+      // each other, other pages go back to the start page.
       setSettingsOpen(false)
-      setView(view === id ? (id === 'apps' ? 'ask' : 'apps') : id)
+      setIssueKey(null)
+      if (id === 'servicedesk') setServiceDeskTab('new')
+      const back: View = id === 'apps' ? 'ask' : id === 'ask' ? 'apps' : startPage
+      setView(view === id && !issueKey ? back : id)
       return
     }
     if (id === 'theme') {
@@ -190,6 +241,28 @@ function Panel({ state }: { state: AppState }) {
     } finally {
       setOpeningApp((current) => (current === app.id ? null : current))
     }
+  }
+
+  /** Opens a Jira issue in the card if connected to Atlassian, otherwise in the browser. */
+  function openIssue(key: string) {
+    setSettingsOpen(false)
+    if (atlassianConnected) setIssueKey(key)
+    else if (atlassianSite) void window.assist.openExternal(browseUrl(atlassianSite, key))
+  }
+
+  /** Starts an IT request from what's in the text box. */
+  function report() {
+    setSettingsOpen(false)
+    setIssueKey(null)
+    setServiceDeskTab('new')
+    setView('servicedesk')
+  }
+
+  async function disconnectAtlassian() {
+    setSettingsOpen(false)
+    setIssueKey(null)
+    await window.assist.atlassian.signOut()
+    showToast('Disconnected from Atlassian')
   }
 
   async function attachLatest() {
@@ -306,6 +379,83 @@ function Panel({ state }: { state: AppState }) {
     ) : null
 
   const settingsIndex = branding.actions.indexOf('settings')
+  // Only keys of real projects, once the projects are known.
+  const issueKeys = atlassianSite
+    ? findIssueKeys(draft).filter(
+        (key) =>
+          !atlassianConnected ||
+          !projectKeys ||
+          projectKeys.includes(key.slice(0, key.lastIndexOf('-'))),
+      )
+    : []
+  const unreadNotifications = feed.notifications.items.filter((n) => n.unread).length
+  const requestNews = feed.requests.items.filter((r) => r.news).length
+
+  const pageContent =
+    view === 'apps' && branding.portalName ? (
+      <AppsList
+        open={open}
+        state={apps}
+        appName={branding.appName}
+        portalName={branding.portalName}
+        favorites={settings.favoriteApps}
+        onToggleFavorite={(app, favorite) => void toggleFavorite(app, favorite)}
+        onOpenApp={(app) => void openApp(app)}
+        openingId={openingApp}
+        onOpenPortal={() => void window.assist.apps.openPortal()}
+        onSignIn={() => void window.assist.apps.signIn()}
+        onCancelSignIn={() => void window.assist.apps.cancelSignIn()}
+        onRetry={() => void window.assist.apps.get(true).then(setApps)}
+      />
+    ) : view === 'jira' && atlassianSite ? (
+      <JiraPage
+        open={open}
+        state={atlassian}
+        feed={feed}
+        appName={branding.appName}
+        site={atlassianSite}
+        onOpenIssue={openIssue}
+      />
+    ) : view === 'servicedesk' && requestTypes ? (
+      <ServiceDeskPage
+        open={open}
+        initialTab={serviceDeskTab}
+        requestTypes={requestTypes}
+        atlassian={atlassianSite ? atlassian : null}
+        feed={feed}
+        appName={branding.appName}
+        draft={draft}
+        attachments={attachments}
+        onAttachLatest={() => void attachLatest()}
+        onOpenAttachment={(attachment) => void openAttachment(attachment)}
+        onRemoveAttachment={(attachment) => void removeAttachment(attachment)}
+        onOpenIssue={openIssue}
+        showToast={showToast}
+      />
+    ) : null
+  // An issue opens over the page it was opened from, which stays (hidden) so Back finds it as it
+  // was: the same tab, search or half-filled form.
+  const page =
+    issueKey || pageContent ? (
+      <>
+        {issueKey && (
+          <IssueView
+            key={issueKey}
+            issueKey={issueKey}
+            inClaudeDesktop={inClaudeDesktop}
+            onBack={() => setIssueKey(null)}
+            onAskedInChat={() => {
+              setIssueKey(null)
+              setView('ask')
+            }}
+            showToast={showToast}
+          />
+        )}
+        <div hidden={issueKey !== null} className="contents">
+          {pageContent}
+        </div>
+      </>
+    ) : null
 
   return (
     <div
@@ -319,24 +469,7 @@ function Panel({ state }: { state: AppState }) {
         toast={toast}
         inClaudeDesktop={inClaudeDesktop}
         autoSend={settings.autoSend}
-        apps={
-          view === 'apps' && branding.portalName ? (
-            <AppsList
-              open={open}
-              state={apps}
-              appName={branding.appName}
-              portalName={branding.portalName}
-              favorites={settings.favoriteApps}
-              onToggleFavorite={(app, favorite) => void toggleFavorite(app, favorite)}
-              onOpenApp={(app) => void openApp(app)}
-              openingId={openingApp}
-              onOpenPortal={() => void window.assist.apps.openPortal()}
-              onSignIn={() => void window.assist.apps.signIn()}
-              onCancelSignIn={() => void window.assist.apps.cancelSignIn()}
-              onRetry={() => void window.assist.apps.get(true).then(setApps)}
-            />
-          ) : null
-        }
+        page={page}
         signInPrompt={signInPrompt}
         banner={banner}
         messages={state.chat}
@@ -352,6 +485,9 @@ function Panel({ state }: { state: AppState }) {
         onAttachLatest={() => void attachLatest()}
         onOpenAttachment={(attachment) => void openAttachment(attachment)}
         onRemoveAttachment={(attachment) => void removeAttachment(attachment)}
+        issueKeys={issueKeys}
+        onOpenIssue={openIssue}
+        onReport={requestTypes ? report : null}
       />
       <ActionStack
         corner={state.corner}
@@ -359,7 +495,14 @@ function Panel({ state }: { state: AppState }) {
         open={open}
         activeId={settingsOpen ? 'settings' : view !== startPage ? view : null}
         theme={settings.theme}
-        dotted={view !== 'ask' && (draft.trim() !== '' || attachments.length > 0) ? ['ask'] : []}
+        pages={requestTypes ? ['servicedesk'] : []}
+        dotted={[
+          ...(view !== 'ask' && (draft.trim() !== '' || attachments.length > 0)
+            ? (['ask'] as const)
+            : []),
+          ...(view !== 'jira' && unreadNotifications > 0 ? (['jira'] as const) : []),
+          ...(view !== 'servicedesk' && requestNews > 0 ? (['servicedesk'] as const) : []),
+        ]}
         onAction={(id) => void runAction(id)}
       />
       {open && settingsOpen && settingsIndex >= 0 && (
@@ -370,6 +513,8 @@ function Panel({ state }: { state: AppState }) {
           branding={branding}
           version={state.version}
           user={auth?.state === 'signed-in' || auth?.state === 'offline' ? auth.user : null}
+          atlassianUser={atlassian.status === 'connected' ? atlassian.user : null}
+          onDisconnectAtlassian={() => void disconnectAtlassian()}
           onToggleAutoStart={async () =>
             setSettings(await window.assist.settings.setAutoStart(!settings.autoStart))
           }

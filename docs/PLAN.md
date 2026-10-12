@@ -2,8 +2,9 @@
 
 Status: **Milestones 0 (Foundation), 1 (Chat with Claude), 2.1 (bubble fixes), 3 (JumpCloud
 sign-in), 4 (logos, favourites, service desk, light/dark, the bubble-click fix) and features 3.1
-(questions open in Claude Desktop) and 3.2 (Apps list, Uninstall, fixes) complete**. Milestone 5 is
-in progress (§7h). Last updated 2026-10-12.
+(questions open in Claude Desktop) and 3.2 (Apps list, Uninstall, fixes) complete**. Milestone 5
+(the app-opening spinner; Jira and the service desk) is in progress (§7h). Last updated
+2026-10-12.
 
 A Windows desktop assistant that runs in the background, shows a small circular company logo
 in the bottom-right corner of the screen, and opens a panel when clicked. It's built for Morse
@@ -379,9 +380,63 @@ Tested with unit tests (226, including recognising images from their bytes, the 
 
 ## 7h. Milestone 5 (in progress)
 
-Done so far:
+Done so far: the spinner, then the Jira and Atlassian ideas 1 to 9 below (5 as a Notifications
+tab, as asked). IT's setup guide: [ATLASSIAN_SETUP.md](ATLASSIAN_SETUP.md).
 
 - **A spinner while an app opens**: Clicking an app in the Apps list could seem to do nothing for a few seconds while JumpCloud gives its sign-in link. Now a loading circle spins over that app's logo from the click until the browser is opening (then the panel closes as before). Opening is also quicker: the launch tool's details are remembered, so each open is one request to JumpCloud instead of two. If JumpCloud takes more than 15 s, the sign-in link the list itself gave is used, so the spinner can't go on for ever. Tested with unit tests (the single request, the slow-JumpCloud fallback) and end-to-end against a stand-in that takes 1.5 s to answer (53 checks: the tile spins, only that tile, gone once the panel closes).
+
+- **Connecting to Atlassian**: Each person connects Desktop Assist to Jira and Confluence once,
+  in the browser (**Connect to Atlassian**), through Atlassian's Remote MCP server
+  (`mcp.atlassian.com`); the sign-in goes through JumpCloud, so it's usually one Accept click. It's
+  the same kind of connection as the Apps list's (client registration, PKCE, no secret, refresh
+  tokens saved with DPAPI in `atlassian.bin`), and the code is now shared
+  (`src/main/mcp/McpAccount.ts`). Atlassian's default domain settings allow apps on the person's
+  PC, so no admin step was needed. **Settings → Disconnect Atlassian** forgets it.
+- **Jira page** (a bell icon):
+  - **Notifications (5)**: when someone else assigned you an issue (from each issue's change
+    history: not when you assigned it yourself) or mentioned you in a comment or description, in
+    the last two weeks. New ones have a dot, a count on the tab and a dot on the bell, and count as
+    seen a moment after the tab is looked at (remembered in `atlassian.json`). Checked every five
+    minutes in the background and whenever the page opens.
+  - **Search (4, 9)**: Jira issues (an issue key finds that issue) and Confluence pages, ranked
+    like Confluence's own search.
+  - **An issue**: its status, description and latest comments, opened from a notification, a
+    search result, My requests or an issue key. **Ask Claude (3)**: Summarise, Draft a reply or
+    Next steps, handed to Claude Desktop with the issue's details in the question (kept under
+    Claude Desktop's 12,000-character limit by leaving out the oldest comments first). **Quick
+    actions (8)**: Move (the issue's own transitions), Comment and Log time ("1h 30m"). Back
+    returns to the page as it was (same tab, same search).
+- **Issue keys (2)**: A key like `ISD-1234` in the text box gets an **Open ISD-1234** button
+  (only keys of real Jira projects once connected); it opens the issue in the panel, or in Jira in
+  the browser if not connected.
+- **Service desk page (1, 6, 7)**: The service desk icon now opens a page (when `tenant.json` lists
+  request types):
+  - **New request**: request type (Morse Micro's portal types), summary and details filled in from
+    the text box, Attach screenshot, and **Include PC details** (PC name, Windows version, Desktop
+    Assist version). Matching how-to pages from IT's Confluence space (`INFRA`) show while typing
+    ("These might help"). **Continue on the portal** opens the portal's own form for that type
+    with the summary and description filled in (Jira Service Management reads them from the
+    link), and the screenshot copied for Ctrl+V; the person sends it there, as themselves, so the
+    request type's own fields and approvals still apply. **Report to IT** under the text box starts
+    one.
+  - **My requests**: the person's IT requests (open, and closed in the last 30 days) with their
+    status, marked "Mark Duong replied" or "Now Resolved" when IT has done something since they
+    last looked, with a Windows notification at the time (automatic replies don't count, and the
+    first check only learns where things are). Opening a request marks it seen.
+
+  Creating the ticket directly from the panel (7) wasn't done: Atlassian's MCP server creates Jira
+  issues, not service desk requests, so a ticket made that way would have no request type, wouldn't
+  show on the portal for the person, and couldn't carry the screenshot.
+
+Found along the way: Atlassian's Rovo search (`search`) uses Rovo credits, so Desktop Assist only
+uses the Jira (JQL) and Confluence (CQL) searches; Jira can find mentions of the user with
+`comment ~ currentUser()`, and the comments themselves (in Jira's own format) say whose account was
+mentioned and by whom; the IT portal is portal 1 of project ISD. Tested with unit tests (259, the
+readers against answers shaped like the real server's, the notifications, request news and its
+Windows notifications, the prompt limit, the form link) and end-to-end against a stand-in for
+Atlassian's MCP server with a real OAuth sign-in (58 checks, from connecting through every tab,
+the issue actions, the form link and a restart, to disconnecting); the earlier runs (54, 39, 47, 9)
+still pass, without contacting the real Atlassian.
 
 ### Jira and Atlassian: ideas
 
@@ -414,19 +469,23 @@ Suggested order: 1 and 2 first (small, useful every day, no new sign-in), then t
 - **3.1** ✅ **Each person's own Claude**: Questions open in Claude Desktop, against each person's own usage limit. See §7e.
 - **3.2** ✅ **Apps list, Uninstall, fixes**: The user's JumpCloud portal apps in the panel; Uninstall in Settings; the bubble, notification and auto-send fixes. See §7f.
 - **4** ✅ **Day-to-day improvements**: App logos, favourites, the service desk icon, screenshots keeping the page, the unresponsive bubble fixed, no tooltip, light/dark mode. See §7g.
-- 5 (in progress): The app-opening spinner (§7h), with the Jira and Atlassian ideas listed there. Other candidates:
+- 5 (in progress): The app-opening spinner, and Jira and the service desk (Atlassian ideas 1 to 9). See §7h. Other candidates:
   - Shipping: code signing (no "unrecognised app" warning), auto-update, silent deployment through JumpCloud (with Claude Desktop), CI on GitHub Actions (tests and the installer on every pull request), real version numbers with a "What's new" note
   - Bubble and screenshots: a keyboard shortcut to open the panel and to take a screenshot, snipping a region or a window, pasting an image into the text box, hiding during full-screen apps and presentations, a first-run tour
   - Apps and JumpCloud: recently opened apps near the top, arrow keys in the grid, company quick links that aren't JumpCloud apps, a password-expiry reminder
-  - Help and Claude: "Report a problem to IT" (a service desk ticket with the screenshot and PC details), quick prompts ("Explain this error", "Summarise this"), "Send my logs to IT"
+  - Help and Claude: quick prompts ("Explain this error", "Summarise this"), "Send my logs to IT", a stand-up helper (idea 10 in §7h)
 - later : Hiding during full-screen apps, company integrations (as claude.ai organization skills or plugins, now that questions go to Claude Desktop), macOS. For the built-in chat: Claude-requested screenshots (as a tool), saved history, a gateway for per-user audit
 
 ## 9. What we need from admins
 
 Step-by-step instructions are in [CLAUDE_DESKTOP_SETUP.md](CLAUDE_DESKTOP_SETUP.md) (3.1),
-[APPS_SETUP.md](APPS_SETUP.md) (3.2) and [JUMPCLOUD_SETUP.md](JUMPCLOUD_SETUP.md) (built-in chat).
+[APPS_SETUP.md](APPS_SETUP.md) (3.2), [ATLASSIAN_SETUP.md](ATLASSIAN_SETUP.md) (M5) and
+[JUMPCLOUD_SETUP.md](JUMPCLOUD_SETUP.md) (built-in chat).
 
 - **JumpCloud admin, Apps list (3.2):** turn on **MCP Server for users** (Settings → JumpCloud AI).
+- **Atlassian admin, Jira and the service desk (M5):** usually nothing: Atlassian's Rovo MCP
+  server must stay on, and its domain settings must keep allowing local apps (`localhost` /
+  `127.0.0.1`, which they do by default).
 
 - **Claude Desktop (3.1):** installed on each PC (MSIX, deployable machine-wide), and people
   signed in to the Morse Micro claude.ai organization. Recommended: the `forceLoginOrgUUID`
@@ -465,6 +524,12 @@ Step-by-step instructions are in [CLAUDE_DESKTOP_SETUP.md](CLAUDE_DESKTOP_SETUP.
 - 3.2 apps → the user's JumpCloud User Portal apps, from JumpCloud's MCP Server for Users, each
   user connecting once in the browser; no secret in the app
 - 3.2 uninstall → from Settings, through the installer's own uninstaller; user data kept
+- M5 Atlassian → each person connects once through Atlassian's Remote MCP server (no secret in the
+  app), sharing the Apps list's connection code; Rovo search left out (it costs Rovo credits)
+- M5 notifications → worked out in Desktop Assist from Jira (assignee changes by someone else,
+  mentions of the user), checked every five minutes; Windows notifications only for IT requests
+- M5 new requests → filled in on the panel, finished and sent on the portal (the request type's
+  own form), not created through Jira
 
 **Open**
 

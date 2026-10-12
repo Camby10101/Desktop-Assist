@@ -3,11 +3,32 @@
   "companyName": "Morse Micro",
   "appName": "Desktop Assist",
   "accentColor": "#9333EA",
-  "actions": ["ask", "servicedesk", "screenshot", "theme", "settings", "bounce", "close"],
+  "actions": ["ask", "jira", "servicedesk", "screenshot", "theme", "settings", "bounce", "close"],
   "chatApp": "claude-desktop",
   "startPage": "apps",
   "serviceDesk": {
-    "url": "https://morsemicro.atlassian.net/servicedesk/customer/portals"
+    "url": "https://morsemicro.atlassian.net/servicedesk/customer/portals",
+    "requests": {
+      "portalId": "1",
+      "projectKey": "ISD",
+      "requestTypes": [
+        { "id": "1561", "name": "Other IT Issue" },
+        { "id": "1565", "name": "Password Reset or Account Unlock" },
+        { "id": "1525", "name": "VPN or Remote Access Issue" },
+        { "id": "1560", "name": "Printing, Displays or Meeting Room Equipment Issue" },
+        { "id": "1571", "name": "Ask IT a question" },
+        { "id": "1355", "name": "Request new software" },
+        { "id": "1425", "name": "Other software/hardware request" },
+        { "id": "1388", "name": "Update or renew software license" },
+        { "id": "1604", "name": "Increase Tool Usage" }
+      ]
+    }
+  },
+  "atlassian": {
+    "site": "https://morsemicro.atlassian.net",
+    "mcpServer": "https://mcp.atlassian.com/v1/mcp",
+    "redirectPort": 47623,
+    "knowledgeSpaces": ["INFRA"]
   },
   "portal": {
     "name": "JumpCloud",

@@ -14,3 +14,16 @@ export function screenshotLabel(fileName: string, now: Date = new Date()): strin
   const today = year === now.getFullYear() && month === now.getMonth() + 1 && day === now.getDate()
   return today ? `Screenshot ${time}` : `Screenshot ${day} ${MONTHS[(month ?? 1) - 1]} ${time}`
 }
+
+/** How long ago something happened, briefly: "just now", "5m ago", "3h ago", "2d ago", "12 Sep". */
+export function timeAgo(iso: string, now: Date = new Date()): string {
+  const then = new Date(iso)
+  const minutes = Math.floor((now.getTime() - then.getTime()) / 60_000)
+  if (Number.isNaN(minutes)) return ''
+  if (minutes < 1) return 'just now'
+  if (minutes < 60) return `${minutes}m ago`
+  if (minutes < 24 * 60) return `${Math.floor(minutes / 60)}h ago`
+  if (minutes < 7 * 24 * 60) return `${Math.floor(minutes / (24 * 60))}d ago`
+  const date = `${then.getDate()} ${MONTHS[then.getMonth()]}`
+  return then.getFullYear() === now.getFullYear() ? date : `${date} ${then.getFullYear()}`
+}

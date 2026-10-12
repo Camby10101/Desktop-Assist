@@ -264,7 +264,7 @@ addAttachment(path: string): Notes | null {
 
 <!-- /code -->
 
-Attaches a screenshot file to the draft. `ipc.ts` calls it from the "Attach latest screenshot"
+Attaches a screenshot file to the draft. `ipc.ts` calls it from the **Attach screenshot**
 handler (`notesAttachLatest`) with the path from `ScreenshotService.latest()`, so the page never
 supplies the path.
 
@@ -545,8 +545,8 @@ newest, making small previews, preparing one for Claude, combining several into 
 clipboard, and opening one in another app. `index.ts` creates a single instance with the
 screenshots folder (`Pictures\<appName>`, for example `Pictures\Desktop Assist`) and a function
 that returns the display the bubble is on. `actions.ts` calls `capture()` for the camera button,
-`index.ts` uses `forClipboard()` when a question goes to Claude Desktop, and `ipc.ts` exposes the
-rest to the pages.
+`index.ts` uses `forClipboard()` when a question goes to Claude Desktop or an IT request to the
+service desk portal, and `ipc.ts` exposes the rest to the pages.
 
 Key ideas:
 
@@ -676,7 +676,7 @@ latest(): Promise<string | null> {
 
 <!-- /code -->
 
-The newest screenshot in the folder, or `null` if there isn't one. The "Attach latest screenshot"
+The newest screenshot in the folder, or `null` if there isn't one. The **Attach screenshot**
 handler in `ipc.ts` calls it and passes the result to `NotesStore.addAttachment()`. The work is done
 by `findLatestScreenshot()` in `files.ts`.
 
@@ -822,9 +822,11 @@ forClipboard(paths: string[]): NativeImage | null {
 Prepares the attached screenshots for Claude Desktop. A question goes to Claude Desktop as a link,
 and a link can carry text but not images, so the screenshots go on the Windows clipboard to be
 pasted into Claude with Ctrl+V, by Desktop Assist or by the user (see
-[Claude Desktop](9-claude-desktop.md)). The clipboard holds only one image at a time, so several
-screenshots are combined into one, stacked top to bottom. `copyScreenshots` in `index.ts` calls
-this and puts the result on the clipboard as a PNG.
+[Claude Desktop](9-claude-desktop.md)). An IT request raised from the panel goes to the service
+desk portal as a link too, so its screenshots go the same way, to be pasted into the portal's form
+(see [Jira and the service desk](11-atlassian.md)). The clipboard holds only one image at a time,
+so several screenshots are combined into one, stacked top to bottom. `copyScreenshots` in
+`index.ts` calls this and puts the result on the clipboard as a PNG.
 
 Unlike `forClaude()`, nothing is shrunk to Claude's preferred size or turned into a JPEG: the
 screenshots keep their full size (apart from the scaling needed to stack them), and `index.ts`
