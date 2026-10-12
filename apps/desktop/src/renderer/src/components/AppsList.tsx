@@ -21,6 +21,8 @@ export function AppsList(props: {
   favorites: string[]
   onToggleFavorite: (app: PortalApp, favorite: boolean) => void
   onOpenApp: (app: PortalApp) => void
+  /** The app being opened (its tile shows a spinner until the browser is opening), or null. */
+  openingId: string | null
   onOpenPortal: () => void
   onSignIn: () => void
   onCancelSignIn: () => void
@@ -139,9 +141,25 @@ export function AppsList(props: {
                       type="button"
                       onClick={() => props.onOpenApp(app)}
                       title={`Open ${app.name}`}
+                      aria-busy={props.openingId === app.id}
                       className="flex w-full flex-col items-center gap-1.5 rounded-xl px-1 py-2 text-center hover:bg-zinc-100 dark:hover:bg-zinc-800"
                     >
-                      <AppLogo app={app} />
+                      <span className="relative">
+                        <AppLogo app={app} />
+                        {props.openingId === app.id && (
+                          <span
+                            role="status"
+                            aria-label={`Opening ${app.name}`}
+                            className="absolute inset-0 grid place-items-center rounded-lg bg-white/75 dark:bg-zinc-900/75"
+                          >
+                            <LoaderCircle
+                              size={22}
+                              className="animate-spin text-accent dark:text-accent-soft"
+                              aria-hidden
+                            />
+                          </span>
+                        )}
+                      </span>
                       <span className="line-clamp-2 text-[11px] leading-tight">{app.name}</span>
                     </button>
                     <button

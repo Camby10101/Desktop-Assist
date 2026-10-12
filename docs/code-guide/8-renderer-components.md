@@ -12,7 +12,8 @@ in, `MessageList` shows the conversation (using `Markdown` for Claude's replies)
 Desktop (the tenant's `chatApp`), there's no sign-in and no conversation in the panel, so the card
 is just the text box, with an "Ask in Claude" button. The card can show the Apps list instead,
 either from the start or behind an icon, depending on the tenant; that component, `AppsList`, is
-covered in [Your apps](10-apps.md).
+covered in [Your apps](10-apps.md). It can also show the Jira page, the service desk page or a
+Jira issue, which are in [The Jira and service desk pages](12-atlassian-pages.md).
 
 ## `src/renderer/src/components/ChatBox.tsx`: the chat card
 
@@ -20,17 +21,18 @@ The card beside the bubble, with the text box at its bottom. `Panel` renders one
 passes it everything it shows: the bubble's `corner`, whether the panel is `open`, the current
 `toast`, the conversation (`messages`), the `draft` and its `attachments`, whether Claude is
 replying (`busy`), whether Send is allowed (`canSend`), whether questions go to Claude Desktop
-(`inClaudeDesktop`) and, if so, whether they're sent there automatically (`autoSend`). `Panel`
-also builds the two optional pieces that go inside it, the sign-in
-(`signInPrompt`) and a status line (`banner`). The `on…` props are what the buttons and the text
-box call. The file has three components: `ChatBox` (the card), `Composer` (the text box, private
-to this file) and `Banner` (exported, used by `Panel`).
+(`inClaudeDesktop`) and, if so, whether they're sent there automatically (`autoSend`). `Panel` also
+builds the optional pieces that go inside it: a page to show instead (`page`), the sign-in
+(`signInPrompt`) and a status line (`banner`). The `on…` props are what the buttons and the text box
+call; `issueKeys`, `onOpenIssue` and `onReport` are for Jira and the service desk. The file has
+three components: `ChatBox` (the card), `Composer` (the text box, private to this file) and `Banner`
+(exported, used by `Panel`).
 
 ### `ChatBox`
 
 <!-- code: apps/desktop/src/renderer/src/components/ChatBox.tsx#ChatBox -->
 
-[`src/renderer/src/components/ChatBox.tsx`, lines 11–97](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L11-L97)
+[`src/renderer/src/components/ChatBox.tsx`, lines 19–111](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L19-L111)
 
 ```tsx
 /**
@@ -38,7 +40,8 @@ to this file) and `Banner` (exported, used by `Panel`).
  * bubble's edge (bottom in a bottom corner, top in a top corner), so it starts as just the text
  * box and grows away from that edge as the conversation gets longer, then scrolls. When nobody is
  * signed in, `signInPrompt` is shown instead of the chat. With `inClaudeDesktop`, it's only the
- * text box, and sending opens the question in Claude Desktop.
+ * text box, and sending opens the question in Claude Desktop. While a page's icon is on (Apps,
+ * Jira, the service desk), the page shows instead.
  */
 export function ChatBox(props: {
   corner: Corner
@@ -48,8 +51,8 @@ export function ChatBox(props: {
   inClaudeDesktop: boolean
   /** With Claude Desktop: the question (and screenshot) is sent there for the user. */
   autoSend: boolean
-  /** Replaces the text box with the Apps list while the Apps icon is on, or null. */
-  apps: ReactNode
+  /** Replaces the text box with a page while its icon is on (the Apps list, Jira), or null. */
+  page: ReactNode
   /** Replaces the chat (the JumpCloud sign-in), or null to show the chat. */
   signInPrompt: ReactNode
   /** A line above the text box, e.g. "Checking your sign-in…". */
@@ -67,6 +70,11 @@ export function ChatBox(props: {
   onAttachLatest: () => void
   onOpenAttachment: (attachment: Attachment) => void
   onRemoveAttachment: (attachment: Attachment) => void
+  /** Jira issue keys in the text, each offered as a chip that opens the issue. */
+  issueKeys: string[]
+  onOpenIssue: (key: string) => void
+  /** Turns the text (and screenshots) into an IT request; null without a service desk form. */
+  onReport: (() => void) | null
 }) {
   return (
     <div
@@ -103,7 +111,7 @@ export function ChatBox(props: {
         </div>
       )}
 
-      {props.apps ?? props.signInPrompt ?? (
+      {props.page ?? props.signInPrompt ?? (
         <>
           {props.messages.length > 0 && (
             <MessageList
@@ -187,8 +195,9 @@ The parts of `ChatBox` itself:
   sign-in prompt or any messages, so the card is just the text box (and sometimes a banner).
 - `autoSend: boolean`: the "Send in Claude automatically" setting, also only for `Composer`'s
   wording.
-- `apps: ReactNode`: the Apps list while it's showing, built by `Panel` like `signInPrompt`;
-  otherwise `null`.
+- `page: ReactNode`: as the comment says, a page that replaces the text box while its icon is on
+  (the Apps list, the Jira page, the service desk page, or an issue over one of them), built by
+  `Panel` like `signInPrompt`; otherwise `null`.
 - `originClass(props.corner)`: sets the CSS `transform-origin` to the bubble's corner (for
   example `origin-bottom-right`), so the zoom-in animation grows out of the bubble.
 - `'scale-95 opacity-0 transition duration-150 ease-out'`: the card is always rendered, even
@@ -218,10 +227,10 @@ The parts of `ChatBox` itself:
   height (`UI.toastRoom`), so the toast always fits.
 - `isLeftCorner(props.corner) ? 'left-0' : 'right-0'`: lines the toast up with the card's edge
   nearest the bubble.
-- `{props.apps ?? props.signInPrompt ?? (`: `??` uses the left side unless it's `null` or
-  `undefined`, so the first of the three that isn't `null` is shown: the Apps list if it's on,
+- `{props.page ?? props.signInPrompt ?? (`: `??` uses the left side unless it's `null` or
+  `undefined`, so the first of the three that isn't `null` is shown: a page if one is on,
   otherwise the sign-in if nobody is signed in, otherwise the chat. Never more than one. The toast
-  above stays outside this choice, so it shows over the Apps list too.
+  above stays outside this choice, so it shows over the pages too.
 - `<>`: a _fragment_. It groups several elements without adding an extra `<div>` to the page.
 - `props.messages.length > 0 &&`: before the first message there's no list, so the card is just
   the text box.
@@ -234,7 +243,7 @@ The parts of `ChatBox` itself:
 
 <!-- code: apps/desktop/src/renderer/src/components/ChatBox.tsx#Composer -->
 
-[`src/renderer/src/components/ChatBox.tsx`, lines 99–210](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L99-L210)
+[`src/renderer/src/components/ChatBox.tsx`, lines 113–254](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L113-L254)
 
 ```tsx
 /** The text box: attached screenshots, the text, and the attach / send / stop buttons. */
@@ -289,12 +298,29 @@ function Composer(props: Parameters<typeof ChatBox>[0]) {
         </p>
       )}
 
+      {props.issueKeys.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 px-3 pt-2.5">
+          {props.issueKeys.map((key) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => props.onOpenIssue(key)}
+              title={`Open ${key}`}
+              className="inline-flex items-center gap-1 rounded-full border border-black/10 px-2 py-0.5 text-[11px] font-medium text-zinc-700 hover:bg-zinc-100 dark:border-white/10 dark:text-zinc-200 dark:hover:bg-zinc-800"
+            >
+              <Ticket size={12} className="text-accent dark:text-accent-soft" aria-hidden />
+              Open {key}
+            </button>
+          ))}
+        </div>
+      )}
+
       <textarea
         ref={textarea}
         value={props.draft}
         onChange={(event) => props.onDraftChange(event.target.value)}
         onKeyDown={onKeyDown}
-        placeholder="Ask Claude anything…"
+        placeholder="Ask anything…"
         aria-label="Message Claude"
         spellCheck
         className={cn(
@@ -303,15 +329,28 @@ function Composer(props: Parameters<typeof ChatBox>[0]) {
         )}
       />
 
-      <div className="flex items-center justify-between gap-2 px-2 pb-2">
+      <div className="flex items-center gap-1 px-2 pb-2">
         <button
           type="button"
           onClick={props.onAttachLatest}
+          title="Attach the latest screenshot (click again for the one before)"
           className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-white"
         >
           <Paperclip size={14} aria-hidden />
-          Attach latest screenshot
+          Attach screenshot
         </button>
+        {props.onReport && (
+          <button
+            type="button"
+            onClick={props.onReport}
+            title="Report a problem to IT, with this text and screenshot"
+            className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-white"
+          >
+            <LifeBuoy size={14} aria-hidden />
+            Report to IT
+          </button>
+        )}
+        <span className="flex-1" />
         {props.busy ? (
           <button
             type="button"
@@ -396,6 +435,10 @@ first appears. Effects are for work outside drawing the UI, such as moving the k
   question typed, Desktop Assist pastes them itself ("will be pasted into Claude for you").
   Otherwise the user pastes them with Ctrl+V. A screenshot without a question is never pasted
   for the user, so the second wording also covers that.
+- `{props.issueKeys.length > 0 && (`: a button for each Jira issue key in the text, which `Panel`
+  finds, such as **Open ISD-1234** with a ticket icon (`Ticket`). Clicking one opens the issue in
+  the card (`Panel.openIssue`), or in the browser when not connected to Atlassian. `flex-wrap`
+  lets several wrap onto more lines.
 - `value={props.draft}`: a _controlled_ text box. What it shows always comes from the `draft`
   prop, not from the element's own memory.
 - `onChange={(event) => props.onDraftChange(event.target.value)}`: React's `onChange` fires on
@@ -410,8 +453,14 @@ first appears. Effects are for work outside drawing the UI, such as moving the k
   small React component that draws an SVG. `size` sets its width and height in pixels.
   `aria-hidden` hides it from screen readers, since the button's text or `aria-label` already
   says what it does.
-- `onClick={props.onAttachLatest}`: `Panel.attachLatest` adds the newest screenshot to the
-  draft, or shows a toast saying why it couldn't.
+- `onClick={props.onAttachLatest}`: **Attach screenshot**. `Panel.attachLatest` adds the newest
+  screenshot to the draft, or shows a toast saying why it couldn't; the tooltip says it's the
+  latest one.
+- `{props.onReport && (`: **Report to IT**, with a lifebuoy icon (`LifeBuoy`), only when the
+  tenant lists request types (`Panel` passes `null` otherwise). It opens the service desk page on
+  New request, which starts from the text box and its screenshots (`Panel.report`).
+- `<span className="flex-1" />`: an empty element that takes up the spare room, pushing the send
+  button to the right-hand end of the row.
 - `props.busy ? (`: while Claude is replying, Send is replaced by Stop. `Panel` sets `busy` when
   any message is still `streaming`, which only happens in the built-in chat.
 - `fill="currentColor"`: lucide icons are outlines; this fills the square with the text colour so
@@ -432,7 +481,7 @@ first appears. Effects are for work outside drawing the UI, such as moving the k
 
 <!-- code: apps/desktop/src/renderer/src/components/ChatBox.tsx#Banner -->
 
-[`src/renderer/src/components/ChatBox.tsx`, lines 212–221](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L212-L221)
+[`src/renderer/src/components/ChatBox.tsx`, lines 256–265](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L256-L265)
 
 ```tsx
 /** A one-line status above the text box, with an optional action. */
@@ -1043,15 +1092,15 @@ passed as `children`.
 The small menu that opens beside the gear icon. `Panel` renders it only while the panel is open, the
 gear has toggled it on, and the tenant's list of actions includes `settings`. Its props are the
 `corner` and `offset` for positioning; the current `settings`, `branding` (app and company name, and
-which kind of chat), `version` and signed-in `user` to display; and one callback per menu item,
-`onUninstall` included. `Panel` closes it on Esc, on a click anywhere else in the panel, and when
-the panel closes.
+which kind of chat), `version`, signed-in `user` and the `atlassianUser` connected to Atlassian to
+display; and one callback per menu item, `onUninstall` and `onDisconnectAtlassian` included. `Panel`
+closes it on Esc, on a click anywhere else in the panel, and when the panel closes.
 
 ### `CONFIRM_MS`, `EFFORTS`
 
 <!-- code: apps/desktop/src/renderer/src/components/SettingsMenu.tsx#CONFIRM_MS,EFFORTS -->
 
-[`src/renderer/src/components/SettingsMenu.tsx`, lines 15–21](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L15-L21)
+[`src/renderer/src/components/SettingsMenu.tsx`, lines 16–22](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L16-L22)
 
 ```tsx
 const CONFIRM_MS = 3000
@@ -1076,7 +1125,7 @@ const EFFORTS: { value: Effort; label: string; hint: string }[] = [
 
 <!-- code: apps/desktop/src/renderer/src/components/SettingsMenu.tsx#SettingsMenu -->
 
-[`src/renderer/src/components/SettingsMenu.tsx`, lines 23–203](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L23-L203)
+[`src/renderer/src/components/SettingsMenu.tsx`, lines 24–221](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L24-L221)
 
 ```tsx
 /** The menu that opens beside the gear icon, on the side facing the middle of the screen. */
@@ -1089,6 +1138,9 @@ export function SettingsMenu(props: {
   version: string
   /** Who's signed in, or null when nobody is. */
   user: SignedInUser | null
+  /** Who's connected to Atlassian, or null when nobody is. */
+  atlassianUser: { name: string; email?: string } | null
+  onDisconnectAtlassian: () => void
   onToggleAutoStart: () => void
   onSetEffort: (effort: Effort) => void
   onToggleAutoSend: () => void
@@ -1236,6 +1288,20 @@ export function SettingsMenu(props: {
         </div>
       )}
 
+      {props.atlassianUser && (
+        <div className="mt-1 border-t border-black/10 pt-1 dark:border-white/10">
+          <p
+            className="truncate px-2.5 pt-1 text-[11px] text-zinc-500"
+            title={props.atlassianUser.email}
+          >
+            Connected to Atlassian as {props.atlassianUser.name}
+          </p>
+          <MenuItem icon={Unplug} onClick={props.onDisconnectAtlassian}>
+            Disconnect Atlassian
+          </MenuItem>
+        </div>
+      )}
+
       <div className="mt-1 border-t border-black/10 pt-1 dark:border-white/10">
         <MenuItem
           icon={Trash2}
@@ -1268,7 +1334,8 @@ Draws the menu's rows. With the built-in chat: Start with Windows, Response styl
 screenshots folder, New conversation, who's signed in with Log out, and the version. With Claude
 Desktop the chat and its settings live in Claude Desktop, so there's no Response style and no
 sign-in; instead there's a "Send in Claude automatically" switch, and New conversation becomes
-Clear text box. Both kinds end with Uninstall, then the version. It keeps two pieces of its own
+Clear text box. When connected to Atlassian, either kind also says who as, with Disconnect
+Atlassian. Both kinds end with Uninstall, then the version. It keeps two pieces of its own
 state.
 
 **State.** `useState(initial)` returns the current value and a function that changes it. Calling
@@ -1333,6 +1400,10 @@ switches the "New conversation" (or "Clear text box") row into its "Click again"
 - `props.user.name ?? props.user.email ?? 'you'`: the first of the name or the email that
   JumpCloud provided. `truncate` cuts a long one short with "…", and `title={props.user.email}`
   shows the email as a tooltip.
+- `{props.atlassianUser && (`: when connected to Atlassian, who as ("Connected to Atlassian as
+  Casey Jones", with the email as a tooltip), and **Disconnect Atlassian** with a plug icon
+  (`Unplug`), which calls `onDisconnectAtlassian`. It needs no second click: nothing is lost, and
+  connecting again is a moment in the browser.
 - `icon={Trash2}`, `danger={confirmingUninstall}`: Uninstall, in a section of its own below a
   line, needs the same second click within 3 seconds, and turns red while armed. The second click
   calls `onUninstall`; `Panel.uninstall` starts the uninstaller and the app quits.
@@ -1347,7 +1418,7 @@ switches the "New conversation" (or "Clear text box") row into its "Click again"
 
 <!-- code: apps/desktop/src/renderer/src/components/SettingsMenu.tsx#MenuItem -->
 
-[`src/renderer/src/components/SettingsMenu.tsx`, lines 205–232](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L205-L232)
+[`src/renderer/src/components/SettingsMenu.tsx`, lines 223–250](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L223-L250)
 
 ```tsx
 function MenuItem(props: {
@@ -1398,7 +1469,7 @@ One row of the menu: an icon and a label, as a button.
 
 <!-- code: apps/desktop/src/renderer/src/components/SettingsMenu.tsx#Switch -->
 
-[`src/renderer/src/components/SettingsMenu.tsx`, lines 234–251](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L234-L251)
+[`src/renderer/src/components/SettingsMenu.tsx`, lines 252–269](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L252-L269)
 
 ```tsx
 function Switch({ on }: { on: boolean }) {
@@ -1433,23 +1504,27 @@ it tells screen readers whether it's on, so the switch itself is `aria-hidden`.
 ## `src/renderer/src/components/ActionStack.tsx`: the action icons
 
 The column of round icon buttons that pops out of the bubble when the panel opens (for Morse
-Micro: Ask Claude, IT service desk, screenshot, light or dark mode, settings, bounce and close),
+Micro: Ask Claude, Jira, IT service desk, screenshot, light or dark mode, settings, bounce and
+close),
 in the order the tenant's `tenant.json` lists them, nearest the bubble first. `Panel` always
 renders it; while closed it's simply invisible. Its props are the `corner`, the tenant's
-`actions`, `open`, `activeId` (`settings` while the settings menu is open, `ask` or `apps` while
-the page that isn't the start page is showing, otherwise `null`), `theme` (the current light or
-dark mode), `dotted` (icons that get a small dot) and `onAction`, which is `Panel.runAction`.
+`actions`, `open`, `activeId` (`settings` while the settings menu is open, otherwise the icon of
+the page showing when it isn't the start page, or `null`), `theme` (the current light or dark
+mode), `pages` (command icons that open a page in the panel instead: the service desk, when the
+tenant lists request types), `dotted` (icons that get a small dot) and `onAction`, which is
+`Panel.runAction`.
 
 ### `ICONS`
 
 <!-- code: apps/desktop/src/renderer/src/components/ActionStack.tsx#ICONS -->
 
-[`src/renderer/src/components/ActionStack.tsx`, lines 19–28](../../apps/desktop/src/renderer/src/components/ActionStack.tsx#L19-L28)
+[`src/renderer/src/components/ActionStack.tsx`, lines 20–30](../../apps/desktop/src/renderer/src/components/ActionStack.tsx#L20-L30)
 
 ```tsx
 const ICONS: Record<ActionId, LucideIcon> = {
   ask: MessageCircle,
   apps: LayoutGrid,
+  jira: Bell,
   servicedesk: Headset,
   screenshot: Camera,
   theme: Sun,
@@ -1462,8 +1537,9 @@ const ICONS: Record<ActionId, LucideIcon> = {
 <!-- /code -->
 
 Which lucide icon each action shows. Ask Claude is `MessageCircle`, a speech bubble; Apps is
-`LayoutGrid`, a grid of four squares, the usual sign for "apps"; and the IT service desk is
-`Headset`, as for a help desk. The theme icon is `Sun`, but see below: it changes with the mode.
+`LayoutGrid`, a grid of four squares, the usual sign for "apps"; Jira is `Bell`, for its
+notifications; and the IT service desk is `Headset`, as for a help desk. The theme icon is `Sun`,
+but see below: it changes with the mode.
 
 - `Record<ActionId, LucideIcon>`: an object with exactly one entry for every action id. If a new
   id is added to `ACTION_IDS` in `src/shared/actions.ts` without an icon here, TypeScript reports
@@ -1473,7 +1549,7 @@ Which lucide icon each action shows. Ask Claude is `MessageCircle`, a speech bub
 
 <!-- code: apps/desktop/src/renderer/src/components/ActionStack.tsx#ActionStack -->
 
-[`src/renderer/src/components/ActionStack.tsx`, lines 30–106](../../apps/desktop/src/renderer/src/components/ActionStack.tsx#L30-L106)
+[`src/renderer/src/components/ActionStack.tsx`, lines 32–112](../../apps/desktop/src/renderer/src/components/ActionStack.tsx#L32-L112)
 
 ```tsx
 /**
@@ -1489,6 +1565,8 @@ export function ActionStack(props: {
   theme: Theme
   /** Icons with a small dot, e.g. Ask Claude while an unsent question is waiting behind it. */
   dotted?: ActionId[]
+  /** Command icons that open a page in the panel instead (the service desk, with a form). */
+  pages?: ActionId[]
   onAction: (id: ActionId) => void
 }) {
   const top = isTopCorner(props.corner)
@@ -1517,7 +1595,9 @@ export function ActionStack(props: {
             type="button"
             title={label}
             aria-label={label}
-            aria-expanded={ACTIONS[id].kind === 'popover' ? active : undefined}
+            aria-expanded={
+              ACTIONS[id].kind === 'popover' || props.pages?.includes(id) ? active : undefined
+            }
             onClick={() => props.onAction(id)}
             style={{
               width: UI.actionSize,
@@ -1575,13 +1655,14 @@ Lays the icons out in a column beside the bubble and animates them in and out.
 - `data-hit`: on each button, not on the column, so the gaps between icons stay click-through.
 - `data-action={id}`: `Panel.closeSettingsOnOutsideClick` looks for `[data-action="settings"]`,
   so clicking the gear toggles the menu instead of counting as a click outside it.
-- `aria-expanded={ACTIONS[id].kind === 'popover' ? active : undefined}`: for a popover action
-  (Settings, Ask Claude and Apps) it tells screen readers whether what it opens is showing.
+- `aria-expanded={ACTIONS[id].kind === 'popover' || props.pages?.includes(id) ? active : undefined}`:
+  for a popover action (Settings, Ask Claude, Apps and Jira), or an icon that opens a page (the
+  service desk, with request types), it tells screen readers whether what it opens is showing.
   `undefined` leaves the attribute off the others, the theme icon included, which opens nothing.
 - `onClick={() => props.onAction(id)}`: `Panel.runAction` toggles the menu for Settings, switches
-  the card's page for Ask Claude and Apps, flips light or dark mode for the theme icon, and asks the
-  main process to run any other action (see `src/main/actions.ts` in [Main process: startup, IPC and
-  app plumbing](2-main-startup.md)).
+  the card's page for Ask Claude, Apps, Jira and (with request types) the service desk, flips light
+  or dark mode for the theme icon, and asks the main process to run any other action (see
+  `src/main/actions.ts` in [Main process: startup, IPC and app plumbing](2-main-startup.md)).
 - ``transitionDelay: props.open ? `${index * 30}ms` : '0ms'``: each icon starts its animation 30
   ms after the one before, so they pop out one after another. Closing has no delay, so they all go
   together.
@@ -1590,13 +1671,14 @@ Lays the icons out in a column beside the bubble and animates them in and out.
   (explained under `ChatBox`) move it to its place at full size when the panel opens.
 - `outline-none`: together with `'focus-visible:ring-2 focus-visible:ring-accent'`, swaps the
   usual square focus outline for an accent ring that follows the round button.
-- `active`: the active action (the gear while its menu is open, Ask Claude or Apps while its page
+- `active`: the active action (the gear while its menu is open, or a page's icon while its page
   is showing) is filled with the accent colour.
 - `'relative grid ...'`: `relative` makes each button the reference box for the dot below.
 - `{props.dotted?.includes(id) && !active && (`: a small accent-coloured dot in the icon's corner
   (`absolute top-1 right-1`), with a ring in the button's own colour so it stands out. `Panel` puts
-  one on Ask Claude while an unsent question or screenshot is waiting behind it. Not on the active
-  icon, whose page is already showing.
+  one on Ask Claude while an unsent question or screenshot is waiting behind it, on the bell while
+  there are unread notifications, and on the service desk while one of the user's requests has
+  news. Not on the active icon, whose page is already showing.
   Otherwise `id === 'close'` turns red on hover, as a warning that it quits the app, and the rest
   get a grey hover.
 

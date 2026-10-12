@@ -43,6 +43,13 @@ MCP SDK carries out its steps:
 
 No token ever reaches the page: it only sees the list's state and the apps' names and logos.
 
+**Shared with Jira.** None of this connecting is particular to JumpCloud: Atlassian's Remote MCP
+server, which Milestone 5's Jira page and service desk use, signs people in the same way. So it
+lives in `src/main/mcp/`: `McpAccount` (connecting once, then calling tools), `mcpConnector()`
+(the MCP SDK) and `payloadOf()` (reading a tool's answer). `PortalApps` and `Atlassian` (see
+[Jira and the service desk](11-atlassian.md)) each have their own `McpAccount`, with a file and a
+port of their own.
+
 **How it fits together**
 
 1. **Showing the list**: at startup `index.ts` already asks `PortalApps.get()` to load the list in
@@ -52,14 +59,17 @@ No token ever reaches the page: it only sees the list's state and the apps' name
    the Apps icon), `Panel` asks again with `window.assist.apps.get()` → IPC `assist:apps-get`, and
    gets the list already loaded, until Refresh.
 2. **Connecting**: with no saved sign-in, the list shows **Sign in with JumpCloud** →
-   `apps.signIn()` → `PortalApps.signIn()`. It starts the local listener, lets the SDK register
+   `apps.signIn()` → `PortalApps.signIn()` → `McpAccount.signIn()`. It starts the local listener,
+   lets the SDK register
    and build the sign-in address (`authorize()`), opens it in the browser, waits for the browser
    to come back with a code, checks it's the sign-in it started (`state`), swaps the code for
    tokens (`authorize()` again, with the code) and loads the list. `index.ts` reopens the panel
    when it's done.
 3. **Opening an app**: a click → `Panel.openApp()` → IPC `assist:apps-open` with the app's ID →
    `PortalApps.open()` calls `launch_application` for that app, takes the sign-in link from the
-   answer, and opens it in the browser; the panel closes.
+   answer, and opens it in the browser; the panel closes. JumpCloud can take a few seconds, so
+   meanwhile a spinner turns over the app's logo. If it takes more than 15 seconds, the link the
+   list itself gave is used instead.
 4. **Favourites**: the star on a tile → `Panel.toggleFavorite()` →
    `window.assist.settings.setFavoriteApp()` saves the app's ID with the user's preferences
    (`favoriteApps` in `preferences.json`). The list shows starred apps first (`orderApps()` in
@@ -78,16 +88,13 @@ reader can be fixed.
 Plain functions with no Electron or network in them, so `tests/portalApps.test.ts` checks them
 with made-up answers. `PortalApps` uses them on what the tools return.
 
-### `PortalAppInfo` and `ToolResult`
+### `PortalAppInfo`
 
-<!-- code: apps/desktop/src/main/apps/portalData.ts#PortalAppInfo,ToolResult -->
+<!-- code: apps/desktop/src/main/apps/portalData.ts#PortalAppInfo -->
 
-[`src/main/apps/portalData.ts`, lines 1–18](../../apps/desktop/src/main/apps/portalData.ts#L1-L18)
+[`src/main/apps/portalData.ts`, lines 6–13](../../apps/desktop/src/main/apps/portalData.ts#L6-L13)
 
 ```ts
-// Reading JumpCloud's answers. The MCP Server for Users documents its tools but not the exact
-// fields they return, so these readers look for the usual names and ignore what they don't know.
-
 /** An app from the portal, before its logo is fetched. */
 export interface PortalAppInfo {
   id: string
@@ -96,32 +103,22 @@ export interface PortalAppInfo {
   /** The sign-in link the list itself gave, if any (launch_application is asked first). */
   launchUrl: string | null
 }
-
-/** What an MCP tool call returns (the parts used here). */
-export interface ToolResult {
-  content?: unknown
-  structuredContent?: unknown
-  isError?: boolean
-}
 ```
 
 <!-- /code -->
 
 - The comment at the top of the file sums up the approach: look for the usual names, ignore the
-  rest.
+  rest. A tool's answer is first turned into data by `payloadOf()`, from
+  `src/main/mcp/toolResult.ts` (below).
 - `PortalAppInfo`: one app as the main process keeps it. It has two things the page never sees:
   the logo's web address (the page gets the logo itself, as a `data:` URL) and `launchUrl`, a
   sign-in link the list may have included, kept as a fallback for `launch_application`.
-- `ToolResult`: what an MCP tool call returns. A tool can answer with `content` (a list of blocks,
-  usually text) and, in newer versions of the protocol, `structuredContent` (data as JSON).
-  `isError` is set when the tool itself reports a failure. Both contents are typed `unknown`,
-  because nothing about their shape is promised.
 
 ### `Item`, `LIST_KEYS`, `URL_KEYS`, `isObject` and `text`
 
 <!-- code: apps/desktop/src/main/apps/portalData.ts#Item,LIST_KEYS,URL_KEYS,isObject,text -->
 
-[`src/main/apps/portalData.ts`, lines 20–29](../../apps/desktop/src/main/apps/portalData.ts#L20-L29)
+[`src/main/apps/portalData.ts`, lines 15–24](../../apps/desktop/src/main/apps/portalData.ts#L15-L24)
 
 ```ts
 type Item = Record<string, unknown>
@@ -153,7 +150,7 @@ Small helpers for poking around in data of unknown shape.
 
 <!-- code: apps/desktop/src/main/apps/portalData.ts#httpsUrl -->
 
-[`src/main/apps/portalData.ts`, lines 31–40](../../apps/desktop/src/main/apps/portalData.ts#L31-L40)
+[`src/main/apps/portalData.ts`, lines 26–35](../../apps/desktop/src/main/apps/portalData.ts#L26-L35)
 
 ```ts
 /** Only web addresses are ever opened from the list (never file:, javascript: and so on). */
@@ -175,41 +172,11 @@ answer can never make the app open a local file (`file:`), run script (`javascri
 another program through its own scheme. `new URL()` throws for text that isn't a web address,
 which counts as "no".
 
-### `payloadOf()`
-
-<!-- code: apps/desktop/src/main/apps/portalData.ts#payloadOf -->
-
-[`src/main/apps/portalData.ts`, lines 42–56](../../apps/desktop/src/main/apps/portalData.ts#L42-L56)
-
-```ts
-/** The tool's answer as data: its structured content, or the JSON in its first text block. */
-export function payloadOf(result: ToolResult): unknown {
-  if (result.structuredContent !== undefined) return result.structuredContent
-  const blocks = Array.isArray(result.content) ? result.content : []
-  for (const block of blocks) {
-    if (isObject(block) && block['type'] === 'text' && typeof block['text'] === 'string') {
-      try {
-        return JSON.parse(block['text'])
-      } catch {
-        return block['text']
-      }
-    }
-  }
-  return undefined
-}
-```
-
-<!-- /code -->
-
-A tool's answer as data. `structuredContent` is taken as it is when there is one. Otherwise the
-first text block is read as JSON, which is how most servers send data; if it isn't JSON, the text
-itself is returned (`findLaunchUrl()` can still find a link in it).
-
 ### `findList()` and `appFrom()`
 
 <!-- code: apps/desktop/src/main/apps/portalData.ts#findList,appFrom -->
 
-[`src/main/apps/portalData.ts`, lines 58–98](../../apps/desktop/src/main/apps/portalData.ts#L58-L98)
+[`src/main/apps/portalData.ts`, lines 37–77](../../apps/desktop/src/main/apps/portalData.ts#L37-L77)
 
 ```ts
 /** The list inside the answer: the answer itself, or an array under a usual key. */
@@ -281,7 +248,7 @@ function appFrom(item: unknown): PortalAppInfo | null {
 
 <!-- code: apps/desktop/src/main/apps/portalData.ts#parseAppList -->
 
-[`src/main/apps/portalData.ts`, lines 100–107](../../apps/desktop/src/main/apps/portalData.ts#L100-L107)
+[`src/main/apps/portalData.ts`, lines 79–86](../../apps/desktop/src/main/apps/portalData.ts#L79-L86)
 
 ```ts
 /** The apps in a list_applications answer, by name; null if it holds no list at all. */
@@ -311,7 +278,7 @@ The apps in a `list_applications` answer, ready to show.
 
 <!-- code: apps/desktop/src/main/apps/portalData.ts#describeShape -->
 
-[`src/main/apps/portalData.ts`, lines 109–117](../../apps/desktop/src/main/apps/portalData.ts#L109-L117)
+[`src/main/apps/portalData.ts`, lines 88–96](../../apps/desktop/src/main/apps/portalData.ts#L88-L96)
 
 ```ts
 /** The field names in the answer's first item, for the log when no apps could be read. */
@@ -335,7 +302,7 @@ up in the log. With them, the readers above can be taught the server's actual fi
 
 <!-- code: apps/desktop/src/main/apps/portalData.ts#idArgumentName -->
 
-[`src/main/apps/portalData.ts`, lines 119–135](../../apps/desktop/src/main/apps/portalData.ts#L119-L135)
+[`src/main/apps/portalData.ts`, lines 98–114](../../apps/desktop/src/main/apps/portalData.ts#L98-L114)
 
 ```ts
 /** Which argument of a tool takes the app's ID (from its input schema). */
@@ -372,7 +339,7 @@ names and whose `required` says which must be given. Rather than assume a name, 
 
 <!-- code: apps/desktop/src/main/apps/portalData.ts#findLaunchUrl -->
 
-[`src/main/apps/portalData.ts`, lines 137–171](../../apps/desktop/src/main/apps/portalData.ts#L137-L171)
+[`src/main/apps/portalData.ts`, lines 116–150](../../apps/desktop/src/main/apps/portalData.ts#L116-L150)
 
 ```ts
 /** The sign-in link in a launch_application answer: a URL field, or the first web address in it. */
@@ -427,23 +394,30 @@ The sign-in link in a `launch_application` answer.
 
 ## `src/main/apps/PortalApps.ts`: the list, the sign-in and opening apps
 
-The Apps list's logic: loading the list, connecting the user, and opening apps. It has no
-Electron in it: the connection to the server, the encrypted store, the local listener, the browser
-and logo fetching all come in through `PortalAppsDeps`, so `tests/portalApps.test.ts` runs it
-against a fake portal. `start()` in `index.ts` creates the one instance when the tenant has a
-`portal`, and `registerApps()` in `ipc.ts` calls it.
+The Apps list's logic: loading the list, connecting the user, and opening apps. The connecting and
+the tool calls are done by an `McpAccount` (below). It has no Electron in it: the connection to the
+server, the encrypted store, the local listener, the browser and logo fetching all come in through
+`PortalAppsDeps`, so `tests/portalApps.test.ts` runs it against a fake portal. `start()` in
+`index.ts` creates the one instance when the tenant has a `portal`, and `registerApps()` in `ipc.ts`
+calls it.
 
-### `LIST_TOOL`, `LAUNCH_TOOL` and `SCOPE`
+### `LIST_TOOL`, `LAUNCH_TOOL`, `LAUNCH_TIMEOUT_MS` and `SCOPE`
 
-<!-- code: apps/desktop/src/main/apps/PortalApps.ts#LIST_TOOL,LAUNCH_TOOL,SCOPE -->
+<!-- code: apps/desktop/src/main/apps/PortalApps.ts#LIST_TOOL,LAUNCH_TOOL,LAUNCH_TIMEOUT_MS,SCOPE -->
 
-[`src/main/apps/PortalApps.ts`, lines 19–24](../../apps/desktop/src/main/apps/PortalApps.ts#L19-L24)
+[`src/main/apps/PortalApps.ts`, lines 18–29](../../apps/desktop/src/main/apps/PortalApps.ts#L18-L29)
 
 ```ts
 /** The portal's tools, from JumpCloud's MCP Server for Users. */
 export const LIST_TOOL = 'list_applications'
 
 export const LAUNCH_TOOL = 'launch_application'
+
+/**
+ * How long opening an app waits for JumpCloud's sign-in link before using the link the list gave
+ * (so the spinner on the tile can't go on for ever).
+ */
+export const LAUNCH_TIMEOUT_MS = 15_000
 
 /** Everything JumpCloud's apps server offers; offline_access keeps the user connected. */
 const SCOPE = 'openid profile email offline_access organization userconsole'
@@ -453,65 +427,20 @@ const SCOPE = 'openid profile email offline_access organization userconsole'
 
 - `LIST_TOOL`, `LAUNCH_TOOL`: the names of the two tools used, from JumpCloud's documentation of
   the server.
-- `SCOPE`: what the app asks to be allowed to do when the user connects. As the comment says, it's
+- `LAUNCH_TIMEOUT_MS = 15_000`: how long opening an app waits for `launch_application` before
+  falling back on the link from the list, so, as the comment says, the spinner on the tile can't
+  turn for ever.
+- `SCOPE`: what the app asks to be allowed to do when the user connects (handed to `McpAccount`,
+  which puts it in `SavedAuth.clientMetadata`). As the comment says, it's
   everything the apps server offers: the user's identity (`openid profile email`), `organization`
   and `userconsole`, and `offline_access`, which asks for a refresh token, so the user doesn't have
   to sign in again every time the short-lived access token runs out.
 
-### `McpSession`, `NeedsSignInError` and `McpConnector`
+### `PortalAppsDeps`
 
-<!-- code: apps/desktop/src/main/apps/PortalApps.ts#McpSession,NeedsSignInError,McpConnector -->
+<!-- code: apps/desktop/src/main/apps/PortalApps.ts#PortalAppsDeps -->
 
-[`src/main/apps/PortalApps.ts`, lines 26–50](../../apps/desktop/src/main/apps/PortalApps.ts#L26-L50)
-
-```ts
-/** A connection to the apps server, signed in as the user. */
-export interface McpSession {
-  listTools(): Promise<{ name: string; inputSchema?: unknown }[]>
-  callTool(name: string, args: Record<string, unknown>): Promise<ToolResult>
-  close(): Promise<void>
-}
-
-/** Thrown when there's no usable sign-in: the user has to connect, in the browser. */
-export class NeedsSignInError extends Error {
-  constructor() {
-    super('Sign-in needed')
-  }
-}
-
-/** Talks to the apps server (src/main/apps/mcp.ts; tests use a fake). */
-export interface McpConnector {
-  /** Connects with the saved sign-in (renewing it if needed); throws NeedsSignInError if none. */
-  connect(provider: OAuthClientProvider): Promise<McpSession>
-  /**
-   * The OAuth steps. Without a code: registers Desktop Assist with the server if it isn't yet,
-   * and asks the provider to send the user to the sign-in page ('REDIRECT'). With the code from
-   * the browser: swaps it for tokens ('AUTHORIZED').
-   */
-  authorize(provider: OAuthClientProvider, code?: string): Promise<'AUTHORIZED' | 'REDIRECT'>
-}
-```
-
-<!-- /code -->
-
-The small interfaces `PortalApps` talks to the server through. The real ones are in `mcp.ts`;
-the tests use fakes.
-
-- `McpSession`: one open connection, signed in as the user: list the server's tools, call one,
-  close.
-- `NeedsSignInError`: the connector throws this when there's no sign-in it can use, so
-  `PortalApps` can tell "the user has to connect" apart from every other failure (`instanceof`).
-- `connect(provider)`: opens a session with the saved sign-in, renewing it if needed. The
-  `provider` is the `SavedAuth` below, which the SDK reads the tokens from.
-- `authorize(provider, code?)`: the OAuth steps, as the comment explains. It answers
-  `'REDIRECT'` when the user needs to go to the sign-in page, and `'AUTHORIZED'` once there are
-  tokens.
-
-### `PortalAppsDeps` and `Saved`
-
-<!-- code: apps/desktop/src/main/apps/PortalApps.ts#PortalAppsDeps,Saved -->
-
-[`src/main/apps/PortalApps.ts`, lines 52–73](../../apps/desktop/src/main/apps/PortalApps.ts#L52-L73)
+[`src/main/apps/PortalApps.ts`, lines 31–45](../../apps/desktop/src/main/apps/PortalApps.ts#L31-L45)
 
 ```ts
 export interface PortalAppsDeps {
@@ -519,22 +448,15 @@ export interface PortalAppsDeps {
   redirectPort: number
   connector: McpConnector
   /** The connection to the portal, saved encrypted (Windows DPAPI). */
-  store: {
-    load(): Promise<string | null>
-    save(secret: string): Promise<void>
-    clear(): Promise<void>
-  }
+  store: SavedSecret
   listen(port: number): Promise<RedirectListener>
   openBrowser(url: string): Promise<void>
   /** An app's logo as a data: URL, or null. */
   fetchLogo(url: string): Promise<string | null>
   onState(state: AppsState): void
   onError?(message: string, error?: unknown): void
-}
-
-interface Saved {
-  client?: OAuthClientInformationMixed
-  tokens?: OAuthTokens
+  /** Tests make it short. */
+  launchTimeoutMs?: number
 }
 ```
 
@@ -543,240 +465,20 @@ interface Saved {
 `PortalAppsDeps` is everything `PortalApps` needs from outside; `start()` in `index.ts` passes
 the real ones (see [Main process: startup, IPC and app plumbing](2-main-startup.md)).
 
-- `appName`: how the app names itself when it registers with JumpCloud.
-- `store`: the encrypted file (`SecretStore` over `jumpcloud-apps.bin`), seen only as load, save
-  and clear.
-- `listen(port)`: starts the local web server for the browser to come back to.
+- `appName`, `redirectPort`, `connector`, `store`, `listen` and `openBrowser` are handed on to
+  the `McpAccount` (see `McpAccountDeps` below): how the app names itself when it registers with
+  JumpCloud, the port the browser comes back to, the connection to the server, the encrypted file
+  (`SecretStore` over `jumpcloud-apps.bin`), the local web server and the browser.
+- `fetchLogo(url)`: an app's logo as a `data:` URL (`fetchLogo()` in `logos.ts`, below).
 - `onState(state)`: called on every change of the list's state; `index.ts` broadcasts it.
 - `onError?(message, error?)`: a line for the problem log.
-- `Saved`: what goes in the file: the app's registration with JumpCloud (`client`) and the user's
-  tokens. Both are optional, since either may not exist yet.
-
-### `SavedAuth`
-
-<!-- code: apps/desktop/src/main/apps/PortalApps.ts#SavedAuth.class -->
-
-[`src/main/apps/PortalApps.ts`, lines 75–80](../../apps/desktop/src/main/apps/PortalApps.ts#L75-L80)
-
-```ts
-/**
- * The OAuth client the MCP SDK drives: Desktop Assist as a public client (PKCE, no secret) with a
- * loopback redirect. It remembers the registration and the tokens; the sign-in page is only opened
- * by PortalApps.signIn(), never by just looking at the list.
- */
-export class SavedAuth implements OAuthClientProvider {
-  // …
-}
-```
-
-<!-- /code -->
-
-The MCP SDK does the OAuth steps, but asks its _provider_ (an `OAuthClientProvider`) for
-everything particular to the app: what to register as, where the browser should come back to,
-the saved tokens, and what to do when the user has to sign in. `SavedAuth` is that provider.
-`implements OAuthClientProvider` makes TypeScript check it has every method the SDK expects.
-
-As the comment says, it never opens the browser itself. When the SDK decides the user has to sign
-in, it calls `redirectToAuthorization()`, which here only notes the address. So merely loading the
-list can't pop up a browser window; only the Sign in button does, through `PortalApps.signIn()`.
-
-### `SavedAuth` fields, constructor and `load()`
-
-<!-- code: apps/desktop/src/main/apps/PortalApps.ts#SavedAuth.saved,verifier,expectedState,authorizationUrl,constructor,load -->
-
-[`src/main/apps/PortalApps.ts`, lines 81–100](../../apps/desktop/src/main/apps/PortalApps.ts#L81-L100)
-
-```ts
-private saved: Saved = {}
-
-private verifier = ''
-
-private expectedState = ''
-
-/** Where the user has to go to sign in, once the SDK has asked for it. */
-authorizationUrl: URL | null = null
-
-constructor(
-  private readonly appName: string,
-  private readonly redirectPort: number,
-  private readonly store: PortalAppsDeps['store'],
-) {}
-
-async load(): Promise<void> {
-  try {
-    const text = await this.store.load()
-    this.saved = text ? (JSON.parse(text) as Saved) : {}
-  } catch {
-    this.saved = {}
-  }
-}
-```
-
-<!-- /code -->
-
-- `saved`: the registration and tokens, as in the file.
-- `verifier`: the current sign-in's PKCE secret. It's needed only until the code is swapped, so
-  it's kept in memory, not saved.
-- `expectedState`: the random `state` sent with the current sign-in, to check the browser's
-  return against.
-- `authorizationUrl`: the sign-in page's address, once the SDK has asked for one.
-- `load()`: reads the file. A missing, undecryptable or damaged file just means "not connected"
-  (`{}`), never an error.
-
-### `SavedAuth.redirectUrl` and `SavedAuth.clientMetadata`
-
-<!-- code: apps/desktop/src/main/apps/PortalApps.ts#SavedAuth.redirectUrl,clientMetadata -->
-
-[`src/main/apps/PortalApps.ts`, lines 102–115](../../apps/desktop/src/main/apps/PortalApps.ts#L102-L115)
-
-```ts
-get redirectUrl(): string {
-  return `http://127.0.0.1:${this.redirectPort}/callback`
-}
-
-get clientMetadata(): OAuthClientMetadata {
-  return {
-    client_name: this.appName,
-    redirect_uris: [this.redirectUrl],
-    grant_types: ['authorization_code', 'refresh_token'],
-    response_types: ['code'],
-    token_endpoint_auth_method: 'none',
-    scope: SCOPE,
-  }
-}
-```
-
-<!-- /code -->
-
-What the app registers as. Both are _getters_, read like fields.
-
-- `redirectUrl`: the local listener's address, which the browser returns to.
-- `client_name`: the app's name, shown on JumpCloud's consent page if it shows one.
-- `grant_types: ['authorization_code', 'refresh_token']`: signing in with a code from the browser,
-  and renewing with a refresh token.
-- `token_endpoint_auth_method: 'none'`: a _public client_: the app proves nothing with a secret
-  when it fetches tokens, because it has none. PKCE protects the code instead.
-
-### `SavedAuth.state()` and `SavedAuth.isExpectedState()`
-
-<!-- code: apps/desktop/src/main/apps/PortalApps.ts#SavedAuth.state,isExpectedState -->
-
-[`src/main/apps/PortalApps.ts`, lines 117–125](../../apps/desktop/src/main/apps/PortalApps.ts#L117-L125)
-
-```ts
-state(): string {
-  this.expectedState = randomBytes(16).toString('base64url')
-  return this.expectedState
-}
-
-/** Whether the browser came back from the sign-in this app started. */
-isExpectedState(state: string | null): boolean {
-  return state !== null && this.expectedState !== '' && state === this.expectedState
-}
-```
-
-<!-- /code -->
-
-OAuth's `state` check. The SDK calls `state()` when it builds the sign-in address, and the value
-travels to JumpCloud and back on the browser's return. `isExpectedState()` then makes sure the
-browser came back from the sign-in this app started, not a link someone else sent the browser to.
-
-- `randomBytes(16).toString('base64url')`: 16 random bytes, written with letters, digits, `-` and
-  `_`, so it's safe in a web address.
-- `this.expectedState !== ''`: before any sign-in has started, nothing is accepted.
-
-### Saving the registration and the tokens
-
-<!-- code: apps/desktop/src/main/apps/PortalApps.ts#SavedAuth.clientInformation,saveClientInformation,tokens,saveTokens -->
-
-[`src/main/apps/PortalApps.ts`, lines 127–143](../../apps/desktop/src/main/apps/PortalApps.ts#L127-L143)
-
-```ts
-clientInformation(): OAuthClientInformationMixed | undefined {
-  return this.saved.client
-}
-
-async saveClientInformation(client: OAuthClientInformationMixed): Promise<void> {
-  this.saved = { ...this.saved, client }
-  await this.persist()
-}
-
-tokens(): OAuthTokens | undefined {
-  return this.saved.tokens
-}
-
-async saveTokens(tokens: OAuthTokens): Promise<void> {
-  this.saved = { ...this.saved, tokens }
-  await this.persist()
-}
-```
-
-<!-- /code -->
-
-The SDK reads the registration and tokens through these, and hands over new ones (after
-registering, signing in or renewing) to be saved. Each save writes the file at once, so a renewed
-token isn't lost if the app quits.
-
-### `SavedAuth.redirectToAuthorization()`, `saveCodeVerifier()` and `codeVerifier()`
-
-<!-- code: apps/desktop/src/main/apps/PortalApps.ts#SavedAuth.redirectToAuthorization,saveCodeVerifier,codeVerifier -->
-
-[`src/main/apps/PortalApps.ts`, lines 145–155](../../apps/desktop/src/main/apps/PortalApps.ts#L145-L155)
-
-```ts
-redirectToAuthorization(authorizationUrl: URL): void {
-  this.authorizationUrl = authorizationUrl
-}
-
-saveCodeVerifier(verifier: string): void {
-  this.verifier = verifier
-}
-
-codeVerifier(): string {
-  return this.verifier
-}
-```
-
-<!-- /code -->
-
-- `redirectToAuthorization(authorizationUrl)`: only notes the address; `PortalApps.signIn()`
-  opens it.
-- `saveCodeVerifier()`, `codeVerifier()`: the SDK makes the PKCE secret when it builds the sign-in
-  address, and asks for it back when it swaps the code for tokens.
-
-### `SavedAuth.invalidateCredentials()` and `SavedAuth.persist()`
-
-<!-- code: apps/desktop/src/main/apps/PortalApps.ts#SavedAuth.invalidateCredentials,persist -->
-
-[`src/main/apps/PortalApps.ts`, lines 157–167](../../apps/desktop/src/main/apps/PortalApps.ts#L157-L167)
-
-```ts
-async invalidateCredentials(scope: 'all' | 'client' | 'tokens' | 'verifier' | 'discovery') {
-  if (scope === 'all' || scope === 'client') this.saved = {}
-  else if (scope === 'tokens') this.saved = { client: this.saved.client }
-  if (scope === 'all' || scope === 'verifier') this.verifier = ''
-  await this.persist()
-}
-
-private async persist(): Promise<void> {
-  if (this.saved.client || this.saved.tokens) await this.store.save(JSON.stringify(this.saved))
-  else await this.store.clear()
-}
-```
-
-<!-- /code -->
-
-- `invalidateCredentials(scope)`: the SDK calls this when JumpCloud rejects something saved: the
-  registration (`client`, or `all`), so the app registers again, or the tokens, so the user signs
-  in again. It then tries once more.
-- `{ client: this.saved.client }`: forgetting the tokens keeps the registration.
-- `persist()`: writes the file, or deletes it when there's nothing left to keep.
+- `launchTimeoutMs?`: replaces `LAUNCH_TIMEOUT_MS`, so the tests don't have to wait 15 seconds.
 
 ### `PortalApps`
 
 <!-- code: apps/desktop/src/main/apps/PortalApps.ts#PortalApps.class -->
 
-[`src/main/apps/PortalApps.ts`, lines 170–175](../../apps/desktop/src/main/apps/PortalApps.ts#L170-L175)
+[`src/main/apps/PortalApps.ts`, lines 47–52](../../apps/desktop/src/main/apps/PortalApps.ts#L47-L52)
 
 ```ts
 /**
@@ -795,33 +497,40 @@ The class `index.ts` and `ipc.ts` use, with the comment that sums it up.
 
 ### `PortalApps` fields, constructor and `current`
 
-<!-- code: apps/desktop/src/main/apps/PortalApps.ts#PortalApps.state,apps,auth,loaded,session,loading,listener,loadedOnce,logos,constructor,current -->
+<!-- code: apps/desktop/src/main/apps/PortalApps.ts#PortalApps.state,apps,account,loading,loadedOnce,logos,launchArgument,constructor,current -->
 
-[`src/main/apps/PortalApps.ts`, lines 176–194](../../apps/desktop/src/main/apps/PortalApps.ts#L176-L194)
+[`src/main/apps/PortalApps.ts`, lines 53–80](../../apps/desktop/src/main/apps/PortalApps.ts#L53-L80)
 
 ```ts
 private state: AppsState = { status: 'loading' }
 
 private apps: PortalAppInfo[] = []
 
-private readonly auth: SavedAuth
-
-private loaded: Promise<void>
-
-private session: McpSession | null = null
+private readonly account: McpAccount
 
 private loading: Promise<AppsState> | null = null
-
-private listener: RedirectListener | null = null
 
 private loadedOnce = false
 
 /** Logos already fetched, by address, so a refresh doesn't download them all again. */
 private readonly logos = new Map<string, string>()
 
+/**
+ * The launch tool's argument for the app ID, once known (null: the server has no launch tool).
+ * Remembered so opening an app is one request to JumpCloud, not two.
+ */
+private launchArgument: string | null | undefined
+
 constructor(private readonly deps: PortalAppsDeps) {
-  this.auth = new SavedAuth(deps.appName, deps.redirectPort, deps.store)
-  this.loaded = this.auth.load()
+  this.account = new McpAccount({
+    appName: deps.appName,
+    redirectPort: deps.redirectPort,
+    scope: SCOPE,
+    connector: deps.connector,
+    store: deps.store,
+    listen: (port) => this.deps.listen(port),
+    openBrowser: (url) => this.deps.openBrowser(url),
+  })
 }
 
 get current(): AppsState {
@@ -835,20 +544,22 @@ get current(): AppsState {
   also reports it.
 - `apps`: the last list read, with the details the page doesn't get (logo addresses, links), for
   `open()`.
-- `loaded`: the promise of reading the saved connection, started in the constructor. Everything
-  that needs it waits for it first (`await this.loaded`).
-- `session`: the open connection to the server, reused between calls, or `null`.
+- `account`: the user's connection to the apps server (`McpAccount`, below), made in the
+  constructor from the deps and JumpCloud's `SCOPE`. `listen` and `openBrowser` are passed as
+  arrow functions that call `this.deps`, so each is still called as a method of `deps`.
 - `loading`: the list load under way, if any, so two requests at once share one load.
-- `listener`: the local web server while a sign-in is waiting for the browser.
 - `loadedOnce`: whether the list has been loaded (or found to need a sign-in) at least once.
 - `logos`: the logos already fetched, by address, as the comment says (see `logo()` below).
+- `launchArgument: string | null | undefined`: the name of the launch tool's ID argument, found the
+  first time an app is opened (see `launchUrl()` below). Three states: `undefined` means "not
+  looked up yet", `null` "the server has no launch tool", and a string the name itself.
 - `get current()`: the state as it is now, for the tests.
 
 ### `PortalApps.get()`
 
 <!-- code: apps/desktop/src/main/apps/PortalApps.ts#PortalApps.get -->
 
-[`src/main/apps/PortalApps.ts`, lines 196–201](../../apps/desktop/src/main/apps/PortalApps.ts#L196-L201)
+[`src/main/apps/PortalApps.ts`, lines 82–87](../../apps/desktop/src/main/apps/PortalApps.ts#L82-L87)
 
 ```ts
 /** The list as it stands, loading it the first time (or again with `refresh`). */
@@ -874,7 +585,7 @@ at startup, to load the list in the background.
 
 <!-- code: apps/desktop/src/main/apps/PortalApps.ts#PortalApps.signIn -->
 
-[`src/main/apps/PortalApps.ts`, lines 203–243](../../apps/desktop/src/main/apps/PortalApps.ts#L203-L243)
+[`src/main/apps/PortalApps.ts`, lines 89–109](../../apps/desktop/src/main/apps/PortalApps.ts#L89-L109)
 
 ```ts
 /** Connects to the portal: the user signs in in the browser, then the list loads. */
@@ -882,30 +593,10 @@ async signIn(): Promise<void> {
   if (this.state.status === 'signing-in') return
   this.setState({ status: 'signing-in' })
   try {
-    await this.loaded
-    this.listener = await this.deps.listen(this.deps.redirectPort)
-    this.auth.authorizationUrl = null
-    if ((await this.deps.connector.authorize(this.auth)) === 'REDIRECT') {
-      const url = this.auth.authorizationUrl as URL | null
-      if (!url) throw new Error('The sign-in page address is missing')
-      await this.deps.openBrowser(url.href)
-      const back = new URL(await this.listener.result)
-      const problem = back.searchParams.get('error_description') ?? back.searchParams.get('error')
-      if (problem) throw new Error(problem)
-      if (!this.auth.isExpectedState(back.searchParams.get('state'))) {
-        throw new Error("The sign-in didn't come from this app")
-      }
-      const code = back.searchParams.get('code')
-      if (!code) throw new Error('The sign-in came back without a code')
-      await this.deps.connector.authorize(this.auth, code)
-    }
-    await this.closeSession()
-    this.listener = null
+    await this.account.signIn()
     this.state = { status: 'loading' }
     await this.load()
   } catch (error) {
-    this.listener?.close()
-    this.listener = null
     if (error instanceof SignInCancelledError) {
       this.setState({ status: 'sign-in' })
       return
@@ -925,67 +616,68 @@ async signIn(): Promise<void> {
 Connects the user's portal: **Sign in with JumpCloud**. It runs for as long as the user takes in
 the browser; the page isn't waiting on it, and follows along through the state.
 
-- `this.listener = await this.deps.listen(this.deps.redirectPort)`: the local web server starts
-  first, so it's ready before the browser could come back.
-- `this.deps.connector.authorize(this.auth)`: no code yet. The SDK registers the app if it isn't
-  registered, then either renews a saved sign-in (`'AUTHORIZED'`, and there's nothing for the user
-  to do) or builds the sign-in address and hands it to `redirectToAuthorization()`
-  (`'REDIRECT'`).
-- `await this.deps.openBrowser(url.href)`: the user signs in at JumpCloud, in their own browser.
-- `const back = new URL(await this.listener.result)`: waits for the browser to come back to the
-  local server, and reads the address it came back to.
-- `back.searchParams.get('error_description') ?? back.searchParams.get('error')`: JumpCloud
-  reports a refusal (the user said no, say) in the address; it becomes the message.
-- `if (!this.auth.isExpectedState(back.searchParams.get('state')))`: the `state` check above.
-- `await this.deps.connector.authorize(this.auth, code)`: swaps the code for tokens, which
-  `SavedAuth` saves.
-- `await this.closeSession()`, `this.state = { status: 'loading' }`, `await this.load()`: any old
-  connection is dropped and the list loads with the new sign-in. Setting `state` directly (not
-  through `setState()`) avoids reporting a `loading` that `load()` reports itself.
-- `catch (error) {`: the listener is closed in every failure. `SignInCancelledError` (Cancel)
-  just goes back to the Sign in button; a timeout (the listener gives up after 5 minutes) or any
-  other failure goes back to it with a message, and is logged.
+- `if (this.state.status === 'signing-in') return`: a second click while the browser is open
+  changes nothing.
+- `await this.account.signIn()`: the browser part, in `McpAccount.signIn()` (below). It resolves
+  once the user has signed in and the tokens are saved, and fails if they cancel, take too long or
+  the sign-in goes wrong.
+- `this.state = { status: 'loading' }`, `await this.load()`: the list loads with the new sign-in.
+  Setting `state` directly (not through `setState()`) avoids reporting a `loading` that `load()`
+  reports itself.
+- `catch (error) {`: `SignInCancelledError` (Cancel) just goes back to the Sign in button; a
+  timeout (the listener gives up after 5 minutes) or any other failure goes back to it with a
+  message, and is logged.
 
 ### `PortalApps.cancelSignIn()`, `open()` and `dispose()`
 
 <!-- code: apps/desktop/src/main/apps/PortalApps.ts#PortalApps.cancelSignIn,open,dispose -->
 
-[`src/main/apps/PortalApps.ts`, lines 245–262](../../apps/desktop/src/main/apps/PortalApps.ts#L245-L262)
+[`src/main/apps/PortalApps.ts`, lines 111–134](../../apps/desktop/src/main/apps/PortalApps.ts#L111-L134)
 
 ```ts
 cancelSignIn(): void {
-  this.listener?.close()
+  this.account.cancelSignIn()
 }
 
-/** Opens the app in the browser through its sign-in link. False if there's no link for it. */
+/**
+ * Opens the app in the browser through its sign-in link. False if there's no link for it. If
+ * JumpCloud is slow to give the link, the one from the list is used instead.
+ */
 async open(id: string): Promise<boolean> {
   const app = this.apps.find((a) => a.id === id)
   if (!app) return false
-  const url = (await this.launchUrl(app).catch(() => null)) ?? app.launchUrl
+  const launched = await withTimeout(
+    this.launchUrl(app).catch(() => null),
+    this.deps.launchTimeoutMs ?? LAUNCH_TIMEOUT_MS,
+  )
+  const url = launched ?? app.launchUrl
   if (!url) return false
   await this.deps.openBrowser(url)
   return true
 }
 
 async dispose(): Promise<void> {
-  this.listener?.close()
-  await this.closeSession()
+  await this.account.dispose()
 }
 ```
 
 <!-- /code -->
 
-- `cancelSignIn()`: closing the listener makes `signIn()`'s wait end with `SignInCancelledError`.
+- `cancelSignIn()`: `McpAccount.cancelSignIn()` closes the listener, which makes `signIn()`'s wait
+  end with `SignInCancelledError`.
 - `open(id)`: only an ID from the last list is accepted. The link from `launch_application` is
-  asked for first; if that fails (`.catch(() => null)`), the link the list itself gave is used, if
-  any. With no link at all, `false` lets the panel say so.
-- `dispose()`: when the app quits, a waiting sign-in is stopped and the connection closed.
+  asked for first, through `withTimeout()` (below): if that fails (`.catch(() => null)`) or takes
+  longer than `LAUNCH_TIMEOUT_MS`, the link the list itself gave (`app.launchUrl`) is used, if
+  any. With no link at all, `false` lets the panel say so. Either way the call ends within about
+  15 seconds, so the tile's spinner always stops.
+- `dispose()`: when the app quits, `McpAccount.dispose()` stops a waiting sign-in and closes the
+  connection.
 
 ### `PortalApps.load()` and `PortalApps.fetchList()`
 
 <!-- code: apps/desktop/src/main/apps/PortalApps.ts#PortalApps.load,fetchList -->
 
-[`src/main/apps/PortalApps.ts`, lines 264–291](../../apps/desktop/src/main/apps/PortalApps.ts#L264-L291)
+[`src/main/apps/PortalApps.ts`, lines 136–163](../../apps/desktop/src/main/apps/PortalApps.ts#L136-L163)
 
 ```ts
 private load(): Promise<AppsState> {
@@ -1037,52 +729,33 @@ private async fetchList(): Promise<AppsState> {
 
 <!-- code: apps/desktop/src/main/apps/PortalApps.ts#PortalApps.call -->
 
-[`src/main/apps/PortalApps.ts`, lines 293–307](../../apps/desktop/src/main/apps/PortalApps.ts#L293-L307)
+[`src/main/apps/PortalApps.ts`, lines 165–167](../../apps/desktop/src/main/apps/PortalApps.ts#L165-L167)
 
 ```ts
-/** Calls a tool, connecting first if needed and once more if the connection has gone stale. */
-private async call(name: string, args: Record<string, unknown>): Promise<ToolResult> {
-  await this.loaded
-  for (let attempt = 0; ; attempt++) {
-    try {
-      this.session ??= await this.deps.connector.connect(this.auth)
-      const result = await this.session.callTool(name, args)
-      if (result.isError) throw new Error(`The ${name} tool reported an error`)
-      return result
-    } catch (error) {
-      await this.closeSession()
-      if (error instanceof NeedsSignInError || attempt > 0) throw error
-    }
-  }
+private call(name: string, args: Record<string, unknown>): Promise<ToolResult> {
+  return this.account.call(name, args)
 }
 ```
 
 <!-- /code -->
 
-Calls a tool, connecting first if there's no open session.
-
-- `for (let attempt = 0; ; attempt++)`: a loop with no end condition, left by `return` or `throw`.
-- `this.session ??= await this.deps.connector.connect(this.auth)`: connects only when there's no
-  session.
-- `if (result.isError) throw`: a tool that reports its own failure counts as an error.
-- `await this.closeSession()`, `if (error instanceof NeedsSignInError || attempt > 0) throw error`:
-  after any failure the session is dropped. A connection kept open between uses can go stale (the
-  server forgets it, say), so the first failure gets one more try with a fresh connection. A
-  missing sign-in, or a second failure, is passed on.
+Every tool call goes through the account: `McpAccount.call()` (below) connects first if there's
+no open connection, and tries once more if a kept connection has gone stale.
 
 ### `PortalApps.launchUrl()`, `PortalApps.withLogos()` and `PortalApps.logo()`
 
 <!-- code: apps/desktop/src/main/apps/PortalApps.ts#PortalApps.launchUrl,withLogos,logo -->
 
-[`src/main/apps/PortalApps.ts`, lines 309–331](../../apps/desktop/src/main/apps/PortalApps.ts#L309-L331)
+[`src/main/apps/PortalApps.ts`, lines 169–192](../../apps/desktop/src/main/apps/PortalApps.ts#L169-L192)
 
 ```ts
 private async launchUrl(app: PortalAppInfo): Promise<string | null> {
-  await this.loaded
-  this.session ??= await this.deps.connector.connect(this.auth)
-  const tool = (await this.session.listTools()).find((t) => t.name === LAUNCH_TOOL)
-  if (!tool) return null
-  const result = await this.call(LAUNCH_TOOL, { [idArgumentName(tool.inputSchema)]: app.id })
+  if (this.launchArgument === undefined) {
+    const tool = (await this.account.listTools()).find((t) => t.name === LAUNCH_TOOL)
+    this.launchArgument = tool ? idArgumentName(tool.inputSchema) : null
+  }
+  if (this.launchArgument === null) return null
+  const result = await this.call(LAUNCH_TOOL, { [this.launchArgument]: app.id })
   return findLaunchUrl(result)
 }
 
@@ -1104,10 +777,14 @@ private async logo(url: string | null): Promise<string | null> {
 
 <!-- /code -->
 
-- `(await this.session.listTools()).find((t) => t.name === LAUNCH_TOOL)`: the launch tool's
-  description, for its argument name. A server without the tool means no link this way.
-- `{ [idArgumentName(tool.inputSchema)]: app.id }`: the arguments object, with the ID under the
-  name the tool's schema uses. `[...]` in an object literal computes the field's name.
+- `if (this.launchArgument === undefined) {`: only the first time. The server's list of tools
+  (`this.account.listTools()`) gives the launch tool's description, and its schema the name of the
+  ID argument.
+  It's remembered, so every later open is a single request to JumpCloud instead of two.
+- `this.launchArgument = tool ? idArgumentName(tool.inputSchema) : null`: `null` when the server
+  has no launch tool; then `return null`, and `open()` uses the list's own link.
+- `{ [this.launchArgument]: app.id }`: the arguments object, with the ID under the name the tool's
+  schema uses. `[...]` in an object literal computes the field's name.
 - `withLogos(apps)`: gets every logo at the same time (`Promise.all`); one that fails is `null`,
   and the list shows the app's first letter instead. Only `id`, `name` and `logo` go into the
   result, which is what the page receives.
@@ -1116,19 +793,13 @@ private async logo(url: string | null): Promise<string | null> {
   logo again. `if (logo) this.logos.set(url, logo)`: only a logo that arrived is kept; as the
   comment says, a failure is tried again on the next load.
 
-### `PortalApps.closeSession()` and `PortalApps.setState()`
+### `PortalApps.setState()`
 
-<!-- code: apps/desktop/src/main/apps/PortalApps.ts#PortalApps.closeSession,setState -->
+<!-- code: apps/desktop/src/main/apps/PortalApps.ts#PortalApps.setState -->
 
-[`src/main/apps/PortalApps.ts`, lines 333–343](../../apps/desktop/src/main/apps/PortalApps.ts#L333-L343)
+[`src/main/apps/PortalApps.ts`, lines 194–198](../../apps/desktop/src/main/apps/PortalApps.ts#L194-L198)
 
 ```ts
-private async closeSession(): Promise<void> {
-  const session = this.session
-  this.session = null
-  await session?.close().catch(() => {})
-}
-
 private setState(state: AppsState): AppsState {
   this.state = state
   this.deps.onState(state)
@@ -1138,16 +809,47 @@ private setState(state: AppsState): AppsState {
 
 <!-- /code -->
 
-- `closeSession()`: forgets the session first, then closes it, ignoring a failure to close (it may
-  be broken already).
-- `setState(state)`: records the new state, reports it (`onState`), and returns it, so
-  `fetchList()` can `return this.setState(...)`.
+Records the new state, reports it (`onState`), and returns it, so `fetchList()` can
+`return this.setState(...)`.
+
+### `withTimeout()`
+
+<!-- code: apps/desktop/src/main/apps/PortalApps.ts#withTimeout -->
+
+[`src/main/apps/PortalApps.ts`, lines 201–210](../../apps/desktop/src/main/apps/PortalApps.ts#L201-L210)
+
+```ts
+/** The promise's value, or null if it takes longer than `ms`. */
+function withTimeout<T>(promise: Promise<T | null>, ms: number): Promise<T | null> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(null), ms)
+    void promise.then((value) => {
+      clearTimeout(timer)
+      resolve(value)
+    })
+  })
+}
+```
+
+<!-- /code -->
+
+The promise's value if it arrives within `ms`, otherwise `null`. `open()` uses it so a slow
+JumpCloud can't keep the user waiting.
+
+- `new Promise((resolve) => {`: a promise this function resolves itself, whichever comes first.
+- `setTimeout(() => resolve(null), ms)`: when the time is up, it resolves with `null`.
+- `promise.then((value) => { clearTimeout(timer); resolve(value) })`: if the value comes first,
+  the timer is cancelled and the value passed on. A promise resolves only once, so whichever
+  happens second changes nothing. The slow request isn't cancelled; its late answer is just
+  ignored.
+- `promise: Promise<T | null>`: the promise must not fail, since nothing here catches an error;
+  `open()` passes one with `.catch(() => null)` already on it.
 
 ### `friendlyError()`
 
 <!-- code: apps/desktop/src/main/apps/PortalApps.ts#friendlyError -->
 
-[`src/main/apps/PortalApps.ts`, lines 346–357](../../apps/desktop/src/main/apps/PortalApps.ts#L346-L357)
+[`src/main/apps/PortalApps.ts`, lines 212–223](../../apps/desktop/src/main/apps/PortalApps.ts#L212-L223)
 
 ```ts
 /** A plain-English reason for the panel. */
@@ -1174,25 +876,614 @@ What the list says when loading fails.
 - `/fetch failed|ENOTFOUND|ECONNREFUSED|ETIMEDOUT|network/i`: the usual signs of no connection.
 - Anything else gets a general "try again".
 
-## `src/main/apps/mcp.ts`: the connection, through the MCP SDK
+## `src/main/mcp/McpAccount.ts`: connecting once, then calling tools
 
-The only file that uses the MCP SDK. It turns the SDK's client into the `McpConnector` that
-`PortalApps` expects, and fetches logos. It isn't unit-tested against a real server; its logo
-fetching is.
+What signing in to an MCP server in the browser and calling its tools needs, whichever server it
+is: `PortalApps` uses it for JumpCloud's apps server, and `Atlassian` for Atlassian's Remote MCP
+server ([Jira and the service desk](11-atlassian.md)). It has no Electron in it either, so
+`tests/portalApps.test.ts` and `tests/atlassian.test.ts` run it against fake servers.
+
+### `McpSession`, `NeedsSignInError`, `ToolError` and `McpConnector`
+
+<!-- code: apps/desktop/src/main/mcp/McpAccount.ts#McpSession,NeedsSignInError,ToolError,McpConnector -->
+
+[`src/main/mcp/McpAccount.ts`, lines 11–38](../../apps/desktop/src/main/mcp/McpAccount.ts#L11-L38)
+
+```ts
+/** A connection to an MCP server, signed in as the user. */
+export interface McpSession {
+  listTools(): Promise<{ name: string; inputSchema?: unknown }[]>
+  callTool(name: string, args: Record<string, unknown>): Promise<ToolResult>
+  close(): Promise<void>
+}
+
+/** Thrown when there's no usable sign-in: the user has to connect, in the browser. */
+export class NeedsSignInError extends Error {
+  constructor() {
+    super('Sign-in needed')
+  }
+}
+
+/** Thrown when a tool answers with an error (the server's message, if it gave one). */
+export class ToolError extends Error {}
+
+/** Talks to an MCP server (src/main/mcp/connector.ts; tests use a fake). */
+export interface McpConnector {
+  /** Connects with the saved sign-in (renewing it if needed); throws NeedsSignInError if none. */
+  connect(provider: OAuthClientProvider): Promise<McpSession>
+  /**
+   * The OAuth steps. Without a code: registers Desktop Assist with the server if it isn't yet,
+   * and asks the provider to send the user to the sign-in page ('REDIRECT'). With the code from
+   * the browser: swaps it for tokens ('AUTHORIZED').
+   */
+  authorize(provider: OAuthClientProvider, code?: string): Promise<'AUTHORIZED' | 'REDIRECT'>
+}
+```
+
+<!-- /code -->
+
+The small interfaces `McpAccount` talks to the server through. The real connector is
+`mcpConnector()` in `connector.ts`; the tests use fakes.
+
+- `McpSession`: one open connection, signed in as the user: list the server's tools, call one,
+  close.
+- `NeedsSignInError`: the connector throws this when there's no sign-in it can use, so
+  `PortalApps` and `Atlassian` can tell "the user has to connect" apart from every other failure
+  (`instanceof`).
+- `ToolError`: a tool answered, but with an error (`isError`). Its message is the server's own
+  words when it gave any (`errorText()` below), so Atlassian's "issue does not exist", say, can
+  reach the user. Being a class of its own lets `call()` tell it apart from a broken connection.
+- `connect(provider)`: opens a session with the saved sign-in, renewing it if needed. The
+  `provider` is the `SavedAuth` below, which the SDK reads the tokens from.
+- `authorize(provider, code?)`: the OAuth steps, as the comment explains. It answers
+  `'REDIRECT'` when the user needs to go to the sign-in page, and `'AUTHORIZED'` once there are
+  tokens.
+
+### `SavedSecret` and `Saved`
+
+<!-- code: apps/desktop/src/main/mcp/McpAccount.ts#SavedSecret,Saved -->
+
+[`src/main/mcp/McpAccount.ts`, lines 40–50](../../apps/desktop/src/main/mcp/McpAccount.ts#L40-L50)
+
+```ts
+/** Where a connection is saved, encrypted (Windows DPAPI). */
+export interface SavedSecret {
+  load(): Promise<string | null>
+  save(secret: string): Promise<void>
+  clear(): Promise<void>
+}
+
+interface Saved {
+  client?: OAuthClientInformationMixed
+  tokens?: OAuthTokens
+}
+```
+
+<!-- /code -->
+
+- `SavedSecret`: where the connection is kept, seen only as load, save and clear. `index.ts`
+  passes a `SecretStore` (see [JumpCloud sign-in](3-sign-in.md)): over `jumpcloud-apps.bin` for
+  the apps list, and over `atlassian.bin` for Atlassian.
+- `Saved`: what goes in the file: the app's registration with the server (`client`) and the user's
+  tokens. Both are optional, since either may not exist yet.
+
+### `SavedAuth`
+
+<!-- code: apps/desktop/src/main/mcp/McpAccount.ts#SavedAuth.class -->
+
+[`src/main/mcp/McpAccount.ts`, lines 52–57](../../apps/desktop/src/main/mcp/McpAccount.ts#L52-L57)
+
+```ts
+/**
+ * The OAuth client the MCP SDK drives: Desktop Assist as a public client (PKCE, no secret) with a
+ * loopback redirect. It remembers the registration and the tokens; the sign-in page is only opened
+ * by McpAccount.signIn(), never by just using the connection.
+ */
+export class SavedAuth implements OAuthClientProvider {
+  // …
+}
+```
+
+<!-- /code -->
+
+The MCP SDK does the OAuth steps, but asks its _provider_ (an `OAuthClientProvider`) for
+everything particular to the app: what to register as, where the browser should come back to,
+the saved tokens, and what to do when the user has to sign in. `SavedAuth` is that provider.
+`implements OAuthClientProvider` makes TypeScript check it has every method the SDK expects.
+
+As the comment says, it never opens the browser itself. When the SDK decides the user has to sign
+in, it calls `redirectToAuthorization()`, which here only notes the address. So merely using the
+connection (loading the apps list, checking Jira) can't pop up a browser window; only a Sign in or
+Connect button does, through `McpAccount.signIn()`.
+
+### `SavedAuth` fields, constructor and `load()`
+
+<!-- code: apps/desktop/src/main/mcp/McpAccount.ts#SavedAuth.saved,verifier,expectedState,authorizationUrl,constructor,load -->
+
+[`src/main/mcp/McpAccount.ts`, lines 58–79](../../apps/desktop/src/main/mcp/McpAccount.ts#L58-L79)
+
+```ts
+private saved: Saved = {}
+
+private verifier = ''
+
+private expectedState = ''
+
+/** Where the user has to go to sign in, once the SDK has asked for it. */
+authorizationUrl: URL | null = null
+
+constructor(
+  private readonly appName: string,
+  private readonly redirectPort: number,
+  private readonly store: SavedSecret,
+  /** The scopes to ask for; left out when the server doesn't define any. */
+  private readonly scope?: string,
+) {}
+
+async load(): Promise<void> {
+  try {
+    const text = await this.store.load()
+    this.saved = text ? (JSON.parse(text) as Saved) : {}
+  } catch {
+    this.saved = {}
+  }
+}
+```
+
+<!-- /code -->
+
+- `saved`: the registration and tokens, as in the file.
+- `verifier`: the current sign-in's PKCE secret. It's needed only until the code is swapped, so
+  it's kept in memory, not saved.
+- `expectedState`: the random `state` sent with the current sign-in, to check the browser's
+  return against.
+- `authorizationUrl`: the sign-in page's address, once the SDK has asked for one.
+- `scope?`: the scopes to ask for, as the comment says, left out when the server doesn't define
+  any. `PortalApps` gives JumpCloud's `SCOPE`; `Atlassian` gives none. `private readonly` before a
+  constructor parameter makes it a field too.
+- `load()`: reads the file. A missing, undecryptable or damaged file just means "not connected"
+  (`{}`), never an error.
+
+### `SavedAuth.redirectUrl` and `SavedAuth.clientMetadata`
+
+<!-- code: apps/desktop/src/main/mcp/McpAccount.ts#SavedAuth.redirectUrl,clientMetadata -->
+
+[`src/main/mcp/McpAccount.ts`, lines 81–94](../../apps/desktop/src/main/mcp/McpAccount.ts#L81-L94)
+
+```ts
+get redirectUrl(): string {
+  return `http://127.0.0.1:${this.redirectPort}/callback`
+}
+
+get clientMetadata(): OAuthClientMetadata {
+  return {
+    client_name: this.appName,
+    redirect_uris: [this.redirectUrl],
+    grant_types: ['authorization_code', 'refresh_token'],
+    response_types: ['code'],
+    token_endpoint_auth_method: 'none',
+    ...(this.scope ? { scope: this.scope } : {}),
+  }
+}
+```
+
+<!-- /code -->
+
+What the app registers as. Both are _getters_, read like fields.
+
+- `redirectUrl`: the local listener's address, which the browser returns to.
+- `client_name`: the app's name, shown on the server's consent page if it shows one.
+- `grant_types: ['authorization_code', 'refresh_token']`: signing in with a code from the browser,
+  and renewing with a refresh token.
+- `token_endpoint_auth_method: 'none'`: a _public client_: the app proves nothing with a secret
+  when it fetches tokens, because it has none. PKCE protects the code instead.
+- `...(this.scope ? { scope: this.scope } : {})`: the scopes, only when there are some. `...`
+  copies an object's fields into this one, and the empty object `{}` adds nothing, so without a
+  scope there's no `scope` field at all.
+
+### `SavedAuth.state()` and `SavedAuth.isExpectedState()`
+
+<!-- code: apps/desktop/src/main/mcp/McpAccount.ts#SavedAuth.state,isExpectedState -->
+
+[`src/main/mcp/McpAccount.ts`, lines 96–104](../../apps/desktop/src/main/mcp/McpAccount.ts#L96-L104)
+
+```ts
+state(): string {
+  this.expectedState = randomBytes(16).toString('base64url')
+  return this.expectedState
+}
+
+/** Whether the browser came back from the sign-in this app started. */
+isExpectedState(state: string | null): boolean {
+  return state !== null && this.expectedState !== '' && state === this.expectedState
+}
+```
+
+<!-- /code -->
+
+OAuth's `state` check. The SDK calls `state()` when it builds the sign-in address, and the value
+travels to the sign-in server and back on the browser's return. `isExpectedState()` then makes sure
+the browser came back from the sign-in this app started, not a link someone else sent the browser
+to.
+
+- `randomBytes(16).toString('base64url')`: 16 random bytes, written with letters, digits, `-` and
+  `_`, so it's safe in a web address.
+- `this.expectedState !== ''`: before any sign-in has started, nothing is accepted.
+
+### Saving the registration and the tokens
+
+<!-- code: apps/desktop/src/main/mcp/McpAccount.ts#SavedAuth.clientInformation,saveClientInformation,tokens,saveTokens -->
+
+[`src/main/mcp/McpAccount.ts`, lines 106–122](../../apps/desktop/src/main/mcp/McpAccount.ts#L106-L122)
+
+```ts
+clientInformation(): OAuthClientInformationMixed | undefined {
+  return this.saved.client
+}
+
+async saveClientInformation(client: OAuthClientInformationMixed): Promise<void> {
+  this.saved = { ...this.saved, client }
+  await this.persist()
+}
+
+tokens(): OAuthTokens | undefined {
+  return this.saved.tokens
+}
+
+async saveTokens(tokens: OAuthTokens): Promise<void> {
+  this.saved = { ...this.saved, tokens }
+  await this.persist()
+}
+```
+
+<!-- /code -->
+
+The SDK reads the registration and tokens through these, and hands over new ones (after
+registering, signing in or renewing) to be saved. Each save writes the file at once, so a renewed
+token isn't lost if the app quits.
+
+### `SavedAuth.redirectToAuthorization()`, `saveCodeVerifier()` and `codeVerifier()`
+
+<!-- code: apps/desktop/src/main/mcp/McpAccount.ts#SavedAuth.redirectToAuthorization,saveCodeVerifier,codeVerifier -->
+
+[`src/main/mcp/McpAccount.ts`, lines 124–134](../../apps/desktop/src/main/mcp/McpAccount.ts#L124-L134)
+
+```ts
+redirectToAuthorization(authorizationUrl: URL): void {
+  this.authorizationUrl = authorizationUrl
+}
+
+saveCodeVerifier(verifier: string): void {
+  this.verifier = verifier
+}
+
+codeVerifier(): string {
+  return this.verifier
+}
+```
+
+<!-- /code -->
+
+- `redirectToAuthorization(authorizationUrl)`: only notes the address; `PortalApps.signIn()`
+  opens it.
+- `saveCodeVerifier()`, `codeVerifier()`: the SDK makes the PKCE secret when it builds the sign-in
+  address, and asks for it back when it swaps the code for tokens.
+
+### `SavedAuth.invalidateCredentials()` and `SavedAuth.persist()`
+
+<!-- code: apps/desktop/src/main/mcp/McpAccount.ts#SavedAuth.invalidateCredentials,persist -->
+
+[`src/main/mcp/McpAccount.ts`, lines 136–146](../../apps/desktop/src/main/mcp/McpAccount.ts#L136-L146)
+
+```ts
+async invalidateCredentials(scope: 'all' | 'client' | 'tokens' | 'verifier' | 'discovery') {
+  if (scope === 'all' || scope === 'client') this.saved = {}
+  else if (scope === 'tokens') this.saved = { client: this.saved.client }
+  if (scope === 'all' || scope === 'verifier') this.verifier = ''
+  await this.persist()
+}
+
+private async persist(): Promise<void> {
+  if (this.saved.client || this.saved.tokens) await this.store.save(JSON.stringify(this.saved))
+  else await this.store.clear()
+}
+```
+
+<!-- /code -->
+
+- `invalidateCredentials(scope)`: the SDK calls this when the server rejects something saved: the
+  registration (`client`, or `all`), so the app registers again, or the tokens, so the user signs
+  in again. It then tries once more. `McpAccount.signOut()` calls it too, with `'all'`.
+- `{ client: this.saved.client }`: forgetting the tokens keeps the registration.
+- `persist()`: writes the file, or deletes it when there's nothing left to keep.
+
+### `McpAccountDeps`
+
+<!-- code: apps/desktop/src/main/mcp/McpAccount.ts#McpAccountDeps -->
+
+[`src/main/mcp/McpAccount.ts`, lines 149–158](../../apps/desktop/src/main/mcp/McpAccount.ts#L149-L158)
+
+```ts
+export interface McpAccountDeps {
+  appName: string
+  redirectPort: number
+  /** The scopes to ask for, if the server defines any. */
+  scope?: string
+  connector: McpConnector
+  store: SavedSecret
+  listen(port: number): Promise<RedirectListener>
+  openBrowser(url: string): Promise<void>
+}
+```
+
+<!-- /code -->
+
+Everything `McpAccount` needs from outside, which `PortalApps` and `Atlassian` pass on from their
+own deps.
+
+- `appName`: how the app names itself when it registers with the server.
+- `redirectPort`: the local port the browser comes back to: 47622 for the apps list, and the
+  tenant's `atlassian.redirectPort` for Atlassian, so two sign-ins can never collide.
+- `scope?`: the scopes to ask for, if the server defines any (see `SavedAuth`).
+- `connector`, `store`: the connection to the server and the encrypted file, as above.
+- `listen(port)`: starts the local web server for the browser to come back to
+  (`listenForRedirect()`).
+- `openBrowser(url)`: opens the sign-in page in the user's browser.
+
+### `McpAccount`
+
+<!-- code: apps/desktop/src/main/mcp/McpAccount.ts#McpAccount.class -->
+
+[`src/main/mcp/McpAccount.ts`, lines 160–165](../../apps/desktop/src/main/mcp/McpAccount.ts#L160-L165)
+
+```ts
+/**
+ * The user's connection to an MCP server that signs people in with OAuth in the browser (the
+ * JumpCloud apps server, Atlassian's): connecting once, then calling tools with the saved
+ * connection, which the SDK renews by itself.
+ */
+export class McpAccount {
+  // …
+}
+```
+
+<!-- /code -->
+
+The connection as its users see it, with the comment that sums it up: connect once in the
+browser, then call tools; renewing the tokens is the SDK's business.
+
+### `McpAccount` fields and constructor
+
+<!-- code: apps/desktop/src/main/mcp/McpAccount.ts#McpAccount.auth,loaded,session,listener,constructor -->
+
+[`src/main/mcp/McpAccount.ts`, lines 166–174](../../apps/desktop/src/main/mcp/McpAccount.ts#L166-L174)
+
+```ts
+private readonly auth: SavedAuth
+
+private readonly loaded: Promise<void>
+
+private session: McpSession | null = null
+
+private listener: RedirectListener | null = null
+
+constructor(private readonly deps: McpAccountDeps) {
+  this.auth = new SavedAuth(deps.appName, deps.redirectPort, deps.store, deps.scope)
+  this.loaded = this.auth.load()
+}
+```
+
+<!-- /code -->
+
+- `auth`: the `SavedAuth` above, made in the constructor with the deps' name, port, store and
+  scope.
+- `loaded`: the promise of reading the saved connection, started in the constructor. Everything
+  that needs it waits for it first (`await this.loaded`).
+- `session`: the open connection to the server, reused between calls, or `null`.
+- `listener`: the local web server while a sign-in is waiting for the browser.
+
+### `McpAccount.signIn()`
+
+<!-- code: apps/desktop/src/main/mcp/McpAccount.ts#McpAccount.signIn -->
+
+[`src/main/mcp/McpAccount.ts`, lines 176–206](../../apps/desktop/src/main/mcp/McpAccount.ts#L176-L206)
+
+```ts
+/**
+ * Connects in the browser: resolves once signed in. Rejects with SignInCancelledError if the
+ * user cancels, SignInTimeoutError if they take too long, or an Error saying what went wrong.
+ */
+async signIn(): Promise<void> {
+  try {
+    await this.loaded
+    this.listener = await this.deps.listen(this.deps.redirectPort)
+    this.auth.authorizationUrl = null
+    if ((await this.deps.connector.authorize(this.auth)) === 'REDIRECT') {
+      const url = this.auth.authorizationUrl as URL | null
+      if (!url) throw new Error('The sign-in page address is missing')
+      await this.deps.openBrowser(url.href)
+      const back = new URL(await this.listener.result)
+      const problem = back.searchParams.get('error_description') ?? back.searchParams.get('error')
+      if (problem) throw new Error(problem)
+      if (!this.auth.isExpectedState(back.searchParams.get('state'))) {
+        throw new Error("The sign-in didn't come from this app")
+      }
+      const code = back.searchParams.get('code')
+      if (!code) throw new Error('The sign-in came back without a code')
+      await this.deps.connector.authorize(this.auth, code)
+    }
+    await this.closeSession()
+  } catch (error) {
+    this.listener?.close()
+    throw error
+  } finally {
+    this.listener = null
+  }
+}
+```
+
+<!-- /code -->
+
+Connects in the browser. It runs for as long as the user takes there, and, as the comment says,
+resolves once they're signed in or fails with the reason; the caller (`PortalApps.signIn()`,
+`Atlassian.signIn()`) turns that into the state its page shows.
+
+- `this.listener = await this.deps.listen(this.deps.redirectPort)`: the local web server starts
+  first, so it's ready before the browser could come back.
+- `this.auth.authorizationUrl = null`: forgets the address from any earlier try.
+- `this.deps.connector.authorize(this.auth)`: no code yet. The SDK registers the app if it isn't
+  registered, then either renews a saved sign-in (`'AUTHORIZED'`, and there's nothing for the user
+  to do) or builds the sign-in address and hands it to `redirectToAuthorization()`
+  (`'REDIRECT'`).
+- `await this.deps.openBrowser(url.href)`: the user signs in, in their own browser (at JumpCloud,
+  or at Atlassian, which sends them through JumpCloud too).
+- `const back = new URL(await this.listener.result)`: waits for the browser to come back to the
+  local server, and reads the address it came back to.
+- `back.searchParams.get('error_description') ?? back.searchParams.get('error')`: the server
+  reports a refusal (the user said no, say) in the address; it becomes the message.
+- `if (!this.auth.isExpectedState(back.searchParams.get('state')))`: the `state` check above.
+- `await this.deps.connector.authorize(this.auth, code)`: swaps the code for tokens, which
+  `SavedAuth` saves.
+- `await this.closeSession()`: any old connection is dropped, so the next call connects with the
+  new sign-in.
+- `catch (error) { this.listener?.close(); throw error }`: the listener is closed in every failure
+  (cancelling has closed it already, and closing twice does no harm), and the error is passed on.
+  `finally` forgets the listener either way.
+
+### `McpAccount.cancelSignIn()`, `listTools()`, `signOut()`, `dispose()` and `closeSession()`
+
+<!-- code: apps/desktop/src/main/mcp/McpAccount.ts#McpAccount.cancelSignIn,listTools,signOut,dispose,closeSession -->
+
+[`src/main/mcp/McpAccount.ts`, lines 208–252](../../apps/desktop/src/main/mcp/McpAccount.ts#L208-L252)
+
+```ts
+cancelSignIn(): void {
+  this.listener?.close()
+}
+
+async listTools(): Promise<{ name: string; inputSchema?: unknown }[]> {
+  await this.loaded
+  this.session ??= await this.deps.connector.connect(this.auth)
+  return this.session.listTools()
+}
+
+/** Forgets the saved connection; the next call needs a new sign-in. */
+async signOut(): Promise<void> {
+  await this.loaded
+  await this.closeSession()
+  await this.auth.invalidateCredentials('all')
+}
+
+async dispose(): Promise<void> {
+  this.listener?.close()
+  await this.closeSession()
+}
+
+private async closeSession(): Promise<void> {
+  const session = this.session
+  this.session = null
+  await session?.close().catch(() => {})
+}
+```
+
+<!-- /code -->
+
+- `cancelSignIn()`: closing the listener makes `signIn()`'s wait end with `SignInCancelledError`.
+- `listTools()`: the server's tools, connecting first if needed. `PortalApps.launchUrl()` reads
+  the launch tool's arguments from it.
+- `signOut()`: as the comment says, forgets the saved connection: the session is closed and
+  `invalidateCredentials('all')` deletes the file, so the next call throws `NeedsSignInError`.
+  **Disconnect Atlassian** in the settings menu ends here.
+- `dispose()`: when the app quits, a waiting sign-in is stopped and the connection closed.
+- `closeSession()`: forgets the session first, then closes it, ignoring a failure to close (it may
+  be broken already).
+
+### `McpAccount.call()`
+
+<!-- code: apps/desktop/src/main/mcp/McpAccount.ts#McpAccount.call -->
+
+[`src/main/mcp/McpAccount.ts`, lines 212–228](../../apps/desktop/src/main/mcp/McpAccount.ts#L212-L228)
+
+```ts
+/** Calls a tool, connecting first if needed and once more if the connection has gone stale. */
+async call(name: string, args: Record<string, unknown>): Promise<ToolResult> {
+  await this.loaded
+  for (let attempt = 0; ; attempt++) {
+    try {
+      this.session ??= await this.deps.connector.connect(this.auth)
+      const result = await this.session.callTool(name, args)
+      if (result.isError) throw new ToolError(errorText(result) ?? `The ${name} tool failed`)
+      return result
+    } catch (error) {
+      // The server answered: trying again won't change its mind.
+      if (error instanceof ToolError) throw error
+      await this.closeSession()
+      if (error instanceof NeedsSignInError || attempt > 0) throw error
+    }
+  }
+}
+```
+
+<!-- /code -->
+
+Calls a tool, connecting first if there's no open session.
+
+- `for (let attempt = 0; ; attempt++)`: a loop with no end condition, left by `return` or `throw`.
+- `this.session ??= await this.deps.connector.connect(this.auth)`: connects only when there's no
+  session.
+- `if (result.isError) throw new ToolError(...)`: a tool that reports its own failure counts as an
+  error, with the server's words if it gave any, or else "The … tool failed".
+- `if (error instanceof ToolError) throw error`: as the comment says, the server did answer, so
+  asking again wouldn't change its mind. The session is kept, since it works.
+- `await this.closeSession()`, `if (error instanceof NeedsSignInError || attempt > 0) throw error`:
+  after any other failure the session is dropped. A connection kept open between uses can go stale
+  (the server forgets it, say), so the first failure gets one more try with a fresh connection. A
+  missing sign-in, or a second failure, is passed on.
+
+### `errorText()`
+
+<!-- code: apps/desktop/src/main/mcp/McpAccount.ts#errorText -->
+
+[`src/main/mcp/McpAccount.ts`, lines 255–263](../../apps/desktop/src/main/mcp/McpAccount.ts#L255-L263)
+
+```ts
+/** The text of an error answer, if it has any. */
+function errorText(result: ToolResult): string | null {
+  const blocks = Array.isArray(result.content) ? (result.content as unknown[]) : []
+  for (const block of blocks) {
+    const text = (block as { text?: unknown } | null)?.text
+    if (typeof text === 'string' && text.trim()) return text.trim().slice(0, 500)
+  }
+  return null
+}
+```
+
+<!-- /code -->
+
+The words of an error answer: the first text block with something in it, trimmed and cut to 500
+characters, so a long error page can't flood a message. `null` when there are none, and `call()`
+uses its own words instead.
+
+## `src/main/mcp/connector.ts`: the connection, through the MCP SDK
+
+The only file that runs the MCP SDK's client (`McpAccount.ts` only borrows its types). It turns
+the SDK into the `McpConnector` that `McpAccount` expects, for any server: `index.ts` makes one for
+JumpCloud's apps server and one for Atlassian's. It isn't unit-tested against a real server.
 
 ### `Fetch` and `mcpConnector()`
 
-<!-- code: apps/desktop/src/main/apps/mcp.ts#Fetch,mcpConnector -->
+<!-- code: apps/desktop/src/main/mcp/connector.ts#Fetch,mcpConnector -->
 
-[`src/main/apps/mcp.ts`, lines 6–50](../../apps/desktop/src/main/apps/mcp.ts#L6-L50)
+[`src/main/mcp/connector.ts`, lines 6–51](../../apps/desktop/src/main/mcp/connector.ts#L6-L51)
 
 ```ts
-type Fetch = (url: string | URL, init?: RequestInit) => Promise<Response>
+export type Fetch = (url: string | URL, init?: RequestInit) => Promise<Response>
 
 /**
- * The real connection to JumpCloud's MCP Server for Users, through the official MCP SDK: its
- * Streamable HTTP transport, and its OAuth (discovery, client registration, PKCE, token renewal).
- * `fetch` is Electron's, so company proxies set in Windows are used.
+ * The real connection to an MCP server (JumpCloud's MCP Server for Users, Atlassian's Remote MCP
+ * server), through the official MCP SDK: its Streamable HTTP transport, and its OAuth (discovery,
+ * client registration, PKCE, token renewal). `fetch` is Electron's, so company proxies set in
+ * Windows are used.
  */
 export function mcpConnector(options: {
   serverUrl: string
@@ -1250,18 +1541,73 @@ export function mcpConnector(options: {
 - `if (error instanceof UnauthorizedError) throw new NeedsSignInError()`: the SDK's way of saying
   the user must sign in (there were no tokens, or they couldn't be renewed). `client.close()`
   first, so a failed connection doesn't linger.
-- `callTool: async (name, args) => {`: calls a tool and returns just the parts `PortalApps` uses.
+- `callTool: async (name, args) => {`: calls a tool and returns just the parts `McpAccount` uses.
   As the comment says, a server on an older version of the protocol puts its data in `toolResult`
   instead.
 - `authorize: (provider, code) => auth(provider, { ... })`: the SDK's `auth()` function, which
   does the OAuth steps: discovery, registration if needed, then either a code swap (with a code),
   a renewal, or building the sign-in address (`'REDIRECT'`).
 
+## `src/main/mcp/toolResult.ts`: a tool's answer
+
+What a tool call returns, and reading it as data. `portalData.ts` (the apps list) and
+`jiraData.ts` (Jira) both start from `payloadOf()`.
+
+### `ToolResult`, `isObject` and `payloadOf()`
+
+<!-- code: apps/desktop/src/main/mcp/toolResult.ts#ToolResult,isObject,payloadOf -->
+
+[`src/main/mcp/toolResult.ts`, lines 1–25](../../apps/desktop/src/main/mcp/toolResult.ts#L1-L25)
+
+```ts
+/** What an MCP tool call returns (the parts used here). */
+export interface ToolResult {
+  content?: unknown
+  structuredContent?: unknown
+  isError?: boolean
+}
+
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+/** The tool's answer as data: its structured content, or the JSON in its first text block. */
+export function payloadOf(result: ToolResult): unknown {
+  if (result.structuredContent !== undefined) return result.structuredContent
+  const blocks = Array.isArray(result.content) ? result.content : []
+  for (const block of blocks) {
+    if (isObject(block) && block['type'] === 'text' && typeof block['text'] === 'string') {
+      try {
+        return JSON.parse(block['text'])
+      } catch {
+        return block['text']
+      }
+    }
+  }
+  return undefined
+}
+```
+
+<!-- /code -->
+
+- `ToolResult`: what an MCP tool call returns. A tool can answer with `content` (a list of blocks,
+  usually text) and, in newer versions of the protocol, `structuredContent` (data as JSON).
+  `isError` is set when the tool itself reports a failure. Both contents are typed `unknown`,
+  because nothing about their shape is promised.
+- `isObject`: the same type guard as in `portalData.ts`: a plain object, not an array or `null`.
+- `payloadOf()`: a tool's answer as data. `structuredContent` is taken as it is when there is one.
+  Otherwise the first text block is read as JSON, which is how most servers send data; if it isn't
+  JSON, the text itself is returned (`findLaunchUrl()` can still find a link in it).
+
+## `src/main/apps/logos.ts`: the apps' logos
+
+Fetching the logos the Apps list shows. `index.ts` hands `fetchLogo()` to `PortalApps`, with
+Electron's `net.fetch()` as the `fetch` to use. It's unit-tested with a fake `fetch`.
+
 ### `MAX_LOGO_BYTES` and `sniffImageType()`
 
-<!-- code: apps/desktop/src/main/apps/mcp.ts#MAX_LOGO_BYTES,sniffImageType -->
+<!-- code: apps/desktop/src/main/apps/logos.ts#MAX_LOGO_BYTES,sniffImageType -->
 
-[`src/main/apps/mcp.ts`, lines 52–75](../../apps/desktop/src/main/apps/mcp.ts#L52-L75)
+[`src/main/apps/logos.ts`, lines 3–26](../../apps/desktop/src/main/apps/logos.ts#L3-L26)
 
 ```ts
 /** Largest logo fetched for the Apps list. */
@@ -1315,9 +1661,9 @@ start with a fixed _signature_, a few bytes that are always the same, and this c
 
 ### `fetchLogo()`
 
-<!-- code: apps/desktop/src/main/apps/mcp.ts#fetchLogo -->
+<!-- code: apps/desktop/src/main/apps/logos.ts#fetchLogo -->
 
-[`src/main/apps/mcp.ts`, lines 77–88](../../apps/desktop/src/main/apps/mcp.ts#L77-L88)
+[`src/main/apps/logos.ts`, lines 28–39](../../apps/desktop/src/main/apps/logos.ts#L28-L39)
 
 ```ts
 /** Fetches an app's logo (https only, an image, not too big) as a data: URL for the panel. */
@@ -1352,7 +1698,7 @@ web itself (its Content-Security-Policy only allows the app's own images and `da
 
 ## `src/renderer/src/components/AppsList.tsx`: the list in the panel
 
-The component `Panel` puts in the card while the Apps list is showing (through `ChatBox`'s `apps`
+The component `Panel` puts in the card while the Apps list is showing (through `ChatBox`'s `page`
 prop; see [The pages](7-renderer-pages.md)). It shows whichever `AppsState` the main process last
 reported, and calls back to `Panel` for everything you can do.
 
@@ -1375,7 +1721,7 @@ With more than 8 apps, a search box appears above them. Fewer fit on screen at a
 
 <!-- code: apps/desktop/src/renderer/src/components/AppsList.tsx#AppsList -->
 
-[`src/renderer/src/components/AppsList.tsx`, lines 10–188](../../apps/desktop/src/renderer/src/components/AppsList.tsx#L10-L188)
+[`src/renderer/src/components/AppsList.tsx`, lines 10–206](../../apps/desktop/src/renderer/src/components/AppsList.tsx#L10-L206)
 
 ```tsx
 /**
@@ -1392,6 +1738,8 @@ export function AppsList(props: {
   favorites: string[]
   onToggleFavorite: (app: PortalApp, favorite: boolean) => void
   onOpenApp: (app: PortalApp) => void
+  /** The app being opened (its tile shows a spinner until the browser is opening), or null. */
+  openingId: string | null
   onOpenPortal: () => void
   onSignIn: () => void
   onCancelSignIn: () => void
@@ -1510,9 +1858,25 @@ export function AppsList(props: {
                       type="button"
                       onClick={() => props.onOpenApp(app)}
                       title={`Open ${app.name}`}
+                      aria-busy={props.openingId === app.id}
                       className="flex w-full flex-col items-center gap-1.5 rounded-xl px-1 py-2 text-center hover:bg-zinc-100 dark:hover:bg-zinc-800"
                     >
-                      <AppLogo app={app} />
+                      <span className="relative">
+                        <AppLogo app={app} />
+                        {props.openingId === app.id && (
+                          <span
+                            role="status"
+                            aria-label={`Opening ${app.name}`}
+                            className="absolute inset-0 grid place-items-center rounded-lg bg-white/75 dark:bg-zinc-900/75"
+                          >
+                            <LoaderCircle
+                              size={22}
+                              className="animate-spin text-accent dark:text-accent-soft"
+                              aria-hidden
+                            />
+                          </span>
+                        )}
+                      </span>
                       <span className="line-clamp-2 text-[11px] leading-tight">{app.name}</span>
                     </button>
                     <button
@@ -1589,7 +1953,18 @@ bottom, always there.
   in the page, the app and its star. A button can't contain another, and a click on the star
   mustn't open the app. `relative` lets the star be placed over the tile; `group/tile` names the
   tile as a _group_, so the star can react to the pointer being anywhere on the tile.
+- `openingId`: the app being opened, or `null`. `Panel` sets it while the main process gets the
+  app's sign-in link, which can take a few seconds.
 - `onClick={() => props.onOpenApp(app)}`: `Panel.openApp` opens it in the browser.
+- `aria-busy={props.openingId === app.id}`: tells screen readers the tile is busy while its app
+  opens.
+- `<span className="relative">`: wraps the logo, so the spinner can be laid over exactly the logo
+  (`absolute inset-0`, the same size).
+- `{props.openingId === app.id && (`: only that app's tile shows the spinner: a `LoaderCircle`
+  turning in the accent colour on a translucent white layer (zinc in dark mode,
+  `bg-white/75 dark:bg-zinc-900/75`), so the logo shows faintly through. `role="status"` with
+  `aria-label` "Opening Slack" is read out by screen readers. It disappears when `Panel` clears
+  `openingId`: as the browser opens, or when opening fails.
 - `onClick={() => props.onToggleFavorite(app, !favorite)}`: stars the app, or takes the star away.
 - `aria-pressed={favorite}`, `aria-label`: for screen readers, a toggle button that's on or off,
   named "Add Slack to favourites" or "Remove Slack from favourites". `title` gives the shorter
@@ -1609,7 +1984,7 @@ bottom, always there.
 
 <!-- code: apps/desktop/src/renderer/src/components/AppsList.tsx#AppLogo,Message -->
 
-[`src/renderer/src/components/AppsList.tsx`, lines 190–218](../../apps/desktop/src/renderer/src/components/AppsList.tsx#L190-L218)
+[`src/renderer/src/components/AppsList.tsx`, lines 208–236](../../apps/desktop/src/renderer/src/components/AppsList.tsx#L208-L236)
 
 ```tsx
 /** The app's logo, or its first letter on the accent colour when there isn't one. */
@@ -1655,9 +2030,10 @@ function Message({ children }: { children: ReactNode }) {
 
 ## What's tested
 
-`tests/portalApps.test.ts` checks the readers with made-up answers, and runs `PortalApps` against
-a fake portal: a connector with two apps and a launch tool that only works once "signed in", a
-fake browser that "signs in" and comes back with a code, and an in-memory store.
+`tests/portalApps.test.ts` checks the readers (and `payloadOf()`) with made-up answers, and runs
+`PortalApps`, with its `McpAccount`, against a fake portal: a connector with two apps and a launch
+tool that only works once "signed in", a fake browser that "signs in" and comes back with a code,
+and an in-memory store.
 
 - Reading the list: JumpCloud-style applications sorted by name, hidden ones skipped; a bare list
   or structured content; `null` when there's no list but `[]` for an empty one; never a link that
@@ -1671,11 +2047,16 @@ fake browser that "signs in" and comes back with a code, and an in-memory store.
 - `orderApps`: starred apps first, each group keeping its order.
 - `PortalApps`: asking to sign in when nobody has connected, without opening the browser;
   signing in through the browser, saving the registration and tokens, then listing the apps with
-  logos; remembering the list until Refresh; opening an app through its launch link; refusing a
-  sign-in that comes back with a `state` it didn't send; Cancel going back to the Sign in
-  button; and keeping the logos it already has, so a refresh doesn't download them again.
+  logos; remembering the list until Refresh; opening an app through its launch link; asking for
+  the launch tool once, so each later open is one request; using the list's own link when
+  JumpCloud is slow (the fake portal's launch can be made slow, and the timeout is cut to 30 ms);
+  refusing a sign-in that comes back with a `state` it didn't send; Cancel going back to the Sign
+  in button; and keeping the logos it already has, so a refresh doesn't download them again.
 - `SavedAuth`: a public client with the loopback redirect; tokens kept across a reload of the
   file; forgetting everything clears the file; and the `state` check.
+
+`tests/atlassian.test.ts` uses `McpAccount` too, through `Atlassian`: connecting, a connection
+that has ended, and disconnecting (see [Jira and the service desk](11-atlassian.md)).
 
 `tests/tenants.test.ts` checks that the Apps icon needs the portal settings, that the portal's own
 address must be `https`, and that starting on the Apps list needs both a portal and the Ask Claude

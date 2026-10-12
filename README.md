@@ -11,12 +11,16 @@ screen and opens a panel when clicked. Built for Morse Micro first. Branding liv
   questions open in Claude Desktop.
 - [docs/APPS_SETUP.md](docs/APPS_SETUP.md): for IT, turning on the Apps list (JumpCloud's MCP
   Server for users).
+- [docs/ATLASSIAN_SETUP.md](docs/ATLASSIAN_SETUP.md): for IT, Jira (notifications, search,
+  issues) and the service desk page (new requests, My requests).
 - [docs/JUMPCLOUD_SETUP.md](docs/JUMPCLOUD_SETUP.md): for IT, setting up JumpCloud sign-in and
   Claude access for the built-in chat (not used by Morse Micro since 3.1).
 
-**Status:** Milestones 0 (Foundation), 1 (Chat with Claude), 2.1 (bubble fixes) and 3 (JumpCloud
-sign-in), feature 3.1 (questions open in Claude Desktop) and feature 3.2 (Apps list, Uninstall)
-are complete. Next is Milestone 4: Ship.
+**Status:** Milestones 0 (Foundation), 1 (Chat with Claude), 2.1 (bubble fixes), 3 (JumpCloud
+sign-in) and 4 (logos, favourites, service desk, light/dark mode, bubble-click fix), and features
+3.1 (questions open in Claude Desktop) and 3.2 (Apps list, Uninstall) are complete. Milestone 5
+(the app-opening spinner; Jira and the service desk) is in progress (see
+[PLAN.md](docs/PLAN.md) §7h).
 
 ## Features
 
@@ -37,22 +41,35 @@ are complete. Next is Milestone 4: Ship.
   Copy. Usage is billed to the company's Claude Console account, through a service account IT
   sets up; there's no API key.
 - **Your apps**: the panel opens on the apps in your JumpCloud User Portal, with their logos.
-  Click one to open it in your browser, signed in through JumpCloud. Star an app (the star on its
+  Click one to open it in your browser, signed in through JumpCloud (a spinner shows on it while
+  it opens). Star an app (the star on its
   logo) to keep it at the top. The first time, **Sign in with JumpCloud** connects Desktop Assist
   to your portal in your browser.
 - **Action icons** above the bubble:
   - **Ask Claude** swaps the apps for the text box (above); click it again or press Esc to go
     back. A dot on it means an unsent question is waiting.
-  - **IT service desk** opens the Morse Micro service desk in your browser.
+  - **Jira** (a bell): **Notifications** shows when someone else assigned you an issue or
+    mentioned you lately (a dot on the bell means something new), and **Search** finds Jira issues
+    and Confluence pages. Click an issue to see it, ask Claude to summarise it, draft a reply or
+    suggest next steps, move it to another status, comment, or log time. The first time,
+    **Connect to Atlassian** connects Desktop Assist to your Atlassian account in your browser.
+  - **IT service desk**: **New request** fills in a request from what's in the text box (pick the
+    kind of request, attach a screenshot, include your PC's details; helpful IT articles show
+    while you type) and opens it on the service desk portal for you to send. **My requests** shows
+    your IT requests and tells you (with a Windows notification) when IT replies or changes one.
   - **Light or dark mode** (sun or moon) switches Desktop Assist's colours. It starts dark.
   - **Screenshot** saves the screen the bubble is on to `Pictures\Desktop Assist`.
   - **Settings**: Start with Windows, Send in Claude automatically, Open screenshots folder,
     Clear text box and **Uninstall Desktop Assist**. (With the
     built-in chat: Response style (Fast / Balanced / Thorough), New conversation, and who you're
     signed in as with **Log out**.)
-  - **Bounce** sends the bubble bouncing around the screen; click it to send it gliding home.
+  - **Bounce** sends the bubble bouncing around the screen, across all your monitors; click it to
+    send it gliding home to its corner.
   - **Close** quits the app.
-- **Attach latest screenshot** adds the newest screenshot to your next question.
+- **Attach screenshot** adds the newest screenshot to your next question; click it again to add
+  the one before, and so on (it says when there are no more). **Report to IT** turns
+  what you've typed (and the screenshot) into a new IT request.
+- **Issue keys**: type a Jira key like `ISD-1234` and an **Open ISD-1234** button appears.
 - A tray icon (the same logo) with Open and Quit.
 
 ## Getting started
@@ -76,7 +93,7 @@ are complete. Next is Milestone 4: Ship.
    Start menu as **Desktop Assist**.
 
 Windows may warn about an unrecognised app because the installer isn't code-signed yet
-(**More info → Run anyway**). Signing is planned for Milestone 4.
+(**More info → Run anyway**). Code signing is a candidate for Milestone 5.
 
 ## Development
 

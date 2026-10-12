@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { missingSettings, TenantSchema } from '../src/main/tenant'
+import { brandingOf, DevOverrideSchema, missingSettings, TenantSchema } from '../src/main/tenant'
 
 const tenantsDir = resolve(__dirname, '../../../tenants')
 const tenantIds = readdirSync(tenantsDir, { withFileTypes: true })
@@ -103,6 +103,53 @@ describe('tenants', () => {
     expect(TenantSchema.safeParse({ ...tenant, serviceDesk }).success).toBe(true)
     const insecure = { url: 'http://example.com/desk' }
     expect(TenantSchema.safeParse({ ...tenant, serviceDesk: insecure }).success).toBe(false)
+  })
+
+  it('can list request types for raising IT requests from the panel', () => {
+    const base = { id: 'x', companyName: 'X', appName: 'X', accentColor: '#000000' }
+    const tenant = { ...base, chatApp: 'claude-desktop', actions: ['servicedesk'] }
+    const url = 'https://morsemicro.atlassian.net/servicedesk/customer/portals'
+    const requests = {
+      portalId: '1',
+      projectKey: 'ISD',
+      requestTypes: [{ id: '1561', name: 'Other IT Issue' }],
+    }
+    const parsed = TenantSchema.parse({ ...tenant, serviceDesk: { url, requests } })
+    expect(brandingOf(parsed).requestTypes).toEqual([{ id: '1561', name: 'Other IT Issue' }])
+    const without = TenantSchema.parse({ ...tenant, serviceDesk: { url } })
+    expect(brandingOf(without).requestTypes).toBeNull()
+    // At least one type, with numeric IDs as in the portal's addresses:
+    const none = { ...requests, requestTypes: [] }
+    expect(
+      TenantSchema.safeParse({ ...tenant, serviceDesk: { url, requests: none } }).success,
+    ).toBe(false)
+    const named = { ...requests, requestTypes: [{ id: 'other', name: 'Other' }] }
+    expect(
+      TenantSchema.safeParse({ ...tenant, serviceDesk: { url, requests: named } }).success,
+    ).toBe(false)
+  })
+
+  it('needs the Atlassian site for the Jira icon, and fills in its MCP server', () => {
+    const base = { id: 'x', companyName: 'X', appName: 'X', accentColor: '#000000' }
+    const tenant = { ...base, chatApp: 'claude-desktop', actions: ['jira'] }
+    expect(TenantSchema.safeParse(tenant).success).toBe(false)
+    const atlassian = { site: 'https://morsemicro.atlassian.net', redirectPort: 47623 }
+    const parsed = TenantSchema.parse({ ...tenant, atlassian })
+    expect(parsed.atlassian).toEqual({
+      ...atlassian,
+      mcpServer: 'https://mcp.atlassian.com/v1/mcp',
+      knowledgeSpaces: [],
+    })
+    expect(brandingOf(parsed).atlassianSite).toBe('https://morsemicro.atlassian.net')
+    const insecure = { ...atlassian, site: 'http://morsemicro.atlassian.net' }
+    expect(TenantSchema.safeParse({ ...tenant, atlassian: insecure }).success).toBe(false)
+  })
+
+  it('lets a dev override change one Atlassian setting without resetting the others', () => {
+    const override = DevOverrideSchema.parse({
+      atlassian: { mcpServer: 'http://127.0.0.1:1/v1/mcp' },
+    })
+    expect(override.atlassian).toEqual({ mcpServer: 'http://127.0.0.1:1/v1/mcp' })
   })
 
   it('lists the sign-in settings still to fill in', () => {

@@ -63,6 +63,19 @@ export interface Branding {
   portalName: string | null
   /** What the card shows when the panel opens: the text box, or the Apps list. */
   startPage: StartPage
+  /** The company's Atlassian site (Jira links, the Jira page), or null without one. */
+  atlassianSite: string | null
+  /**
+   * Raising IT requests from the panel: the request types offered, the first one for "Report a
+   * problem". Null when the service desk icon just opens the portal.
+   */
+  requestTypes: RequestType[] | null
+}
+
+/** A kind of request on the IT help centre portal ("Other IT Issue", "Request new software"). */
+export interface RequestType {
+  id: string
+  name: string
 }
 
 /** The two things the card beside the bubble can show. */
@@ -153,7 +166,146 @@ export type AppsState =
 export type UninstallResult =
   { ok: true } | { ok: false; reason: 'not-installed' | 'missing' | 'failed' }
 
+/**
+ * The connection to Atlassian (Jira and Confluence), made once in the browser.
+ * - `sign-in`: not connected yet (or the connection ended); a button starts it.
+ * - `signing-in`: waiting for the user to finish in their browser.
+ */
+export type AtlassianState =
+  | { status: 'loading' }
+  | { status: 'sign-in'; message?: string }
+  | { status: 'signing-in' }
+  | { status: 'connected'; user: { name: string; email?: string } }
+  | { status: 'error'; message: string }
+
+/** How far along an issue is, by its status's category in Jira (which sets its colour). */
+export type StatusCategory = 'new' | 'indeterminate' | 'done'
+
+export interface IssueStatus {
+  name: string
+  category: StatusCategory
+}
+
+/** Someone else assigned the user an issue, or mentioned them, in the last two weeks. */
+export interface JiraNotification {
+  id: string
+  kind: 'assigned' | 'mentioned'
+  key: string
+  summary: string
+  /** Who did it (their name in Atlassian). */
+  by: string
+  /** ISO time. */
+  at: string
+  /** The start of the comment they were mentioned in. */
+  excerpt?: string
+  unread: boolean
+}
+
+/** One of the user's own requests to the IT service desk. */
+export interface ServiceRequest {
+  key: string
+  summary: string
+  status: IssueStatus
+  /** ISO time of the last change. */
+  updated: string
+  /** The request on the help centre portal. */
+  url: string
+  /** What's new since the user last looked ("Mark Duong replied", "Now Resolved"), or null. */
+  news: string | null
+}
+
+/** A list the main process keeps up to date in the background. */
+export interface FeedList<T> {
+  status: 'loading' | 'ready' | 'error'
+  items: T[]
+  message?: string
+}
+
+/** The Notifications tab and My requests. */
+export interface JiraFeed {
+  notifications: FeedList<JiraNotification>
+  requests: FeedList<ServiceRequest>
+}
+
+/** An issue in a list of search results. */
+export interface IssueSummary {
+  key: string
+  summary: string
+  status: IssueStatus
+  type: string | null
+  url: string
+}
+
+/** A Confluence page in search results or suggestions. */
+export interface ConfluencePage {
+  id: string
+  title: string
+  /** A line or two from the page, as plain text. */
+  excerpt: string
+  space: string | null
+  url: string
+}
+
+export type SearchResult =
+  { ok: true; issues: IssueSummary[]; pages: ConfluencePage[] } | { ok: false; message: string }
+
+export interface IssueComment {
+  id: string
+  author: string
+  /** ISO time. */
+  created: string
+  /** Markdown. */
+  body: string
+}
+
+/** A status the issue can be moved to ("Start progress", "Done"). */
+export interface IssueTransition {
+  id: string
+  name: string
+}
+
+/** An issue as the issue view shows it. */
+export interface IssueDetail extends IssueSummary {
+  assignee: string | null
+  reporter: string | null
+  created: string
+  updated: string
+  /** Markdown, shortened if it's long. */
+  description: string
+  /** The latest comments, oldest first. */
+  comments: IssueComment[]
+  /** The request on the help centre portal, for service desk requests; null otherwise. */
+  portalUrl: string | null
+  transitions: IssueTransition[]
+}
+
+/** Opening an issue, or changing it (which answers with the issue as it is now). */
+export type IssueResult = { ok: true; issue: IssueDetail } | { ok: false; message: string }
+
+/** What to ask Claude about an issue. */
+export type IssuePrompt = 'summarise' | 'reply' | 'next-steps'
+
+/** Asking Claude about an issue: `inChat` when it went to the chat in the panel. */
+export type AskAboutIssueResult = { ok: true; inChat: boolean } | { ok: false; message: string }
+
+/** A request filled in on the panel, to finish on the help centre portal. */
+export interface NewRequest {
+  requestTypeId: string
+  summary: string
+  details: string
+  includePcDetails: boolean
+}
+
+/** Opening the portal's form, filled in, with the text box's screenshots on the clipboard. */
+export type RaiseResult =
+  | { ok: true; screenshots: number }
+  | { ok: false; reason: 'empty' | 'missing-screenshot' | 'failed' }
+
 export type ActionResult = { ok: true; message?: string } | { ok: false; message: string }
 
+/**
+ * Attaching a screenshot: the newest one not attached yet. `no-more` when every screenshot is
+ * already attached.
+ */
 export type AttachResult =
-  { ok: true; notes: Notes } | { ok: false; reason: 'no-screenshots' | 'already-attached' }
+  { ok: true; notes: Notes } | { ok: false; reason: 'no-screenshots' | 'no-more' }

@@ -1,4 +1,12 @@
-import { ArrowUp, ArrowUpRight, LoaderCircle, Paperclip, Square } from 'lucide-react'
+import {
+  ArrowUp,
+  ArrowUpRight,
+  LifeBuoy,
+  LoaderCircle,
+  Paperclip,
+  Square,
+  Ticket,
+} from 'lucide-react'
 import { useEffect, useRef, type KeyboardEvent, type ReactNode } from 'react'
 import { PANEL_LAYOUT, UI, isLeftCorner, isTopCorner, type Corner } from '@shared/geometry'
 import type { Attachment, ChatMessage } from '@shared/types'
@@ -13,7 +21,8 @@ import { MessageList } from './MessageList'
  * bubble's edge (bottom in a bottom corner, top in a top corner), so it starts as just the text
  * box and grows away from that edge as the conversation gets longer, then scrolls. When nobody is
  * signed in, `signInPrompt` is shown instead of the chat. With `inClaudeDesktop`, it's only the
- * text box, and sending opens the question in Claude Desktop.
+ * text box, and sending opens the question in Claude Desktop. While a page's icon is on (Apps,
+ * Jira, the service desk), the page shows instead.
  */
 export function ChatBox(props: {
   corner: Corner
@@ -23,8 +32,8 @@ export function ChatBox(props: {
   inClaudeDesktop: boolean
   /** With Claude Desktop: the question (and screenshot) is sent there for the user. */
   autoSend: boolean
-  /** Replaces the text box with the Apps list while the Apps icon is on, or null. */
-  apps: ReactNode
+  /** Replaces the text box with a page while its icon is on (the Apps list, Jira), or null. */
+  page: ReactNode
   /** Replaces the chat (the JumpCloud sign-in), or null to show the chat. */
   signInPrompt: ReactNode
   /** A line above the text box, e.g. "Checking your sign-in…". */
@@ -42,6 +51,11 @@ export function ChatBox(props: {
   onAttachLatest: () => void
   onOpenAttachment: (attachment: Attachment) => void
   onRemoveAttachment: (attachment: Attachment) => void
+  /** Jira issue keys in the text, each offered as a chip that opens the issue. */
+  issueKeys: string[]
+  onOpenIssue: (key: string) => void
+  /** Turns the text (and screenshots) into an IT request; null without a service desk form. */
+  onReport: (() => void) | null
 }) {
   return (
     <div
@@ -78,7 +92,7 @@ export function ChatBox(props: {
         </div>
       )}
 
-      {props.apps ?? props.signInPrompt ?? (
+      {props.page ?? props.signInPrompt ?? (
         <>
           {props.messages.length > 0 && (
             <MessageList
@@ -148,12 +162,29 @@ function Composer(props: Parameters<typeof ChatBox>[0]) {
         </p>
       )}
 
+      {props.issueKeys.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 px-3 pt-2.5">
+          {props.issueKeys.map((key) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => props.onOpenIssue(key)}
+              title={`Open ${key}`}
+              className="inline-flex items-center gap-1 rounded-full border border-black/10 px-2 py-0.5 text-[11px] font-medium text-zinc-700 hover:bg-zinc-100 dark:border-white/10 dark:text-zinc-200 dark:hover:bg-zinc-800"
+            >
+              <Ticket size={12} className="text-accent dark:text-accent-soft" aria-hidden />
+              Open {key}
+            </button>
+          ))}
+        </div>
+      )}
+
       <textarea
         ref={textarea}
         value={props.draft}
         onChange={(event) => props.onDraftChange(event.target.value)}
         onKeyDown={onKeyDown}
-        placeholder="Ask Claude anything…"
+        placeholder="Ask anything…"
         aria-label="Message Claude"
         spellCheck
         className={cn(
@@ -162,15 +193,28 @@ function Composer(props: Parameters<typeof ChatBox>[0]) {
         )}
       />
 
-      <div className="flex items-center justify-between gap-2 px-2 pb-2">
+      <div className="flex items-center gap-1 px-2 pb-2">
         <button
           type="button"
           onClick={props.onAttachLatest}
+          title="Attach the latest screenshot (click again for the one before)"
           className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-white"
         >
           <Paperclip size={14} aria-hidden />
-          Attach latest screenshot
+          Attach screenshot
         </button>
+        {props.onReport && (
+          <button
+            type="button"
+            onClick={props.onReport}
+            title="Report a problem to IT, with this text and screenshot"
+            className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-white"
+          >
+            <LifeBuoy size={14} aria-hidden />
+            Report to IT
+          </button>
+        )}
+        <span className="flex-1" />
         {props.busy ? (
           <button
             type="button"

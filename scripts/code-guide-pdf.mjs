@@ -32,6 +32,8 @@ const PAGES = [
   '8-renderer-components.md',
   '9-claude-desktop.md',
   '10-apps.md',
+  '11-atlassian.md',
+  '12-atlassian-pages.md',
 ]
 /** Code blocks up to this many lines are kept on one sheet; longer ones may break across sheets. */
 const KEEP_TOGETHER_LINES = 45

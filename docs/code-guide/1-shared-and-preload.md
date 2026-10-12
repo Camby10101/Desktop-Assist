@@ -276,10 +276,12 @@ label and a _kind_. A tenant's `tenant.json` has an `actions` list that picks wh
 and in what order, nearest the bubble first. There are three kinds:
 
 - `command` actions run in the main process: the IT service desk, screenshot, bounce and close
-  (handlers in `createActionHandlers()`, `src/main/actions.ts`).
+  (handlers in `createActionHandlers()`, `src/main/actions.ts`). The service desk is the one
+  exception: when the tenant lists request types, `PanelView.runAction()` opens the service desk
+  page instead (see [Jira and the service desk](11-atlassian.md)).
 - `popover` actions open some UI inside the panel and never leave the renderer: Settings (the
-  settings menu), and Ask Claude and Your apps, which switch the card between the text box and
-  the Apps list. `PanelView.runAction()` handles them.
+  settings menu); Ask Claude and Your apps, which switch the card between the text box and the
+  Apps list; and Jira, which swaps in the Jira page. `PanelView.runAction()` handles them.
 - `switch` actions flip a setting straight from the icon, without opening anything: light or dark
   mode. `PanelView.runAction()` handles it too, through the settings channels.
 
@@ -292,7 +294,7 @@ is a `Record<ActionId, ...>` (it must have an icon for every action), and `Actio
 
 <!-- code: apps/desktop/src/shared/actions.ts#ACTION_IDS,ActionId -->
 
-[`src/shared/actions.ts`, lines 1–19](../../apps/desktop/src/shared/actions.ts#L1-L19)
+[`src/shared/actions.ts`, lines 1–20](../../apps/desktop/src/shared/actions.ts#L1-L20)
 
 ```ts
 // The action registry: every icon that can appear in the stack above the bubble. A tenant's
@@ -305,6 +307,7 @@ is a `Record<ActionId, ...>` (it must have an icon for every action), and `Actio
 export const ACTION_IDS = [
   'ask',
   'apps',
+  'jira',
   'servicedesk',
   'screenshot',
   'theme',
@@ -321,10 +324,10 @@ export type ActionId = (typeof ACTION_IDS)[number]
 The list of every action that exists, and the type of one of its entries.
 
 - `as const`: without it the array's type would be `string[]`. With it, the type is a read-only
-  list of these eight exact strings, which is what lets the next line work.
+  list of these nine exact strings, which is what lets the next line work.
 - `(typeof ACTION_IDS)[number]`: "the type of whatever you get by indexing the array with a number",
-  which is the union of the eight, `'ask' | 'apps' | 'servicedesk' | ... | 'close'`. The type
-  follows the list automatically.
+  which is the union of the nine, `'ask' | 'apps' | 'jira' | ... | 'close'`. The type follows the
+  list automatically.
 - The array also exists at runtime, which a type doesn't: `TenantSchema` in `src/main/tenant.ts`
   uses `z.enum(ACTION_IDS)` to reject a `tenant.json` that lists an unknown action. **zod** is a
   validation library: you describe a shape (a _schema_) and zod checks, while the app runs, that
@@ -335,12 +338,14 @@ The list of every action that exists, and the type of one of its entries.
 
 <!-- code: apps/desktop/src/shared/actions.ts#ACTIONS -->
 
-[`src/shared/actions.ts`, lines 21–30](../../apps/desktop/src/shared/actions.ts#L21-L30)
+[`src/shared/actions.ts`, lines 22–33](../../apps/desktop/src/shared/actions.ts#L22-L33)
 
 ```ts
 export const ACTIONS = {
   ask: { label: 'Ask Claude', kind: 'popover' },
   apps: { label: 'Your apps', kind: 'popover' },
+  jira: { label: 'Jira: notifications and search', kind: 'popover' },
+  // A page in the panel when the tenant lists request types (see PanelView); otherwise a link.
   servicedesk: { label: 'IT service desk', kind: 'command' },
   screenshot: { label: 'Take screenshot', kind: 'command' },
   theme: { label: 'Light or dark mode', kind: 'switch' },
@@ -353,8 +358,12 @@ export const ACTIONS = {
 <!-- /code -->
 
 The label and kind of each action. `ActionStack.tsx` uses `label` as each icon's tooltip and
-screen-reader name, and gives `popover` actions an `aria-expanded` attribute so screen readers
-announce whether the menu is open.
+screen-reader name, and gives `popover` actions (and the service desk, when it opens a page) an
+`aria-expanded` attribute so screen readers announce whether the menu or page is open.
+
+- `jira: { label: 'Jira: notifications and search', kind: 'popover' }`: the Jira icon, a bell.
+- The comment above `servicedesk`: it stays a `command`, because without request types it just
+  opens the portal in the browser; with them, the panel opens its page instead.
 
 - `satisfies Record<ActionId, { label: string; kind: 'command' | 'popover' | 'switch' }>`: checks
   that there is exactly one entry per action id, each with a label and a valid kind. A missing,
@@ -368,7 +377,7 @@ announce whether the menu is open.
 
 <!-- code: apps/desktop/src/shared/actions.ts#CommandActionId -->
 
-[`src/shared/actions.ts`, lines 32–34](../../apps/desktop/src/shared/actions.ts#L32-L34)
+[`src/shared/actions.ts`, lines 35–37](../../apps/desktop/src/shared/actions.ts#L35-L37)
 
 ```ts
 export type CommandActionId = {
@@ -388,15 +397,15 @@ worked out from
   `{ ask: never; servicedesk: 'servicedesk'; settings: never; close: 'close' }`.
 - `}[ActionId]`: looking up every key at once gives the union of the property types. `never`
   disappears from a union, leaving the four command ids.
-- `AssistApi.invokeAction()` in `src/shared/ipc.ts` only accepts these, so a page can't even try
-  to send `settings`, `ask` or `apps` to the main process. In `PanelView.runAction()`, the early
-  returns for those narrow the id to exactly this type, which is why it can then be passed on.
+- `AssistApi.invokeAction()` in `src/shared/ipc.ts` only accepts these, so a page can't even try to
+  send `settings`, `ask`, `apps` or `jira` to the main process. In `PanelView.runAction()`, the
+  early returns for those narrow the id to exactly this type, which is why it can then be passed on.
 
 ### `COMMAND_ACTION_IDS`
 
 <!-- code: apps/desktop/src/shared/actions.ts#COMMAND_ACTION_IDS -->
 
-[`src/shared/actions.ts`, lines 36–38](../../apps/desktop/src/shared/actions.ts#L36-L38)
+[`src/shared/actions.ts`, lines 39–41](../../apps/desktop/src/shared/actions.ts#L39-L41)
 
 ```ts
 export const COMMAND_ACTION_IDS = ACTION_IDS.filter(
@@ -418,7 +427,8 @@ isn't enough.
 ## `src/shared/types.ts`: data shapes
 
 The shapes of the data that travels between the main process and the pages: the bubble's mode,
-the draft, settings, branding, sign-in status, chat messages and the answers to requests. The
+the draft, settings, branding, sign-in status, chat messages, the Apps list, Jira and the service
+desk, and the answers to requests. The
 file holds only types, so nothing in it exists at runtime; every file imports it with
 `import type`.
 
@@ -577,11 +587,11 @@ Where questions are answered, set per tenant (`chatApp` in `tenant.json`, checke
   their own Claude account, so it counts against their own usage limit. Desktop Assist has no
   sign-in of its own then (see [Claude Desktop](9-claude-desktop.md)).
 
-### `Branding` and `StartPage`
+### `Branding`, `RequestType` and `StartPage`
 
-<!-- code: apps/desktop/src/shared/types.ts#Branding,StartPage -->
+<!-- code: apps/desktop/src/shared/types.ts#Branding,RequestType,StartPage -->
 
-[`src/shared/types.ts`, lines 56–69](../../apps/desktop/src/shared/types.ts#L56-L69)
+[`src/shared/types.ts`, lines 56–82](../../apps/desktop/src/shared/types.ts#L56-L82)
 
 ```ts
 export interface Branding {
@@ -594,6 +604,19 @@ export interface Branding {
   portalName: string | null
   /** What the card shows when the panel opens: the text box, or the Apps list. */
   startPage: StartPage
+  /** The company's Atlassian site (Jira links, the Jira page), or null without one. */
+  atlassianSite: string | null
+  /**
+   * Raising IT requests from the panel: the request types offered, the first one for "Report a
+   * problem". Null when the service desk icon just opens the portal.
+   */
+  requestTypes: RequestType[] | null
+}
+
+/** A kind of request on the IT help centre portal ("Other IT Issue", "Request new software"). */
+export interface RequestType {
+  id: string
+  name: string
 }
 
 /** The two things the card beside the bubble can show. */
@@ -604,22 +627,26 @@ export type StartPage = 'ask' | 'apps'
 
 The parts of the tenant's `tenant.json` that the pages need. `brandingOf()` in `src/main/tenant.ts`
 copies just these fields, deliberately leaving out the sign-in settings, the Claude access settings,
-the portal's addresses and the system prompt. `accentColor` becomes the page's accent colour
-(`useAccentColor()` sets the CSS variable `--color-accent`), and `actions` decides which icons
-`ActionStack` shows, in order. `chatApp` tells the panel which kind of chat it is: it changes the
-send button, the settings menu, and whether there's a sign-in at all. `portalName` is the name of
-the company's app portal ("JumpCloud"), for the Apps list's buttons ("Sign in with JumpCloud"); it's
-`null` when the tenant has no portal, and then the Apps list never shows.
+the portal's addresses, Atlassian's MCP server and the system prompt. `accentColor` becomes the
+page's accent colour (`useAccentColor()` sets the CSS variable `--color-accent`), and `actions`
+decides which icons `ActionStack` shows, in order. `chatApp` tells the panel which kind of chat it
+is: it changes the send button, the settings menu, and whether there's a sign-in at all.
+`portalName` is the name of the company's app portal ("JumpCloud"), for the Apps list's buttons
+("Sign in with JumpCloud"); it's `null` when the tenant has no portal, and then the Apps list never
+shows. `atlassianSite` is the company's Atlassian site (`https://morsemicro.atlassian.net`), for
+Jira links and the Jira page, or `null` without one. `requestTypes` lists the request types the
+service desk page offers, as its comment says; `null` means the service desk icon just opens the
+portal. `RequestType` is one of them: its ID, as in the portal's addresses, and its name.
 
 `startPage` is what the card shows when the panel opens: the text box (`ask`) or the Apps list
-(`apps`). `StartPage` is the type of those two, and also of the panel's `view` (which of the two
-is showing right now).
+(`apps`). `StartPage` is the type of those two. The panel's `view` (what's showing right now) can
+also be the Jira page or the service desk page (`View` in `PanelView.tsx`).
 
 ### `SignedInUser` and `AuthStatus`
 
 <!-- code: apps/desktop/src/shared/types.ts#SignedInUser,AuthStatus -->
 
-[`src/shared/types.ts`, lines 71–90](../../apps/desktop/src/shared/types.ts#L71-L90)
+[`src/shared/types.ts`, lines 84–103](../../apps/desktop/src/shared/types.ts#L84-L103)
 
 ```ts
 export interface SignedInUser {
@@ -668,7 +695,7 @@ token ever reaches them. With Claude Desktop there is no `AuthManager` and no st
 
 <!-- code: apps/desktop/src/shared/types.ts#ChatMessage,SendResult -->
 
-[`src/shared/types.ts`, lines 92–108](../../apps/desktop/src/shared/types.ts#L92-L108)
+[`src/shared/types.ts`, lines 105–121](../../apps/desktop/src/shared/types.ts#L105-L121)
 
 ```ts
 /** One message as the chat shows it. */
@@ -715,7 +742,7 @@ draft, which the panel shows. The reply itself arrives later, through `onChatMes
 
 <!-- code: apps/desktop/src/shared/types.ts#AskResult -->
 
-[`src/shared/types.ts`, lines 110–116](../../apps/desktop/src/shared/types.ts#L110-L116)
+[`src/shared/types.ts`, lines 123–129](../../apps/desktop/src/shared/types.ts#L123-L129)
 
 ```ts
 /**
@@ -750,7 +777,7 @@ Claude Desktop has opened with the question filled in. The failures come from
 
 <!-- code: apps/desktop/src/shared/types.ts#AppState -->
 
-[`src/shared/types.ts`, lines 118–129](../../apps/desktop/src/shared/types.ts#L118-L129)
+[`src/shared/types.ts`, lines 131–142](../../apps/desktop/src/shared/types.ts#L131-L142)
 
 ```ts
 export interface AppState {
@@ -781,13 +808,15 @@ the page's own requests, so the panel takes their new values from the replies.
 - `chat: ChatMessage[]`: the built-in chat's messages. With Claude Desktop it's always empty.
 
 The Apps list isn't in `AppState`: the panel asks for it whenever the list shows
-(`window.assist.apps.get()`), and then keeps up through `onAppsState`.
+(`window.assist.apps.get()`), and then keeps up through `onAppsState`. Nor is Atlassian: the panel
+asks with `atlassian.get()` and `atlassian.feed()`, and keeps up through `onAtlassianState` and
+`onJiraFeed`.
 
 ### `PortalApp` and `AppsState`
 
 <!-- code: apps/desktop/src/shared/types.ts#PortalApp,AppsState -->
 
-[`src/shared/types.ts`, lines 131–150](../../apps/desktop/src/shared/types.ts#L131-L150)
+[`src/shared/types.ts`, lines 144–163](../../apps/desktop/src/shared/types.ts#L144-L163)
 
 ```ts
 /** One app from the user's JumpCloud User Portal, as the Apps list shows it. */
@@ -834,7 +863,7 @@ sets the state and broadcasts every change on `assist:apps-state`.
 
 <!-- code: apps/desktop/src/shared/types.ts#UninstallResult -->
 
-[`src/shared/types.ts`, lines 152–154](../../apps/desktop/src/shared/types.ts#L152-L154)
+[`src/shared/types.ts`, lines 165–167](../../apps/desktop/src/shared/types.ts#L165-L167)
 
 ```ts
 /** Settings → Uninstall. On success the app is already quitting. */
@@ -852,17 +881,281 @@ quitting, so the page has nothing more to do.
 - `'missing'`: the uninstaller isn't next to the app's `.exe`.
 - `'failed'`: it couldn't be started; the details are in the log.
 
+### `AtlassianState`
+
+<!-- code: apps/desktop/src/shared/types.ts#AtlassianState -->
+
+[`src/shared/types.ts`, lines 169–179](../../apps/desktop/src/shared/types.ts#L169-L179)
+
+```ts
+/**
+ * The connection to Atlassian (Jira and Confluence), made once in the browser.
+ * - `sign-in`: not connected yet (or the connection ended); a button starts it.
+ * - `signing-in`: waiting for the user to finish in their browser.
+ */
+export type AtlassianState =
+  | { status: 'loading' }
+  | { status: 'sign-in'; message?: string }
+  | { status: 'signing-in' }
+  | { status: 'connected'; user: { name: string; email?: string } }
+  | { status: 'error'; message: string }
+```
+
+<!-- /code -->
+
+The connection to Atlassian, as the comment says, which `Atlassian` in
+`src/main/atlassian/Atlassian.ts` sets and broadcasts on `assist:atlassian-state` (see
+[Jira and the service desk](11-atlassian.md)). Like `AppsState`, it's told apart by `status`.
+
+- `{ status: 'sign-in'; message?: string }`: not connected; `message` says why when the
+  connection has ended or the last try failed.
+- `{ status: 'connected'; user: { name: string; email?: string } }`: connected, with who as, for
+  the settings menu. The account ID and tokens stay in the main process.
+- `{ status: 'error'; message: string }`: a saved connection couldn't be tried (Atlassian couldn't
+  be reached, say). The pages offer Retry.
+
+### `StatusCategory`, `IssueStatus`, `JiraNotification` and `ServiceRequest`
+
+<!-- code: apps/desktop/src/shared/types.ts#StatusCategory,IssueStatus,JiraNotification,ServiceRequest -->
+
+[`src/shared/types.ts`, lines 181–215](../../apps/desktop/src/shared/types.ts#L181-L215)
+
+```ts
+/** How far along an issue is, by its status's category in Jira (which sets its colour). */
+export type StatusCategory = 'new' | 'indeterminate' | 'done'
+
+export interface IssueStatus {
+  name: string
+  category: StatusCategory
+}
+
+/** Someone else assigned the user an issue, or mentioned them, in the last two weeks. */
+export interface JiraNotification {
+  id: string
+  kind: 'assigned' | 'mentioned'
+  key: string
+  summary: string
+  /** Who did it (their name in Atlassian). */
+  by: string
+  /** ISO time. */
+  at: string
+  /** The start of the comment they were mentioned in. */
+  excerpt?: string
+  unread: boolean
+}
+
+/** One of the user's own requests to the IT service desk. */
+export interface ServiceRequest {
+  key: string
+  summary: string
+  status: IssueStatus
+  /** ISO time of the last change. */
+  updated: string
+  /** The request on the help centre portal. */
+  url: string
+  /** What's new since the user last looked ("Mark Duong replied", "Now Resolved"), or null. */
+  news: string | null
+}
+```
+
+<!-- /code -->
+
+- `StatusCategory`, `IssueStatus`: an issue's status, with the category Jira puts it in (to do,
+  in progress or done), which decides its colour.
+- `JiraNotification`: one line in the Notifications tab, as the comment says. `kind` says which
+  of the two it is; `by` is who did it; `at` is when, as an ISO time; `excerpt` is the start of the
+  comment, for a mention; and `unread` puts a dot on it.
+- `ServiceRequest`: one line in My requests. `news` is what's changed since the user last looked,
+  in words, or `null`.
+
+### `FeedList` and `JiraFeed`
+
+<!-- code: apps/desktop/src/shared/types.ts#FeedList,JiraFeed -->
+
+[`src/shared/types.ts`, lines 217–228](../../apps/desktop/src/shared/types.ts#L217-L228)
+
+```ts
+/** A list the main process keeps up to date in the background. */
+export interface FeedList<T> {
+  status: 'loading' | 'ready' | 'error'
+  items: T[]
+  message?: string
+}
+
+/** The Notifications tab and My requests. */
+export interface JiraFeed {
+  notifications: FeedList<JiraNotification>
+  requests: FeedList<ServiceRequest>
+}
+```
+
+<!-- /code -->
+
+- `FeedList<T>`: a list the main process keeps up to date in the background, with its own status.
+  `<T>` is the kind of item, so the same shape serves both lists. An `error` can still have
+  `items`: the ones from the last check that worked, with `message` saying why it couldn't be
+  updated.
+- `JiraFeed`: the two lists, broadcast together on `assist:jira-feed`.
+
+### `IssueSummary`, `ConfluencePage` and `SearchResult`
+
+<!-- code: apps/desktop/src/shared/types.ts#IssueSummary,ConfluencePage,SearchResult -->
+
+[`src/shared/types.ts`, lines 230–250](../../apps/desktop/src/shared/types.ts#L230-L250)
+
+```ts
+/** An issue in a list of search results. */
+export interface IssueSummary {
+  key: string
+  summary: string
+  status: IssueStatus
+  type: string | null
+  url: string
+}
+
+/** A Confluence page in search results or suggestions. */
+export interface ConfluencePage {
+  id: string
+  title: string
+  /** A line or two from the page, as plain text. */
+  excerpt: string
+  space: string | null
+  url: string
+}
+
+export type SearchResult =
+  { ok: true; issues: IssueSummary[]; pages: ConfluencePage[] } | { ok: false; message: string }
+```
+
+<!-- /code -->
+
+What the Search tab shows: Jira issues (`IssueSummary`, with the issue's address in Jira as
+`url`) and Confluence pages (`ConfluencePage`, with a plain-text `excerpt` and the space's name).
+`SearchResult` is both lists, or a message when the search failed.
+
+### `IssueComment`, `IssueTransition`, `IssueDetail` and `IssueResult`
+
+<!-- code: apps/desktop/src/shared/types.ts#IssueComment,IssueTransition,IssueDetail,IssueResult -->
+
+[`src/shared/types.ts`, lines 252–283](../../apps/desktop/src/shared/types.ts#L252-L283)
+
+```ts
+export interface IssueComment {
+  id: string
+  author: string
+  /** ISO time. */
+  created: string
+  /** Markdown. */
+  body: string
+}
+
+/** A status the issue can be moved to ("Start progress", "Done"). */
+export interface IssueTransition {
+  id: string
+  name: string
+}
+
+/** An issue as the issue view shows it. */
+export interface IssueDetail extends IssueSummary {
+  assignee: string | null
+  reporter: string | null
+  created: string
+  updated: string
+  /** Markdown, shortened if it's long. */
+  description: string
+  /** The latest comments, oldest first. */
+  comments: IssueComment[]
+  /** The request on the help centre portal, for service desk requests; null otherwise. */
+  portalUrl: string | null
+  transitions: IssueTransition[]
+}
+
+/** Opening an issue, or changing it (which answers with the issue as it is now). */
+export type IssueResult = { ok: true; issue: IssueDetail } | { ok: false; message: string }
+```
+
+<!-- /code -->
+
+What the issue view shows.
+
+- `IssueComment`: a comment, its `body` as Markdown.
+- `IssueTransition`: as the comment says, a status the issue can move to, with the ID Jira needs
+  to make the move.
+- `IssueDetail extends IssueSummary`: everything an `IssueSummary` has, plus the rest. `extends`
+  means it doesn't have to list the summary's fields again.
+- `portalUrl`: as the comment says, only for service desk requests, which then get a link to the
+  portal.
+- `IssueResult`: as its comment says, the answer to opening an issue and to changing one, which
+  is the issue as it is now.
+
+### `IssuePrompt` and `AskAboutIssueResult`
+
+<!-- code: apps/desktop/src/shared/types.ts#IssuePrompt,AskAboutIssueResult -->
+
+[`src/shared/types.ts`, lines 285–289](../../apps/desktop/src/shared/types.ts#L285-L289)
+
+```ts
+/** What to ask Claude about an issue. */
+export type IssuePrompt = 'summarise' | 'reply' | 'next-steps'
+
+/** Asking Claude about an issue: `inChat` when it went to the chat in the panel. */
+export type AskAboutIssueResult = { ok: true; inChat: boolean } | { ok: false; message: string }
+```
+
+<!-- /code -->
+
+- `IssuePrompt`: the three **Ask Claude** buttons on an issue.
+- `AskAboutIssueResult`: the answer. `inChat` is `true` when the question went to the built-in
+  chat, so the panel shows it; with Claude Desktop the panel has closed instead.
+
+### `NewRequest` and `RaiseResult`
+
+<!-- code: apps/desktop/src/shared/types.ts#NewRequest,RaiseResult -->
+
+[`src/shared/types.ts`, lines 291–302](../../apps/desktop/src/shared/types.ts#L291-L302)
+
+```ts
+/** A request filled in on the panel, to finish on the help centre portal. */
+export interface NewRequest {
+  requestTypeId: string
+  summary: string
+  details: string
+  includePcDetails: boolean
+}
+
+/** Opening the portal's form, filled in, with the text box's screenshots on the clipboard. */
+export type RaiseResult =
+  | { ok: true; screenshots: number }
+  | { ok: false; reason: 'empty' | 'missing-screenshot' | 'failed' }
+```
+
+<!-- /code -->
+
+The service desk page's form, and the answer to sending it (see `ServiceDesk.raise()`).
+
+- `NewRequest`: the form's fields. The screenshots aren't in it: the main process takes them from
+  its own copy of the draft.
+- `{ ok: true; screenshots: number }`: the portal's form is opening in the browser, and this many
+  screenshots are on the clipboard.
+- `reason: 'empty' | 'missing-screenshot' | 'failed'`: nothing was written, an attached screenshot
+  has gone from the folder, or the request type wasn't one of the tenant's or the browser couldn't
+  be opened.
+
 ### `ActionResult` and `AttachResult`
 
 <!-- code: apps/desktop/src/shared/types.ts#ActionResult,AttachResult -->
 
-[`src/shared/types.ts`, lines 156–159](../../apps/desktop/src/shared/types.ts#L156-L159)
+[`src/shared/types.ts`, lines 304–311](../../apps/desktop/src/shared/types.ts#L304-L311)
 
 ```ts
 export type ActionResult = { ok: true; message?: string } | { ok: false; message: string }
 
+/**
+ * Attaching a screenshot: the newest one not attached yet. `no-more` when every screenshot is
+ * already attached.
+ */
 export type AttachResult =
-  { ok: true; notes: Notes } | { ok: false; reason: 'no-screenshots' | 'already-attached' }
+  { ok: true; notes: Notes } | { ok: false; reason: 'no-screenshots' | 'no-more' }
 ```
 
 <!-- /code -->
@@ -873,9 +1166,9 @@ The answers to two more requests.
   returns (`src/main/actions.ts`). `PanelView.runAction()` shows `message` as a toast, styled as
   an error when `ok` is false. A failure must carry a message; a success may (the screenshot
   action says "Screenshot saved", Bounce says nothing).
-- `reason: 'no-screenshots' | 'already-attached'`: why "Attach latest screenshot" did nothing:
-  the folder has no screenshots, or the newest one is already in the draft
-  (`NotesStore.addAttachment()` refuses duplicates).
+- `reason: 'no-screenshots' | 'no-more'`: why **Attach screenshot** did nothing: the folder has
+  no screenshots, or every one of them is already in the draft (each click attaches the newest
+  one that isn't, going one further back each time).
 
 ## `src/shared/ipc.ts`: the IPC contract
 
@@ -894,13 +1187,13 @@ Messages come in three styles:
   frequent or one-way signals such as each keystroke in the text box. In `AssistApi`, the methods
   that return `void` are these; the ones that return a `Promise` are requests.
 - **Pushed by the main process**: `webContents.send()` to a window, which the page receives
-  through one of the `on...` listeners. These are the last seven channels.
+  through one of the `on...` listeners. These are the last nine channels.
 
 ### `IPC`
 
 <!-- code: apps/desktop/src/shared/ipc.ts#IPC -->
 
-[`src/shared/ipc.ts`, lines 20–68](../../apps/desktop/src/shared/ipc.ts#L20-L68)
+[`src/shared/ipc.ts`, lines 29–98](../../apps/desktop/src/shared/ipc.ts#L29-L98)
 
 ```ts
 /** IPC channel names. The preload maps them onto `window.assist`; src/main/ipc.ts handles them. */
@@ -943,6 +1236,25 @@ export const IPC = {
   appsCancelSignIn: 'assist:apps-cancel-sign-in',
   appsOpen: 'assist:apps-open',
   appsOpenPortal: 'assist:apps-open-portal',
+  atlassianGet: 'assist:atlassian-get',
+  atlassianSignIn: 'assist:atlassian-sign-in',
+  atlassianCancelSignIn: 'assist:atlassian-cancel-sign-in',
+  atlassianSignOut: 'assist:atlassian-sign-out',
+  atlassianRetry: 'assist:atlassian-retry',
+  atlassianFeed: 'assist:atlassian-feed',
+  atlassianMarkNotificationsRead: 'assist:atlassian-mark-notifications-read',
+  atlassianMarkRequestsRead: 'assist:atlassian-mark-requests-read',
+  atlassianSearch: 'assist:atlassian-search',
+  atlassianIssue: 'assist:atlassian-issue',
+  atlassianTransition: 'assist:atlassian-transition',
+  atlassianComment: 'assist:atlassian-comment',
+  atlassianLogWork: 'assist:atlassian-log-work',
+  atlassianArticles: 'assist:atlassian-articles',
+  atlassianProjectKeys: 'assist:atlassian-project-keys',
+  atlassianAsk: 'assist:atlassian-ask',
+  serviceDeskPcDetails: 'assist:service-desk-pc-details',
+  serviceDeskRaise: 'assist:service-desk-raise',
+  serviceDeskOpenMyRequests: 'assist:service-desk-open-my-requests',
   // main → renderer
   modeChanged: 'assist:mode-changed',
   cornerChanged: 'assist:corner-changed',
@@ -951,6 +1263,8 @@ export const IPC = {
   chatMessage: 'assist:chat-message',
   chatReset: 'assist:chat-reset',
   appsState: 'assist:apps-state',
+  atlassianState: 'assist:atlassian-state',
+  jiraFeed: 'assist:jira-feed',
 } as const
 ```
 
@@ -968,10 +1282,15 @@ name: a typo is a compile error instead of a message nobody hears.
 - `appUninstall`: Settings → Uninstall.
 - `appsGet` to `appsOpenPortal`: the Apps list. Like the two chats' channels, they're only
   answered when the tenant has a portal.
+- `atlassianGet` to `atlassianAsk`: Jira and Confluence (see
+  [Jira and the service desk](11-atlassian.md)), answered only when the tenant has `atlassian`.
+  `serviceDeskPcDetails` to `serviceDeskOpenMyRequests`: the service desk page, answered only when
+  the tenant lists request types.
 - `authSignIn` to `chatNew`, and `claudeDesktopAsk` and `claudeDesktopInstalled`: the first group
   belongs to the built-in chat and the second to Claude Desktop. The main process only answers
   the group the tenant uses (`registerIpc()` in `src/main/ipc.ts`).
-- `// main → renderer`: the channels from here on go the other way. `broadcast()` in `start()`
+- `// main → renderer`: the channels from here on go the other way. `atlassianState` and `jiraFeed`
+  carry the Atlassian connection and the notifications and requests. `broadcast()` in `start()`
   (`src/main/index.ts`) sends them to both windows, except `clickThroughReset`, which
   `resetClickThrough()` in `src/main/bubble/windows.ts` sends only to the panel.
 
@@ -979,7 +1298,7 @@ name: a typo is a compile error instead of a message nobody hears.
 
 <!-- code: apps/desktop/src/shared/ipc.ts#AssistApi -->
 
-[`src/shared/ipc.ts`, lines 70–157](../../apps/desktop/src/shared/ipc.ts#L70-L157)
+[`src/shared/ipc.ts`, lines 100–232](../../apps/desktop/src/shared/ipc.ts#L100-L232)
 
 ```ts
 /** The API the preload exposes to renderers as `window.assist`. */
@@ -1000,6 +1319,7 @@ export interface AssistApi {
   copyText(text: string): Promise<void>
   notes: {
     setText(text: string): void
+    /** Attaches the newest screenshot that isn't attached yet (each click goes one further back). */
     attachLatestScreenshot(): Promise<AttachResult>
     removeAttachment(id: string): Promise<Notes>
     /** Empties the text box and removes the attached screenshots (the files are kept). */
@@ -1058,6 +1378,48 @@ export interface AssistApi {
     open(id: string): Promise<boolean>
     openPortal(): Promise<void>
   }
+  /** Jira and Confluence (only when the tenant has `atlassian`). */
+  atlassian: {
+    get(): Promise<AtlassianState>
+    /** Connects to Atlassian in the browser; progress via onAtlassianState. */
+    signIn(): Promise<void>
+    cancelSignIn(): Promise<void>
+    /** Forgets the connection. */
+    signOut(): Promise<void>
+    /** Tries the saved connection again after an error. */
+    retry(): Promise<void>
+    /** Notifications and the user's IT requests; checked again first with `refresh`. */
+    feed(refresh?: boolean): Promise<JiraFeed>
+    markNotificationsRead(): Promise<JiraFeed>
+    /** Marks what's new on one request (or all of them) as seen. */
+    markRequestsRead(key?: string): Promise<JiraFeed>
+    search(query: string): Promise<SearchResult>
+    issue(key: string): Promise<IssueResult>
+    transition(key: string, transitionId: string): Promise<IssueResult>
+    comment(key: string, body: string): Promise<IssueResult>
+    /** Jira's format: "30m", "1h 30m", "2d". */
+    logWork(key: string, timeSpent: string): Promise<IssueResult>
+    /** How-to pages about what the user is typing in a new request. */
+    articles(text: string): Promise<ConfluencePage[]>
+    /** The Jira projects' keys, or null if they can't be listed (e.g. not connected). */
+    projectKeys(): Promise<string[] | null>
+    /**
+     * Asks Claude about the issue, with its details: in Claude Desktop (the panel closes), or the
+     * chat in the panel.
+     */
+    ask(key: string, prompt: IssuePrompt): Promise<AskAboutIssueResult>
+  }
+  /** Raising IT requests (only when the tenant's service desk lists request types). */
+  serviceDesk: {
+    /** What "Include PC details" adds. */
+    pcDetails(): Promise<string>
+    /**
+     * Opens the portal's form for the request, filled in, with the text box's screenshots on the
+     * clipboard to paste. Closes the panel if it worked.
+     */
+    raise(request: NewRequest): Promise<RaiseResult>
+    openMyRequests(): Promise<void>
+  }
   /** Starts Desktop Assist's uninstaller and quits (installed copies only). */
   uninstall(): Promise<UninstallResult>
   onModeChanged(callback: (mode: Mode) => void): () => void
@@ -1069,6 +1431,8 @@ export interface AssistApi {
   onChatMessage(callback: (message: ChatMessage) => void): () => void
   onChatReset(callback: () => void): () => void
   onAppsState(callback: (state: AppsState) => void): () => void
+  onAtlassianState(callback: (state: AtlassianState) => void): () => void
+  onJiraFeed(callback: (feed: JiraFeed) => void): () => void
 }
 ```
 
@@ -1076,9 +1440,11 @@ export interface AssistApi {
 
 The API a page sees as `window.assist`. Each method maps onto one channel in `IPC`. Related calls
 are grouped into nested objects (`notes`, `screenshots`, `settings`, `auth`, `claudeDesktop`,
-`chat`, `apps`), which is only for readability. Every page gets all of them, but `auth` and
-`chat` only work with the built-in chat, `claudeDesktop` only with Claude Desktop, and `apps`
-only when the tenant has a portal; the panel checks `branding` to know which to call.
+`chat`, `apps`, `atlassian`, `serviceDesk`), which is only for readability. Every page gets all of
+them, but `auth` and `chat` only work with the built-in chat, `claudeDesktop` only with Claude
+Desktop, `apps` only when the tenant has a portal, `atlassian` only when it has an Atlassian site,
+and `serviceDesk` only when it lists request types; the panel checks `branding` to know which to
+call.
 
 - `getState(): Promise<AppState>`: called once when a page loads (`useAssistState()`).
 - `bubbleClick(pressedAt?: number): void`: this and the next three are fire-and-forget calls into
@@ -1121,6 +1487,19 @@ only when the tenant has a portal; the panel checks `branding` to know which to 
   in the browser and progress arrives through `onAppsState`.
 - `open(id: string): Promise<boolean>`: asks the main process to open the app in the browser.
   `false` means it had no link for it.
+- `atlassian.signIn()`, `retry()`: like `apps.signIn()`, resolve straight away; progress arrives
+  through `onAtlassianState`.
+- `feed(refresh?: boolean): Promise<JiraFeed>`: the notifications and requests, checked again
+  first with `refresh` (or if the last check is over a minute old). The answer also arrives
+  through `onJiraFeed`, like every other change.
+- `transition()`, `comment()`, `logWork()`: each answers with the issue as it is after the change
+  (`IssueResult`).
+- `projectKeys()`: the keys of the Jira projects the user can see, so the text box only offers to
+  open real issue keys; `null` when they aren't known.
+- `ask(key, prompt)`: as its comment says, asks Claude about an issue with its details, in Claude
+  Desktop or the built-in chat.
+- `serviceDesk.raise(request: NewRequest)`: as the comment says, opens the portal's form, filled
+  in. Like `claudeDesktop.ask()`, the screenshots come from the main process's copy of the draft.
 - `uninstall(): Promise<UninstallResult>`: starts the uninstaller; the app quits if it worked.
 - `onModeChanged(callback: (mode: Mode) => void): () => void`: each `on...` method starts
   listening and returns a function that stops. That suits React's `useEffect`, whose cleanup
@@ -1129,17 +1508,18 @@ only when the tenant has a portal; the panel checks `branding` to know which to 
   position relative to the panel window, so the page can decide at once whether the pointer is
   over real UI.
 
-## `src/shared/format.ts`: screenshot labels
+## `src/shared/format.ts`: screenshot labels and times
 
-One small text helper. `AttachmentChip.tsx` uses it for the label on each screenshot chip in the
-text box. It has no Electron or React code in it, and `tests/format.test.ts` tests it directly.
-The file is short, so here it is whole.
+Two small text helpers. `AttachmentChip.tsx` uses `screenshotLabel()` for the label on each
+screenshot chip in the text box, and the Jira and service desk pages use `timeAgo()` to say when
+something happened. The file has no Electron or React code in it, and `tests/format.test.ts`
+tests it directly. It's short, so here it is whole.
 
-### `screenshotLabel()`
+### `screenshotLabel()` and `timeAgo()`
 
 <!-- code: apps/desktop/src/shared/format.ts -->
 
-[`src/shared/format.ts`, lines 1–16](../../apps/desktop/src/shared/format.ts#L1-L16)
+[`src/shared/format.ts`, lines 1–29](../../apps/desktop/src/shared/format.ts#L1-L29)
 
 ```ts
 const SCREENSHOT_NAME =
@@ -1157,6 +1537,19 @@ export function screenshotLabel(fileName: string, now: Date = new Date()): strin
   const time = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
   const today = year === now.getFullYear() && month === now.getMonth() + 1 && day === now.getDate()
   return today ? `Screenshot ${time}` : `Screenshot ${day} ${MONTHS[(month ?? 1) - 1]} ${time}`
+}
+
+/** How long ago something happened, briefly: "just now", "5m ago", "3h ago", "2d ago", "12 Sep". */
+export function timeAgo(iso: string, now: Date = new Date()): string {
+  const then = new Date(iso)
+  const minutes = Math.floor((now.getTime() - then.getTime()) / 60_000)
+  if (Number.isNaN(minutes)) return ''
+  if (minutes < 1) return 'just now'
+  if (minutes < 60) return `${minutes}m ago`
+  if (minutes < 24 * 60) return `${Math.floor(minutes / 60)}h ago`
+  if (minutes < 7 * 24 * 60) return `${Math.floor(minutes / (24 * 60))}d ago`
+  const date = `${then.getDate()} ${MONTHS[then.getMonth()]}`
+  return then.getFullYear() === now.getFullYear() ? date : `${date} ${then.getFullYear()}`
 }
 ```
 
@@ -1180,6 +1573,15 @@ date and time for older ones.
 - `(month ?? 1) - 1`: the regex guarantees `month` is there, but this project turns on
   TypeScript's `noUncheckedIndexedAccess` setting, which treats every array element as possibly
   missing. The `?? 1` fallback satisfies the compiler.
+
+`timeAgo()`, as its comment says, turns an ISO time into a short "how long ago":
+
+- `Math.floor((now.getTime() - then.getTime()) / 60_000)`: the whole minutes since then.
+  `Math.floor` rounds down, so 90 minutes is "1h ago".
+- `if (Number.isNaN(minutes)) return ''`: a time that can't be read gives "not a number", and then
+  nothing is shown.
+- "just now" under a minute, then minutes, hours, and days for up to a week.
+- After a week, the date (`12 Sep`), with the year only if it isn't this year (`12 Sep 2025`).
 
 ## `src/shared/claudeDesktop.ts`: where to get Claude Desktop
 
@@ -1243,6 +1645,52 @@ alphabetical among themselves too.
 - `[...apps.filter(...), ...apps.filter(...)]`: the starred apps, then the others, joined into one
   new list. The list it was given isn't changed.
 
+## `src/shared/jira.ts`: issue keys
+
+Jira issue keys, which, as the comment at the top says, both the main process and the panel need:
+the panel to offer an **Open** button for keys typed in the text box, and the main process to
+check keys and build links. The file is short, so here it is whole.
+
+### `ISSUE_KEY`, `findIssueKeys()`, `isIssueKey` and `browseUrl()`
+
+<!-- code: apps/desktop/src/shared/jira.ts -->
+
+[`src/shared/jira.ts`, lines 1–17](../../apps/desktop/src/shared/jira.ts#L1-L17)
+
+```ts
+// Jira issue keys, used by the main process and the panel alike.
+
+/** Jira issue keys in text: a project key, a dash and a number ("ISD-1234"). */
+const ISSUE_KEY = /\b[A-Z][A-Z0-9_]{1,9}-\d{1,7}\b/g
+
+/** The issue keys in the text, first to last, each once. */
+export function findIssueKeys(value: string, limit = 3): string[] {
+  return [...new Set(value.match(ISSUE_KEY) ?? [])].slice(0, limit)
+}
+
+export const isIssueKey = (value: string): boolean =>
+  /^[A-Z][A-Z0-9_]{1,9}-\d{1,7}$/.test(value.trim())
+
+/** The issue's page in Jira. */
+export function browseUrl(site: string, key: string): string {
+  return `${new URL(site).origin}/browse/${encodeURIComponent(key)}`
+}
+```
+
+<!-- /code -->
+
+- `ISSUE_KEY`: a key is a project key (a capital letter, then 1 to 9 more capitals, digits or
+  `_`), a dash and a number, such as `ISD-1234`. `\b` at each end means a whole word, so
+  `myISD-12` or `ISD-123x` don't count. `g` finds every match, not just the first.
+- `findIssueKeys(value, limit)`: the keys in the text, each once and at most three.
+  `new Set(...)` drops repeats while keeping the first-to-last order, and `[...]` turns it back
+  into a list. `?? []` covers `match()` finding nothing (it returns `null` then).
+- `isIssueKey(value)`: whether the whole text is one key. `^` and `$` pin the pattern to the
+  start and end. The main process checks the same pattern (`IssueKey` in `src/main/ipc.ts`).
+- `browseUrl(site, key)`: the issue's page in Jira, such as
+  `https://morsemicro.atlassian.net/browse/ISD-1234`. `encodeURIComponent` keeps the key from
+  changing the address, whatever it holds.
+
 ## `src/preload/index.ts`: the bridge to the page
 
 A _preload script_ runs inside each window (bubble and panel) just before the page's own code. This
@@ -1295,7 +1743,7 @@ listening. Every `on...` method in `api` uses it.
 
 <!-- code: apps/desktop/src/preload/index.ts#api -->
 
-[`src/preload/index.ts`, lines 12–73](../../apps/desktop/src/preload/index.ts#L12-L73)
+[`src/preload/index.ts`, lines 12–99](../../apps/desktop/src/preload/index.ts#L12-L99)
 
 ```ts
 const api: AssistApi = {
@@ -1351,6 +1799,30 @@ const api: AssistApi = {
     open: (id) => ipcRenderer.invoke(IPC.appsOpen, id),
     openPortal: () => ipcRenderer.invoke(IPC.appsOpenPortal),
   },
+  atlassian: {
+    get: () => ipcRenderer.invoke(IPC.atlassianGet),
+    signIn: () => ipcRenderer.invoke(IPC.atlassianSignIn),
+    cancelSignIn: () => ipcRenderer.invoke(IPC.atlassianCancelSignIn),
+    signOut: () => ipcRenderer.invoke(IPC.atlassianSignOut),
+    retry: () => ipcRenderer.invoke(IPC.atlassianRetry),
+    feed: (refresh) => ipcRenderer.invoke(IPC.atlassianFeed, refresh ?? false),
+    markNotificationsRead: () => ipcRenderer.invoke(IPC.atlassianMarkNotificationsRead),
+    markRequestsRead: (key) => ipcRenderer.invoke(IPC.atlassianMarkRequestsRead, key),
+    search: (query) => ipcRenderer.invoke(IPC.atlassianSearch, query),
+    issue: (key) => ipcRenderer.invoke(IPC.atlassianIssue, key),
+    transition: (key, transitionId) =>
+      ipcRenderer.invoke(IPC.atlassianTransition, { key, transitionId }),
+    comment: (key, body) => ipcRenderer.invoke(IPC.atlassianComment, { key, body }),
+    logWork: (key, timeSpent) => ipcRenderer.invoke(IPC.atlassianLogWork, { key, timeSpent }),
+    articles: (text) => ipcRenderer.invoke(IPC.atlassianArticles, text),
+    projectKeys: () => ipcRenderer.invoke(IPC.atlassianProjectKeys),
+    ask: (key, prompt) => ipcRenderer.invoke(IPC.atlassianAsk, { key, prompt }),
+  },
+  serviceDesk: {
+    pcDetails: () => ipcRenderer.invoke(IPC.serviceDeskPcDetails),
+    raise: (request) => ipcRenderer.invoke(IPC.serviceDeskRaise, request),
+    openMyRequests: () => ipcRenderer.invoke(IPC.serviceDeskOpenMyRequests),
+  },
   uninstall: () => ipcRenderer.invoke(IPC.appUninstall),
   onModeChanged: (callback) => subscribe(IPC.modeChanged, callback),
   onCornerChanged: (callback) => subscribe(IPC.cornerChanged, callback),
@@ -1359,6 +1831,8 @@ const api: AssistApi = {
   onChatMessage: (callback) => subscribe(IPC.chatMessage, callback),
   onChatReset: (callback) => subscribe(IPC.chatReset, () => callback()),
   onAppsState: (callback) => subscribe(IPC.appsState, callback),
+  onAtlassianState: (callback) => subscribe(IPC.atlassianState, callback),
+  onJiraFeed: (callback) => subscribe(IPC.jiraFeed, callback),
 }
 ```
 
@@ -1381,7 +1855,9 @@ The implementation of `AssistApi`: one line per method, each sending its channel
   the main process's check for this channel wants a real `true` or `false`, so a missing one is
   sent as `false`.
 - `ipcRenderer.invoke(IPC.settingsSetFavoriteApp, { id, favorite })`: a request carries one
-  argument, checked by one schema in the main process, so the two values go as one object.
+  argument, checked by one schema in the main process, so the two values go as one object. The
+  Atlassian calls that take two values (`transition`, `comment`, `logWork` and `ask`) do the same,
+  and `atlassian.feed()` sends a missing `refresh` as `false`, like `apps.get()`.
 
 ### `contextBridge.exposeInMainWorld()`
 

@@ -1254,7 +1254,9 @@ the redirect URI. Plain `http` is fine because the traffic never leaves the PC, 
 the code even if another program on the PC sees it. `index.ts` passes `listenForRedirect` to
 `AuthManager` as `listen`, and `signIn()` starts one listener per sign-in. It uses Node's built-in
 `http` module, which works in Electron's main process. The Apps list's connection to JumpCloud
-uses the same listener, on port 47622 (see [Your apps](10-apps.md)).
+uses the same listener, on port 47622 (see [Your apps](10-apps.md)), and so does the connection to
+Atlassian, on the tenant's `atlassian.redirectPort` (47623 for Morse Micro; see
+[Jira and the service desk](11-atlassian.md)).
 
 ### `CALLBACK_PATH`, `RedirectListener`
 
@@ -1619,10 +1621,11 @@ function text(value: unknown): string | undefined {
 ## `src/main/storage/SecretStore.ts`: keeping the sign-in safe
 
 Keeps one secret in one file, encrypted so only the same Windows user on the same PC can read it.
-The app has two such secrets, each in a store of its own: the built-in chat's JumpCloud sign-in
+The app has three such secrets, each in a store of its own: the built-in chat's JumpCloud sign-in
 (`AuthManager` saves the refresh token and user as JSON in
-`%APPDATA%\Desktop Assist\jumpcloud-session.bin`), and the Apps list's connection to JumpCloud
-(`jumpcloud-apps.bin`, see [Your apps](10-apps.md)). The encryption itself is passed
+`%APPDATA%\Desktop Assist\jumpcloud-session.bin`), the Apps list's connection to JumpCloud
+(`jumpcloud-apps.bin`, see [Your apps](10-apps.md)), and the connection to Atlassian
+(`atlassian.bin`, see [Jira and the service desk](11-atlassian.md)). The encryption itself is passed
 in as an `Encryptor`: `index.ts` gives it Electron's `safeStorage`, which on Windows uses **DPAPI**
 (the Windows Data Protection API, which encrypts with a key tied to the user's Windows login). Tests
 use a fake.

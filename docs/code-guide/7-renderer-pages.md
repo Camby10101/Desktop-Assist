@@ -1143,9 +1143,11 @@ argument (see `Panel` below).
 
 The page shown in the panel window: the chat card, the action icons and the settings menu. All the
 panel's shared state and handlers live in `Panel`; the components it renders (`ChatBox`,
-`ActionStack`, `SettingsMenu`, `SignInPanel`, `Banner`, `AppsList`) get their data and callbacks
-from it as props. Those are covered in [the components part](8-renderer-components.md), except
-`AppsList`, which is in [Your apps](10-apps.md).
+`ActionStack`, `SettingsMenu`, `SignInPanel`, `Banner`, `AppsList`, `JiraPage`, `ServiceDeskPage`,
+`IssueView`) get their data and callbacks from it as props. Those are covered in
+[the components part](8-renderer-components.md), except `AppsList`, which is in
+[Your apps](10-apps.md), and the Jira and service desk pages, which are in
+[The Jira and service desk pages](12-atlassian-pages.md).
 
 The panel works in one of two ways, set by the tenant's `chatApp` (`branding.chatApp`). With the
 built-in chat it's a chat with Claude, behind a JumpCloud sign-in. With Claude Desktop it's just
@@ -1155,12 +1157,15 @@ automatically" on, sends it there), and there's no sign-in and no conversation i
 the card can also show the Apps list instead of the text box. Which of the two the panel opens on
 is the tenant's `startPage` (`branding.startPage`); the other is behind its icon in the stack:
 **Ask Claude** for the text box, **Your apps** for the list. Morse Micro opens on the Apps list.
+With an Atlassian site, the bell icon swaps in the Jira page, and with the service desk's request
+types, the service desk icon swaps in the service desk page; a Jira issue opens over either (see
+[Jira and the service desk](11-atlassian.md)).
 
 ### `ASK_ERRORS`
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#ASK_ERRORS -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 25–31](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L25-L31)
+[`src/renderer/src/views/PanelView.tsx`, lines 31–37](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L31-L37)
 
 ```tsx
 /** What to say when a question couldn't be handed to Claude Desktop. */
@@ -1190,7 +1195,7 @@ The toast for each way handing a question to Claude Desktop can fail (`AskResult
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#UNINSTALL_ERRORS -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 33–38](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L33-L38)
+[`src/renderer/src/views/PanelView.tsx`, lines 39–44](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L39-L44)
 
 ```tsx
 /** What to say when Settings → Uninstall couldn't start the uninstaller. */
@@ -1207,11 +1212,36 @@ The toast for each way Settings → Uninstall can fail (`UninstallResult`), buil
 `ASK_ERRORS`. The two that can happen in an installed copy point to Windows Settings, where the
 app can always be uninstalled.
 
+### `View` and `EMPTY_FEED`
+
+<!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#View,EMPTY_FEED -->
+
+[`src/renderer/src/views/PanelView.tsx`, lines 46–54](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L46-L54)
+
+```tsx
+/**
+ * What the card shows: the text box (`ask`), or a page in its place while that page's icon is on.
+ */
+type View = StartPage | 'jira' | 'servicedesk'
+
+const EMPTY_FEED: JiraFeed = {
+  notifications: { status: 'loading', items: [] },
+  requests: { status: 'loading', items: [] },
+}
+```
+
+<!-- /code -->
+
+- `View`: as the comment says, what the card shows: one of the two start pages (`StartPage`: the
+  text box or the Apps list), or the Jira page or the service desk page while its icon is on.
+- `EMPTY_FEED`: the notifications and requests before the main process has said anything: two
+  empty lists, both still loading.
+
 ### `<PanelView>`
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#PanelView -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 40–46](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L40-L46)
+[`src/renderer/src/views/PanelView.tsx`, lines 56–62](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L56-L62)
 
 ```tsx
 /** Everything that appears around the bubble when it's clicked. */
@@ -1242,7 +1272,7 @@ returns. The sections after it take its values and functions one at a time.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 48–379](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L48-L379)
+[`src/renderer/src/views/PanelView.tsx`, lines 64–532](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L64-L532)
 
 ```tsx
 function Panel({ state }: { state: AppState }) {
@@ -1257,11 +1287,19 @@ function Panel({ state }: { state: AppState }) {
   const [settings, setSettings] = useState(state.settings)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [asking, setAsking] = useState(false)
-  // The card shows the text box or the Apps list: the tenant's start page when the panel opens,
-  // the other one while its icon (Ask Claude or Your apps) is on.
-  const { startPage } = branding
-  const [view, setView] = useState<StartPage>(startPage)
+  // The card shows the tenant's start page (the text box or the Apps list) when the panel opens,
+  // and another page while its icon is on (Ask Claude, Your apps, Jira, the service desk).
+  const { startPage, atlassianSite, requestTypes } = branding
+  const [view, setView] = useState<View>(startPage)
   const [apps, setApps] = useState<AppsState>({ status: 'loading' })
+  const [openingApp, setOpeningApp] = useState<string | null>(null)
+  const [atlassian, setAtlassian] = useState<AtlassianState>({ status: 'loading' })
+  const [feed, setFeed] = useState<JiraFeed>(EMPTY_FEED)
+  /** The Jira issue shown in the card (over whichever page it was opened from), or null. */
+  const [issueKey, setIssueKey] = useState<string | null>(null)
+  const [serviceDeskTab, setServiceDeskTab] = useState<ServiceDeskTab>('new')
+  /** The Jira projects' keys, to only offer real issue keys from the text box. */
+  const [projectKeys, setProjectKeys] = useState<string[] | null>(null)
   /** Claude Desktop isn't installed, so questions can't be opened in it (checked on opening). */
   const [claudeMissing, setClaudeMissing] = useState(false)
   const [toast, showToast] = useToast()
@@ -1271,11 +1309,33 @@ function Panel({ state }: { state: AppState }) {
       window.assist.onModeChanged((mode) => {
         if (mode !== 'expanded') setSettingsOpen(false)
         // The panel always reopens on the start page (but taking a screenshot isn't closing it).
-        if (mode === 'collapsed') setView(startPage)
+        if (mode === 'collapsed') {
+          setView(startPage)
+          setIssueKey(null)
+        }
       }),
     [startPage],
   )
   useEffect(() => window.assist.onAppsState(setApps), [])
+  useEffect(() => {
+    if (!atlassianSite) return
+    const unsubscribe = [
+      window.assist.onAtlassianState(setAtlassian),
+      window.assist.onJiraFeed(setFeed),
+    ]
+    void window.assist.atlassian.get().then(setAtlassian)
+    void window.assist.atlassian.feed().then(setFeed)
+    return () => unsubscribe.forEach((stop) => stop())
+  }, [atlassianSite])
+  const atlassianConnected = atlassian.status === 'connected'
+  useEffect(() => {
+    if (!atlassianConnected) return
+    let alive = true
+    void window.assist.atlassian.projectKeys().then((keys) => alive && setProjectKeys(keys))
+    return () => {
+      alive = false
+    }
+  }, [atlassianConnected])
   // The Apps list is loaded (or remembered) by the main process; ask for it whenever it shows.
   useEffect(() => {
     if (!open || view !== 'apps' || !branding.portalName) return
@@ -1301,12 +1361,13 @@ function Panel({ state }: { state: AppState }) {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
       if (settingsOpen) setSettingsOpen(false)
+      else if (issueKey) setIssueKey(null)
       else if (view !== startPage) setView(startPage)
       else window.assist.collapse()
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [settingsOpen, view, startPage])
+  }, [settingsOpen, issueKey, view, startPage])
 
   // Not signed in: the chat box shows the sign-in instead of the chat. While a saved sign-in is
   // being renewed, or JumpCloud can't be reached, the chat stays (sending tries JumpCloud again).
@@ -1318,10 +1379,15 @@ function Panel({ state }: { state: AppState }) {
   const canSend = signedIn && !busy && !asking && (draft.trim() !== '' || attachments.length > 0)
 
   async function runAction(id: ActionId) {
-    if (id === 'apps' || id === 'ask') {
-      // Swaps the card to that page, or back again.
+    // With request types, the service desk icon opens a page for them instead of the portal.
+    if (id === 'apps' || id === 'ask' || id === 'jira' || (id === 'servicedesk' && requestTypes)) {
+      // Swaps the card to that page, or back again: the text box and the Apps list swap with
+      // each other, other pages go back to the start page.
       setSettingsOpen(false)
-      setView(view === id ? (id === 'apps' ? 'ask' : 'apps') : id)
+      setIssueKey(null)
+      if (id === 'servicedesk') setServiceDeskTab('new')
+      const back: View = id === 'apps' ? 'ask' : id === 'ask' ? 'apps' : startPage
+      setView(view === id && !issueKey ? back : id)
       return
     }
     if (id === 'theme') {
@@ -1379,18 +1445,46 @@ function Panel({ state }: { state: AppState }) {
   }
 
   async function openApp(app: PortalApp) {
-    // On success the main process closes the panel; the browser opens the app.
-    if (!(await window.assist.apps.open(app.id))) {
-      showToast(`Couldn't open ${app.name}. Try it from the portal.`, 'error')
+    // The tile spins until the browser is opening (JumpCloud can take a few seconds to give the
+    // sign-in link); on success the main process closes the panel.
+    setOpeningApp(app.id)
+    try {
+      if (!(await window.assist.apps.open(app.id))) {
+        showToast(`Couldn't open ${app.name}. Try it from the portal.`, 'error')
+      }
+    } finally {
+      setOpeningApp((current) => (current === app.id ? null : current))
     }
+  }
+
+  /** Opens a Jira issue in the card if connected to Atlassian, otherwise in the browser. */
+  function openIssue(key: string) {
+    setSettingsOpen(false)
+    if (atlassianConnected) setIssueKey(key)
+    else if (atlassianSite) void window.assist.openExternal(browseUrl(atlassianSite, key))
+  }
+
+  /** Starts an IT request from what's in the text box. */
+  function report() {
+    setSettingsOpen(false)
+    setIssueKey(null)
+    setServiceDeskTab('new')
+    setView('servicedesk')
+  }
+
+  async function disconnectAtlassian() {
+    setSettingsOpen(false)
+    setIssueKey(null)
+    await window.assist.atlassian.signOut()
+    showToast('Disconnected from Atlassian')
   }
 
   async function attachLatest() {
     const result = await window.assist.notes.attachLatestScreenshot()
     if (result.ok) setAttachments(result.notes.attachments)
     else if (result.reason === 'no-screenshots') {
-      showToast('No screenshots yet. Take one with the camera button.')
-    } else showToast('That screenshot is already attached')
+      showToast('No screenshots yet. Take one with the camera button.', 'error')
+    } else showToast('No more screenshots to attach', 'error')
   }
 
   async function removeAttachment(attachment: Attachment) {
@@ -1499,6 +1593,83 @@ function Panel({ state }: { state: AppState }) {
     ) : null
 
   const settingsIndex = branding.actions.indexOf('settings')
+  // Only keys of real projects, once the projects are known.
+  const issueKeys = atlassianSite
+    ? findIssueKeys(draft).filter(
+        (key) =>
+          !atlassianConnected ||
+          !projectKeys ||
+          projectKeys.includes(key.slice(0, key.lastIndexOf('-'))),
+      )
+    : []
+  const unreadNotifications = feed.notifications.items.filter((n) => n.unread).length
+  const requestNews = feed.requests.items.filter((r) => r.news).length
+
+  const pageContent =
+    view === 'apps' && branding.portalName ? (
+      <AppsList
+        open={open}
+        state={apps}
+        appName={branding.appName}
+        portalName={branding.portalName}
+        favorites={settings.favoriteApps}
+        onToggleFavorite={(app, favorite) => void toggleFavorite(app, favorite)}
+        onOpenApp={(app) => void openApp(app)}
+        openingId={openingApp}
+        onOpenPortal={() => void window.assist.apps.openPortal()}
+        onSignIn={() => void window.assist.apps.signIn()}
+        onCancelSignIn={() => void window.assist.apps.cancelSignIn()}
+        onRetry={() => void window.assist.apps.get(true).then(setApps)}
+      />
+    ) : view === 'jira' && atlassianSite ? (
+      <JiraPage
+        open={open}
+        state={atlassian}
+        feed={feed}
+        appName={branding.appName}
+        site={atlassianSite}
+        onOpenIssue={openIssue}
+      />
+    ) : view === 'servicedesk' && requestTypes ? (
+      <ServiceDeskPage
+        open={open}
+        initialTab={serviceDeskTab}
+        requestTypes={requestTypes}
+        atlassian={atlassianSite ? atlassian : null}
+        feed={feed}
+        appName={branding.appName}
+        draft={draft}
+        attachments={attachments}
+        onAttachLatest={() => void attachLatest()}
+        onOpenAttachment={(attachment) => void openAttachment(attachment)}
+        onRemoveAttachment={(attachment) => void removeAttachment(attachment)}
+        onOpenIssue={openIssue}
+        showToast={showToast}
+      />
+    ) : null
+  // An issue opens over the page it was opened from, which stays (hidden) so Back finds it as it
+  // was: the same tab, search or half-filled form.
+  const page =
+    issueKey || pageContent ? (
+      <>
+        {issueKey && (
+          <IssueView
+            key={issueKey}
+            issueKey={issueKey}
+            inClaudeDesktop={inClaudeDesktop}
+            onBack={() => setIssueKey(null)}
+            onAskedInChat={() => {
+              setIssueKey(null)
+              setView('ask')
+            }}
+            showToast={showToast}
+          />
+        )}
+        <div hidden={issueKey !== null} className="contents">
+          {pageContent}
+        </div>
+      </>
+    ) : null
 
   return (
     <div
@@ -1512,23 +1683,7 @@ function Panel({ state }: { state: AppState }) {
         toast={toast}
         inClaudeDesktop={inClaudeDesktop}
         autoSend={settings.autoSend}
-        apps={
-          view === 'apps' && branding.portalName ? (
-            <AppsList
-              open={open}
-              state={apps}
-              appName={branding.appName}
-              portalName={branding.portalName}
-              favorites={settings.favoriteApps}
-              onToggleFavorite={(app, favorite) => void toggleFavorite(app, favorite)}
-              onOpenApp={(app) => void openApp(app)}
-              onOpenPortal={() => void window.assist.apps.openPortal()}
-              onSignIn={() => void window.assist.apps.signIn()}
-              onCancelSignIn={() => void window.assist.apps.cancelSignIn()}
-              onRetry={() => void window.assist.apps.get(true).then(setApps)}
-            />
-          ) : null
-        }
+        page={page}
         signInPrompt={signInPrompt}
         banner={banner}
         messages={state.chat}
@@ -1544,6 +1699,9 @@ function Panel({ state }: { state: AppState }) {
         onAttachLatest={() => void attachLatest()}
         onOpenAttachment={(attachment) => void openAttachment(attachment)}
         onRemoveAttachment={(attachment) => void removeAttachment(attachment)}
+        issueKeys={issueKeys}
+        onOpenIssue={openIssue}
+        onReport={requestTypes ? report : null}
       />
       <ActionStack
         corner={state.corner}
@@ -1551,7 +1709,14 @@ function Panel({ state }: { state: AppState }) {
         open={open}
         activeId={settingsOpen ? 'settings' : view !== startPage ? view : null}
         theme={settings.theme}
-        dotted={view !== 'ask' && (draft.trim() !== '' || attachments.length > 0) ? ['ask'] : []}
+        pages={requestTypes ? ['servicedesk'] : []}
+        dotted={[
+          ...(view !== 'ask' && (draft.trim() !== '' || attachments.length > 0)
+            ? (['ask'] as const)
+            : []),
+          ...(view !== 'jira' && unreadNotifications > 0 ? (['jira'] as const) : []),
+          ...(view !== 'servicedesk' && requestNews > 0 ? (['servicedesk'] as const) : []),
+        ]}
         onAction={(id) => void runAction(id)}
       />
       {open && settingsOpen && settingsIndex >= 0 && (
@@ -1562,6 +1727,8 @@ function Panel({ state }: { state: AppState }) {
           branding={branding}
           version={state.version}
           user={auth?.state === 'signed-in' || auth?.state === 'offline' ? auth.user : null}
+          atlassianUser={atlassian.status === 'connected' ? atlassian.user : null}
+          onDisconnectAtlassian={() => void disconnectAtlassian()}
           onToggleAutoStart={async () =>
             setSettings(await window.assist.settings.setAutoStart(!settings.autoStart))
           }
@@ -1596,13 +1763,24 @@ Props and state:
 - `const [asking, setAsking] = useState(false)`: true while a question is being handed to Claude
   Desktop, so it can't be sent twice. (Only for that moment: sending it in Claude carries on in
   the main process after the panel has closed.)
-- `const [view, setView] = useState<StartPage>(startPage)`: what the card shows: the text box
-  (`ask`) or the Apps list (`apps`). It starts on the tenant's start page, as the comment says,
-  and the other page shows while its icon is on. `<StartPage>` gives the state its type, since
-  TypeScript would otherwise take it to be just the starting value's type.
+- `const { startPage, atlassianSite, requestTypes } = branding`: the tenant's start page, its
+  Atlassian site (`null` without one) and its service desk's request types (`null` without them).
+- `const [view, setView] = useState<View>(startPage)`: what the card shows: the text box (`ask`),
+  the Apps list (`apps`), the Jira page or the service desk page. It starts on the tenant's start
+  page, as the comment says, and another page shows while its icon is on. `<View>` gives the state
+  its type, since TypeScript would otherwise take it to be just the starting value's type.
 - `const [apps, setApps] = useState<AppsState>({ status: 'loading' })`: the Apps list as the main
   process last reported it. It isn't part of the app state the page loads at the start; it's asked
   for whenever the list shows (the effect below).
+- `const [openingApp, setOpeningApp] = useState<string | null>(null)`: the ID of the app being
+  opened, so its tile can show a spinner, or `null`.
+- `atlassian`, `feed`: the Atlassian connection and the notifications and requests, as the main
+  process last reported them.
+- `issueKey`: as the comment says, the Jira issue shown in the card over the page it was opened
+  from, or `null`.
+- `serviceDeskTab`: which tab the service desk page opens on.
+- `projectKeys`: as the comment says, the keys of the Jira projects the user can see, or `null`
+  until they're known.
 - `const [claudeMissing, setClaudeMissing] = useState(false)`: whether Claude Desktop was found
   to be missing, which shows a banner with a Download button.
 - `const [toast, showToast] = useToast()`: the current toast and the function to show one.
@@ -1612,11 +1790,21 @@ Effects:
 - `window.assist.onModeChanged((mode) => {`: closes the settings menu whenever the panel closes,
   so it isn't still open the next time. The arrow returns what `onModeChanged` returns, the
   unsubscribe function, which React uses as the cleanup.
-- `if (mode === 'collapsed') setView(startPage)`: once the panel has really closed, the next
-  opening is on the start page again. Only `collapsed` counts: taking a screenshot hides the panel
-  too (`capturing`), and the user expects to come back to the same page afterwards.
+- `if (mode === 'collapsed') {`: once the panel has really closed, the next opening is on the start
+  page again (`setView(startPage)`), with no issue open (`setIssueKey(null)`). Only `collapsed`
+  counts: taking a screenshot hides the panel too (`capturing`), and the user expects to come back
+  to the same page afterwards.
 - `useEffect(() => window.assist.onAppsState(setApps), [])`: keeps the Apps list up to date as
   the main process reports changes (connecting, loading, ready). `setApps` itself is the callback.
+- `if (!atlassianSite) return`: with an Atlassian site, the connection and the feed are kept up to
+  date from their two broadcasts (`onAtlassianState`, `onJiraFeed`), and asked for once at the
+  start (`atlassian.get()`, `atlassian.feed()`), so the bell's dot can show before the Jira page
+  is ever opened. The cleanup stops both subscriptions: `unsubscribe` is the list of the two stop
+  functions, and `forEach` calls each.
+- `const atlassianConnected = atlassian.status === 'connected'`: used by several things below.
+- `if (!atlassianConnected) return`: once connected, the Jira project keys are asked for
+  (`atlassian.projectKeys()`), with the same `alive` guard as below. The effect runs again if the
+  user disconnects and connects again.
 - `if (!open || view !== 'apps' || !branding.portalName) return`: whenever the panel is open on the
   Apps list, it asks the main process for the list (`window.assist.apps.get()`). The main process
   already started loading it at startup and keeps it, so this is usually instant; the first time,
@@ -1630,13 +1818,14 @@ Effects:
   `useAssistState`. If the panel closes before the answer arrives, the cleanup sets `alive` to
   `false` and the late answer is ignored.
 - `}, [open, inClaudeDesktop])`: the effect runs again when the panel opens or closes.
-- `if (event.key !== 'Escape') return`: Esc closes the settings menu if it's open, otherwise goes
-  back to the start page if the other page is showing, otherwise asks the main process to close
-  the panel (`BubbleController.collapse`). Keys reach the panel because the main process focuses
+- `if (event.key !== 'Escape') return`: Esc closes the settings menu if it's open, otherwise
+  closes an open issue (back to the page under it), otherwise goes back to the start page if
+  another page is showing, otherwise asks the main process to close the panel
+  (`BubbleController.collapse`). Keys reach the panel because the main process focuses
   it when it opens.
-- `}, [settingsOpen, view, startPage])`: the listener reads these, and a function only sees the
-  values from the render it was created in. Listing them here makes React remove the old listener
-  and add a fresh one whenever one changes.
+- `}, [settingsOpen, issueKey, view, startPage])`: the listener reads these, and a function only
+  sees the values from the render it was created in. Listing them here makes React remove the old
+  listener and add a fresh one whenever one changes.
 
 The JSX it returns:
 
@@ -1660,22 +1849,26 @@ The JSX it returns:
 - `onSend={() => void send()}`: the handlers are `async`, so they return promises. Each is wrapped
   in an arrow with `void`, which marks the promise as deliberately not awaited and makes the
   callback return nothing.
-- `apps={view === 'apps' && branding.portalName ? (`: while the Apps list is showing, the card
-  shows an `AppsList` in place of everything else (see [Your apps](10-apps.md)); otherwise `null`.
-  Checking `portalName` too means a tenant without a portal never shows it, and gives TypeScript
-  a definite string for the `portalName` prop.
-- `favorites={settings.favoriteApps}`, `onToggleFavorite={...}`: the starred apps, from the
-  panel's own copy of the settings, and what a star click does (`toggleFavorite`, below).
-- `onRetry={() => void window.assist.apps.get(true).then(setApps)}`: the list's Retry and Refresh
-  load it again (`true` means "even if already loaded").
+- `page={page}`: the page the card shows in place of everything else (the Apps list, the Jira
+  page, the service desk page, or an issue), built further down (`pageContent` and `page`), or
+  `null` for the text box.
+- `issueKeys={issueKeys}`, `onOpenIssue={openIssue}`: the Jira issue keys typed in the text box,
+  which get an **Open** button each, and what that button does.
+- `onReport={requestTypes ? report : null}`: **Report to IT** under the text box, only when the
+  tenant lists request types.
 - `activeId={settingsOpen ? 'settings' : view !== startPage ? view : null}`: the gear stays
-  highlighted while its menu is open, and otherwise the icon of the page that isn't the start page
-  while it's showing (Ask Claude while the text box is on, for a panel that starts on the Apps
-  list). The start page itself has no icon to highlight.
+  highlighted while its menu is open, and otherwise the icon of the page showing, when it isn't
+  the start page (Ask Claude while the text box is on, for a panel that starts on the Apps list;
+  the bell while the Jira page is on). The start page itself has no icon to highlight.
 - `theme={settings.theme}`: the current mode, so the theme icon shows the mode it switches to.
-- `dotted={view !== 'ask' && (draft.trim() !== '' || attachments.length > 0) ? ['ask'] : []}`: a
-  small dot on the Ask Claude icon while there's an unsent question or screenshot behind it, so it
-  isn't forgotten while the Apps list is showing.
+- `pages={requestTypes ? ['servicedesk'] : []}`: the service desk icon opens a page when there are
+  request types, so `ActionStack` marks it as expandable like the popover icons.
+- `dotted={[...]}`: small dots on icons with something behind them: Ask Claude while there's an
+  unsent question or screenshot, so it isn't forgotten while another page is showing; the bell while
+  there are unread notifications; and the service desk while one of the user's requests has news. No
+  icon gets a dot while its own page is showing. `...(condition ? (['ask'] as const) : [])` adds an
+  entry only when its condition holds; `as const` keeps it the exact id `'ask'` rather than any
+  string.
 - `{open && settingsOpen && settingsIndex >= 0 && (`: JSX's way of saying "only if": when any part
   is false, nothing is rendered. Removing the menu also resets its own state (its "click again to
   confirm" on New conversation or Clear text box).
@@ -1685,6 +1878,9 @@ The JSX it returns:
   signed in, for the menu's "Signed in as" and Log out. `auth?.state` is `undefined` when `auth`
   is `null` (Claude Desktop), so then there's no user. After the check, TypeScript knows `auth`
   is one of the two states that have a `user`.
+- `atlassianUser={atlassian.status === 'connected' ? atlassian.user : null}`,
+  `onDisconnectAtlassian`: who's connected to Atlassian, for the menu's "Connected to Atlassian as"
+  and **Disconnect Atlassian** (`disconnectAtlassian`, below).
 - `onToggleAutoStart={async () =>`: flips Start with Windows and shows the settings the main
   process returns.
 - `onToggleAutoSend={() => void toggleAutoSend()}`: the menu's "Send in Claude automatically"
@@ -1697,7 +1893,7 @@ The JSX it returns:
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.signedIn,busy,canSend -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 111–118](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L111-L118)
+[`src/renderer/src/views/PanelView.tsx`, lines 158–165](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L158-L165)
 
 ```tsx
 // Not signed in: the chat box shows the sign-in instead of the chat. While a saved sign-in is
@@ -1735,14 +1931,19 @@ Values worked out on every render from the current state.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.runAction -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 120–142](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L120-L142)
+[`src/renderer/src/views/PanelView.tsx`, lines 167–194](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L167-L194)
 
 ```tsx
 async function runAction(id: ActionId) {
-  if (id === 'apps' || id === 'ask') {
-    // Swaps the card to that page, or back again.
+  // With request types, the service desk icon opens a page for them instead of the portal.
+  if (id === 'apps' || id === 'ask' || id === 'jira' || (id === 'servicedesk' && requestTypes)) {
+    // Swaps the card to that page, or back again: the text box and the Apps list swap with
+    // each other, other pages go back to the start page.
     setSettingsOpen(false)
-    setView(view === id ? (id === 'apps' ? 'ask' : 'apps') : id)
+    setIssueKey(null)
+    if (id === 'servicedesk') setServiceDeskTab('new')
+    const back: View = id === 'apps' ? 'ask' : id === 'ask' ? 'apps' : startPage
+    setView(view === id && !issueKey ? back : id)
     return
   }
   if (id === 'theme') {
@@ -1767,13 +1968,18 @@ async function runAction(id: ActionId) {
 
 Runs when an action icon is clicked (`ActionStack`'s `onAction`).
 
-- `if (id === 'apps' || id === 'ask') {`: Your apps and Ask Claude are "popover" actions
-  (src/shared/actions.ts): they switch the card between the text box and the Apps list. They
-  close the settings menu if that was open. A tenant shows only the icon of the page it doesn't
-  start on.
-- `setView(view === id ? (id === 'apps' ? 'ask' : 'apps') : id)`: clicking the icon of the page
-  that isn't showing shows it; clicking it again (while it is) swaps back to the other page. The
-  list is fetched by the effect above as soon as it shows.
+- `if (id === 'apps' || id === 'ask' || id === 'jira' || (id === 'servicedesk' && requestTypes))`:
+  the icons that swap the card to a page. Your apps, Ask Claude and Jira are "popover" actions
+  (src/shared/actions.ts); the service desk is a command, but, as the comment says, with request
+  types it opens its page instead of the portal. They close the settings menu and any open issue,
+  and the service desk page always opens on New request. A tenant shows only one of Ask Claude
+  and Your apps: the icon of the page it doesn't start on.
+- `const back: View = id === 'apps' ? 'ask' : id === 'ask' ? 'apps' : startPage`: where clicking
+  the icon of the page that's showing goes back to. As the comment says, the text box and the
+  Apps list swap with each other, and the other pages go back to the start page.
+- `setView(view === id && !issueKey ? back : id)`: clicking the icon of a page that isn't showing
+  shows it; clicking it again goes back. With an issue open over its page, the click shows the
+  page itself instead. The Apps list is fetched by the effect above as soon as it shows.
 - `if (id === 'theme') {`: the light or dark mode icon, a "switch" action. It asks the main
   process for the other mode (`settings.setTheme()`), which switches every window at once, and
   keeps the settings it returns, so the icon shows the new mode.
@@ -1784,10 +1990,10 @@ Runs when an action icon is clicked (`ActionStack`'s `onAction`).
   `if (!settingsOpen)` means "the menu is being opened now".
 - `setSettings(await window.assist.settings.get())`: refreshes the settings as the menu opens,
   because Start with Windows can also be changed in Windows Settings.
-- `window.assist.invokeAction(id)`: after the `apps`, `ask`, `theme` and `settings` branches return,
-  TypeScript knows `id` is `servicedesk`, `screenshot`, `bounce` or `close`, which is exactly the
-  `CommandActionId` type `invokeAction` accepts. The main process runs the matching handler from
-  src/main/actions.ts.
+- `window.assist.invokeAction(id)`: after the `apps`, `ask`, `jira`, `theme` and `settings` branches
+  return, TypeScript knows `id` is `servicedesk` (without request types), `screenshot`, `bounce` or
+  `close`, which is exactly the `CommandActionId` type `invokeAction` accepts. The main process runs
+  the matching handler from src/main/actions.ts.
 - `if (result.message) showToast(result.message, result.ok ? 'info' : 'error')`: for example
   "Screenshot saved", or "Couldn't take a screenshot" in red. Bounce, close and the service desk
   return no message when they work (the service desk closes the panel as the browser opens).
@@ -1799,7 +2005,7 @@ Runs when an action icon is clicked (`ActionStack`'s `onAction`).
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.changeDraft -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 144–147](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L144-L147)
+[`src/renderer/src/views/PanelView.tsx`, lines 196–199](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L196-L199)
 
 ```tsx
 function changeDraft(next: string) {
@@ -1818,7 +2024,7 @@ writes notes.json about half a second after typing stops, so an unsent message s
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.send -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 149–161](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L149-L161)
+[`src/renderer/src/views/PanelView.tsx`, lines 201–213](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L201-L213)
 
 ```tsx
 async function send() {
@@ -1858,7 +2064,7 @@ The other two reasons, `busy` and `empty`, are ignored: `canSend` already rules 
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.askInClaudeDesktop -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 163–175](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L163-L175)
+[`src/renderer/src/views/PanelView.tsx`, lines 215–227](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L215-L227)
 
 ```tsx
 async function askInClaudeDesktop() {
@@ -1903,7 +2109,7 @@ Claude automatically" on) carries on in the main process; the panel isn't told h
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.toggleFavorite -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 177–179](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L177-L179)
+[`src/renderer/src/views/PanelView.tsx`, lines 229–231](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L229-L231)
 
 ```tsx
 async function toggleFavorite(app: PortalApp, favorite: boolean) {
@@ -1921,13 +2127,19 @@ with the starred apps first.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.openApp -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 181–186](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L181-L186)
+[`src/renderer/src/views/PanelView.tsx`, lines 233–244](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L233-L244)
 
 ```tsx
 async function openApp(app: PortalApp) {
-  // On success the main process closes the panel; the browser opens the app.
-  if (!(await window.assist.apps.open(app.id))) {
-    showToast(`Couldn't open ${app.name}. Try it from the portal.`, 'error')
+  // The tile spins until the browser is opening (JumpCloud can take a few seconds to give the
+  // sign-in link); on success the main process closes the panel.
+  setOpeningApp(app.id)
+  try {
+    if (!(await window.assist.apps.open(app.id))) {
+      showToast(`Couldn't open ${app.name}. Try it from the portal.`, 'error')
+    }
+  } finally {
+    setOpeningApp((current) => (current === app.id ? null : current))
   }
 }
 ```
@@ -1939,19 +2151,69 @@ JumpCloud for the app's sign-in link and opens it in the browser (see [Your apps
 As the comment says, if it works the main process closes the panel; if there was no link, the
 panel stays open with a toast, and the portal itself is one click away at the bottom of the list.
 
+- `setOpeningApp(app.id)`: JumpCloud can take a few seconds to give the link, so the app's tile
+  shows a spinner meanwhile, and the user can see the click worked.
+- `finally {`: runs whether opening worked, failed or threw, so the spinner never stays on.
+- `setOpeningApp((current) => (current === app.id ? null : current))`: passing a function gives
+  the latest value. The spinner is cleared only if it's still this app's: if the user clicked a
+  second app meanwhile, its spinner stays.
+
+#### `openIssue`, `report`, `disconnectAtlassian`
+
+<!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.openIssue,report,disconnectAtlassian -->
+
+[`src/renderer/src/views/PanelView.tsx`, lines 246–266](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L246-L266)
+
+```tsx
+/** Opens a Jira issue in the card if connected to Atlassian, otherwise in the browser. */
+function openIssue(key: string) {
+  setSettingsOpen(false)
+  if (atlassianConnected) setIssueKey(key)
+  else if (atlassianSite) void window.assist.openExternal(browseUrl(atlassianSite, key))
+}
+
+/** Starts an IT request from what's in the text box. */
+function report() {
+  setSettingsOpen(false)
+  setIssueKey(null)
+  setServiceDeskTab('new')
+  setView('servicedesk')
+}
+
+async function disconnectAtlassian() {
+  setSettingsOpen(false)
+  setIssueKey(null)
+  await window.assist.atlassian.signOut()
+  showToast('Disconnected from Atlassian')
+}
+```
+
+<!-- /code -->
+
+- `openIssue(key)`: as its comment says, opens a Jira issue in the card if connected to Atlassian
+  (`setIssueKey(key)`, and `page` below shows an `IssueView` for it), otherwise in the browser.
+  `browseUrl()` (from `src/shared/jira.ts`) makes the issue's address on the company's site. The
+  pages, the notifications and the text box's Open buttons all come here.
+- `report()`: **Report to IT** under the text box: as its comment says, starts an IT request from
+  what's in the text box, by showing the service desk page on New request. The form there picks
+  the text up itself.
+- `disconnectAtlassian()`: **Disconnect Atlassian** in the settings menu. The main process forgets
+  the connection, and the new `sign-in` state arrives through `onAtlassianState`, so the Jira page
+  shows its Connect button again.
+
 #### `attachLatest`, `removeAttachment`, `openAttachment`
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.attachLatest,removeAttachment,openAttachment -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 188–204](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L188-L204)
+[`src/renderer/src/views/PanelView.tsx`, lines 268–284](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L268-L284)
 
 ```tsx
 async function attachLatest() {
   const result = await window.assist.notes.attachLatestScreenshot()
   if (result.ok) setAttachments(result.notes.attachments)
   else if (result.reason === 'no-screenshots') {
-    showToast('No screenshots yet. Take one with the camera button.')
-  } else showToast('That screenshot is already attached')
+    showToast('No screenshots yet. Take one with the camera button.', 'error')
+  } else showToast('No more screenshots to attach', 'error')
 }
 
 async function removeAttachment(attachment: Attachment) {
@@ -1970,10 +2232,11 @@ async function openAttachment(attachment: Attachment) {
 The screenshot chips on the draft. Each asks the main process, which owns the draft, and shows the
 result.
 
-- `window.assist.notes.attachLatestScreenshot()`: the main process finds the newest file in the
-  screenshots folder and adds it to the draft.
-- `else showToast('That screenshot is already attached')`: the only other failure,
-  `already-attached`.
+- `window.assist.notes.attachLatestScreenshot()`: the main process adds the newest screenshot
+  that isn't attached yet, so each click goes one further back.
+- `'no-screenshots'`: there are none at all, so the toast says how to take one.
+- `else showToast('No more screenshots to attach', 'error')`: the only other failure, `no-more`:
+  every screenshot is already attached. Both are shown in red, as errors.
 - `window.assist.notes.removeAttachment(attachment.id)`: returns the updated draft, whose
   attachment list the panel adopts.
 - `window.assist.screenshots.open(attachment.path)`: opens the file in the default image viewer;
@@ -1983,7 +2246,7 @@ result.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.copy -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 206–209](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L206-L209)
+[`src/renderer/src/views/PanelView.tsx`, lines 286–289](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L286-L289)
 
 ```tsx
 async function copy(text: string) {
@@ -2001,7 +2264,7 @@ The Copy button on Claude's replies. The main process writes the text to the cli
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.signOut,clearText,uninstall,newConversation,setEffort,toggleAutoSend -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 211–244](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L211-L244)
+[`src/renderer/src/views/PanelView.tsx`, lines 291–324](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L291-L324)
 
 ```tsx
 async function signOut() {
@@ -2068,7 +2331,7 @@ Settings menu actions.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.closeSettingsOnOutsideClick -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 246–252](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L246-L252)
+[`src/renderer/src/views/PanelView.tsx`, lines 326–332](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L326-L332)
 
 ```tsx
 // Clicking anywhere else in the panel closes the settings menu.
@@ -2098,7 +2361,7 @@ the panel (`BubbleController.panelBlurred`), and the mode effect above closes th
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.signInPrompt,banner -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 254–299](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L254-L299)
+[`src/renderer/src/views/PanelView.tsx`, lines 334–379](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L334-L379)
 
 ```tsx
 const signInPrompt =
@@ -2197,7 +2460,7 @@ one saying Claude Desktop isn't installed. With the built-in chat, it depends on
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.settingsIndex -->
 
-[`src/renderer/src/views/PanelView.tsx`, line 301](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L301)
+[`src/renderer/src/views/PanelView.tsx`, line 381](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L381)
 
 ```tsx
 const settingsIndex = branding.actions.indexOf('settings')
@@ -2207,3 +2470,125 @@ const settingsIndex = branding.actions.indexOf('settings')
 
 Where the gear is in the tenant's list of icons (`actions` in tenant.json), counting from the
 bubble. It's `-1` if the tenant doesn't show Settings, and then the menu is never drawn.
+
+#### `issueKeys`, `unreadNotifications`, `requestNews`, `pageContent`, `page`
+
+<!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.issueKeys,unreadNotifications,requestNews,pageContent,page -->
+
+[`src/renderer/src/views/PanelView.tsx`, lines 382–458](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L382-L458)
+
+```tsx
+// Only keys of real projects, once the projects are known.
+const issueKeys = atlassianSite
+  ? findIssueKeys(draft).filter(
+      (key) =>
+        !atlassianConnected ||
+        !projectKeys ||
+        projectKeys.includes(key.slice(0, key.lastIndexOf('-'))),
+    )
+  : []
+
+const unreadNotifications = feed.notifications.items.filter((n) => n.unread).length
+
+const requestNews = feed.requests.items.filter((r) => r.news).length
+
+const pageContent =
+  view === 'apps' && branding.portalName ? (
+    <AppsList
+      open={open}
+      state={apps}
+      appName={branding.appName}
+      portalName={branding.portalName}
+      favorites={settings.favoriteApps}
+      onToggleFavorite={(app, favorite) => void toggleFavorite(app, favorite)}
+      onOpenApp={(app) => void openApp(app)}
+      openingId={openingApp}
+      onOpenPortal={() => void window.assist.apps.openPortal()}
+      onSignIn={() => void window.assist.apps.signIn()}
+      onCancelSignIn={() => void window.assist.apps.cancelSignIn()}
+      onRetry={() => void window.assist.apps.get(true).then(setApps)}
+    />
+  ) : view === 'jira' && atlassianSite ? (
+    <JiraPage
+      open={open}
+      state={atlassian}
+      feed={feed}
+      appName={branding.appName}
+      site={atlassianSite}
+      onOpenIssue={openIssue}
+    />
+  ) : view === 'servicedesk' && requestTypes ? (
+    <ServiceDeskPage
+      open={open}
+      initialTab={serviceDeskTab}
+      requestTypes={requestTypes}
+      atlassian={atlassianSite ? atlassian : null}
+      feed={feed}
+      appName={branding.appName}
+      draft={draft}
+      attachments={attachments}
+      onAttachLatest={() => void attachLatest()}
+      onOpenAttachment={(attachment) => void openAttachment(attachment)}
+      onRemoveAttachment={(attachment) => void removeAttachment(attachment)}
+      onOpenIssue={openIssue}
+      showToast={showToast}
+    />
+  ) : null
+
+// An issue opens over the page it was opened from, which stays (hidden) so Back finds it as it
+// was: the same tab, search or half-filled form.
+const page =
+  issueKey || pageContent ? (
+    <>
+      {issueKey && (
+        <IssueView
+          key={issueKey}
+          issueKey={issueKey}
+          inClaudeDesktop={inClaudeDesktop}
+          onBack={() => setIssueKey(null)}
+          onAskedInChat={() => {
+            setIssueKey(null)
+            setView('ask')
+          }}
+          showToast={showToast}
+        />
+      )}
+      <div hidden={issueKey !== null} className="contents">
+        {pageContent}
+      </div>
+    </>
+  ) : null
+```
+
+<!-- /code -->
+
+What the card shows besides the text box, worked out on every render.
+
+- `issueKeys`: the issue keys in the text box (`findIssueKeys()`, at most three), for its Open
+  buttons. As the comment says, once connected and the project keys are known, only keys of real
+  projects count: `key.slice(0, key.lastIndexOf('-'))` is the project part (`ISD` of `ISD-12`).
+  Until then, every key that looks right is offered. Without an Atlassian site, none.
+- `unreadNotifications`, `requestNews`: how many notifications have a dot, and how many requests
+  have news, for the dots on the bell and the service desk icon.
+- `pageContent`: the page for `view`: an `AppsList` (see [Your apps](10-apps.md)), a `JiraPage` or
+  a `ServiceDeskPage` (see [The Jira and service desk pages](12-atlassian-pages.md)); `null` for
+  the text box. Each is only shown when the tenant has what it needs (`portalName`,
+  `atlassianSite`, `requestTypes`), which also gives TypeScript definite values for their props.
+- `openingId={openingApp}`: which tile of the Apps list shows the "opening" spinner.
+- `favorites={settings.favoriteApps}`, `onToggleFavorite={...}`: the starred apps, from the
+  panel's own copy of the settings, and what a star click does (`toggleFavorite`, above).
+- `onRetry={() => void window.assist.apps.get(true).then(setApps)}`: the list's Retry and Refresh
+  load it again (`true` means "even if already loaded").
+- `atlassian={atlassianSite ? atlassian : null}`: the service desk page gets the Atlassian
+  connection only when there's a site; without one it shows just the form.
+- `draft={draft}`, `attachments={attachments}`: the service desk form starts from the text box,
+  and shares its screenshots, with the same attach, open and remove handlers.
+- `page`: `pageContent`, with an issue over it when one is open. As the comment says, the page the
+  issue was opened from stays, hidden, so Back finds it as it was: the same tab, search or
+  half-filled form. `<div hidden={issueKey !== null} className="contents">` hides it without
+  removing it; `contents` makes the wrapper itself take no space, so the page lays out as if it
+  weren't there.
+- `<IssueView key={issueKey} ... />`: `key` makes React create a new `IssueView` for each issue,
+  rather than reusing one with the old issue's state. `onAskedInChat` closes the issue and shows
+  the text box, where the built-in chat's answer arrives.
+- `<>` and `</>`: a _fragment_, which groups the two without adding an element of its own.

@@ -70,6 +70,22 @@ describe('findLatestScreenshot', () => {
     await utimes(other, new Date(2026, 9, 4), new Date(2026, 9, 4))
     expect(await findLatestScreenshot(dir)).toBe(newer)
   })
+
+  it('passes over screenshots it is told to skip, going one further back each time', async () => {
+    const paths = ['01', '02', '03'].map((day) => join(dir, `Screenshot 2026-10-${day} 090000.png`))
+    for (const [i, path] of paths.entries()) {
+      await writeFile(path, 'x')
+      await utimes(path, new Date(2026, 9, i + 1), new Date(2026, 9, i + 1))
+    }
+    const attached: string[] = []
+    const next = () => findLatestScreenshot(dir, (path) => attached.includes(path))
+    for (const expected of [paths[2], paths[1], paths[0]]) {
+      const found = await next()
+      expect(found).toBe(expected)
+      attached.push(found!)
+    }
+    expect(await next()).toBeNull()
+  })
 })
 
 describe('isInsideDir', () => {

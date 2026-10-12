@@ -9,13 +9,28 @@ $env:TENANT = 'morse-micro'; npm run dev
 
 A tenant folder contains:
 
-- `tenant.json`: Company and app names, accent colour, the action icons shown above the bubble (listed from the bubble upward), where chats happen, and the sign-in settings. Validated at startup and by `npm test`.
+- `tenant.json`: Company and app names, accent colour, the action icons shown above the bubble (listed from the bubble upward), where chats happen, the company's portal, service desk and Atlassian site, and the sign-in settings. Validated at startup and by `npm test`.
 - `logo.png` or `logo.svg`: The logo. `logo.png` is also the tray icon and the `.exe` icon. If both exist, `logo.png` is used.
 
-Available actions: `ask`, `apps`, `servicedesk`, `screenshot`, `theme` (light or dark mode),
-`settings`, `bounce`, `close`.
+Available actions: `ask`, `apps`, `jira`, `servicedesk`, `screenshot`, `theme` (light or dark
+mode), `settings`, `bounce`, `close`.
+
 `servicedesk` needs `serviceDesk`: `{ "url": "https://…" }`, the company's IT service desk (Morse
-Micro's Jira Service Management portal), opened in the browser.
+Micro's Jira Service Management help centre), opened in the browser. With `serviceDesk.requests`
+the icon opens a page instead, for raising requests from the panel (and following them, with
+`atlassian`):
+
+- `requests.portalId`: the IT portal's number (`…/servicedesk/customer/portal/<id>`).
+- `requests.projectKey`: the Jira project behind it (`ISD`), for My requests.
+- `requests.requestTypes`: `[{ "id": "1561", "name": "Other IT Issue" }, …]`, the request types
+  offered; the first is the one **Report to IT** starts with. Each ID is the number at the end of
+  the type's form address (`…/portal/<portalId>/create/<id>`).
+
+`jira` needs `atlassian`, the company's Atlassian site: `site` (`https://morsemicro.atlassian.net`),
+`mcpServer` (Atlassian's Remote MCP server, `https://mcp.atlassian.com/v1/mcp` if left out),
+`redirectPort` (the local port the browser returns to while connecting, `47623`) and
+`knowledgeSpaces` (Confluence space keys whose pages are suggested while writing a request,
+`["INFRA"]`). See [docs/ATLASSIAN_SETUP.md](../docs/ATLASSIAN_SETUP.md).
 
 `startPage`: what the panel opens on, `ask` (the text box, the default) or `apps` (the Apps list,
 Morse Micro). The other page is behind its icon: `ask` ("Ask Claude") when starting on the apps,

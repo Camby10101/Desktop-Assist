@@ -8,6 +8,7 @@
 export const ACTION_IDS = [
   'ask',
   'apps',
+  'jira',
   'servicedesk',
   'screenshot',
   'theme',
@@ -21,6 +22,8 @@ export type ActionId = (typeof ACTION_IDS)[number]
 export const ACTIONS = {
   ask: { label: 'Ask Claude', kind: 'popover' },
   apps: { label: 'Your apps', kind: 'popover' },
+  jira: { label: 'Jira: notifications and search', kind: 'popover' },
+  // A page in the panel when the tenant lists request types (see PanelView); otherwise a link.
   servicedesk: { label: 'IT service desk', kind: 'command' },
   screenshot: { label: 'Take screenshot', kind: 'command' },
   theme: { label: 'Light or dark mode', kind: 'switch' },

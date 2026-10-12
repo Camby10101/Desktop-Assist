@@ -1,6 +1,8 @@
 // Reading JumpCloud's answers. The MCP Server for Users documents its tools but not the exact
 // fields they return, so these readers look for the usual names and ignore what they don't know.
 
+import { payloadOf, type ToolResult } from '../mcp/toolResult'
+
 /** An app from the portal, before its logo is fetched. */
 export interface PortalAppInfo {
   id: string
@@ -8,13 +10,6 @@ export interface PortalAppInfo {
   logoUrl: string | null
   /** The sign-in link the list itself gave, if any (launch_application is asked first). */
   launchUrl: string | null
-}
-
-/** What an MCP tool call returns (the parts used here). */
-export interface ToolResult {
-  content?: unknown
-  structuredContent?: unknown
-  isError?: boolean
 }
 
 type Item = Record<string, unknown>
@@ -37,22 +32,6 @@ export function httpsUrl(value: unknown): string | null {
   } catch {
     return null
   }
-}
-
-/** The tool's answer as data: its structured content, or the JSON in its first text block. */
-export function payloadOf(result: ToolResult): unknown {
-  if (result.structuredContent !== undefined) return result.structuredContent
-  const blocks = Array.isArray(result.content) ? result.content : []
-  for (const block of blocks) {
-    if (isObject(block) && block['type'] === 'text' && typeof block['text'] === 'string') {
-      try {
-        return JSON.parse(block['text'])
-      } catch {
-        return block['text']
-      }
-    }
-  }
-  return undefined
 }
 
 /** The list inside the answer: the answer itself, or an array under a usual key. */

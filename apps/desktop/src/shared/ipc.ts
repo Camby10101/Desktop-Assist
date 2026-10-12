@@ -4,13 +4,22 @@ import type {
   ActionResult,
   AppsState,
   AppState,
+  AskAboutIssueResult,
   AskResult,
+  AtlassianState,
   AttachResult,
   AuthStatus,
   ChatMessage,
+  ConfluencePage,
   Effort,
+  IssuePrompt,
+  IssueResult,
+  JiraFeed,
   Mode,
+  NewRequest,
   Notes,
+  RaiseResult,
+  SearchResult,
   SendResult,
   Settings,
   Theme,
@@ -57,6 +66,25 @@ export const IPC = {
   appsCancelSignIn: 'assist:apps-cancel-sign-in',
   appsOpen: 'assist:apps-open',
   appsOpenPortal: 'assist:apps-open-portal',
+  atlassianGet: 'assist:atlassian-get',
+  atlassianSignIn: 'assist:atlassian-sign-in',
+  atlassianCancelSignIn: 'assist:atlassian-cancel-sign-in',
+  atlassianSignOut: 'assist:atlassian-sign-out',
+  atlassianRetry: 'assist:atlassian-retry',
+  atlassianFeed: 'assist:atlassian-feed',
+  atlassianMarkNotificationsRead: 'assist:atlassian-mark-notifications-read',
+  atlassianMarkRequestsRead: 'assist:atlassian-mark-requests-read',
+  atlassianSearch: 'assist:atlassian-search',
+  atlassianIssue: 'assist:atlassian-issue',
+  atlassianTransition: 'assist:atlassian-transition',
+  atlassianComment: 'assist:atlassian-comment',
+  atlassianLogWork: 'assist:atlassian-log-work',
+  atlassianArticles: 'assist:atlassian-articles',
+  atlassianProjectKeys: 'assist:atlassian-project-keys',
+  atlassianAsk: 'assist:atlassian-ask',
+  serviceDeskPcDetails: 'assist:service-desk-pc-details',
+  serviceDeskRaise: 'assist:service-desk-raise',
+  serviceDeskOpenMyRequests: 'assist:service-desk-open-my-requests',
   // main → renderer
   modeChanged: 'assist:mode-changed',
   cornerChanged: 'assist:corner-changed',
@@ -65,6 +93,8 @@ export const IPC = {
   chatMessage: 'assist:chat-message',
   chatReset: 'assist:chat-reset',
   appsState: 'assist:apps-state',
+  atlassianState: 'assist:atlassian-state',
+  jiraFeed: 'assist:jira-feed',
 } as const
 
 /** The API the preload exposes to renderers as `window.assist`. */
@@ -85,6 +115,7 @@ export interface AssistApi {
   copyText(text: string): Promise<void>
   notes: {
     setText(text: string): void
+    /** Attaches the newest screenshot that isn't attached yet (each click goes one further back). */
     attachLatestScreenshot(): Promise<AttachResult>
     removeAttachment(id: string): Promise<Notes>
     /** Empties the text box and removes the attached screenshots (the files are kept). */
@@ -143,6 +174,48 @@ export interface AssistApi {
     open(id: string): Promise<boolean>
     openPortal(): Promise<void>
   }
+  /** Jira and Confluence (only when the tenant has `atlassian`). */
+  atlassian: {
+    get(): Promise<AtlassianState>
+    /** Connects to Atlassian in the browser; progress via onAtlassianState. */
+    signIn(): Promise<void>
+    cancelSignIn(): Promise<void>
+    /** Forgets the connection. */
+    signOut(): Promise<void>
+    /** Tries the saved connection again after an error. */
+    retry(): Promise<void>
+    /** Notifications and the user's IT requests; checked again first with `refresh`. */
+    feed(refresh?: boolean): Promise<JiraFeed>
+    markNotificationsRead(): Promise<JiraFeed>
+    /** Marks what's new on one request (or all of them) as seen. */
+    markRequestsRead(key?: string): Promise<JiraFeed>
+    search(query: string): Promise<SearchResult>
+    issue(key: string): Promise<IssueResult>
+    transition(key: string, transitionId: string): Promise<IssueResult>
+    comment(key: string, body: string): Promise<IssueResult>
+    /** Jira's format: "30m", "1h 30m", "2d". */
+    logWork(key: string, timeSpent: string): Promise<IssueResult>
+    /** How-to pages about what the user is typing in a new request. */
+    articles(text: string): Promise<ConfluencePage[]>
+    /** The Jira projects' keys, or null if they can't be listed (e.g. not connected). */
+    projectKeys(): Promise<string[] | null>
+    /**
+     * Asks Claude about the issue, with its details: in Claude Desktop (the panel closes), or the
+     * chat in the panel.
+     */
+    ask(key: string, prompt: IssuePrompt): Promise<AskAboutIssueResult>
+  }
+  /** Raising IT requests (only when the tenant's service desk lists request types). */
+  serviceDesk: {
+    /** What "Include PC details" adds. */
+    pcDetails(): Promise<string>
+    /**
+     * Opens the portal's form for the request, filled in, with the text box's screenshots on the
+     * clipboard to paste. Closes the panel if it worked.
+     */
+    raise(request: NewRequest): Promise<RaiseResult>
+    openMyRequests(): Promise<void>
+  }
   /** Starts Desktop Assist's uninstaller and quits (installed copies only). */
   uninstall(): Promise<UninstallResult>
   onModeChanged(callback: (mode: Mode) => void): () => void
@@ -154,4 +227,6 @@ export interface AssistApi {
   onChatMessage(callback: (message: ChatMessage) => void): () => void
   onChatReset(callback: () => void): () => void
   onAppsState(callback: (state: AppsState) => void): () => void
+  onAtlassianState(callback: (state: AtlassianState) => void): () => void
+  onJiraFeed(callback: (feed: JiraFeed) => void): () => void
 }

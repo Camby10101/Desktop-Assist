@@ -44,10 +44,54 @@ export const PortalSchema = z.object({
 
 export type PortalConfig = z.infer<typeof PortalSchema>
 
-/** The company's IT service desk, opened by the `servicedesk` icon. */
+/**
+ * The company's IT service desk, opened by the `servicedesk` icon. With `requests`, the icon opens
+ * a page for raising requests (filled in on the panel, finished on the help centre portal) and, with
+ * `atlassian` too, for following the user's own requests.
+ */
 export const ServiceDeskSchema = z.object({
+  /** The help centre (all portals). */
   url: z.url({ protocol: /^https$/ }),
+  requests: z
+    .object({
+      /** The IT portal's number, from its address: …/servicedesk/customer/portal/<id>. */
+      portalId: z.string().regex(/^\d+$/),
+      /** The Jira project behind the portal, for My requests. */
+      projectKey: z.string().regex(/^[A-Z][A-Z0-9_]+$/),
+      /**
+       * The request types offered, the first one for "Report a problem". Each ID is the number at
+       * the end of the type's form address: …/portal/<portalId>/create/<id>.
+       */
+      requestTypes: z
+        .array(z.object({ id: z.string().regex(/^\d+$/), name: z.string().min(1) }))
+        .min(1),
+    })
+    .optional(),
 })
+
+export type ServiceDeskConfig = z.infer<typeof ServiceDeskSchema>
+
+/**
+ * The company's Atlassian site, for the Jira page (notifications, search, issues) and My requests.
+ * Each user connects once, in the browser, through Atlassian's Remote MCP server (no secret in the
+ * app); at Morse Micro that sign-in goes through JumpCloud.
+ */
+const AtlassianFields = z.object({
+  /** The site, e.g. https://morsemicro.atlassian.net. */
+  site: z.url({ protocol: /^https$/ }),
+  mcpServer: z.url({ protocol: /^https?$/ }),
+  /** The browser comes back to http://127.0.0.1:<port>/callback after connecting. */
+  redirectPort: z.number().int().min(1024).max(65535),
+  /** Confluence spaces (their keys) searched for how-to articles while raising an IT request. */
+  knowledgeSpaces: z.array(z.string().regex(/^[A-Za-z0-9~_]+$/)),
+})
+
+export const AtlassianSchema = AtlassianFields.extend({
+  mcpServer: AtlassianFields.shape.mcpServer.default('https://mcp.atlassian.com/v1/mcp'),
+  knowledgeSpaces: AtlassianFields.shape.knowledgeSpaces.default([]),
+})
+
+export type AtlassianConfig = z.infer<typeof AtlassianSchema>
 
 export type SignInConfig = z.infer<typeof SignInSchema>
 export type ClaudeAccessConfig = z.infer<typeof ClaudeAccessSchema>
@@ -86,6 +130,8 @@ export const TenantSchema = z
     portal: PortalSchema.optional(),
     /** Needed for the service desk icon. */
     serviceDesk: ServiceDeskSchema.optional(),
+    /** Needed for the Jira icon. */
+    atlassian: AtlassianSchema.optional(),
     /** Needed for the built-in chat only. */
     signIn: SignInSchema.optional(),
     claudeAccess: ClaudeAccessSchema.optional(),
@@ -102,6 +148,9 @@ export const TenantSchema = z
   .refine((tenant) => !tenant.actions.includes('servicedesk') || tenant.serviceDesk !== undefined, {
     message: 'the servicedesk action needs serviceDesk',
   })
+  .refine((tenant) => !tenant.actions.includes('jira') || tenant.atlassian !== undefined, {
+    message: 'the jira action needs atlassian',
+  })
   .refine((tenant) => tenant.startPage !== 'apps' || tenant.portal !== undefined, {
     message: 'starting on the apps list needs portal',
   })
@@ -115,7 +164,17 @@ export function brandingOf(tenant: Tenant): Branding {
   const { companyName, appName, accentColor, actions, chatApp } = tenant
   const portalName = tenant.portal?.name ?? null
   const { startPage } = tenant
-  return { companyName, appName, accentColor, actions, chatApp, portalName, startPage }
+  return {
+    companyName,
+    appName,
+    accentColor,
+    actions,
+    chatApp,
+    portalName,
+    startPage,
+    atlassianSite: tenant.atlassian?.site ?? null,
+    requestTypes: tenant.serviceDesk?.requests?.requestTypes ?? null,
+  }
 }
 
 /** The tenant.json settings still to be filled in before anyone can sign in, by name. */
@@ -133,13 +192,15 @@ export function missingSettings(signIn: SignInConfig, access: ClaudeAccessConfig
 
 /**
  * Dev runs only: a JSON file (path in DESKTOP_ASSIST_DEV_CONFIG) can override `chatApp`,
- * `startPage`, `portal`, `signIn` and `claudeAccess`, so the app can be pointed at a test identity provider without editing
- * tenant.json. Installed builds never read it.
+ * `startPage`, `portal`, `atlassian`, `signIn` and `claudeAccess`, so the app can be pointed at
+ * test servers without editing tenant.json. Installed builds never read it.
  */
 export const DevOverrideSchema = z.object({
   chatApp: z.enum(CHAT_APPS).optional(),
   startPage: z.enum(START_PAGES).optional(),
   portal: PortalSchema.partial().optional(),
+  // Without the defaults, so a partial override can't reset what tenant.json sets.
+  atlassian: AtlassianFields.partial().optional(),
   signIn: SignInSchema.partial().optional(),
   claudeAccess: ClaudeAccessSchema.partial().optional(),
 })

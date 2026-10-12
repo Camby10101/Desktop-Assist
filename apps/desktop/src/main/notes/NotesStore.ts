@@ -65,8 +65,13 @@ export class NotesStore {
   }
 
   /** Adds a screenshot to the text box. Returns null if that file is already attached. */
+  /** Whether the screenshot is already attached to the draft. */
+  isAttached(path: string): boolean {
+    return this.notes.attachments.some((a) => samePath(a.path, path))
+  }
+
   addAttachment(path: string): Notes | null {
-    if (this.notes.attachments.some((a) => samePath(a.path, path))) return null
+    if (this.isAttached(path)) return null
     const attachment = {
       id: randomUUID(),
       path,

@@ -39,6 +39,79 @@ export function nearestCorner(workArea: Rect, bubble: Point): Corner {
   return `${top ? 'top' : 'bottom'}-${left ? 'left' : 'right'}`
 }
 
+/**
+ * Where a bouncing bubble may go: every display's work area, plus the parts of a taskbar that lie
+ * between two displays (where a monitor stacked above another has its taskbar along the edge they
+ * share, say), so the bubble can pass over that taskbar from one display to the other. A taskbar
+ * on an outer edge stays a wall.
+ */
+export function travelAreas(displays: { bounds: Rect; workArea: Rect }[]): Rect[] {
+  const areas = displays.map((display) => display.workArea)
+  for (const { bounds: b, workArea: w } of displays) {
+    // The strips of the screen outside its work area (normally just the taskbar's).
+    const strips = [
+      { side: 'top', rect: { x: b.x, y: b.y, width: b.width, height: w.y - b.y } },
+      {
+        side: 'bottom',
+        rect: {
+          x: b.x,
+          y: w.y + w.height,
+          width: b.width,
+          height: b.y + b.height - (w.y + w.height),
+        },
+      },
+      { side: 'left', rect: { x: b.x, y: b.y, width: w.x - b.x, height: b.height } },
+      {
+        side: 'right',
+        rect: {
+          x: w.x + w.width,
+          y: b.y,
+          width: b.x + b.width - (w.x + w.width),
+          height: b.height,
+        },
+      },
+    ].filter((strip) => strip.rect.width > 0 && strip.rect.height > 0)
+    for (const { side, rect } of strips) {
+      for (const { bounds: n } of displays) {
+        if (n === b) continue
+        const bridge = bridgeTo(side, rect, b, n)
+        if (bridge) areas.push(bridge)
+      }
+    }
+  }
+  return areas
+}
+
+/** Edges this close count as touching (scaled displays can be a pixel out). */
+const TOUCHING = 1
+
+/**
+ * The part of `strip` (on `side` of the display with `bounds`) that another display (`other`)
+ * lies right beyond, or null if `other` isn't there.
+ */
+function bridgeTo(side: string, strip: Rect, bounds: Rect, other: Rect): Rect | null {
+  const near = (a: number, b: number) => Math.abs(a - b) <= TOUCHING
+  const vertical = side === 'top' || side === 'bottom'
+  const touching =
+    side === 'top'
+      ? near(other.y + other.height, bounds.y)
+      : side === 'bottom'
+        ? near(other.y, bounds.y + bounds.height)
+        : side === 'left'
+          ? near(other.x + other.width, bounds.x)
+          : near(other.x, bounds.x + bounds.width)
+  if (!touching) return null
+  // Only as far along the edge as the other display reaches.
+  if (vertical) {
+    const from = Math.max(strip.x, other.x)
+    const to = Math.min(strip.x + strip.width, other.x + other.width)
+    return to > from ? { ...strip, x: from, width: to - from } : null
+  }
+  const from = Math.max(strip.y, other.y)
+  const to = Math.min(strip.y + strip.height, other.y + other.height)
+  return to > from ? { ...strip, y: from, height: to - from } : null
+}
+
 /** Every position where the bubble is fully inside the work area. */
 export function travelBox(workArea: Rect): TravelBox {
   return {

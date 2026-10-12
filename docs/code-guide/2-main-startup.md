@@ -7,8 +7,8 @@ windows, the files, the tray icon and the network. This page covers how it start
 pages talk to it. `index.ts` creates every service and wires them together, `ipc.ts` answers the
 pages' requests, and the smaller files hold the problem log, the tenant config, the user's
 preferences, the commands behind the action icons, uninstalling and the tray icon. The services
-themselves (sign-in, Claude, the bubble, the draft and screenshots, Claude Desktop, the Apps list)
-each have their own page.
+themselves (sign-in, Claude, the bubble, the draft and screenshots, Claude Desktop, the Apps list,
+Jira and the service desk) each have their own page.
 
 ## `src/main/index.ts`: startup and shutdown
 
@@ -23,7 +23,9 @@ stages:
    questions go depends on the tenant's `chatApp`: `start()` either sets up the built-in chat (with
    [`startBuiltInChat()`](#startbuiltinchat)) or hands questions over to the Claude Desktop app
    (`ClaudeDesktop`, see [Claude Desktop](9-claude-desktop.md)). If the tenant has a `portal`, it
-   also sets up the Apps list (`PortalApps`, see [Your apps](10-apps.md)).
+   also sets up the Apps list (`PortalApps`, see [Your apps](10-apps.md)). With `atlassian` it
+   connects to Jira (`Atlassian`), and with the service desk's request types it sets up raising
+   IT requests from the panel (`ServiceDesk`); see [Jira and the service desk](11-atlassian.md).
 3. **When the app quits**, a `before-quit` handler saves the draft before letting it close.
 
 The key idea is that the services don't know about each other or about Electron's globals. Each
@@ -34,7 +36,7 @@ tests can drive them with fakes. `index.ts` is the only file that knows about al
 
 <!-- code: apps/desktop/src/main/index.ts#SHUTDOWN_TIMEOUT_MS,PRODUCT_NAME,controller,tray -->
 
-[`src/main/index.ts`, lines 56–72](../../apps/desktop/src/main/index.ts#L56-L72)
+[`src/main/index.ts`, lines 61–77](../../apps/desktop/src/main/index.ts#L61-L77)
 
 ```ts
 const SHUTDOWN_TIMEOUT_MS = 2000
@@ -97,7 +99,7 @@ backend, the conversation and the JumpCloud sign-in) are in a separate function,
 
 <!-- code: apps/desktop/src/main/index.ts#start.tenant -->
 
-[`src/main/index.ts`, line 84](../../apps/desktop/src/main/index.ts#L84)
+[`src/main/index.ts`, line 89](../../apps/desktop/src/main/index.ts#L89)
 
 ```ts
 const tenant = await withDevOverrides(TenantSchema.parse(tenantConfig))
@@ -124,7 +126,7 @@ const tenant = await withDevOverrides(TenantSchema.parse(tenantConfig))
 
 <!-- code: apps/desktop/src/main/index.ts#start.userData,screenshotsDir,actionCount,log,notes,settings -->
 
-[`src/main/index.ts`, lines 88–99](../../apps/desktop/src/main/index.ts#L88-L99)
+[`src/main/index.ts`, lines 93–104](../../apps/desktop/src/main/index.ts#L93-L104)
 
 ```ts
 const userData = app.getPath('userData')
@@ -163,7 +165,7 @@ const settings = new SettingsService(join(userData, 'preferences.json'), screens
 
 <!-- code: apps/desktop/src/main/index.ts#start.bubbleWindow,panelWindow,windows,windowsReady,broadcast -->
 
-[`src/main/index.ts`, lines 102–111](../../apps/desktop/src/main/index.ts#L102-L111)
+[`src/main/index.ts`, lines 107–116](../../apps/desktop/src/main/index.ts#L107-L116)
 
 ```ts
 // The windows are created after the last `await`: from here to registerIpc() below nothing
@@ -207,7 +209,7 @@ page's request is handled, its handler has been registered.
 
 <!-- code: apps/desktop/src/main/index.ts#start.bubble -->
 
-[`src/main/index.ts`, lines 113–125](../../apps/desktop/src/main/index.ts#L113-L125)
+[`src/main/index.ts`, lines 118–130](../../apps/desktop/src/main/index.ts#L118-L130)
 
 ```ts
 const bubble = new BubbleController({
@@ -251,16 +253,36 @@ touches Electron directly; everything it needs is passed in here.
   keyboard focus, for example when the user clicks another app. The controller then closes the
   panel (unless it has only just opened).
 
-#### Screenshots
+#### Screenshots, notifications and the clipboard
 
-<!-- code: apps/desktop/src/main/index.ts#start.screenshots -->
+<!-- code: apps/desktop/src/main/index.ts#start.screenshots,notify,copyScreenshots -->
 
-[`src/main/index.ts`, lines 129–131](../../apps/desktop/src/main/index.ts#L129-L131)
+[`src/main/index.ts`, lines 134–155](../../apps/desktop/src/main/index.ts#L134-L155)
 
 ```ts
 const screenshots = new ScreenshotService(screenshotsDir, () =>
   screen.getDisplayMatching(bubbleWindow.getBounds()),
 )
+
+/**
+ * A Windows notification. Windows shows it in the bottom-right corner, over the bubble when it's
+ * there: clicking it does what clicking the bubble would.
+ */
+const notify = ({ title, body }: { title: string; body: string }) => {
+  if (!Notification.isSupported()) return
+  const notification = new Notification({ title, body })
+  notification.on('click', () => bubble.expand())
+  notification.show()
+}
+
+/** Screenshots go on the clipboard as one image, for pasting where a link can't carry them. */
+const copyScreenshots = async (paths: string[]) => {
+  const image = screenshots.forClipboard(paths)
+  if (!image) return false
+  const png = new Blob([image.toPNG()], { type: 'image/png' })
+  await clipboard.write([new ClipboardItem({ 'image/png': png })])
+  return true
+}
 ```
 
 <!-- /code -->
@@ -268,12 +290,32 @@ const screenshots = new ScreenshotService(screenshotsDir, () =>
 - `screen.getDisplayMatching(bubbleWindow.getBounds())`: the screenshot service is given a
   function rather than a fixed display, so each capture takes the display the bubble is on at
   that moment.
+- `notify`: a Windows notification, shared by three services: Claude Desktop (to say what's left
+  to do in Claude: paste the screenshot, or press Enter), the service desk (the screenshot is
+  ready to paste on the portal's form) and Atlassian (IT replied to a request). The panel can't
+  say these things, because it has closed by then. `if (!Notification.isSupported()) return`:
+  where Windows can't show notifications, nothing is shown.
+- `notification.on('click', () => bubble.expand())`: as the comment says, Windows shows
+  notifications in the bottom-right corner of the screen, which is where the bubble usually is.
+  Someone reaching for the bubble can easily click the notification instead, so clicking it opens
+  the panel, as the bubble would.
+- `copyScreenshots`: as the comment says, puts the attached screenshots on the clipboard as one
+  image, for pasting where a link can't carry them (Claude Desktop, and the portal's request form).
+  `screenshots.forClipboard(paths)` makes the image (several are stacked; see
+  [The draft, screenshots and safe files](6-drafts-and-screenshots.md)). `null` means a file is
+  missing, and `return false` lets the caller report `missing-screenshot`.
+- `new Blob([image.toPNG()], { type: 'image/png' })`: the image encoded as PNG and wrapped in a
+  `Blob` (a block of bytes labelled with its media type), which is what a clipboard item holds.
+- `clipboard.write([new ClipboardItem({ 'image/png': png })])`: puts the image on the Windows
+  clipboard, replacing whatever was there. This is Electron 44's clipboard API, modelled on the
+  browser's; Electron 44 removed the older `clipboard.writeImage()`. `write()` returns a promise,
+  hence the `await`.
 
 #### The chat: built in, or in Claude Desktop
 
 <!-- code: apps/desktop/src/main/index.ts#start.builtIn,claudeDesktop -->
 
-[`src/main/index.ts`, lines 134–176](../../apps/desktop/src/main/index.ts#L134-L176)
+[`src/main/index.ts`, lines 158–187](../../apps/desktop/src/main/index.ts#L158-L187)
 
 ```ts
 const builtIn =
@@ -295,13 +337,7 @@ const claudeDesktop =
     ? new ClaudeDesktop({
         isInstalled: () => app.getApplicationNameForProtocol(NEW_CHAT_LINK) !== '',
         openLink: (url) => shell.openExternal(url),
-        copyScreenshots: async (paths) => {
-          const image = screenshots.forClipboard(paths)
-          if (!image) return false
-          const png = new Blob([image.toPNG()], { type: 'image/png' })
-          await clipboard.write([new ClipboardItem({ 'image/png': png })])
-          return true
-        },
+        copyScreenshots,
         autoSend: () => settings.get().autoSend,
         sendInClaude: async (question, paste) => {
           const outcome = await sendInClaude({ question, paste })
@@ -309,14 +345,7 @@ const claudeDesktop =
           if (outcome !== 'sent') log(`Sending in Claude Desktop stopped: ${outcome}`)
           return outcome
         },
-        notify: ({ title, body }) => {
-          if (!Notification.isSupported()) return
-          const notification = new Notification({ title, body })
-          // Windows shows it in the bottom-right corner, over the bubble when it's there:
-          // clicking it should do what clicking the bubble would.
-          notification.on('click', () => bubble.expand())
-          notification.show()
-        },
+        notify,
         onError: (error) => log('Handing a question to Claude Desktop failed:', error),
       })
     : null
@@ -346,15 +375,8 @@ exists.
   registered, Electron returns an empty string.
 - `openLink: (url) => shell.openExternal(url)`: hands the `claude://` link to Windows, which opens
   it in Claude Desktop, the same way it opens a web link in the browser.
-- `screenshots.forClipboard(paths)`: the attached screenshots as one image (several are stacked;
-  see [The draft, screenshots and safe files](6-drafts-and-screenshots.md)). `null` means a file
-  is missing, and `return false` makes `ClaudeDesktop` report `missing-screenshot`.
-- `new Blob([image.toPNG()], { type: 'image/png' })`: the image encoded as PNG and wrapped in a
-  `Blob` (a block of bytes labelled with its media type), which is what a clipboard item holds.
-- `clipboard.write([new ClipboardItem({ 'image/png': png })])`: puts the image on the Windows
-  clipboard, replacing whatever was there. This is Electron 44's clipboard API, modelled on the
-  browser's; Electron 44 removed the older `clipboard.writeImage()`. `write()` returns a promise,
-  hence the `await`.
+- `copyScreenshots`: the helper above; `ClaudeDesktop` reports `missing-screenshot` when it
+  returns `false`.
 - `autoSend: () => settings.get().autoSend`: the user's "Send in Claude automatically" setting. A
   function rather than a value, so each question uses the setting as it is at that moment.
 - `sendInClaude: async (question, paste) => {`: presses Ctrl+V and Enter in Claude Desktop once it
@@ -363,33 +385,16 @@ exists.
   Claude Desktop stopped: not-ready", say). As the comment says, that isn't a failure as such:
   the user gets a notification saying what's left to do. But it's worth having in the log if
   someone reports that questions aren't being sent.
-- `notify: ({ title, body }) => {`: a Windows notification, used to say what's left to do in
-  Claude: paste the screenshot, or press Enter. The panel can't say it, because it closes as
-  Claude Desktop opens. `if (!Notification.isSupported()) return`: where Windows can't show
-  notifications, nothing is shown.
-- `notification.on('click', () => bubble.expand())`: as the comment says, Windows shows
-  notifications in the bottom-right corner of the screen, which is where the bubble usually is.
-  Someone reaching for the bubble can easily click the notification instead, so clicking it opens
-  the panel, as the bubble would.
+- `notify`: the helper above, to say what's left to do in Claude.
 - `onError: (error) => log('Handing a question to Claude Desktop failed:', error)`: if copying or
   opening fails, the panel shows a short message; if the sending helper can't run, the user gets
   a notification. Either way the log gets the details.
-
-Two statements follow:
-
-- `if (!builtIn) {`, `void rm(join(userData, 'jumpcloud-session.bin'), ...)`: with Claude
-  Desktop, a JumpCloud sign-in saved by the built-in chat (which Morse Micro used until 3.1) is no
-  longer needed, so the file is deleted rather than left on disk.
-- `void rm(join(userData, 'claude-api-key.bin'), { force: true }).catch(() => {})`: an earlier
-  version saved a Claude API key in this file. Nothing uses it now, so it's deleted. `force: true`
-  means "no error if it isn't there", and `.catch(() => {})` ignores any other failure. The
-  JumpCloud file above is deleted the same way.
 
 #### The Apps list
 
 <!-- code: apps/desktop/src/main/index.ts#start.netFetch,appsStatus,portalApps -->
 
-[`src/main/index.ts`, lines 177–202](../../apps/desktop/src/main/index.ts#L177-L202)
+[`src/main/index.ts`, lines 188–213](../../apps/desktop/src/main/index.ts#L188-L213)
 
 ```ts
 // Electron's fetch, so a proxy set in Windows is used.
@@ -436,8 +441,8 @@ icon (see [Your apps](10-apps.md)). It's only set up when the tenant has a `port
 - `let appsStatus`: the list's previous status, for the same reason as `authState` in the built-in
   chat's sign-in: inside `onState`, the new one has already arrived.
 - `mcpConnector({ serverUrl: portal.appsServer, ... })`: the real connection to JumpCloud's apps
-  server, through the MCP SDK (`apps/mcp.ts`). `client` is how Desktop Assist introduces itself to
-  the server: its name and version.
+  server, through the MCP SDK (`mcp/connector.ts`). `client` is how Desktop Assist introduces itself
+  to the server: its name and version.
 - `new SecretStore(join(userData, 'jumpcloud-apps.bin'), safeStorageEncryptor)`: where the
   connection to the portal (the app's registration and the user's tokens) is kept between runs,
   encrypted with Windows DPAPI like the built-in chat's sign-in, in a file of its own.
@@ -457,11 +462,135 @@ icon (see [Your apps](10-apps.md)). It's only set up when the tenant has a `port
   the comment says, it never opens the browser: without a saved connection it just settles on the
   Sign in button. `?.` skips it when there's no portal.
 
+#### Jira and the service desk
+
+<!-- code: apps/desktop/src/main/index.ts#start.requests,memoryPath,atlassianStatus,atlassian,desk -->
+
+[`src/main/index.ts`, lines 218–280](../../apps/desktop/src/main/index.ts#L218-L280)
+
+```ts
+const requests = serviceDesk?.requests
+
+const memoryPath = join(userData, 'atlassian.json')
+
+let atlassianStatus: AtlassianState['status'] = 'loading'
+
+const atlassian = tenant.atlassian
+  ? new Atlassian({
+      appName: tenant.appName,
+      site: tenant.atlassian.site,
+      redirectPort: tenant.atlassian.redirectPort,
+      knowledgeSpaces: tenant.atlassian.knowledgeSpaces,
+      requests:
+        serviceDesk && requests
+          ? {
+              helpCentre: serviceDesk.url,
+              portalId: requests.portalId,
+              projectKey: requests.projectKey,
+            }
+          : null,
+      connector: mcpConnector({
+        serverUrl: tenant.atlassian.mcpServer,
+        client: { name: tenant.appName, version: app.getVersion() },
+        fetch: netFetch,
+      }),
+      store: new SecretStore(join(userData, 'atlassian.bin'), safeStorageEncryptor),
+      memory: {
+        load: async () => {
+          const read = await readJsonFile(memoryPath, AtlassianMemorySchema)
+          return read.status === 'ok' ? read.value : {}
+        },
+        save: async (memory) => void (await writeJsonFile(memoryPath, memory)),
+      },
+      listen: (port) => listenForRedirect(port),
+      openBrowser: (url) => shell.openExternal(url),
+      onState: (state) => {
+        broadcast(IPC.atlassianState, state)
+        // Connecting took the user to their browser; bring the panel back once it's done.
+        if (atlassianStatus === 'signing-in' && state.status !== 'signing-in') bubble.expand()
+        atlassianStatus = state.status
+      },
+      onFeed: (feed) => broadcast(IPC.jiraFeed, feed),
+      notify,
+      onError: (message, error) => log(message, error),
+    })
+  : null
+
+const desk =
+  serviceDesk && requests
+    ? new ServiceDesk({
+        helpCentre: serviceDesk.url,
+        portalId: requests.portalId,
+        requestTypeIds: requests.requestTypes.map((type) => type.id),
+        pcInfo: () => ({
+          computerName: hostname(),
+          windows: windowsVersion(osVersion(), release()),
+          appName: tenant.appName,
+          appVersion: app.getVersion(),
+        }),
+        openLink: (url) => shell.openExternal(url),
+        copyScreenshots,
+        notify,
+        onError: (error) => log('Opening the request form failed:', error),
+      })
+    : null
+```
+
+<!-- /code -->
+
+Jira, Confluence and the user's IT requests, through Atlassian's Remote MCP server, and raising
+IT requests from the panel (see [Jira and the service desk](11-atlassian.md)). `atlassian` is
+only set up when the tenant has `atlassian`, and `desk` only when its service desk lists request
+types (`serviceDesk.requests`); otherwise each is `null` and its channels aren't answered.
+
+- `const requests = serviceDesk?.requests`: the portal, the Jira project and the request types, or
+  `undefined`.
+- `memoryPath`: `atlassian.json` in the app's data folder, where `Atlassian` remembers what the
+  user has already seen.
+- `let atlassianStatus`: the connection's previous status, as `appsStatus` is for the Apps list.
+- `site`, `redirectPort`, `knowledgeSpaces`: from the tenant's `atlassian` settings. Atlassian's
+  sign-in comes back to a port of its own (47623 for Morse Micro), different from the Apps list's
+  and the built-in chat's.
+- `requests: serviceDesk && requests ? { helpCentre: serviceDesk.url, ... } : null`: what My
+  requests needs: the help centre's address, the portal's number and the Jira project's key.
+- `mcpConnector({ serverUrl: tenant.atlassian.mcpServer, ... })`: the same MCP SDK connection as
+  the Apps list's, to Atlassian's server instead, also through `netFetch`.
+- `new SecretStore(join(userData, 'atlassian.bin'), safeStorageEncryptor)`: the connection to
+  Atlassian (the registration and the user's tokens), encrypted with Windows DPAPI, in a file of
+  its own.
+- `memory: { load, save }`: reads `atlassian.json` with `readJsonFile()` and the
+  `AtlassianMemorySchema` (see
+  [The draft, screenshots and safe files](6-drafts-and-screenshots.md)): a missing or damaged file
+  just gives `{}`, starting afresh. `writeJsonFile()` writes it safely.
+- `onState: (state) => {`: broadcasts every change of the connection on `IPC.atlassianState`, and,
+  like the Apps list, opens the panel again when connecting in the browser has finished.
+- `onFeed: (feed) => broadcast(IPC.jiraFeed, feed)`: every change in the notifications or
+  requests goes to the pages, which put dots on the icons from it.
+- `notify`: the Windows notification above, for IT's replies.
+- `void atlassian?.init()` (the next statement): as the comment says, uses a saved connection if
+  there is one, and starts checking notifications. Like the Apps list, it never opens the browser.
+- `new ServiceDesk({`: raising IT requests. `requestTypeIds` is the list of the request types'
+  IDs, the only ones it accepts.
+- `pcInfo: () => ({ ... })`: the PC's details for **Include PC details**: its name (`hostname()`),
+  the Windows version (`windowsVersion(osVersion(), release())`, from Node's `os` module) and the
+  app's name and version. A function, so they're read when they're needed.
+- `copyScreenshots`, `notify`: the helpers above, for the screenshot that's pasted on the portal.
+
+Two statements follow:
+
+- `if (!builtIn) {`, `void rm(join(userData, 'jumpcloud-session.bin'), ...)`: with Claude
+  Desktop, a JumpCloud sign-in saved by the built-in chat (which Morse Micro used until 3.1) is no
+  longer needed, so the file is deleted rather than left on disk.
+- `void rm(join(userData, 'claude-api-key.bin'), { force: true }).catch(() => {})`: an earlier
+  version saved a Claude API key in this file. Nothing uses it now, so it's deleted. `force: true`
+  means "no error if it isn't there", and `.catch(() => {})` ignores any other failure. The
+  JumpCloud file above is deleted the same way.
+
 #### IPC, the tray and display changes
 
 <!-- code: apps/desktop/src/main/index.ts#start.onDisplayChange -->
 
-[`src/main/index.ts`, line 258](../../apps/desktop/src/main/index.ts#L258)
+[`src/main/index.ts`, line 336](../../apps/desktop/src/main/index.ts#L336)
 
 ```ts
 const onDisplayChange = () => bubble.displayChanged()
@@ -478,6 +607,10 @@ Everything else in this part of `start()` is plain statements:
 - `apps: portal && portalApps ? { list: portalApps, portalUrl: portal.url } : null`: the Apps
   list and the portal's own address (for "Open the JumpCloud portal"), or `null` without a portal.
   Checking `portal` again lets TypeScript know `portal.url` exists.
+- `atlassian`: Jira and Confluence, or `null`.
+- `serviceDesk: serviceDesk && desk ? { desk, myRequestsUrl: myRequestsUrl(serviceDesk.url) } : null`:
+  raising requests, and the portal's page of the user's requests (for "All your requests on the
+  portal"), or `null` without request types.
 - `uninstall: () => uninstall({`: Settings → Uninstall (see
   [`uninstall()`](#uninstall)). Everything it needs from Electron and Node is passed in: where the
   running `.exe` is (`app.getPath('exe')`), `existsSync` to check the uninstaller is there,
@@ -508,7 +641,7 @@ Everything else in this part of `start()` is plain statements:
 
 <!-- code: apps/desktop/src/main/index.ts#start.shuttingDown -->
 
-[`src/main/index.ts`, lines 263–264](../../apps/desktop/src/main/index.ts#L263-L264)
+[`src/main/index.ts`, lines 341–342](../../apps/desktop/src/main/index.ts#L341-L342)
 
 ```ts
 // Save the text box before quitting. before-quit fires again after the second app.quit().
@@ -528,7 +661,8 @@ Quit or the Close icon. It doesn't fire when Windows shuts down or logs off, whi
 - `bubble.dispose()`, `builtIn?.chat.stop()`: stops the bubble's animation timers and, with the
   built-in chat, aborts a reply that is still streaming.
 - `void portalApps?.dispose()`: closes the Apps list's connection to JumpCloud, and stops waiting
-  for a browser sign-in if one is under way.
+  for a browser sign-in if one is under way. `atlassian?.dispose()` does the same for Atlassian,
+  and stops the 5-minute checks.
 - `tray?.destroy()`: removes the tray icon now. Otherwise it can linger in the tray until the
   mouse passes over it.
 - `Promise.race([notes.flush(), timeout])`: waits for the draft to be written, or
@@ -560,7 +694,7 @@ was part of `start()`. It returns a [`BuiltInChat`](#builtinchat): the `AuthMana
 
 <!-- code: apps/desktop/src/main/index.ts#startBuiltInChat.devBaseUrl,lastIdToken,backend,chat -->
 
-[`src/main/index.ts`, lines 299–323](../../apps/desktop/src/main/index.ts#L299-L323)
+[`src/main/index.ts`, lines 378–402](../../apps/desktop/src/main/index.ts#L378-L402)
 
 ```ts
 // Dev runs may point at a local test server; an installed app always talks to Anthropic.
@@ -633,7 +767,7 @@ const chat = new ChatSession({
 
 <!-- code: apps/desktop/src/main/index.ts#startBuiltInChat.missing,localIssuer,authState,auth -->
 
-[`src/main/index.ts`, lines 325–349](../../apps/desktop/src/main/index.ts#L325-L349)
+[`src/main/index.ts`, lines 404–428](../../apps/desktop/src/main/index.ts#L404-L428)
 
 ```ts
 const missing = missingSettings(signIn, claudeAccess)
@@ -710,7 +844,7 @@ Two statements end the function:
 
 <!-- code: apps/desktop/src/main/index.ts#safeStorageEncryptor -->
 
-[`src/main/index.ts`, lines 355–360](../../apps/desktop/src/main/index.ts#L355-L360)
+[`src/main/index.ts`, lines 434–439](../../apps/desktop/src/main/index.ts#L434-L439)
 
 ```ts
 /** Windows DPAPI through Electron: only this Windows user can decrypt what it encrypts. */
@@ -738,7 +872,7 @@ The encryption `SecretStore` uses for the saved sign-in. `SecretStore` only know
 
 <!-- code: apps/desktop/src/main/index.ts#withDevOverrides -->
 
-[`src/main/index.ts`, lines 362–381](../../apps/desktop/src/main/index.ts#L362-L381)
+[`src/main/index.ts`, lines 441–463](../../apps/desktop/src/main/index.ts#L441-L463)
 
 ```ts
 /**
@@ -755,6 +889,9 @@ async function withDevOverrides(tenant: Tenant): Promise<Tenant> {
     chatApp: override.chatApp ?? tenant.chatApp,
     startPage: override.startPage ?? tenant.startPage,
     portal: override.portal ? { ...tenant.portal, ...override.portal } : tenant.portal,
+    atlassian: override.atlassian
+      ? { ...tenant.atlassian, ...override.atlassian }
+      : tenant.atlassian,
     signIn: override.signIn ? { ...tenant.signIn, ...override.signIn } : tenant.signIn,
     claudeAccess: override.claudeAccess
       ? { ...tenant.claudeAccess, ...override.claudeAccess }
@@ -778,8 +915,9 @@ example to try the built-in chat against a test identity provider, without editi
 - `override.signIn ? { ...tenant.signIn, ...override.signIn } : tenant.signIn`: `...` copies an
   object's properties, and later ones win, so the override's fields replace the tenant's. The
   merge only happens when the override has a `signIn`; a Claude Desktop tenant without one keeps
-  having none, rather than an empty object. `portal` and `claudeAccess` work the same way, so a
-  dev run can point the Apps list at a test server. `startPage` is replaced like `chatApp`.
+  having none, rather than an empty object. `portal`, `atlassian` and `claudeAccess` work the same
+  way, so a dev run can point the Apps list or Jira at a test server. `startPage` is replaced like
+  `chatApp`.
 - `TenantSchema.parse({`: the result is checked again as a whole tenant, so an override can't
   produce an invalid config. For example, switching to the built-in chat without sign-in settings
   fails here, and the app shows the error instead of starting.
@@ -788,7 +926,7 @@ example to try the built-in chat against a test identity provider, without editi
 
 <!-- code: apps/desktop/src/main/index.ts#isLoopback -->
 
-[`src/main/index.ts`, lines 383–385](../../apps/desktop/src/main/index.ts#L383-L385)
+[`src/main/index.ts`, lines 465–467](../../apps/desktop/src/main/index.ts#L465-L467)
 
 ```ts
 function isLoopback(url: URL): boolean {
@@ -806,17 +944,19 @@ in `hostname`. Used only to decide whether plain `http` is allowed for a dev ide
 
 <!-- code: apps/desktop/src/main/index.ts#toArea,electronDisplays -->
 
-[`src/main/index.ts`, lines 387–401](../../apps/desktop/src/main/index.ts#L387-L401)
+[`src/main/index.ts`, lines 469–485](../../apps/desktop/src/main/index.ts#L469-L485)
 
 ```ts
 /** Electron's `screen`, in the shape the bubble controller uses. All coordinates are DIPs. */
 const toArea = (display: Electron.Display): DisplayArea => ({
   id: display.id,
+  bounds: display.bounds,
   workArea: display.workArea,
 })
 
 const electronDisplays: Displays = {
   primary: () => toArea(screen.getPrimaryDisplay()),
+  all: () => screen.getAllDisplays().map(toArea),
   byId: (id) => {
     const display = screen.getAllDisplays().find((d) => d.id === id)
     return display && toArea(display)
@@ -833,11 +973,13 @@ The adapter between Electron's `screen` module and the `Displays` interface `Bub
 uses (see [The bubble](5-bubble.md)). Keeping Electron behind this small interface is what lets
 `tests/bubbleController.test.ts` run the controller with two fake displays.
 
-- `toArea`: keeps only what the controller needs from a display: its ID and its work area (the
-  screen minus the taskbar).
+- `toArea`: keeps only what the controller needs from a display: its ID, its bounds (the whole
+  screen) and its work area (the screen minus the taskbar).
 - `DIPs`: device-independent pixels. On a display scaled to 150%, one DIP is 1.5 physical pixels.
   Electron's window positions and display sizes are all in DIPs, so the controller never has to
   think about scaling.
+- `screen.getAllDisplays().map(toArea)`: every connected display, for Bounce, which roams across
+  them all.
 - `return display && toArea(display)`: if no display has that ID any more (it was unplugged),
   this returns `undefined` rather than throwing.
 - `Math.round(point.x)`: the bubble's position can be fractional while it animates, but this
@@ -851,7 +993,7 @@ method is called, which happens after `start()` has begun.
 
 <!-- code: apps/desktop/src/main/index.ts#fail -->
 
-[`src/main/index.ts`, lines 403–407](../../apps/desktop/src/main/index.ts#L403-L407)
+[`src/main/index.ts`, lines 487–491](../../apps/desktop/src/main/index.ts#L487-L491)
 
 ```ts
 function fail(error: unknown): void {
@@ -877,12 +1019,12 @@ preferences file, and so on. Errors after `start()` has finished don't come here
 
 A small log of problems, written to `%APPDATA%\Desktop Assist\logs\desktop-assist.log` (in a dev
 run, the `Desktop Assist (Dev)` folder) and printed to the terminal as well. An installed copy has
-no terminal, so without this file there would be no way to see why something failed on a user's
-PC, for example why Anthropic refused their sign-in. `start()` in `index.ts` creates the one log
-and gives it to the error callbacks of `NotesStore`, `ClaudeDesktop` and `PortalApps`, the
-uninstaller and the bubble controller's notes, or of `ChatSession` and `AuthManager` with the
-built-in chat. It's never given tokens, only errors and summaries such as
-the ID token summary.
+no terminal, so without this file there would be no way to see why something failed on a user's PC,
+for example why Anthropic refused their sign-in. `start()` in `index.ts` creates the one log and
+gives it to the error callbacks of `NotesStore`, `ClaudeDesktop`, `PortalApps`, `Atlassian` and
+`ServiceDesk`, the uninstaller and the bubble controller's notes, or of `ChatSession` and
+`AuthManager` with the built-in chat. It's never given tokens, only errors and summaries such as the
+ID token summary.
 
 ### `MAX_LOG_BYTES` and `Log`
 
@@ -1049,13 +1191,14 @@ send the main process something unexpected.
 
 Only the channels of the features in use are answered. With the built-in chat, the sign-in and
 chat channels have handlers; with Claude Desktop, the two `claudeDesktop...` channels do instead.
-The Apps list's channels are answered only when the tenant has a portal.
+The Apps list's channels are answered only when the tenant has a portal, Jira's only when it has
+an Atlassian site, and the service desk page's only when it lists request types.
 
 ### `BuiltInChat`
 
 <!-- code: apps/desktop/src/main/ipc.ts#BuiltInChat -->
 
-[`src/main/ipc.ts`, lines 24–28](../../apps/desktop/src/main/ipc.ts#L24-L28)
+[`src/main/ipc.ts`, lines 34–38](../../apps/desktop/src/main/ipc.ts#L34-L38)
 
 ```ts
 /** The built-in chat and the JumpCloud sign-in it needs. */
@@ -1077,7 +1220,7 @@ which one exists without the other.
 
 <!-- code: apps/desktop/src/main/ipc.ts#IpcContext -->
 
-[`src/main/ipc.ts`, lines 30–47](../../apps/desktop/src/main/ipc.ts#L30-L47)
+[`src/main/ipc.ts`, lines 40–61](../../apps/desktop/src/main/ipc.ts#L40-L61)
 
 ```ts
 export interface IpcContext {
@@ -1093,6 +1236,10 @@ export interface IpcContext {
   claudeDesktop: ClaudeDesktop | null
   /** The Apps list and the portal it comes from, or null when the tenant has no portal. */
   apps: { list: PortalApps; portalUrl: string } | null
+  /** Jira and Confluence, or null when the tenant has no Atlassian site. */
+  atlassian: Atlassian | null
+  /** Raising IT requests and the user's requests page, or null without request types. */
+  serviceDesk: { desk: ServiceDesk; myRequestsUrl: string } | null
   actions: ActionHandlers
   /** Settings → Uninstall. */
   uninstall(): UninstallResult
@@ -1112,20 +1259,40 @@ are created there, so this file only needs their types, not how to build them.
   [The chat: built in, or in Claude Desktop](#the-chat-built-in-or-in-claude-desktop)).
 - `apps: { list: PortalApps; portalUrl: string } | null`: the Apps list, and the portal's address
   for "Open the JumpCloud portal"; `null` when the tenant has no portal.
+- `atlassian: Atlassian | null`, `serviceDesk: { desk: ServiceDesk; myRequestsUrl: string } | null`:
+  as their comments say, Jira and Confluence, and raising IT requests with the address of the user's
+  requests on the portal; each `null` when the tenant doesn't use it.
 - `uninstall(): UninstallResult`: Settings → Uninstall, ready-wired in `start()`.
 - `getState(): AppState`: builds the full snapshot a page asks for when it first loads (defined
   in `start()`).
 
-### `NoArgs`, `FilePath` and `ExternalUrl`
+### `NoArgs`, `FilePath`, `IssueKey`, `TimeSpent`, `ASK_PROBLEMS` and `ExternalUrl`
 
-<!-- code: apps/desktop/src/main/ipc.ts#NoArgs,FilePath,ExternalUrl -->
+<!-- code: apps/desktop/src/main/ipc.ts#NoArgs,FilePath,IssueKey,TimeSpent,ASK_PROBLEMS,ExternalUrl -->
 
-[`src/main/ipc.ts`, lines 49–61](../../apps/desktop/src/main/ipc.ts#L49-L61)
+[`src/main/ipc.ts`, lines 63–90](../../apps/desktop/src/main/ipc.ts#L63-L90)
 
 ```ts
 const NoArgs = z.undefined()
 
 const FilePath = z.string().min(1).max(1024)
+
+const IssueKey = z.string().regex(/^[A-Z][A-Z0-9_]{1,9}-\d{1,7}$/)
+
+/** Jira's time format: weeks, days, hours and minutes ("1h 30m"). */
+const TimeSpent = z
+  .string()
+  .trim()
+  .regex(/^(?=.*\d)(\d{1,3}w ?)?(\d{1,3}d ?)?(\d{1,3}h ?)?(\d{1,4}m)?$/)
+
+/** What to say when an issue couldn't be handed to Claude Desktop. */
+const ASK_PROBLEMS: Record<Extract<AskResult, { ok: false }>['reason'], string> = {
+  empty: 'There was nothing to ask.',
+  'too-long': 'That issue is too long to open in Claude.',
+  'not-installed': "Claude Desktop isn't installed on this PC. Ask IT to install it.",
+  'missing-screenshot': 'An attached screenshot is missing.',
+  failed: "Couldn't open Claude Desktop. Try again.",
+}
 
 /** Only web and email links may be opened from the chat (no file:, javascript: and so on). */
 const ExternalUrl = z
@@ -1148,6 +1315,13 @@ Schemas used by several channels.
   argument arrives as `undefined`; anything else is rejected.
 - `FilePath`: only checks for a sensible string. The real check, that the file is inside the
   screenshots folder, is done by `ScreenshotService` (`owns()`).
+- `IssueKey`: a Jira issue key such as `ISD-1234`, the same pattern as `isIssueKey()` in
+  `src/shared/jira.ts`. Every Jira channel that takes a key checks it.
+- `TimeSpent`: as the comment says, Jira's way of writing time spent, such as `30m` or `1h 30m`
+  (explained with `TIME_SPENT` in [The Jira and service desk pages](12-atlassian-pages.md)).
+  `.trim()` comes before the check, so spaces around it don't matter.
+- `ASK_PROBLEMS`: as the comment says, what to say when asking Claude about an issue couldn't be
+  handed to Claude Desktop, one message for each of `AskResult`'s failure reasons.
 - `.refine(...)`: adds a custom check to a schema. Here the string must parse as a URL and use
   `http:`, `https:` (opened in the browser) or `mailto:` (opened in the email app), so a link in a
   Claude reply can't open a local file (`file:`), run script (`javascript:`) or launch another
@@ -1158,7 +1332,7 @@ Schemas used by several channels.
 
 <!-- code: apps/desktop/src/main/ipc.ts#registerIpc -->
 
-[`src/main/ipc.ts`, lines 63–202](../../apps/desktop/src/main/ipc.ts#L63-L202)
+[`src/main/ipc.ts`, lines 92–323](../../apps/desktop/src/main/ipc.ts#L92-L323)
 
 ```ts
 /** Wires every renderer request to the main process. All arguments are validated with zod. */
@@ -1208,11 +1382,16 @@ export function registerIpc(ctx: IpcContext): void {
   handle(IPC.copyText, z.string().max(1_000_000), (text) => clipboard.writeText(text))
 
   on(IPC.notesSetText, z.string().max(MAX_NOTE_LENGTH), (text) => ctx.notes.setText(text))
+  // Each click attaches the newest screenshot that isn't attached yet, so clicking again goes one
+  // further back.
   handle(IPC.notesAttachLatest, NoArgs, async (): Promise<AttachResult> => {
-    const latest = await ctx.screenshots.latest()
-    if (!latest) return { ok: false, reason: 'no-screenshots' }
-    const notes = ctx.notes.addAttachment(latest)
-    return notes ? { ok: true, notes } : { ok: false, reason: 'already-attached' }
+    const next = await ctx.screenshots.latest((path) => ctx.notes.isAttached(path))
+    if (!next) {
+      const anyAttached = ctx.notes.get().attachments.length > 0
+      return { ok: false, reason: anyAttached ? 'no-more' : 'no-screenshots' }
+    }
+    const notes = ctx.notes.addAttachment(next)
+    return notes ? { ok: true, notes } : { ok: false, reason: 'no-more' }
   })
   handle(IPC.notesRemoveAttachment, z.string().min(1).max(64), (id) =>
     ctx.notes.removeAttachment(id),
@@ -1257,6 +1436,93 @@ export function registerIpc(ctx: IpcContext): void {
     })
   }
   if (ctx.builtIn) registerBuiltInChat(ctx.builtIn)
+  if (ctx.atlassian) registerAtlassian(ctx.atlassian)
+  if (ctx.serviceDesk) registerServiceDesk(ctx.serviceDesk)
+
+  function registerAtlassian(atlassian: Atlassian): void {
+    handle(IPC.atlassianGet, NoArgs, () => atlassian.current)
+    // Connecting happens in the browser and can take minutes, so this returns straight away;
+    // progress is broadcast on IPC.atlassianState. No tokens ever reach the renderer.
+    handle(IPC.atlassianSignIn, NoArgs, () => void atlassian.signIn())
+    handle(IPC.atlassianCancelSignIn, NoArgs, () => atlassian.cancelSignIn())
+    handle(IPC.atlassianSignOut, NoArgs, () => atlassian.signOut())
+    handle(IPC.atlassianRetry, NoArgs, () => void atlassian.retry())
+    handle(IPC.atlassianFeed, z.boolean(), (refresh) => atlassian.feed(refresh))
+    handle(IPC.atlassianMarkNotificationsRead, NoArgs, () => atlassian.markNotificationsRead())
+    handle(IPC.atlassianMarkRequestsRead, IssueKey.optional(), (key) =>
+      atlassian.markRequestsRead(key),
+    )
+    handle(IPC.atlassianSearch, z.string().max(200), (query) => atlassian.search(query))
+    handle(IPC.atlassianIssue, IssueKey, (key) => atlassian.issue(key))
+    handle(
+      IPC.atlassianTransition,
+      z.object({ key: IssueKey, transitionId: z.string().regex(/^\d{1,10}$/) }),
+      ({ key, transitionId }) => atlassian.transition(key, transitionId),
+    )
+    handle(
+      IPC.atlassianComment,
+      z.object({ key: IssueKey, body: z.string().trim().min(1).max(10_000) }),
+      ({ key, body }) => atlassian.comment(key, body),
+    )
+    handle(
+      IPC.atlassianLogWork,
+      z.object({ key: IssueKey, timeSpent: TimeSpent }),
+      ({ key, timeSpent }) => atlassian.logWork(key, timeSpent),
+    )
+    handle(IPC.atlassianArticles, z.string().max(2000), (text) => atlassian.articles(text))
+    handle(IPC.atlassianProjectKeys, NoArgs, () => atlassian.projectKeys())
+    handle(
+      IPC.atlassianAsk,
+      z.object({ key: IssueKey, prompt: z.enum(['summarise', 'reply', 'next-steps']) }),
+      async ({ key, prompt }): Promise<AskAboutIssueResult> => {
+        const built = await atlassian.prompt(key, prompt, MAX_PROMPT_LENGTH)
+        if (!built.ok) return built
+        if (ctx.claudeDesktop) {
+          const result = await ctx.claudeDesktop.ask(built.prompt, [])
+          if (!result.ok) return { ok: false, message: ASK_PROBLEMS[result.reason] }
+          // Claude Desktop is coming to the front; get out of its way.
+          ctx.controller.collapse()
+          return { ok: true, inChat: false }
+        }
+        if (ctx.builtIn) {
+          const status = ctx.builtIn.chat.send(built.prompt, [], [])
+          if (status === 'sent') return { ok: true, inChat: true }
+          return {
+            ok: false,
+            message:
+              status === 'busy'
+                ? 'Claude is still answering. Try again in a moment.'
+                : 'Sign in with JumpCloud first.',
+          }
+        }
+        return { ok: false, message: "Asking Claude isn't set up." }
+      },
+    )
+  }
+
+  function registerServiceDesk({ desk, myRequestsUrl }: NonNullable<IpcContext['serviceDesk']>) {
+    handle(IPC.serviceDeskPcDetails, NoArgs, () => desk.pcDetails())
+    // The request: the form's fields, plus the screenshots attached to the text box.
+    handle(
+      IPC.serviceDeskRaise,
+      z.object({
+        requestTypeId: z.string().regex(/^\d{1,10}$/),
+        summary: z.string().max(255),
+        details: z.string().max(MAX_NOTE_LENGTH),
+        includePcDetails: z.boolean(),
+      }),
+      async (request): Promise<RaiseResult> => {
+        const result = await desk.raise(request, ctx.notes.get().attachments)
+        // The browser is coming to the front; get out of its way.
+        if (result.ok) ctx.controller.collapse()
+        return result
+      },
+    )
+    handle(IPC.serviceDeskOpenMyRequests, NoArgs, async () => {
+      await shell.openExternal(myRequestsUrl)
+      ctx.controller.collapse()
+    })
+  }
 
   function registerClaudeDesktop(claudeDesktop: ClaudeDesktop): void {
     handle(IPC.claudeDesktopInstalled, NoArgs, () => claudeDesktop.isInstalled())
@@ -1308,7 +1574,8 @@ export function registerIpc(ctx: IpcContext): void {
 Registers a handler for every channel the app uses, once, at startup. The first part sets up a
 sender check and two helpers; the rest is one line (or a few) per channel, grouped by area. The
 channels of the two kinds of chat are registered by two inner functions, `registerClaudeDesktop()`
-and `registerBuiltInChat()`, and only one of them runs.
+and `registerBuiltInChat()`, and only one of them runs. The Apps list, Jira and the service desk
+have inner functions of their own too.
 
 **The sender check and the two helpers**
 
@@ -1357,9 +1624,10 @@ and `registerBuiltInChat()`, and only one of them runs.
 
 - `on(IPC.notesSetText, ...)`: sent on every keystroke, so it's one-way. The length cap matches
   what `NotesStore` keeps (`MAX_NOTE_LENGTH`).
-- `IPC.notesAttachLatest`: finds the newest screenshot in the folder and attaches it to the draft.
-  It answers `no-screenshots` if there are none and `already-attached` if `addAttachment()`
-  returns `null` because that file is already attached.
+- `IPC.notesAttachLatest`: attaches the newest screenshot in the folder that isn't attached yet
+  (`ctx.notes.isAttached` tells `latest()` which to pass over), so each click goes one screenshot
+  further back. With nothing left it answers `no-more` if some are attached (every screenshot
+  is), or `no-screenshots` if there are none at all; the page shows either as an error.
 - `z.string().min(1).max(64)`: an attachment ID (a UUID, 36 characters).
 - `IPC.notesClear`: empties the text box and removes its screenshots (Clear text box in the
   Settings menu, with Claude Desktop). It returns the empty draft, which the panel shows.
@@ -1383,15 +1651,17 @@ and `registerBuiltInChat()`, and only one of them runs.
 - `handle(IPC.appUninstall, NoArgs, () => ctx.uninstall())`: Settings → Uninstall. On success the
   app is already quitting.
 
-**Built-in chat, Claude Desktop and the Apps list**
+**Built-in chat, Claude Desktop, the Apps list, Jira and the service desk**
 
 - `if (ctx.claudeDesktop) registerClaudeDesktop(ctx.claudeDesktop)`,
   `if (ctx.builtIn) registerBuiltInChat(ctx.builtIn)`: `start()` sets exactly one of the two, so
   only that chat's channels get handlers. If a page called one of the other chat's channels
   anyway, Electron would reject its promise, because nothing is registered for it.
 - `if (ctx.apps) registerApps(ctx.apps)`: the same for the Apps list, when there's a portal.
+  `registerAtlassian()` and `registerServiceDesk()` likewise run only when `start()` passed an
+  `atlassian` or a `serviceDesk`.
 - `function registerClaudeDesktop(...)`, `function registerBuiltInChat(...)`: declared inside
-  `registerIpc()`, so they can use `handle()` and `ctx`. `registerApps()` too. They're called above
+  `registerIpc()`, so they can use `handle()` and `ctx`. The other three too. They're called above
   the lines that declare them, which works because JavaScript sets up a block's `function`
   declarations before running it (this is called _hoisting_).
 
@@ -1427,6 +1697,43 @@ and `registerBuiltInChat()`, and only one of them runs.
   front, so the panel closes. If there was no link, the panel stays and shows a toast.
 - `shell.openExternal(portalUrl)`: "Open the JumpCloud portal" opens the portal's address from
   `tenant.json` (never one sent by the page), then closes the panel.
+
+**Jira** (`registerAtlassian()`)
+
+- `() => void atlassian.signIn()`: as the comment says, connecting happens in the browser, so the
+  call returns at once and progress arrives as `IPC.atlassianState` broadcasts. Retry works the
+  same way. No token ever reaches the page.
+- `z.boolean()`: `feed`'s `refresh`; the preload always sends `true` or `false`.
+- `IssueKey.optional()`: marking one request's news as seen, or all of them without a key.
+- `z.string().max(200)`, `z.string().max(2000)`: a search, and the words to look for articles
+  about, each capped.
+- `z.object({ key: IssueKey, transitionId: z.string().regex(/^\d{1,10}$/) })`: a move: the issue
+  and the transition's ID, which is a number. The comment's body must have something in it and be
+  at most 10,000 characters; the time spent must pass `TimeSpent`.
+- `handle(IPC.atlassianAsk, ...)`: **Ask Claude** on an issue.
+  `z.enum(['summarise', 'reply', 'next-steps'])` accepts only the three buttons' requests.
+- `atlassian.prompt(key, prompt, MAX_PROMPT_LENGTH)`: builds the question with the issue in it,
+  kept within Claude Desktop's limit for a question in a link (`MAX_PROMPT_LENGTH`, from
+  `claudeDesktop.ts`). If the issue can't be read, its message goes back to the page.
+- `ctx.claudeDesktop.ask(built.prompt, [])`: with Claude Desktop, the question is handed over like
+  one typed in the text box, with no screenshots. A failure becomes a message from `ASK_PROBLEMS`;
+  on success the panel closes, as Claude Desktop comes to the front (`inChat: false`).
+- `ctx.builtIn.chat.send(built.prompt, [], [])`: with the built-in chat, the question is sent in
+  the panel's conversation, and `inChat: true` tells the page to show the chat. If Claude is still
+  answering, or nobody is signed in, the page is told so.
+
+**The service desk** (`registerServiceDesk()`)
+
+- `IPC.serviceDeskPcDetails`: what **Include PC details** adds, for the form to show.
+- `handle(IPC.serviceDeskRaise, z.object({ ... }), ...)`: the form's fields: a request type's ID
+  (a number), a summary of at most 255 characters (Jira's limit), details no longer than the draft
+  can be, and whether to include the PC's details.
+- `desk.raise(request, ctx.notes.get().attachments)`: as the comment says, the screenshots are the
+  ones attached to the text box, taken from the main process's own copy of the draft.
+- `if (result.ok) ctx.controller.collapse()`: the portal's form is opening in the browser, which
+  comes to the front, so the panel closes. The draft is kept, unlike after asking Claude: the
+  request isn't sent until the user sends it on the portal.
+- `shell.openExternal(myRequestsUrl)`: "All your requests on the portal", then the panel closes.
 
 **Sign-in** (`registerBuiltInChat()`)
 
@@ -1643,8 +1950,10 @@ tenant folder the same way, so a mistake is caught by the tests before it reache
 Besides the branding, a tenant chooses where questions go (`chatApp`): to the Claude Desktop app, or
 to the chat built into the panel. Only the built-in chat needs the sign-in settings (`signIn`) and
 the Claude access settings (`claudeAccess`). A tenant with the IT service desk icon needs the
-service desk's address (`serviceDesk`). A tenant with the Apps list (as its start page, or behind
-the Apps icon) also needs its app portal's settings (`portal`).
+service desk's address (`serviceDesk`), and its request types to raise requests from the panel
+(`serviceDesk.requests`). A tenant with the Apps list (as its start page, or behind the Apps icon)
+also needs its app portal's settings (`portal`), and one with the Jira icon its Atlassian site
+(`atlassian`).
 
 None of the values here are secret. The client ID and the Claude IDs identify the app; on their
 own they don't grant access to anything.
@@ -1752,29 +2061,110 @@ admin has to turn on (the comment says where).
   never get in each other's way.
 - `PortalConfig`: the type derived from the schema.
 
-### `ServiceDeskSchema`
+### `ServiceDeskSchema` and `ServiceDeskConfig`
 
-<!-- code: apps/desktop/src/main/tenant.ts#ServiceDeskSchema -->
+<!-- code: apps/desktop/src/main/tenant.ts#ServiceDeskSchema,ServiceDeskConfig -->
 
-[`src/main/tenant.ts`, lines 47–50](../../apps/desktop/src/main/tenant.ts#L47-L50)
+[`src/main/tenant.ts`, lines 47–72](../../apps/desktop/src/main/tenant.ts#L47-L72)
 
 ```ts
-/** The company's IT service desk, opened by the `servicedesk` icon. */
+/**
+ * The company's IT service desk, opened by the `servicedesk` icon. With `requests`, the icon opens
+ * a page for raising requests (filled in on the panel, finished on the help centre portal) and, with
+ * `atlassian` too, for following the user's own requests.
+ */
 export const ServiceDeskSchema = z.object({
+  /** The help centre (all portals). */
   url: z.url({ protocol: /^https$/ }),
+  requests: z
+    .object({
+      /** The IT portal's number, from its address: …/servicedesk/customer/portal/<id>. */
+      portalId: z.string().regex(/^\d+$/),
+      /** The Jira project behind the portal, for My requests. */
+      projectKey: z.string().regex(/^[A-Z][A-Z0-9_]+$/),
+      /**
+       * The request types offered, the first one for "Report a problem". Each ID is the number at
+       * the end of the type's form address: …/portal/<portalId>/create/<id>.
+       */
+      requestTypes: z
+        .array(z.object({ id: z.string().regex(/^\d+$/), name: z.string().min(1) }))
+        .min(1),
+    })
+    .optional(),
 })
+
+export type ServiceDeskConfig = z.infer<typeof ServiceDeskSchema>
 ```
 
 <!-- /code -->
 
-The company's IT service desk, opened by the `servicedesk` icon: just its address, `https` only.
-For Morse Micro it's the Atlassian service desk's customer portal.
+The company's IT service desk, opened by the `servicedesk` icon: its address, `https` only. For
+Morse Micro it's the Atlassian help centre.
+
+- `requests`: optional. With it, the icon opens the service desk page in the panel instead, to
+  raise requests there and see the user's own (see [Jira and the service desk](11-atlassian.md)).
+- `portalId: z.string().regex(/^\d+$/)`: the IT portal's number, as the comment says, from its
+  address. Digits only, since it goes into addresses.
+- `projectKey`: the Jira project the portal's requests are kept in (`ISD` at Morse Micro), for My
+  requests: a capital letter, then capitals, digits or `_`.
+- `requestTypes`: the kinds of request offered, as the comment says, each with the number from its
+  form's address and its name, in the order the form lists them. `.min(1)`: at least one.
+- `ServiceDeskConfig`: the TypeScript type, worked out from the schema.
+
+### `AtlassianFields`, `AtlassianSchema` and `AtlassianConfig`
+
+<!-- code: apps/desktop/src/main/tenant.ts#AtlassianFields,AtlassianSchema,AtlassianConfig -->
+
+[`src/main/tenant.ts`, lines 74–94](../../apps/desktop/src/main/tenant.ts#L74-L94)
+
+```ts
+/**
+ * The company's Atlassian site, for the Jira page (notifications, search, issues) and My requests.
+ * Each user connects once, in the browser, through Atlassian's Remote MCP server (no secret in the
+ * app); at Morse Micro that sign-in goes through JumpCloud.
+ */
+const AtlassianFields = z.object({
+  /** The site, e.g. https://morsemicro.atlassian.net. */
+  site: z.url({ protocol: /^https$/ }),
+  mcpServer: z.url({ protocol: /^https?$/ }),
+  /** The browser comes back to http://127.0.0.1:<port>/callback after connecting. */
+  redirectPort: z.number().int().min(1024).max(65535),
+  /** Confluence spaces (their keys) searched for how-to articles while raising an IT request. */
+  knowledgeSpaces: z.array(z.string().regex(/^[A-Za-z0-9~_]+$/)),
+})
+
+export const AtlassianSchema = AtlassianFields.extend({
+  mcpServer: AtlassianFields.shape.mcpServer.default('https://mcp.atlassian.com/v1/mcp'),
+  knowledgeSpaces: AtlassianFields.shape.knowledgeSpaces.default([]),
+})
+
+export type AtlassianConfig = z.infer<typeof AtlassianSchema>
+```
+
+<!-- /code -->
+
+The company's Atlassian site, for the Jira page and My requests. As the comment says, each user
+connects once in the browser, so there's no secret here.
+
+- `site`: the site's address, `https` only (`https://morsemicro.atlassian.net`).
+- `mcpServer`: Atlassian's Remote MCP server. `http` is allowed as well as `https`, so a dev run
+  can point it at a test server on the PC.
+- `redirectPort`: the port the browser comes back to after connecting (47623 for Morse Micro).
+  Ports below 1024 are reserved on many systems, hence `.min(1024)`.
+- `knowledgeSpaces`: as the comment says, the Confluence spaces searched for how-to articles while
+  raising a request (`INFRA` at Morse Micro), by their keys.
+- `AtlassianSchema = AtlassianFields.extend({ ... })`: the same fields, with defaults for two of
+  them: `.extend()` replaces those fields, and `AtlassianFields.shape.mcpServer` is the original
+  field's schema, to add `.default(...)` to. A `tenant.json` can leave out the MCP server
+  (Atlassian's own is used) and the knowledge spaces (none). The fields are defined separately so
+  the dev override can use them without the defaults (see `DevOverrideSchema`).
+- `AtlassianConfig`: the TypeScript type, with `mcpServer` and `knowledgeSpaces` always there.
 
 ### `SignInConfig` and `ClaudeAccessConfig`
 
 <!-- code: apps/desktop/src/main/tenant.ts#SignInConfig,ClaudeAccessConfig -->
 
-[`src/main/tenant.ts`, lines 52–53](../../apps/desktop/src/main/tenant.ts#L52-L53)
+[`src/main/tenant.ts`, lines 96–97](../../apps/desktop/src/main/tenant.ts#L96-L97)
 
 ```ts
 export type SignInConfig = z.infer<typeof SignInSchema>
@@ -1792,7 +2182,7 @@ and `AnthropicBackend.ts` use these types.
 
 <!-- code: apps/desktop/src/main/tenant.ts#CHAT_APPS -->
 
-[`src/main/tenant.ts`, lines 55–63](../../apps/desktop/src/main/tenant.ts#L55-L63)
+[`src/main/tenant.ts`, lines 99–107](../../apps/desktop/src/main/tenant.ts#L99-L107)
 
 ```ts
 /**
@@ -1822,7 +2212,7 @@ billed to the company.
 
 <!-- code: apps/desktop/src/main/tenant.ts#START_PAGES -->
 
-[`src/main/tenant.ts`, lines 65–69](../../apps/desktop/src/main/tenant.ts#L65-L69)
+[`src/main/tenant.ts`, lines 109–113](../../apps/desktop/src/main/tenant.ts#L109-L113)
 
 ```ts
 /**
@@ -1842,7 +2232,7 @@ Morse Micro opens on the Apps list, with the text box behind the Ask Claude icon
 
 <!-- code: apps/desktop/src/main/tenant.ts#TenantSchema,Tenant -->
 
-[`src/main/tenant.ts`, lines 71–112](../../apps/desktop/src/main/tenant.ts#L71-L112)
+[`src/main/tenant.ts`, lines 115–161](../../apps/desktop/src/main/tenant.ts#L115-L161)
 
 ```ts
 export const TenantSchema = z
@@ -1863,6 +2253,8 @@ export const TenantSchema = z
     portal: PortalSchema.optional(),
     /** Needed for the service desk icon. */
     serviceDesk: ServiceDeskSchema.optional(),
+    /** Needed for the Jira icon. */
+    atlassian: AtlassianSchema.optional(),
     /** Needed for the built-in chat only. */
     signIn: SignInSchema.optional(),
     claudeAccess: ClaudeAccessSchema.optional(),
@@ -1878,6 +2270,9 @@ export const TenantSchema = z
   })
   .refine((tenant) => !tenant.actions.includes('servicedesk') || tenant.serviceDesk !== undefined, {
     message: 'the servicedesk action needs serviceDesk',
+  })
+  .refine((tenant) => !tenant.actions.includes('jira') || tenant.atlassian !== undefined, {
+    message: 'the jira action needs atlassian',
   })
   .refine((tenant) => tenant.startPage !== 'apps' || tenant.portal !== undefined, {
     message: 'starting on the apps list needs portal',
@@ -1910,6 +2305,8 @@ The whole `tenant.json`.
   the tenant says otherwise.
 - `portal: PortalSchema.optional()`: only needed for the Apps list.
 - `serviceDesk: ServiceDeskSchema.optional()`: only needed for the service desk icon.
+- `atlassian: AtlassianSchema.optional()`: only needed for the Jira icon (and for My requests on
+  the service desk page).
 - `signIn: SignInSchema.optional()`, `claudeAccess: ClaudeAccessSchema.optional()`: a Claude
   Desktop tenant can leave both out.
 - `.refine((tenant) => tenant.chatApp !== 'built-in' || ...)`: a check on the whole object, so it
@@ -1919,7 +2316,7 @@ The whole `tenant.json`.
 - `.refine((tenant) => !tenant.actions.includes('apps') || tenant.portal !== undefined, ...)`: a
   second check of the same kind: a tenant that shows the Apps icon must say which portal it's for.
 - `.refine((tenant) => !tenant.actions.includes('servicedesk') || ...)`: likewise, the service desk
-  icon needs the service desk's address.
+  icon needs the service desk's address, and the Jira icon (`'jira'`) needs `atlassian`.
 - `.refine((tenant) => tenant.startPage !== 'apps' || tenant.portal !== undefined, ...)`: so must a
   tenant that starts on the Apps list.
 - `.refine((tenant) => tenant.startPage !== 'apps' || tenant.actions.includes('ask'), ...)`: and it
@@ -1929,14 +2326,24 @@ The whole `tenant.json`.
 
 <!-- code: apps/desktop/src/main/tenant.ts#brandingOf -->
 
-[`src/main/tenant.ts`, lines 114–119](../../apps/desktop/src/main/tenant.ts#L114-L119)
+[`src/main/tenant.ts`, lines 163–178](../../apps/desktop/src/main/tenant.ts#L163-L178)
 
 ```ts
 export function brandingOf(tenant: Tenant): Branding {
   const { companyName, appName, accentColor, actions, chatApp } = tenant
   const portalName = tenant.portal?.name ?? null
   const { startPage } = tenant
-  return { companyName, appName, accentColor, actions, chatApp, portalName, startPage }
+  return {
+    companyName,
+    appName,
+    accentColor,
+    actions,
+    chatApp,
+    portalName,
+    startPage,
+    atlassianSite: tenant.atlassian?.site ?? null,
+    requestTypes: tenant.serviceDesk?.requests?.requestTypes ?? null,
+  }
 }
 ```
 
@@ -1945,15 +2352,16 @@ export function brandingOf(tenant: Tenant): Branding {
 The part of the tenant the pages need: names, the accent colour, the action list, `chatApp`, which
 tells the panel whether to show the built-in chat or hand questions to Claude Desktop, and the
 portal's name for the Apps list (`null` without a portal; `?.` reads `name` only if there's a
-`portal`), and the start page. It goes into the state snapshot from `getState`. The object is
-rebuilt field by field rather than passed as is, so the sign-in, Claude and portal settings never go
-to the pages.
+`portal`), the start page, the Atlassian site (`null` without one), and the service desk's request
+types (`null` without them). It goes into the state snapshot from `getState`. The object is
+rebuilt field by field rather than passed as is, so the sign-in, Claude, portal and MCP server
+settings never go to the pages.
 
 ### `missingSettings()`
 
 <!-- code: apps/desktop/src/main/tenant.ts#missingSettings -->
 
-[`src/main/tenant.ts`, lines 121–132](../../apps/desktop/src/main/tenant.ts#L121-L132)
+[`src/main/tenant.ts`, lines 180–191](../../apps/desktop/src/main/tenant.ts#L180-L191)
 
 ```ts
 /** The tenant.json settings still to be filled in before anyone can sign in, by name. */
@@ -1986,18 +2394,20 @@ status is `unconfigured` and the chat box shows the list instead of a sign-in bu
 
 <!-- code: apps/desktop/src/main/tenant.ts#DevOverrideSchema -->
 
-[`src/main/tenant.ts`, lines 134–145](../../apps/desktop/src/main/tenant.ts#L134-L145)
+[`src/main/tenant.ts`, lines 193–206](../../apps/desktop/src/main/tenant.ts#L193-L206)
 
 ```ts
 /**
  * Dev runs only: a JSON file (path in DESKTOP_ASSIST_DEV_CONFIG) can override `chatApp`,
- * `startPage`, `portal`, `signIn` and `claudeAccess`, so the app can be pointed at a test identity provider without editing
- * tenant.json. Installed builds never read it.
+ * `startPage`, `portal`, `atlassian`, `signIn` and `claudeAccess`, so the app can be pointed at
+ * test servers without editing tenant.json. Installed builds never read it.
  */
 export const DevOverrideSchema = z.object({
   chatApp: z.enum(CHAT_APPS).optional(),
   startPage: z.enum(START_PAGES).optional(),
   portal: PortalSchema.partial().optional(),
+  // Without the defaults, so a partial override can't reset what tenant.json sets.
+  atlassian: AtlassianFields.partial().optional(),
   signIn: SignInSchema.partial().optional(),
   claudeAccess: ClaudeAccessSchema.partial().optional(),
 })
@@ -2014,6 +2424,10 @@ changes.
 - `startPage: z.enum(START_PAGES).optional()`: lets a dev run try the other start page.
 - `portal: PortalSchema.partial().optional()`: lets a dev run point the Apps list at a test
   server (`appsServer`), without editing `tenant.json`.
+- `atlassian: AtlassianFields.partial().optional()`: the same for Atlassian, such as a test MCP
+  server. As the comment says, it's built from the fields without the defaults: otherwise an
+  override that only gives `mcpServer` would also get `knowledgeSpaces: []`, and the merge in
+  `withDevOverrides()` would wipe out the tenant's spaces.
 
 ## `src/main/settings.ts`: the user's preferences
 

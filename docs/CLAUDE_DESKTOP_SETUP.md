@@ -82,7 +82,7 @@ Organization skills and plugins also reach Claude Desktop chats.
 
 1. Click the bubble, type `Hello` and press Enter. Claude Desktop comes to the front with a new
    chat, `Hello` is sent within a few seconds, and Claude answers.
-2. Take a screenshot with the camera icon, click **Attach latest screenshot**, type a question
+2. Take a screenshot with the camera icon, click **Attach screenshot**, type a question
    and press Enter. Claude opens, the screenshot is pasted under the question, and it's sent.
    (With **Send in Claude automatically** off: a notification says the screenshot was copied;
    press Ctrl+V in Claude, then Enter.)

@@ -5,6 +5,7 @@ import {
   homePosition,
   nearestCorner,
   panelWindowBounds,
+  travelAreas,
   travelBox,
 } from '../src/main/bubble/layout'
 
@@ -108,6 +109,48 @@ describe('panelWindowSize', () => {
   it('grows to fit a long action stack', () => {
     const far = actionOffset(14) + UI.actionSize
     expect(panelWindowSize(15).height).toBe(far + UI.shadowPad)
+  })
+})
+
+describe('travelAreas', () => {
+  const laptop = {
+    bounds: { x: 0, y: 0, width: 1536, height: 864 },
+    workArea: { x: 0, y: 0, width: 1536, height: 816 }, // taskbar along the bottom
+  }
+  const above = {
+    bounds: { x: -750, y: -1440, width: 3440, height: 1440 },
+    workArea: { x: -750, y: -1440, width: 3440, height: 1392 }, // taskbar along the shared edge
+  }
+
+  it('adds the stretch of a taskbar that another display lies right beyond', () => {
+    expect(travelAreas([laptop, above])).toEqual([
+      laptop.workArea,
+      above.workArea,
+      // Only the part of the upper monitor's taskbar above the laptop; the laptop's own taskbar,
+      // on an outer edge, stays out.
+      { x: 0, y: -48, width: 1536, height: 48 },
+    ])
+  })
+
+  it('needs the displays to touch', () => {
+    const apart = {
+      ...above,
+      bounds: { ...above.bounds, y: -1500 },
+      workArea: { ...above.workArea, y: -1500 },
+    }
+    expect(travelAreas([laptop, apart])).toEqual([laptop.workArea, apart.workArea])
+  })
+
+  it('works for a taskbar down the side between two monitors side by side', () => {
+    const left = {
+      bounds: { x: 0, y: 0, width: 1920, height: 1080 },
+      workArea: { x: 0, y: 0, width: 1858, height: 1080 }, // taskbar on the right
+    }
+    const right = {
+      bounds: { x: 1920, y: 100, width: 1280, height: 1024 },
+      workArea: { x: 1920, y: 100, width: 1280, height: 1024 },
+    }
+    expect(travelAreas([left, right])).toContainEqual({ x: 1858, y: 100, width: 62, height: 980 })
   })
 })
 
