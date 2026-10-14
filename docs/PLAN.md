@@ -450,6 +450,16 @@ tab, as asked). IT's setup guide: [ATLASSIAN_SETUP.md](ATLASSIAN_SETUP.md).
   mid-bounce) and end-to-end (attaching twice, the placeholder, and Bounce onto the other monitor
   and home again on the real screens: 10 checks).
 
+- **The bubble could start behind other windows**: If Desktop Assist started while a full-screen
+  window was open (at sign-in, Windows can start it after other apps), the bubble sat behind the
+  user's windows until they were minimised and restored. Electron's default always-on-top level
+  tucks a window just behind the taskbar, and while a full-screen app is in front the taskbar isn't
+  always on top, so the bubble and panel lost it too. Reproduced by starting the app behind a
+  full-screen window (neither window on top), then fixed: they use a level Electron keeps simply on
+  top (`pop-up-menu`), are put on top again each time they're shown, and check every five seconds
+  that they still are. Checked the same way: both on top, and back on top within five seconds when
+  something took it away. The bubble now also shows over full-screen apps.
+
 Found along the way: Atlassian's Rovo search (`search`) uses Rovo credits, so Desktop Assist only
 uses the Jira (JQL) and Confluence (CQL) searches; Jira can find mentions of the user with
 `comment ~ currentUser()`, and the comments themselves (in Jira's own format) say whose account was

@@ -30,7 +30,7 @@ import { summarizeIdToken, type IdTokenSummary } from './auth/idToken'
 import { listenForRedirect } from './auth/loopback'
 import { createOidc } from './auth/oidc'
 import { BubbleController, type DisplayArea, type Displays } from './bubble/BubbleController'
-import { bubbleSurface, createOverlayWindow, panelSurface } from './bubble/windows'
+import { bubbleSurface, createOverlayWindow, keepOnTop, panelSurface } from './bubble/windows'
 import { AnthropicBackend } from './claude/AnthropicBackend'
 import { ChatSession } from './claude/ChatSession'
 import { classifyError } from './claude/errors'
@@ -109,6 +109,7 @@ async function start(): Promise<void> {
   const bubbleWindow = createOverlayWindow('bubble', { width: BUBBLE_BOX, height: BUBBLE_BOX })
   const panelWindow = createOverlayWindow('panel', panelWindowSize(actionCount))
   const windows = [bubbleWindow, panelWindow]
+  const stopKeepingOnTop = windows.map(keepOnTop)
   // Listen straight away, so a page that finishes loading quickly isn't missed.
   const windowsReady = Promise.all(windows.map((win) => once(win, 'ready-to-show')))
   const broadcast = (channel: string, payload?: unknown) => {
@@ -345,6 +346,7 @@ async function start(): Promise<void> {
     shuttingDown = true
     event.preventDefault()
     bubble.dispose()
+    for (const stop of stopKeepingOnTop) stop()
     builtIn?.chat.stop()
     void portalApps?.dispose()
     atlassian?.dispose()

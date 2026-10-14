@@ -7,6 +7,19 @@ import type { PanelSurface, Surface } from './BubbleController'
 export type View = 'bubble' | 'panel'
 
 /**
+ * How the overlay windows stay on top. Electron's default level for always-on-top, "floating",
+ * tucks a window just behind the taskbar on Windows. While a full-screen app is in front, Windows
+ * takes the taskbar out of the always-on-top group, and a window tucked behind it then loses its
+ * own always-on-top too: started that way (say, at sign-in, with a full-screen browser already
+ * open), the bubble sat behind everything. From this level up, Electron simply keeps the window
+ * on top, taskbar or not.
+ */
+export const ON_TOP_LEVEL = 'pop-up-menu'
+
+/** How often the overlay windows check they're still on top (see keepOnTop). */
+export const ON_TOP_CHECK_MS = 5000
+
+/**
  * Creates one of the two overlay windows. Both are frameless, transparent, always on top and
  * hidden from the taskbar and Alt+Tab.
  *
@@ -30,7 +43,8 @@ export function createOverlayWindow(view: View, size: Size): BrowserWindow {
     maximizable: false,
     fullscreenable: false,
     skipTaskbar: true,
-    alwaysOnTop: true,
+    // Always on top, but at ON_TOP_LEVEL (set below); `alwaysOnTop: true` here would use
+    // Electron's default level, which loses it while a full-screen app is in front.
     type: 'toolbar',
     // Both can take the focus. A bubble that couldn't had its mouse presses dropped by Windows /
     // Chromium after clicking elsewhere (only the release arrived, so clicks did nothing).
@@ -46,6 +60,7 @@ export function createOverlayWindow(view: View, size: Size): BrowserWindow {
       spellcheck: view === 'panel',
     },
   })
+  win.setAlwaysOnTop(true, ON_TOP_LEVEL)
   lockDown(win, view)
   if (view === 'panel') {
     win.setIgnoreMouseEvents(true, { forward: true })
@@ -61,10 +76,27 @@ export function createOverlayWindow(view: View, size: Size): BrowserWindow {
   return win
 }
 
+/**
+ * Puts the window back on top if something took that away. Windows can still demote an
+ * always-on-top window (another app reordering windows, Explorer restarting), and nothing tells
+ * the app when it happens, so the windows check every few seconds; it costs one look at the
+ * window's style, and only a window that lost it is moved. Returns a function that stops it.
+ */
+export function keepOnTop(win: BrowserWindow): () => void {
+  const timer = setInterval(() => {
+    if (!win.isDestroyed() && !win.isAlwaysOnTop()) win.setAlwaysOnTop(true, ON_TOP_LEVEL)
+  }, ON_TOP_CHECK_MS)
+  return () => clearInterval(timer)
+}
+
 export function bubbleSurface(win: BrowserWindow): Surface {
   return {
     setBounds: (bounds) => win.setBounds(bounds),
-    show: () => win.showInactive(),
+    show: () => {
+      // Also puts it at the top of the always-on-top windows, in front of any shown meanwhile.
+      win.setAlwaysOnTop(true, ON_TOP_LEVEL)
+      win.showInactive()
+    },
     hide: () => win.hide(),
   }
 }
@@ -74,6 +106,7 @@ export function panelSurface(win: BrowserWindow): PanelSurface {
     setBounds: (bounds) => win.setBounds(bounds),
     show: () => {
       resetClickThrough(win)
+      win.setAlwaysOnTop(true, ON_TOP_LEVEL)
       win.show()
     },
     hide: () => win.hide(),
