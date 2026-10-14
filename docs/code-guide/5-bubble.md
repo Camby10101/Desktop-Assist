@@ -1686,6 +1686,9 @@ Key ideas:
   `?view=panel` in its address tells `main.tsx` which UI to draw. The bubble has its own tiny
   window so it never resizes when the panel opens, and only a 72×72 window moves during a drag or
   a bounce.
+- **Always on top, and kept there.** Both windows stay in front of other apps' windows. They use
+  `ON_TOP_LEVEL` rather than Electron's default level, which lost it when the app started behind a
+  full-screen app, and `keepOnTop()` puts them back if anything else takes it away.
 - **Click-through.** The panel window is a large rectangle (sized for the chat card at its
   tallest), but most of it is transparent. `setIgnoreMouseEvents(true, { forward: true })` makes
   Windows pass clicks on it to whatever is underneath, while still telling the page where the
@@ -1710,11 +1713,51 @@ export type View = 'bubble' | 'panel'
 A _union type_: a `View` can only be the string `'bubble'` or `'panel'`, and TypeScript rejects
 anything else.
 
+### `ON_TOP_LEVEL`, `ON_TOP_CHECK_MS`
+
+<!-- code: apps/desktop/src/main/bubble/windows.ts#ON_TOP_LEVEL,ON_TOP_CHECK_MS -->
+
+[`src/main/bubble/windows.ts`, lines 9–20](../../apps/desktop/src/main/bubble/windows.ts#L9-L20)
+
+```ts
+/**
+ * How the overlay windows stay on top. Electron's default level for always-on-top, "floating",
+ * tucks a window just behind the taskbar on Windows. While a full-screen app is in front, Windows
+ * takes the taskbar out of the always-on-top group, and a window tucked behind it then loses its
+ * own always-on-top too: started that way (say, at sign-in, with a full-screen browser already
+ * open), the bubble sat behind everything. From this level up, Electron simply keeps the window
+ * on top, taskbar or not.
+ */
+export const ON_TOP_LEVEL = 'pop-up-menu'
+
+/** How often the overlay windows check they're still on top (see keepOnTop). */
+export const ON_TOP_CHECK_MS = 5000
+```
+
+<!-- /code -->
+
+How the overlay windows stay in front of everything else. Electron's `setAlwaysOnTop(true, level)`
+takes a _level_; the names come from macOS, where they are real window layers. On Windows there is
+just "always on top" (the `WS_EX_TOPMOST` style), but Electron treats the lower levels specially:
+up to `'status'` it tucks the window in just behind the taskbar.
+
+That caused a bug. With `alwaysOnTop: true` in the window's options, Electron uses its default
+level, `'floating'`, one of those. While a full-screen app is in front, Windows takes the taskbar
+out of the always-on-top group (so the app can cover it), and Windows' rule is that a window placed
+behind one that isn't always on top stops being always on top itself. So if Desktop Assist started
+while, say, a full-screen browser was open (as it can at sign-in, when Windows starts it a little
+after other apps), both its windows lost always-on-top and the bubble sat behind the user's
+windows until something reshuffled them. `'pop-up-menu'` is the lowest level Electron simply keeps
+on top, taskbar or not. This was found by starting the app behind a full-screen window and reading
+the windows' style: before, neither was on top; now both are.
+
+- `ON_TOP_CHECK_MS`: how often `keepOnTop()` looks.
+
 ### `createOverlayWindow()`
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#createOverlayWindow -->
 
-[`src/main/bubble/windows.ts`, lines 9–62](../../apps/desktop/src/main/bubble/windows.ts#L9-L62)
+[`src/main/bubble/windows.ts`, lines 22–77](../../apps/desktop/src/main/bubble/windows.ts#L22-L77)
 
 ```ts
 /**
@@ -1741,7 +1784,8 @@ export function createOverlayWindow(view: View, size: Size): BrowserWindow {
     maximizable: false,
     fullscreenable: false,
     skipTaskbar: true,
-    alwaysOnTop: true,
+    // Always on top, but at ON_TOP_LEVEL (set below); `alwaysOnTop: true` here would use
+    // Electron's default level, which loses it while a full-screen app is in front.
     type: 'toolbar',
     // Both can take the focus. A bubble that couldn't had its mouse presses dropped by Windows /
     // Chromium after clicking elsewhere (only the release arrived, so clicks did nothing).
@@ -1757,6 +1801,7 @@ export function createOverlayWindow(view: View, size: Size): BrowserWindow {
       spellcheck: view === 'panel',
     },
   })
+  win.setAlwaysOnTop(true, ON_TOP_LEVEL)
   lockDown(win, view)
   if (view === 'panel') {
     win.setIgnoreMouseEvents(true, { forward: true })
@@ -1781,6 +1826,9 @@ inside; the options say what kind of window.
 - `...size`: the window's `width` and `height`: `BUBBLE_BOX` square for the bubble,
   `panelWindowSize(actionCount)` for the panel. Neither window changes size later, only position.
 - `show: false`: created hidden. The controller decides when each one appears.
+- No `alwaysOnTop: true`: the comment explains that would use Electron's default level, which
+  loses it while a full-screen app is in front. `win.setAlwaysOnTop(true, ON_TOP_LEVEL)` straight
+  after creating the window makes it always on top at a level that keeps it there.
 - `transparent: true`: together with `frame: false` (no title bar or border) and a fully
   transparent `backgroundColor` (in `'#00000000'` the last two hex digits are the alpha), only what
   the page draws is visible.
@@ -1819,17 +1867,55 @@ inside; the options say what kind of window.
 - `void win.loadURL(`: loading returns a promise that isn't awaited; `void` marks that as
   deliberate.
 
+### `keepOnTop()`
+
+<!-- code: apps/desktop/src/main/bubble/windows.ts#keepOnTop -->
+
+[`src/main/bubble/windows.ts`, lines 79–90](../../apps/desktop/src/main/bubble/windows.ts#L79-L90)
+
+```ts
+/**
+ * Puts the window back on top if something took that away. Windows can still demote an
+ * always-on-top window (another app reordering windows, Explorer restarting), and nothing tells
+ * the app when it happens, so the windows check every few seconds; it costs one look at the
+ * window's style, and only a window that lost it is moved. Returns a function that stops it.
+ */
+export function keepOnTop(win: BrowserWindow): () => void {
+  const timer = setInterval(() => {
+    if (!win.isDestroyed() && !win.isAlwaysOnTop()) win.setAlwaysOnTop(true, ON_TOP_LEVEL)
+  }, ON_TOP_CHECK_MS)
+  return () => clearInterval(timer)
+}
+```
+
+<!-- /code -->
+
+A safety net. Windows can still take always-on-top away from a window, for example when another
+app reorders windows or Explorer restarts, and nothing tells the app when it happens. So each
+window looks every five seconds and puts itself back if needed. `index.ts` starts this for both
+windows and stops it when quitting.
+
+- `win.isAlwaysOnTop()`: reads the window's actual style, so it notices when Windows took it away.
+  Most of the time it's still on top and nothing else happens: the window isn't moved, so it never
+  jumps in front of another app's always-on-top window every few seconds.
+- `!win.isDestroyed()`: never touch a window that has been closed.
+- `return () => clearInterval(timer)`: the caller gets the way to stop it.
+
 ### `bubbleSurface()`, `panelSurface()`
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#bubbleSurface,panelSurface -->
 
-[`src/main/bubble/windows.ts`, lines 64–82](../../apps/desktop/src/main/bubble/windows.ts#L64-L82)
+[`src/main/bubble/windows.ts`, lines 92–115](../../apps/desktop/src/main/bubble/windows.ts#L92-L115)
 
 ```ts
 export function bubbleSurface(win: BrowserWindow): Surface {
   return {
     setBounds: (bounds) => win.setBounds(bounds),
-    show: () => win.showInactive(),
+    show: () => {
+      // Also puts it at the top of the always-on-top windows, in front of any shown meanwhile.
+      win.setAlwaysOnTop(true, ON_TOP_LEVEL)
+      win.showInactive()
+    },
     hide: () => win.hide(),
   }
 }
@@ -1839,6 +1925,7 @@ export function panelSurface(win: BrowserWindow): PanelSurface {
     setBounds: (bounds) => win.setBounds(bounds),
     show: () => {
       resetClickThrough(win)
+      win.setAlwaysOnTop(true, ON_TOP_LEVEL)
       win.show()
     },
     hide: () => win.hide(),
@@ -1852,8 +1939,9 @@ export function panelSurface(win: BrowserWindow): PanelSurface {
 Adapters: each wraps a real `BrowserWindow` in the small object the controller expects, and
 forwards each call to the matching Electron method.
 
-- `show: () => win.showInactive()`: shows the bubble without activating it, so it never steals
-  focus.
+- `win.setAlwaysOnTop(true, ON_TOP_LEVEL)`: each time a window is shown it's made always on top
+  again, which also puts it in front of any other always-on-top windows that appeared meanwhile.
+- `win.showInactive()`: shows the bubble without activating it, so it never steals focus.
 - `resetClickThrough(win)`: the panel's click-through is reset each time, just before it's shown.
 - `win.show()`: unlike `showInactive()`, this shows and activates the panel.
 - `focus: () => win.focus()`: gives the panel keyboard focus, so you can type straight away.
@@ -1863,7 +1951,7 @@ forwards each call to the matching Electron method.
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#resetClickThrough -->
 
-[`src/main/bubble/windows.ts`, lines 84–96](../../apps/desktop/src/main/bubble/windows.ts#L84-L96)
+[`src/main/bubble/windows.ts`, lines 117–129](../../apps/desktop/src/main/bubble/windows.ts#L117-L129)
 
 ```ts
 /**
@@ -1901,7 +1989,7 @@ been hidden, for example for a screenshot.
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#lockDown -->
 
-[`src/main/bubble/windows.ts`, lines 98–107](../../apps/desktop/src/main/bubble/windows.ts#L98-L107)
+[`src/main/bubble/windows.ts`, lines 131–140](../../apps/desktop/src/main/bubble/windows.ts#L131-L140)
 
 ```ts
 function lockDown(win: BrowserWindow, view: View): void {
@@ -1936,7 +2024,7 @@ Basic safety and crash recovery for both pages.
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#addEditContextMenu -->
 
-[`src/main/bubble/windows.ts`, lines 109–130](../../apps/desktop/src/main/bubble/windows.ts#L109-L130)
+[`src/main/bubble/windows.ts`, lines 142–163](../../apps/desktop/src/main/bubble/windows.ts#L142-L163)
 
 ```ts
 /** Right-click menu for the text box: spelling suggestions plus the usual edit commands. */
