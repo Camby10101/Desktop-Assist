@@ -163,9 +163,9 @@ const settings = new SettingsService(join(userData, 'preferences.json'), screens
 
 #### The two windows
 
-<!-- code: apps/desktop/src/main/index.ts#start.bubbleWindow,panelWindow,windows,windowsReady,broadcast -->
+<!-- code: apps/desktop/src/main/index.ts#start.bubbleWindow,panelWindow,windows,stopKeepingOnTop,windowsReady,broadcast -->
 
-[`src/main/index.ts`, lines 107–116](../../apps/desktop/src/main/index.ts#L107-L116)
+[`src/main/index.ts`, lines 107–117](../../apps/desktop/src/main/index.ts#L107-L117)
 
 ```ts
 // The windows are created after the last `await`: from here to registerIpc() below nothing
@@ -175,6 +175,8 @@ const bubbleWindow = createOverlayWindow('bubble', { width: BUBBLE_BOX, height: 
 const panelWindow = createOverlayWindow('panel', panelWindowSize(actionCount))
 
 const windows = [bubbleWindow, panelWindow]
+
+const stopKeepingOnTop = windows.map(keepOnTop)
 
 // Listen straight away, so a page that finishes loading quickly isn't missed.
 const windowsReady = Promise.all(windows.map((win) => once(win, 'ready-to-show')))
@@ -196,6 +198,9 @@ page's request is handled, its handler has been registered.
   window and starts loading the page into it (`bubble/windows.ts`, see
   [The bubble](5-bubble.md)). The bubble window is just big enough for the bubble; the panel
   window's size depends on how many action icons the tenant has (`panelWindowSize()`).
+- `windows.map(keepOnTop)`: each window checks every few seconds that it's still on top of other
+  apps' windows, and puts itself back if not (`bubble/windows.ts`). The functions that stop the
+  checks are kept for quitting.
 - `once(win, 'ready-to-show')`: Node's `once()` turns the next firing of an event into a promise.
   `ready-to-show` fires when a hidden window's page has painted for the first time. The listeners
   are attached as soon as the windows exist, because an event that fires before anyone is
@@ -209,7 +214,7 @@ page's request is handled, its handler has been registered.
 
 <!-- code: apps/desktop/src/main/index.ts#start.bubble -->
 
-[`src/main/index.ts`, lines 118–130](../../apps/desktop/src/main/index.ts#L118-L130)
+[`src/main/index.ts`, lines 119–131](../../apps/desktop/src/main/index.ts#L119-L131)
 
 ```ts
 const bubble = new BubbleController({
@@ -257,7 +262,7 @@ touches Electron directly; everything it needs is passed in here.
 
 <!-- code: apps/desktop/src/main/index.ts#start.screenshots,notify,copyScreenshots -->
 
-[`src/main/index.ts`, lines 134–155](../../apps/desktop/src/main/index.ts#L134-L155)
+[`src/main/index.ts`, lines 135–156](../../apps/desktop/src/main/index.ts#L135-L156)
 
 ```ts
 const screenshots = new ScreenshotService(screenshotsDir, () =>
@@ -315,7 +320,7 @@ const copyScreenshots = async (paths: string[]) => {
 
 <!-- code: apps/desktop/src/main/index.ts#start.builtIn,claudeDesktop -->
 
-[`src/main/index.ts`, lines 158–187](../../apps/desktop/src/main/index.ts#L158-L187)
+[`src/main/index.ts`, lines 159–188](../../apps/desktop/src/main/index.ts#L159-L188)
 
 ```ts
 const builtIn =
@@ -394,7 +399,7 @@ exists.
 
 <!-- code: apps/desktop/src/main/index.ts#start.netFetch,appsStatus,portalApps -->
 
-[`src/main/index.ts`, lines 188–213](../../apps/desktop/src/main/index.ts#L188-L213)
+[`src/main/index.ts`, lines 189–214](../../apps/desktop/src/main/index.ts#L189-L214)
 
 ```ts
 // Electron's fetch, so a proxy set in Windows is used.
@@ -466,7 +471,7 @@ icon (see [Your apps](10-apps.md)). It's only set up when the tenant has a `port
 
 <!-- code: apps/desktop/src/main/index.ts#start.requests,memoryPath,atlassianStatus,atlassian,desk -->
 
-[`src/main/index.ts`, lines 218–280](../../apps/desktop/src/main/index.ts#L218-L280)
+[`src/main/index.ts`, lines 219–281](../../apps/desktop/src/main/index.ts#L219-L281)
 
 ```ts
 const requests = serviceDesk?.requests
@@ -590,7 +595,7 @@ Two statements follow:
 
 <!-- code: apps/desktop/src/main/index.ts#start.onDisplayChange -->
 
-[`src/main/index.ts`, line 336](../../apps/desktop/src/main/index.ts#L336)
+[`src/main/index.ts`, line 337](../../apps/desktop/src/main/index.ts#L337)
 
 ```ts
 const onDisplayChange = () => bubble.displayChanged()
@@ -641,7 +646,7 @@ Everything else in this part of `start()` is plain statements:
 
 <!-- code: apps/desktop/src/main/index.ts#start.shuttingDown -->
 
-[`src/main/index.ts`, lines 341–342](../../apps/desktop/src/main/index.ts#L341-L342)
+[`src/main/index.ts`, lines 342–343](../../apps/desktop/src/main/index.ts#L342-L343)
 
 ```ts
 // Save the text box before quitting. before-quit fires again after the second app.quit().
@@ -659,7 +664,8 @@ Quit or the Close icon. It doesn't fire when Windows shuts down or logs off, whi
   `before-quit` a second time. This flag lets that second one through.
 - `event.preventDefault()`: cancels this first quit, to make time for the steps below.
 - `bubble.dispose()`, `builtIn?.chat.stop()`: stops the bubble's animation timers and, with the
-  built-in chat, aborts a reply that is still streaming.
+  built-in chat, aborts a reply that is still streaming. The loop over `stopKeepingOnTop` ends the
+  windows' on-top checks.
 - `void portalApps?.dispose()`: closes the Apps list's connection to JumpCloud, and stops waiting
   for a browser sign-in if one is under way. `atlassian?.dispose()` does the same for Atlassian,
   and stops the 5-minute checks.
@@ -694,7 +700,7 @@ was part of `start()`. It returns a [`BuiltInChat`](#builtinchat): the `AuthMana
 
 <!-- code: apps/desktop/src/main/index.ts#startBuiltInChat.devBaseUrl,lastIdToken,backend,chat -->
 
-[`src/main/index.ts`, lines 378–402](../../apps/desktop/src/main/index.ts#L378-L402)
+[`src/main/index.ts`, lines 380–404](../../apps/desktop/src/main/index.ts#L380-L404)
 
 ```ts
 // Dev runs may point at a local test server; an installed app always talks to Anthropic.
@@ -767,7 +773,7 @@ const chat = new ChatSession({
 
 <!-- code: apps/desktop/src/main/index.ts#startBuiltInChat.missing,localIssuer,authState,auth -->
 
-[`src/main/index.ts`, lines 404–428](../../apps/desktop/src/main/index.ts#L404-L428)
+[`src/main/index.ts`, lines 406–430](../../apps/desktop/src/main/index.ts#L406-L430)
 
 ```ts
 const missing = missingSettings(signIn, claudeAccess)
@@ -844,7 +850,7 @@ Two statements end the function:
 
 <!-- code: apps/desktop/src/main/index.ts#safeStorageEncryptor -->
 
-[`src/main/index.ts`, lines 434–439](../../apps/desktop/src/main/index.ts#L434-L439)
+[`src/main/index.ts`, lines 436–441](../../apps/desktop/src/main/index.ts#L436-L441)
 
 ```ts
 /** Windows DPAPI through Electron: only this Windows user can decrypt what it encrypts. */
@@ -872,7 +878,7 @@ The encryption `SecretStore` uses for the saved sign-in. `SecretStore` only know
 
 <!-- code: apps/desktop/src/main/index.ts#withDevOverrides -->
 
-[`src/main/index.ts`, lines 441–463](../../apps/desktop/src/main/index.ts#L441-L463)
+[`src/main/index.ts`, lines 443–465](../../apps/desktop/src/main/index.ts#L443-L465)
 
 ```ts
 /**
@@ -926,7 +932,7 @@ example to try the built-in chat against a test identity provider, without editi
 
 <!-- code: apps/desktop/src/main/index.ts#isLoopback -->
 
-[`src/main/index.ts`, lines 465–467](../../apps/desktop/src/main/index.ts#L465-L467)
+[`src/main/index.ts`, lines 467–469](../../apps/desktop/src/main/index.ts#L467-L469)
 
 ```ts
 function isLoopback(url: URL): boolean {
@@ -944,7 +950,7 @@ in `hostname`. Used only to decide whether plain `http` is allowed for a dev ide
 
 <!-- code: apps/desktop/src/main/index.ts#toArea,electronDisplays -->
 
-[`src/main/index.ts`, lines 469–485](../../apps/desktop/src/main/index.ts#L469-L485)
+[`src/main/index.ts`, lines 471–487](../../apps/desktop/src/main/index.ts#L471-L487)
 
 ```ts
 /** Electron's `screen`, in the shape the bubble controller uses. All coordinates are DIPs. */
@@ -993,7 +999,7 @@ method is called, which happens after `start()` has begun.
 
 <!-- code: apps/desktop/src/main/index.ts#fail -->
 
-[`src/main/index.ts`, lines 487–491](../../apps/desktop/src/main/index.ts#L487-L491)
+[`src/main/index.ts`, lines 489–493](../../apps/desktop/src/main/index.ts#L489-L493)
 
 ```ts
 function fail(error: unknown): void {
