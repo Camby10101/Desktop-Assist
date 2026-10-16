@@ -595,7 +595,7 @@ One notification, as a button that opens its issue.
   (`absolute -top-0.5 -right-0.5`). Its white border (`border-2 border-white`) separates it from
   the icon.
 - `n.unread && 'font-semibold'`: a new notification's first line is bold too.
-- `{n.by} {n.kind === 'assigned' ? 'assigned you' : 'mentioned you'}`: "Sam Bolin assigned you".
+- `{n.by} {n.kind === 'assigned' ? 'assigned you' : 'mentioned you'}`: "Alan Turing assigned you".
 - `timeAgo(n.at)`: from `src/shared/format.ts`: "5m ago", "2d ago" and so on.
 - `{n.key}` then `{n.summary}`: the issue, on one line, cut short if it's long (`truncate`).
 - `n.excerpt`: for a mention, the start of the comment, in quotes, on up to two lines
@@ -1619,7 +1619,7 @@ My requests: the user's requests, newest change first.
 - `list.status === 'error'`: the reason with Retry, above the requests as last loaded.
 - Each request is a button that opens it in the card (`onOpenIssue`), which also marks its news
   as seen (`Atlassian.issue()`). It shows the key and summary, the status pill, then either the
-  news in the accent colour ("Now Resolved · Mark Duong replied") or when it was last updated.
+  news in the accent colour ("Now Resolved · Grace Hopper replied") or when it was last updated.
 
 ### `Field` and `firstLine()`
 

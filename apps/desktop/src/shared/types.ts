@@ -212,7 +212,7 @@ export interface ServiceRequest {
   updated: string
   /** The request on the help centre portal. */
   url: string
-  /** What's new since the user last looked ("Mark Duong replied", "Now Resolved"), or null. */
+  /** What's new since the user last looked ("Grace Hopper replied", "Now Resolved"), or null. */
   news: string | null
 }
 

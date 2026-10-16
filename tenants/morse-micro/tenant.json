@@ -58,7 +58,8 @@
     "knowledgeSpaces": ["INFRA"]
   },
   "updates": {
-    "repo": "Camby10101/Desktop-Assist"
+    "repo": "Camby10101/Desktop-Assist",
+    "publicKey": "MCowBQYDK2VwAyEAVVUDKeMaBj3X+A0BV4uKVrM4XFieyOYA1DTzGw+2VcY="
   },
   "portal": {
     "name": "JumpCloud",

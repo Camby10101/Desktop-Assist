@@ -6,8 +6,8 @@ The _main process_ is the Node.js side of an Electron app: the single process th
 windows, the files, the tray icon and the network. This page covers how it starts and how the
 pages talk to it. `index.ts` creates every service and wires them together, `ipc.ts` answers the
 pages' requests, and the smaller files hold the problem log, the tenant config, the user's
-preferences, the commands behind the action icons, uninstalling, checking for updates and the tray
-icon. The services
+preferences, the commands behind the action icons, uninstalling, checking for updates (and signing
+releases for it), refusing to start with debugging on, and the tray icon. The services
 themselves (sign-in, Claude, the bubble, the draft and screenshots, Claude Desktop, the Apps list,
 Jira and the service desk) each have their own page.
 
@@ -37,9 +37,9 @@ tests can drive them with fakes. `index.ts` is the only file that knows about al
 
 ### Module-level code
 
-<!-- code: apps/desktop/src/main/index.ts#SHUTDOWN_TIMEOUT_MS,PRODUCT_NAME,controller,tray -->
+<!-- code: apps/desktop/src/main/index.ts#SHUTDOWN_TIMEOUT_MS,PRODUCT_NAME,controller,tray,refusedSwitches -->
 
-[`src/main/index.ts`, lines 69–85](../../apps/desktop/src/main/index.ts#L69-L85)
+[`src/main/index.ts`, lines 70–91](../../apps/desktop/src/main/index.ts#L70-L91)
 
 ```ts
 const SHUTDOWN_TIMEOUT_MS = 2000
@@ -50,12 +50,18 @@ const PRODUCT_NAME = 'Desktop Assist'
 let controller: BubbleController | null = null
 
 let tray: Tray | null = null
+
+// An installed copy won't start with debugging switched on: another program could use it to drive
+// the app, and through it Jira with the user's sign-in. Dev runs and the automated tests need it.
+const refusedSwitches = app.isPackaged
+  ? debugSwitches((name) => app.commandLine.hasSwitch(name))
+  : []
 ```
 
 <!-- /code -->
 
 This runs the moment Electron loads the file, before the app is ready. The block shows only the
-four declarations. Two `if` statements sit between them (they can't be shown on their own), so
+five declarations. Two `if` statements sit among them (they can't be shown on their own), so
 they're quoted in the bullets below, in the order they run.
 
 - `SHUTDOWN_TIMEOUT_MS = 2000`: the longest quitting will wait for the draft to be saved (see
@@ -75,8 +81,18 @@ they're quoted in the bullets below, in the order they run.
 - `let tray`: if JavaScript frees the `Tray` object (garbage collection, which happens once
   nothing refers to it), its icon can vanish from the notification area. A module-level variable
   keeps it alive for the whole run.
-- `if (!app.requestSingleInstanceLock())`: the _single-instance lock_ lets only one copy of the
-  app run per data folder. A second copy fails to get the lock and quits at once (`app.quit()`).
+- `const refusedSwitches`: as the comment says, an installed copy won't start with debugging
+  switched on. `debugSwitches()` (see [`src/main/debugging.ts`](#srcmaindebuggingts-no-debugging-in-an-installed-copy))
+  lists the debugging switches the app was started with, asking `app.commandLine.hasSwitch()`,
+  which reads Chromium's own view of the command line. A dev run, and the automated tests (which
+  drive the app through remote debugging), skip the check.
+- `if (refusedSwitches.length)`: then the app writes a line to the problem log ("Refused to start
+  with --remote-debugging-port") and exits at once with `app.exit(1)`, before any window, sign-in
+  or connection exists. It comes before the single-instance lock, so a copy started that way
+  can't pass anything on to the copy that's already running either.
+- `else if (!app.requestSingleInstanceLock())`: the _single-instance lock_ lets only one copy of
+  the app run per data folder. A second copy fails to get the lock and quits at once
+  (`app.quit()`).
 - `app.on('second-instance', () => controller?.expand())`: Electron fires `second-instance` in
   the copy that's already running when another copy tries to start. So launching the app again
   (from the Start menu, say) just opens the panel. The `?.` skips the call if `start()` hasn't
@@ -102,7 +118,7 @@ backend, the conversation and the JumpCloud sign-in) are in a separate function,
 
 <!-- code: apps/desktop/src/main/index.ts#start.tenant -->
 
-[`src/main/index.ts`, line 97](../../apps/desktop/src/main/index.ts#L97)
+[`src/main/index.ts`, line 108](../../apps/desktop/src/main/index.ts#L108)
 
 ```ts
 const tenant = await withDevOverrides(TenantSchema.parse(tenantConfig))
@@ -129,7 +145,7 @@ const tenant = await withDevOverrides(TenantSchema.parse(tenantConfig))
 
 <!-- code: apps/desktop/src/main/index.ts#start.userData,screenshotsDir,actionCount,log,notes,settings -->
 
-[`src/main/index.ts`, lines 101–112](../../apps/desktop/src/main/index.ts#L101-L112)
+[`src/main/index.ts`, lines 112–123](../../apps/desktop/src/main/index.ts#L112-L123)
 
 ```ts
 const userData = app.getPath('userData')
@@ -168,7 +184,7 @@ const settings = new SettingsService(join(userData, 'preferences.json'), screens
 
 <!-- code: apps/desktop/src/main/index.ts#start.bubbleWindow,panelWindow,windows,stopKeepingOnTop,windowsReady,broadcast -->
 
-[`src/main/index.ts`, lines 115–125](../../apps/desktop/src/main/index.ts#L115-L125)
+[`src/main/index.ts`, lines 126–136](../../apps/desktop/src/main/index.ts#L126-L136)
 
 ```ts
 // The windows are created after the last `await`: from here to registerIpc() below nothing
@@ -217,7 +233,7 @@ page's request is handled, its handler has been registered.
 
 <!-- code: apps/desktop/src/main/index.ts#start.bubble -->
 
-[`src/main/index.ts`, lines 127–139](../../apps/desktop/src/main/index.ts#L127-L139)
+[`src/main/index.ts`, lines 138–150](../../apps/desktop/src/main/index.ts#L138-L150)
 
 ```ts
 const bubble = new BubbleController({
@@ -265,7 +281,7 @@ touches Electron directly; everything it needs is passed in here.
 
 <!-- code: apps/desktop/src/main/index.ts#start.screenshots,notify,copyScreenshots -->
 
-[`src/main/index.ts`, lines 143–164](../../apps/desktop/src/main/index.ts#L143-L164)
+[`src/main/index.ts`, lines 154–175](../../apps/desktop/src/main/index.ts#L154-L175)
 
 ```ts
 const screenshots = new ScreenshotService(screenshotsDir, () =>
@@ -323,7 +339,7 @@ const copyScreenshots = async (paths: string[]) => {
 
 <!-- code: apps/desktop/src/main/index.ts#start.builtIn,claudeDesktop -->
 
-[`src/main/index.ts`, lines 167–196](../../apps/desktop/src/main/index.ts#L167-L196)
+[`src/main/index.ts`, lines 178–207](../../apps/desktop/src/main/index.ts#L178-L207)
 
 ```ts
 const builtIn =
@@ -402,7 +418,7 @@ exists.
 
 <!-- code: apps/desktop/src/main/index.ts#start.netFetch,updater -->
 
-[`src/main/index.ts`, lines 197–226](../../apps/desktop/src/main/index.ts#L197-L226)
+[`src/main/index.ts`, lines 208–238](../../apps/desktop/src/main/index.ts#L208-L238)
 
 ```ts
 // Electron's fetch, so a proxy set in Windows is used.
@@ -413,6 +429,7 @@ const updater = updates
       currentVersion: app.getVersion(),
       latestUrl: `${updates.api}/repos/${updates.repo}/releases/latest`,
       downloads: `${updates.downloads}/${updates.repo}/releases/download/`,
+      publicKey: updates.publicKey,
       fetch: netFetch,
       save: (name, chunks) =>
         saveDownload(join(app.getPath('temp'), `${tenant.appName} update`), name, chunks),
@@ -457,6 +474,8 @@ const updater = updates
   repository's release files are, such as
   `https://github.com/Camby10101/Desktop-Assist/releases/download/`. Nothing from anywhere else is
   downloaded.
+- `publicKey: updates.publicKey`: the release key's public half from `tenant.json`. Only an
+  installer signed with the key's private half, which stays off GitHub, is ever run.
 - `saveDownload(join(app.getPath('temp'), ...), name, chunks)`: the installer is saved in a folder
   of its own in Windows' temporary folder, `%TEMP%\Desktop Assist update`.
 - `install: app.isPackaged ? (path) => spawn(path, INSTALLER_ARGS, ...).unref() : null`: as the
@@ -478,7 +497,7 @@ const updater = updates
 
 <!-- code: apps/desktop/src/main/index.ts#start.appsStatus,portalApps -->
 
-[`src/main/index.ts`, lines 228–250](../../apps/desktop/src/main/index.ts#L228-L250)
+[`src/main/index.ts`, lines 240–262](../../apps/desktop/src/main/index.ts#L240-L262)
 
 ```ts
 let appsStatus: AppsState['status'] = 'loading'
@@ -543,7 +562,7 @@ icon (see [Your apps](10-apps.md)). It's only set up when the tenant has a `port
 
 <!-- code: apps/desktop/src/main/index.ts#start.requests,memoryPath,atlassianStatus,atlassian,desk -->
 
-[`src/main/index.ts`, lines 255–317](../../apps/desktop/src/main/index.ts#L255-L317)
+[`src/main/index.ts`, lines 267–329](../../apps/desktop/src/main/index.ts#L267-L329)
 
 ```ts
 const requests = serviceDesk?.requests
@@ -667,7 +686,7 @@ Two statements follow:
 
 <!-- code: apps/desktop/src/main/index.ts#start.onDisplayChange -->
 
-[`src/main/index.ts`, line 374](../../apps/desktop/src/main/index.ts#L374)
+[`src/main/index.ts`, line 386](../../apps/desktop/src/main/index.ts#L386)
 
 ```ts
 const onDisplayChange = () => bubble.displayChanged()
@@ -719,7 +738,7 @@ Everything else in this part of `start()` is plain statements:
 
 <!-- code: apps/desktop/src/main/index.ts#start.shuttingDown -->
 
-[`src/main/index.ts`, lines 379–380](../../apps/desktop/src/main/index.ts#L379-L380)
+[`src/main/index.ts`, lines 391–392](../../apps/desktop/src/main/index.ts#L391-L392)
 
 ```ts
 // Save the text box before quitting. before-quit fires again after the second app.quit().
@@ -757,7 +776,7 @@ anything.
 
 <!-- code: apps/desktop/src/main/index.ts#start.stopWatchingFront -->
 
-[`src/main/index.ts`, lines 399–409](../../apps/desktop/src/main/index.ts#L399-L409)
+[`src/main/index.ts`, lines 411–421](../../apps/desktop/src/main/index.ts#L411-L421)
 
 ```ts
 // For its first ten minutes, make sure the bubble isn't stuck behind other apps' windows.
@@ -808,7 +827,7 @@ was part of `start()`. It returns a [`BuiltInChat`](#builtinchat): the `AuthMana
 
 <!-- code: apps/desktop/src/main/index.ts#startBuiltInChat.devBaseUrl,lastIdToken,backend,chat -->
 
-[`src/main/index.ts`, lines 429–453](../../apps/desktop/src/main/index.ts#L429-L453)
+[`src/main/index.ts`, lines 441–465](../../apps/desktop/src/main/index.ts#L441-L465)
 
 ```ts
 // Dev runs may point at a local test server; an installed app always talks to Anthropic.
@@ -881,7 +900,7 @@ const chat = new ChatSession({
 
 <!-- code: apps/desktop/src/main/index.ts#startBuiltInChat.missing,localIssuer,authState,auth -->
 
-[`src/main/index.ts`, lines 455–479](../../apps/desktop/src/main/index.ts#L455-L479)
+[`src/main/index.ts`, lines 467–491](../../apps/desktop/src/main/index.ts#L467-L491)
 
 ```ts
 const missing = missingSettings(signIn, claudeAccess)
@@ -958,7 +977,7 @@ Two statements end the function:
 
 <!-- code: apps/desktop/src/main/index.ts#safeStorageEncryptor -->
 
-[`src/main/index.ts`, lines 485–490](../../apps/desktop/src/main/index.ts#L485-L490)
+[`src/main/index.ts`, lines 497–502](../../apps/desktop/src/main/index.ts#L497-L502)
 
 ```ts
 /** Windows DPAPI through Electron: only this Windows user can decrypt what it encrypts. */
@@ -986,7 +1005,7 @@ The encryption `SecretStore` uses for the saved sign-in. `SecretStore` only know
 
 <!-- code: apps/desktop/src/main/index.ts#withDevOverrides -->
 
-[`src/main/index.ts`, lines 492–515](../../apps/desktop/src/main/index.ts#L492-L515)
+[`src/main/index.ts`, lines 504–527](../../apps/desktop/src/main/index.ts#L504-L527)
 
 ```ts
 /**
@@ -1042,7 +1061,7 @@ example to try the built-in chat against a test identity provider, without editi
 
 <!-- code: apps/desktop/src/main/index.ts#isLoopback -->
 
-[`src/main/index.ts`, lines 517–519](../../apps/desktop/src/main/index.ts#L517-L519)
+[`src/main/index.ts`, lines 529–531](../../apps/desktop/src/main/index.ts#L529-L531)
 
 ```ts
 function isLoopback(url: URL): boolean {
@@ -1060,7 +1079,7 @@ in `hostname`. Used only to decide whether plain `http` is allowed for a dev ide
 
 <!-- code: apps/desktop/src/main/index.ts#toArea,electronDisplays -->
 
-[`src/main/index.ts`, lines 521–537](../../apps/desktop/src/main/index.ts#L521-L537)
+[`src/main/index.ts`, lines 533–549](../../apps/desktop/src/main/index.ts#L533-L549)
 
 ```ts
 /** Electron's `screen`, in the shape the bubble controller uses. All coordinates are DIPs. */
@@ -1109,7 +1128,7 @@ method is called, which happens after `start()` has begun.
 
 <!-- code: apps/desktop/src/main/index.ts#fail -->
 
-[`src/main/index.ts`, lines 539–543](../../apps/desktop/src/main/index.ts#L539-L543)
+[`src/main/index.ts`, lines 551–555](../../apps/desktop/src/main/index.ts#L551-L555)
 
 ```ts
 function fail(error: unknown): void {
@@ -2088,9 +2107,16 @@ versions are published as _releases_ of the tenant's GitHub repository (`updates
 tagged with its version, such as `v1.0.1`, and has the installer (`Desktop Assist-Setup-1.0.1.exe`)
 attached. One click does the whole job: ask GitHub's API for the latest release; if it's newer than
 this copy (`app.getVersion()`), download its installer, check it's exactly the file GitHub has (its
-size and SHA-256), and run it as an update. The installer waits for the app to quit, replaces it
-silently and starts the new version; the app says so in a Windows notification and quits. GitHub
-answers without a sign-in, so there's no secret involved.
+size and SHA-256) and that it's signed with the _release key_, and run it as an update. The
+installer waits for the app to quit, replaces it silently and starts the new version; the app says
+so in a Windows notification and quits. GitHub answers without a sign-in, so there's no secret in
+the app.
+
+The signature is what makes an update trustworthy beyond GitHub itself. Each release carries
+`<installer>.sig`, made by [`scripts/release-signing.mjs`](#scriptsrelease-signingmjs-signing-a-release)
+with the private half of the release key, which never goes on GitHub. Every copy has the public
+half (`updates.publicKey` in `tenant.json`) and refuses an installer it doesn't match. So someone
+who gets into the GitHub account can publish a release, but no copy will install it.
 
 Everything outside (the network, the disk, starting the installer, the notification, quitting) is
 passed in, so `tests/updates.test.ts` runs it against a fake GitHub. `start()` in `index.ts`
@@ -2166,7 +2192,7 @@ export function isNewer(candidate: string, current: string): boolean {
 
 <!-- code: apps/desktop/src/main/updates.ts#Release,Item,isObject,releaseOf -->
 
-[`src/main/updates.ts`, lines 33–78](../../apps/desktop/src/main/updates.ts#L33-L78)
+[`src/main/updates.ts`, lines 33–81](../../apps/desktop/src/main/updates.ts#L33-L81)
 
 ```ts
 /** A release with an installer attached. */
@@ -2179,6 +2205,8 @@ export interface Release {
     /** The installer's SHA-256 as GitHub worked it out (hex), if it says. */
     sha256: string | null
   }
+  /** Where the installer's signature is (`<installer>.sig`, on the same release), if it has one. */
+  signature: string | null
 }
 
 type Item = Record<string, unknown>
@@ -2189,23 +2217,23 @@ const isObject = (value: unknown): value is Item =>
 /**
  * The release in GitHub's answer for a repository's latest release, if it's a version with an
  * installer: an `.exe` with "Setup" in its name, downloaded from `downloads` (the repository's own
- * releases, https://github.com/<owner>/<name>/releases/download/).
+ * releases, https://github.com/<owner>/<name>/releases/download/). Its signature is the file of
+ * the same name plus `.sig`.
  */
 export function releaseOf(payload: unknown, downloads: string): Release | null {
   if (!isObject(payload) || payload['draft'] === true || payload['prerelease'] === true) return null
   const version = parseVersion(typeof payload['tag_name'] === 'string' ? payload['tag_name'] : '')
   if (!version) return null
   const assets = Array.isArray(payload['assets']) ? payload['assets'].filter(isObject) : []
+  const fromRepo = (a: Item) =>
+    typeof a['browser_download_url'] === 'string' && a['browser_download_url'].startsWith(downloads)
   const asset = assets.find(
-    (a) =>
-      typeof a['name'] === 'string' &&
-      /setup.*\.exe$/i.test(a['name']) &&
-      typeof a['browser_download_url'] === 'string' &&
-      a['browser_download_url'].startsWith(downloads),
+    (a) => typeof a['name'] === 'string' && /setup.*\.exe$/i.test(a['name']) && fromRepo(a),
   )
   if (!asset) return null
   const digest = typeof asset['digest'] === 'string' ? asset['digest'] : ''
   const sha256 = /^sha256:([0-9a-f]{64})$/i.exec(digest)?.[1]?.toLowerCase() ?? null
+  const signature = assets.find((a) => a['name'] === `${asset['name']}.sig` && fromRepo(a))
   return {
     version: version.join('.'),
     installer: {
@@ -2214,15 +2242,17 @@ export function releaseOf(payload: unknown, downloads: string): Release | null {
       size: typeof asset['size'] === 'number' ? asset['size'] : 0,
       sha256,
     },
+    signature: signature ? String(signature['browser_download_url']) : null,
   }
 }
 ```
 
 <!-- /code -->
 
-`Release` is a release worth installing: its version (`1.0.1`) and its installer's name, address,
-size and SHA-256. `Item` and `isObject` are the same helpers as in `portalData.ts`. `releaseOf()`
-reads GitHub's answer for a repository's latest release, as the comment says.
+`Release` is a release worth installing: its version (`1.0.1`), its installer's name, address,
+size and SHA-256, and where its signature is. `Item` and `isObject` are the same helpers as in
+`portalData.ts`. `releaseOf()` reads GitHub's answer for a repository's latest release, as the
+comment says.
 
 - `payload['draft'] === true || payload['prerelease'] === true`: drafts and pre-releases are never
   installed. GitHub's "latest release" is never one of those anyway, so this is a second guard.
@@ -2231,20 +2261,81 @@ reads GitHub's answer for a repository's latest release, as the comment says.
 - `assets`: the files attached to the release. `/setup.*\.exe$/i` picks the installer by its name
   (electron-builder calls it `<product>-Setup-<version>.exe`); any other files attached to the
   release are ignored.
-- `a['browser_download_url'].startsWith(downloads)`: the file must come from the repository's own
-  releases, so even a strange answer can't make the app download something from elsewhere.
+- `fromRepo(a)`: the file must come from the repository's own releases
+  (`browser_download_url` starts with `downloads`), so even a strange answer can't make the app
+  download something from elsewhere. Both the installer and its signature must pass it.
 - `/^sha256:([0-9a-f]{64})$/i.exec(digest)`: GitHub works out each attached file's SHA-256 itself
   and gives it as `digest`, written `sha256:` and 64 hex digits. `?.[1]` takes the digits if it
   matched; `?? null` covers a release without a digest (older ones), which is checked by its size
   alone.
 - `size: typeof asset['size'] === 'number' ? asset['size'] : 0`: the file's size in bytes, or 0
   when GitHub doesn't say.
+- ``a['name'] === `${asset['name']}.sig` ``: the signature is the file named like the installer
+  plus `.sig`. GitHub renames uploads the same way (a space becomes a `.`), so the two names still
+  match. `signature: null` if there's none; `Updater` then refuses the release.
+
+### `signedText()` and `isSigned()`
+
+<!-- code: apps/desktop/src/main/updates.ts#signedText,isSigned -->
+
+[`src/main/updates.ts`, lines 83–113](../../apps/desktop/src/main/updates.ts#L83-L113)
+
+```ts
+/**
+ * What a release's signature signs: the version and the installer's SHA-256. Signing the version
+ * too means a genuine older installer can't be passed off as a newer release.
+ * scripts/release-signing.mjs signs the same text.
+ */
+export function signedText(version: string, sha256: string): string {
+  return `desktop-assist-update ${version} sha256:${sha256}`
+}
+
+/**
+ * Whether `signature` is the release key's signature of `version` and `sha256`. `publicKey` is
+ * the key's public half as tenant.json has it: an Ed25519 key, base64 (SPKI).
+ */
+export function isSigned(
+  publicKey: string,
+  version: string,
+  sha256: string,
+  signature: Uint8Array,
+): boolean {
+  try {
+    const key = createPublicKey({
+      key: Buffer.from(publicKey, 'base64'),
+      format: 'der',
+      type: 'spki',
+    })
+    if (key.asymmetricKeyType !== 'ed25519') return false
+    return verify(null, Buffer.from(signedText(version, sha256)), key, signature)
+  } catch {
+    return false
+  }
+}
+```
+
+<!-- /code -->
+
+How a signature is checked.
+
+- `signedText(version, sha256)`: what's signed, as the comment says: one line with the version
+  and the installer's SHA-256, such as `desktop-assist-update 1.0.1 sha256:3f…`. Signing the
+  SHA-256 instead of the whole file means the check needs no second pass over a 100 MB download.
+  Signing the version too means a genuine older installer (with its own genuine signature) can't
+  be attached to a new release to put copies back on an old version.
+  `scripts/release-signing.mjs` builds the same text, and a test checks the two agree.
+- `isSigned(publicKey, version, sha256, signature)`: `createPublicKey` reads the public half from
+  `tenant.json`: base64 of the key in the standard _SPKI_ form (`format: 'der'` is that form's
+  binary encoding). The key must be an _Ed25519_ key, a modern signature scheme with short keys
+  and signatures (32 and 64 bytes). `verify(null, text, key, signature)` is Node's check; the
+  `null` is the hash to use, which Ed25519 chooses itself. Anything unreadable (a key that isn't
+  one) counts as not signed, so it never throws.
 
 ### `Fetch` and `UpdaterDeps`
 
 <!-- code: apps/desktop/src/main/updates.ts#Fetch,UpdaterDeps -->
 
-[`src/main/updates.ts`, lines 80–105](../../apps/desktop/src/main/updates.ts#L80-L105)
+[`src/main/updates.ts`, lines 115–146](../../apps/desktop/src/main/updates.ts#L115-L146)
 
 ```ts
 export type Fetch = (url: string, init?: RequestInit) => Promise<Response>
@@ -2256,6 +2347,12 @@ export interface UpdaterDeps {
   latestUrl: string
   /** Where the repository's release files are downloaded from; nothing else is downloaded. */
   downloads: string
+  /**
+   * The release key's public half (tenant.json `updates.publicKey`). An installer only runs if
+   * its release has a signature made with the key's private half, which is kept off GitHub: someone
+   * who gets into the GitHub account still can't publish an update.
+   */
+  publicKey: string
   fetch: Fetch
   /**
    * Saves the installer's chunks as they come in, replacing any earlier download; its path. If
@@ -2283,6 +2380,7 @@ proxy set in Windows is used. `UpdaterDeps` is everything `Updater` needs from o
 - `currentVersion`: this copy's version, from `package.json`.
 - `latestUrl`, `downloads`: as their comments say, GitHub's address for the latest release, and
   the only place installers are downloaded from.
+- `publicKey`: the release key's public half, as the comment says.
 - `save(name, chunks)`: as the comment says, saves the installer as it arrives and returns where
   it is (`saveDownload()` below). `AsyncIterable<Uint8Array>` is a source of chunks of bytes that
   arrive one at a time.
@@ -2296,13 +2394,14 @@ proxy set in Windows is used. `UpdaterDeps` is everything `Updater` needs from o
 
 <!-- code: apps/desktop/src/main/updates.ts#Updater.class -->
 
-[`src/main/updates.ts`, lines 107–112](../../apps/desktop/src/main/updates.ts#L107-L112)
+[`src/main/updates.ts`, lines 148–154](../../apps/desktop/src/main/updates.ts#L148-L154)
 
 ```ts
 /**
  * Settings → Check for updates: asks GitHub for the latest release and, if it's newer than this
- * copy, downloads its installer, checks it's exactly the file GitHub has, and runs it. The
- * installer replaces this copy silently and starts the new one; this app quits to let it.
+ * copy, downloads its installer, checks it's exactly the file GitHub has and that the release key
+ * signed it, and runs it. The installer replaces this copy silently and starts the new one; this
+ * app quits to let it.
  */
 export class Updater {
   // …
@@ -2315,7 +2414,7 @@ The class `index.ts` and `ipc.ts` use, with the comment that sums it up.
 
 <!-- code: apps/desktop/src/main/updates.ts#Updater.state,constructor,current -->
 
-[`src/main/updates.ts`, lines 113–119](../../apps/desktop/src/main/updates.ts#L113-L119)
+[`src/main/updates.ts`, lines 155–161](../../apps/desktop/src/main/updates.ts#L155-L161)
 
 ```ts
 private state: UpdateState = { status: 'idle' }
@@ -2337,7 +2436,7 @@ get current(): UpdateState {
 
 <!-- code: apps/desktop/src/main/updates.ts#Updater.checkAndInstall -->
 
-[`src/main/updates.ts`, lines 121–154](../../apps/desktop/src/main/updates.ts#L121-L154)
+[`src/main/updates.ts`, lines 163–198](../../apps/desktop/src/main/updates.ts#L163-L198)
 
 ```ts
 /** The whole job, one click: check, and if there's an update, download and install it. */
@@ -2358,7 +2457,9 @@ async checkAndInstall(): Promise<UpdateState> {
   try {
     path = await this.download(release)
   } catch (error) {
-    return this.fail(`Couldn't download ${version}`, error)
+    const doing =
+      error instanceof Unsigned ? `Didn't install ${version}` : `Couldn't download ${version}`
+    return this.fail(doing, error)
   }
   if (!this.deps.install) return this.setState({ status: 'downloaded', version, path })
   this.setState({ status: 'installing', version })
@@ -2387,7 +2488,8 @@ The whole job, from one click, as the comment says.
 - `if (!release || !isNewer(release.version, this.deps.currentVersion))`: no release, or one that
   isn't newer than this copy: `up-to-date`, with this copy's version for the menu to show.
 - `path = await this.download(release)`: downloads the installer and checks it. A failure, or a
-  file that isn't the release's, is `Couldn't download 1.0.1. …`.
+  file that isn't the release's, is `Couldn't download 1.0.1. …`; one the release key didn't sign
+  (`Unsigned`) is `Didn't install 1.0.1. …`, since downloading wasn't the problem.
 - `if (!this.deps.install) return this.setState({ status: 'downloaded', version, path })`: a
   development run stops here.
 - `this.setState({ status: 'installing', version })`, `this.deps.install(path)`: the installer
@@ -2402,7 +2504,7 @@ The whole job, from one click, as the comment says.
 
 <!-- code: apps/desktop/src/main/updates.ts#Updater.latest -->
 
-[`src/main/updates.ts`, lines 156–166](../../apps/desktop/src/main/updates.ts#L156-L166)
+[`src/main/updates.ts`, lines 200–210](../../apps/desktop/src/main/updates.ts#L200-L210)
 
 ```ts
 private async latest(): Promise<Release | null> {
@@ -2438,12 +2540,17 @@ Asks GitHub's API for the repository's latest release.
 
 <!-- code: apps/desktop/src/main/updates.ts#Updater.download -->
 
-[`src/main/updates.ts`, lines 168–203](../../apps/desktop/src/main/updates.ts#L168-L203)
+[`src/main/updates.ts`, lines 212–257](../../apps/desktop/src/main/updates.ts#L212-L257)
 
 ```ts
-/** Downloads the installer, checking its size and SHA-256 against the release's. */
+/**
+ * Downloads the installer, checking its size and SHA-256 against the release's, and its
+ * signature against the release key.
+ */
 private async download(release: Release): Promise<string> {
   const { installer, version } = release
+  const signature = await this.signature(release)
+  const { publicKey } = this.deps
   const response = await this.deps.fetch(installer.url)
   if (!response.ok || !response.body) throw new Error(`The download answered ${response.status}`)
   const total = installer.size || Number(response.headers.get('content-length')) || 0
@@ -2458,7 +2565,8 @@ private async download(release: Release): Promise<string> {
   progress(0)
   const reader = response.body.getReader()
   // The file's chunks as they arrive, hashed and counted on their way to the disk. At the end it
-  // must be the release's file, or saving fails (and the file is deleted).
+  // must be the release's file, signed with the release key, or saving fails (and the file is
+  // deleted).
   async function* chunks(): AsyncGenerator<Uint8Array> {
     for (;;) {
       const { done, value } = await reader.read()
@@ -2471,8 +2579,12 @@ private async download(release: Release): Promise<string> {
     if (installer.size && received !== installer.size) {
       throw new Mismatch(`it's ${received} bytes, not ${installer.size}`)
     }
-    if (installer.sha256 && hash.digest('hex') !== installer.sha256) {
+    const sha256 = hash.digest('hex')
+    if (installer.sha256 && sha256 !== installer.sha256) {
       throw new Mismatch("its SHA-256 isn't the release's")
+    }
+    if (!isSigned(publicKey, version, sha256, signature)) {
+      throw new Unsigned("its signature doesn't match")
     }
   }
   return this.deps.save(installer.name, chunks())
@@ -2482,8 +2594,12 @@ private async download(release: Release): Promise<string> {
 <!-- /code -->
 
 Downloads the installer, as the comment says, checking it on the way: the file must be exactly
-the release's, or it's never run.
+the release's and signed with the release key, or it's never run.
 
+- `const signature = await this.signature(release)`: the signature first (see `signature()`
+  below). A release without one is refused before anything big is downloaded.
+  `const { publicKey } = this.deps` copies the key out for the generator below, which, being a
+  plain `function`, has no `this`.
 - `await this.deps.fetch(installer.url)`: GitHub sends the download on to where it stores release
   files, and `fetch` follows.
 - `const total = installer.size || Number(response.headers.get('content-length')) || 0`: the size
@@ -2498,18 +2614,52 @@ the release's, or it's never run.
   values one at a time (`yield value`) as whoever is reading asks for them, waiting (`await`) in
   between. Here it reads the next chunk, adds it to the hash and the count, reports progress
   (stopping at 99% until the file has been checked), and passes it on to be saved.
-- `if (installer.size && received !== installer.size)`, `hash.digest('hex') !== installer.sha256`:
-  after the last chunk, the size and the SHA-256 must be the release's. As the comment says, if
-  they aren't, `Mismatch` is thrown inside the generator, so it surfaces in `save()` as a failed
-  write, and the file is deleted. A file that isn't the release's never stays on disk to be run.
+- `if (installer.size && received !== installer.size)`, `sha256 !== installer.sha256`: after the
+  last chunk, the size and the SHA-256 must be the release's. As the comment says, if they aren't,
+  `Mismatch` is thrown inside the generator, so it surfaces in `save()` as a failed write, and the
+  file is deleted. A file that isn't the release's never stays on disk to be run.
+- `if (!isSigned(publicKey, version, sha256, signature))`: then the signature must be the release
+  key's, for this version and exactly this file. If not, `Unsigned` is thrown the same way, and
+  the file is deleted too.
 - `return this.deps.save(installer.name, chunks())`: saving pulls the chunks through the
   generator, and returns where the file is.
+
+### `Updater.signature()`
+
+<!-- code: apps/desktop/src/main/updates.ts#Updater.signature -->
+
+[`src/main/updates.ts`, lines 259–269](../../apps/desktop/src/main/updates.ts#L259-L269)
+
+```ts
+/** The release's signature of its installer (64 bytes, base64 in `<installer>.sig`). */
+private async signature(release: Release): Promise<Uint8Array> {
+  if (!release.signature) throw new Unsigned('the release has no signature')
+  const response = await this.deps.fetch(release.signature, {
+    signal: AbortSignal.timeout(15_000),
+  })
+  if (!response.ok) throw new Error(`The signature's download answered ${response.status}`)
+  const signature = Buffer.from((await response.text()).trim(), 'base64')
+  if (signature.length !== 64) throw new Unsigned("its signature file isn't a signature")
+  return signature
+}
+```
+
+<!-- /code -->
+
+Downloads the release's signature, as the comment says.
+
+- `if (!release.signature) throw new Unsigned('the release has no signature')`: no `.sig` on the
+  release (it was forgotten, or the release wasn't made by someone with the key).
+- `AbortSignal.timeout(15_000)`: the file is tiny, so 15 seconds is plenty.
+- `Buffer.from((await response.text()).trim(), 'base64')`: the file is one line of base64, which
+  must come to the 64 bytes of an Ed25519 signature. Anything else (an error page, say) is
+  `Unsigned` too.
 
 ### `Updater.fail()` and `Updater.setState()`
 
 <!-- code: apps/desktop/src/main/updates.ts#Updater.fail,setState -->
 
-[`src/main/updates.ts`, lines 205–224](../../apps/desktop/src/main/updates.ts#L205-L224)
+[`src/main/updates.ts`, lines 271–292](../../apps/desktop/src/main/updates.ts#L271-L292)
 
 ```ts
 private fail(doing: string, error: unknown): UpdateState {
@@ -2519,11 +2669,13 @@ private fail(doing: string, error: unknown): UpdateState {
       ? 'GitHub is busy; try again in a few minutes.'
       : error instanceof Mismatch
         ? `The download isn't the release's file (${error.message}); try again.`
-        : /fetch failed|ENOTFOUND|ECONNREFUSED|ETIMEDOUT|ERR_|network|abort|timeout/i.test(
-              String(error),
-            )
-          ? "Couldn't reach GitHub. Check you're online and try again."
-          : 'Try again later.'
+        : error instanceof Unsigned
+          ? `It isn't signed with the release key (${error.message}), so it may not be genuine. Let IT know.`
+          : /fetch failed|ENOTFOUND|ECONNREFUSED|ETIMEDOUT|ERR_|network|abort|timeout/i.test(
+                String(error),
+              )
+            ? "Couldn't reach GitHub. Check you're online and try again."
+            : 'Try again later.'
   return this.setState({ status: 'error', message: `${doing}. ${reason}` })
 }
 
@@ -2538,7 +2690,8 @@ private setState(state: UpdateState): UpdateState {
 
 - `fail(doing, error)`: logs the details and sets an `error` state with what was being done and a
   plain-English reason: GitHub is busy (`Busy`); the download isn't the release's file
-  (`Mismatch`, with what was wrong); GitHub couldn't be reached (the usual signs of no connection,
+  (`Mismatch`, with what was wrong); it isn't signed with the release key (`Unsigned`, "so it may
+  not be genuine. Let IT know."); GitHub couldn't be reached (the usual signs of no connection,
   plus `ERR_`, Chromium's network errors, and `abort` or `timeout`, the 15-second limit); or just
   "Try again later." The menu shows the message under Check for updates.
 - `setState(state)`: records the new state, reports it (`onState`) and returns it, so
@@ -2548,7 +2701,7 @@ private setState(state: UpdateState): UpdateState {
 
 <!-- code: apps/desktop/src/main/updates.ts#saveDownload -->
 
-[`src/main/updates.ts`, lines 227–249](../../apps/desktop/src/main/updates.ts#L227-L249)
+[`src/main/updates.ts`, lines 295–317](../../apps/desktop/src/main/updates.ts#L295-L317)
 
 ```ts
 /**
@@ -2593,11 +2746,11 @@ Saves the downloaded installer, as the comment says. `index.ts` gives it the fol
 - `catch (error) { await rm(path, { force: true }); throw error }`: the partial file is deleted,
   and the failure passed on to `Updater`.
 
-### `Busy` and `Mismatch`
+### `Busy`, `Mismatch` and `Unsigned`
 
-<!-- code: apps/desktop/src/main/updates.ts#Busy,Mismatch -->
+<!-- code: apps/desktop/src/main/updates.ts#Busy,Mismatch,Unsigned -->
 
-[`src/main/updates.ts`, lines 251–255](../../apps/desktop/src/main/updates.ts#L251-L255)
+[`src/main/updates.ts`, lines 319–326](../../apps/desktop/src/main/updates.ts#L319-L326)
 
 ```ts
 /** GitHub turned the request away (its limit for apps that don't sign in). */
@@ -2605,13 +2758,168 @@ class Busy extends Error {}
 
 /** The download isn't the file the release has. */
 class Mismatch extends Error {}
+
+/** The release isn't signed with the release key: it may not be genuine, so it's never run. */
+class Unsigned extends Error {}
 ```
 
 <!-- /code -->
 
-Two kinds of error, as their comments say, so `fail()` can tell them apart (`instanceof`) and say
-something useful: GitHub turned the request away, or the download isn't the release's file. Like
-`ToolError` in `McpAccount.ts`, each is a plain `Error` under a class name of its own.
+Three kinds of error, as their comments say, so `fail()` can tell them apart (`instanceof`) and
+say something useful: GitHub turned the request away, the download isn't the release's file, or
+it isn't signed with the release key. Like `ToolError` in `McpAccount.ts`, each is a plain `Error`
+under a class name of its own.
+
+## `scripts/release-signing.mjs`: signing a release
+
+The other half of the signature check: the script that makes the release key and signs each
+release's installer with it. It runs on the PC that builds releases, not in the app, and it's
+plain JavaScript run by Node, like the Code Guide's scripts. `npm run release:key` makes the key
+(once), and `npm run dist` ends by signing the installer it built. How to use it is in
+[RELEASING.md](../RELEASING.md).
+
+<!-- code: scripts/release-signing.mjs#ROOT,KEY,signedText,publicKeyOf,signInstaller -->
+
+[`scripts/release-signing.mjs`, lines 26–41](../../scripts/release-signing.mjs#L26-L41)
+
+```js
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+
+const KEY =
+  process.env.DESKTOP_ASSIST_RELEASE_KEY || join(homedir(), '.desktop-assist', 'release-key.pem')
+
+/** What's signed: the same text as signedText() in apps/desktop/src/main/updates.ts. */
+export const signedText = (version, sha256) => `desktop-assist-update ${version} sha256:${sha256}`
+
+/** A key's public half as tenant.json has it: base64 (SPKI). */
+export const publicKeyOf = (key) =>
+  createPublicKey(key).export({ type: 'spki', format: 'der' }).toString('base64')
+
+/** The signature of an installer for a version, base64, as the `.sig` file has it. */
+export function signInstaller(privateKey, version, installer) {
+  const sha256 = createHash('sha256').update(installer).digest('hex')
+  return sign(null, Buffer.from(signedText(version, sha256)), privateKey).toString('base64')
+}
+```
+
+<!-- /code -->
+
+- `KEY`: where the private half is: `%USERPROFILE%\.desktop-assist\release-key.pem`, outside the
+  repository so it can't be committed by mistake, or the file named in
+  `DESKTOP_ASSIST_RELEASE_KEY`.
+- `signedText(version, sha256)`: the same text as `signedText()` in `updates.ts`. The script can't
+  import the app's TypeScript, so it's written twice; `tests/updates.test.ts` signs with this
+  script and checks with the app, so the two can't drift apart unnoticed.
+- `publicKeyOf(key)`: a key's public half as `tenant.json` has it: the SPKI form, base64.
+- `signInstaller(privateKey, version, installer)`: the SHA-256 of the installer's bytes, then
+  Node's `sign()` over the text, as base64: what goes in the `.sig` file.
+
+<!-- code: scripts/release-signing.mjs#makeKey -->
+
+[`scripts/release-signing.mjs`, lines 43–58](../../scripts/release-signing.mjs#L43-L58)
+
+```js
+function makeKey() {
+  if (existsSync(KEY)) {
+    fail(`There's already a release key, ${KEY}. It's never replaced: copies only trust that one.`)
+  }
+  const { privateKey } = generateKeyPairSync('ed25519')
+  mkdirSync(dirname(KEY), { recursive: true })
+  writeFileSync(KEY, privateKey.export({ type: 'pkcs8', format: 'pem' }), {
+    mode: 0o600,
+    flag: 'wx',
+  })
+  console.log(`Made the release key: ${KEY}`)
+  console.log('Keep a copy somewhere safe, such as a password manager. Without it, copies of')
+  console.log("Desktop Assist can't be updated from Settings; with it, anyone can sign an update.")
+  console.log(`\nIts public half, for "updates": { "publicKey": ... } in tenant.json:`)
+  console.log(publicKeyOf(privateKey))
+}
+```
+
+<!-- /code -->
+
+`npm run release:key`. It refuses if there's already a key, since copies only trust the one whose
+public half they have, and replacing it by accident would cut them off from updates.
+`generateKeyPairSync('ed25519')` makes a new key pair; the private half is saved in the standard
+PKCS #8 form (`flag: 'wx'` fails rather than overwrite a file). It prints the public half for
+`tenant.json` and a reminder to keep a copy of the file; the private half is never printed.
+
+<!-- code: scripts/release-signing.mjs#signRelease -->
+
+[`scripts/release-signing.mjs`, lines 60–97](../../scripts/release-signing.mjs#L60-L97)
+
+```js
+function signRelease() {
+  const tenantName = process.env.TENANT ?? 'morse-micro'
+  const tenant = JSON.parse(readFileSync(join(ROOT, 'tenants', tenantName, 'tenant.json'), 'utf8'))
+  if (!tenant.updates) {
+    console.log(`${tenantName} doesn't update from GitHub: nothing to sign.`)
+    return
+  }
+  const app = JSON.parse(readFileSync(join(ROOT, 'apps/desktop/package.json'), 'utf8'))
+  const installer = join(ROOT, 'apps/desktop/dist', `${app.productName}-Setup-${app.version}.exe`)
+  if (!existsSync(installer)) fail(`There's no ${installer} to sign; build it with npm run dist.`)
+  if (!existsSync(KEY)) {
+    fail(
+      `There's no release key at ${KEY}, so the installer isn't signed and copies won't take it ` +
+        'as an update. Put the key there (or name it in DESKTOP_ASSIST_RELEASE_KEY) and run ' +
+        '"node scripts/release-signing.mjs sign"; see docs/RELEASING.md.',
+    )
+  }
+  const privateKey = createPrivateKey(readFileSync(KEY))
+  if (publicKeyOf(privateKey) !== tenant.updates.publicKey) {
+    fail(
+      `${KEY} isn't the key whose public half is updates.publicKey in ${tenantName}'s tenant.json.`,
+    )
+  }
+  const file = readFileSync(installer)
+  const signature = signInstaller(privateKey, app.version, file)
+  // Checked as the app checks it, with the public half from tenant.json.
+  const sha256 = createHash('sha256').update(file).digest('hex')
+  const publicKey = createPublicKey({
+    key: Buffer.from(tenant.updates.publicKey, 'base64'),
+    format: 'der',
+    type: 'spki',
+  })
+  const text = Buffer.from(signedText(app.version, sha256))
+  if (!verify(null, text, publicKey, Buffer.from(signature, 'base64')))
+    fail('The signature failed its check.')
+  writeFileSync(`${installer}.sig`, `${signature}\n`)
+  console.log(`Signed: ${installer}.sig (attach it to the release with the installer)`)
+}
+```
+
+<!-- /code -->
+
+The last step of `npm run dist`.
+
+- `if (!tenant.updates)`: a tenant without updates has nothing to sign.
+- `installer`: the file electron-builder just built, named from `productName` and `version` in
+  `apps/desktop/package.json`, as `artifactName` in `electron-builder.cjs` names it.
+- `if (!existsSync(KEY))`: without the key, the build stops here and says how to sign later.
+- `publicKeyOf(privateKey) !== tenant.updates.publicKey`: the key must be the one copies trust;
+  signing with any other would make a release every copy refuses.
+- `verify(null, text, publicKey, ...)`: the new signature is checked just as the app will check
+  it, with the public half from `tenant.json`, before `<installer>.exe.sig` is written next to the
+  installer.
+
+<!-- code: scripts/release-signing.mjs#fail -->
+
+[`scripts/release-signing.mjs`, lines 99–102](../../scripts/release-signing.mjs#L99-L102)
+
+```js
+function fail(message) {
+  console.error(message)
+  process.exit(1)
+}
+```
+
+<!-- /code -->
+
+Prints why and stops with exit code 1, so `npm run dist` fails visibly. The `if` at the end of the
+file (not shown) runs `key` or `sign` only when the script is run directly, so the test can import
+`signInstaller` without anything happening.
 
 ## `src/main/tenant.ts`: the tenant config
 
@@ -2838,7 +3146,7 @@ connects once in the browser, so there's no secret here.
 
 <!-- code: apps/desktop/src/main/tenant.ts#UpdatesFields,UpdatesSchema,UpdatesConfig -->
 
-[`src/main/tenant.ts`, lines 96–114](../../apps/desktop/src/main/tenant.ts#L96-L114)
+[`src/main/tenant.ts`, lines 96–119](../../apps/desktop/src/main/tenant.ts#L96-L119)
 
 ```ts
 /**
@@ -2852,6 +3160,11 @@ const UpdatesFields = z.object({
   api: z.url({ protocol: /^https?$/ }),
   /** Where release files come from: <downloads>/<repo>/releases/download/…; nothing else is. */
   downloads: z.url({ protocol: /^https?$/ }),
+  /**
+   * The release key's public half, from `npm run release:key`: an Ed25519 key, base64. Only
+   * installers signed with its private half are run (see docs/RELEASING.md).
+   */
+  publicKey: z.string().regex(/^MCowBQYDK2VwAyEA[A-Za-z0-9+/]{43}=$/, 'an Ed25519 public key'),
 })
 
 export const UpdatesSchema = UpdatesFields.extend({
@@ -2864,8 +3177,8 @@ export type UpdatesConfig = z.infer<typeof UpdatesSchema>
 
 <!-- /code -->
 
-Where Check for updates looks for new releases. For Morse Micro, `tenant.json` has just
-`"updates": { "repo": "Camby10101/Desktop-Assist" }`.
+Where Check for updates looks for new releases, and the key they must be signed with. For Morse
+Micro, `tenant.json` has `"updates": { "repo": "Camby10101/Desktop-Assist", "publicKey": "MCow…" }`.
 
 - `repo`: the GitHub repository, as "owner/name". `[\w.-]+` is one or more letters, digits, `_`,
   `.` or `-` (`\w` covers the first three), so the pattern is two such names with one `/`
@@ -2874,17 +3187,66 @@ Where Check for updates looks for new releases. For Morse Micro, `tenant.json` h
   server on the PC.
 - `downloads`: as the comment says, where release files come from: an installer is only
   downloaded from `<downloads>/<repo>/releases/download/`.
+- `publicKey`: the release key's public half, which every update must be signed with. It's
+  required, so a tenant can't offer updates without signatures. `MCowBQYDK2VwAyEA` is how every
+  Ed25519 public key starts in this form (the part that says "Ed25519 key, 32 bytes"); the 43
+  characters and `=` after it are the key itself.
 - `UpdatesSchema = UpdatesFields.extend({ ... })`: the same fields, with GitHub's own addresses as
   defaults (`https://api.github.com` and `https://github.com`), so a tenant only names its
   repository. As for Atlassian, the fields are kept separately for the dev override, without the
   defaults.
 - `UpdatesConfig`: the TypeScript type, with `api` and `downloads` always there.
 
+## `src/main/debugging.ts`: no debugging in an installed copy
+
+<!-- code: apps/desktop/src/main/debugging.ts -->
+
+[`src/main/debugging.ts`, lines 1–19](../../apps/desktop/src/main/debugging.ts#L1-L19)
+
+```ts
+/**
+ * Command-line switches that would let another program on the PC look inside Desktop Assist or
+ * drive it: Chromium's remote debugging (the pages, whose bridge reaches Jira with the user's
+ * sign-in) and Node's inspector (the main process). An installed copy refuses to start with any
+ * of them. Node's are also switched off in the .exe itself (the fuses in electron-builder.cjs).
+ */
+export const DEBUG_SWITCHES = [
+  'remote-debugging-port',
+  'remote-debugging-pipe',
+  'inspect',
+  'inspect-brk',
+  'inspect-port',
+  'inspect-wait',
+]
+
+/** The debugging switches the app was started with, from Electron's `app.commandLine.hasSwitch`. */
+export function debugSwitches(hasSwitch: (name: string) => boolean): string[] {
+  return DEBUG_SWITCHES.filter((name) => hasSwitch(name))
+}
+```
+
+<!-- /code -->
+
+The switches an installed copy refuses to start with, as the comment says. Started with
+`--remote-debugging-port=9222`, an Electron app lets any program on the PC connect to that port
+and run code in its pages. Desktop Assist's panel has the `window.assist` bridge, which can search
+Jira and read issues as the user, so that would hand another program the user's Jira through the
+app. `--remote-debugging-pipe` does the same over a pipe. `--inspect` and its relatives start
+Node's debugger in the main process; the fuses in `electron-builder.cjs` already make the `.exe`
+ignore those, and listing them here is a second guard.
+
+- `debugSwitches(hasSwitch)`: the switches from the list that the app was started with. It's given
+  `app.commandLine.hasSwitch` rather than calling it, so `tests/debugging.test.ts` can try it
+  without Electron. Chromium's own parsing finds a switch however it's written (`--x`, `-x`, or
+  `/x` on Windows, any case), which a search of `process.argv` would miss.
+- The module-level code in `index.ts` exits when this isn't empty (see
+  [Module-level code](#module-level-code)).
+
 ### `SignInConfig` and `ClaudeAccessConfig`
 
 <!-- code: apps/desktop/src/main/tenant.ts#SignInConfig,ClaudeAccessConfig -->
 
-[`src/main/tenant.ts`, lines 116–117](../../apps/desktop/src/main/tenant.ts#L116-L117)
+[`src/main/tenant.ts`, lines 121–122](../../apps/desktop/src/main/tenant.ts#L121-L122)
 
 ```ts
 export type SignInConfig = z.infer<typeof SignInSchema>
@@ -2902,7 +3264,7 @@ and `AnthropicBackend.ts` use these types.
 
 <!-- code: apps/desktop/src/main/tenant.ts#CHAT_APPS -->
 
-[`src/main/tenant.ts`, lines 119–127](../../apps/desktop/src/main/tenant.ts#L119-L127)
+[`src/main/tenant.ts`, lines 124–132](../../apps/desktop/src/main/tenant.ts#L124-L132)
 
 ```ts
 /**
@@ -2932,7 +3294,7 @@ billed to the company.
 
 <!-- code: apps/desktop/src/main/tenant.ts#START_PAGES -->
 
-[`src/main/tenant.ts`, lines 129–133](../../apps/desktop/src/main/tenant.ts#L129-L133)
+[`src/main/tenant.ts`, lines 134–138](../../apps/desktop/src/main/tenant.ts#L134-L138)
 
 ```ts
 /**
@@ -2952,7 +3314,7 @@ Morse Micro opens on the Apps list, with the text box behind the Ask Claude icon
 
 <!-- code: apps/desktop/src/main/tenant.ts#TenantSchema,Tenant -->
 
-[`src/main/tenant.ts`, lines 135–183](../../apps/desktop/src/main/tenant.ts#L135-L183)
+[`src/main/tenant.ts`, lines 140–188](../../apps/desktop/src/main/tenant.ts#L140-L188)
 
 ```ts
 export const TenantSchema = z
@@ -3049,7 +3411,7 @@ The whole `tenant.json`.
 
 <!-- code: apps/desktop/src/main/tenant.ts#brandingOf -->
 
-[`src/main/tenant.ts`, lines 185–201](../../apps/desktop/src/main/tenant.ts#L185-L201)
+[`src/main/tenant.ts`, lines 190–206](../../apps/desktop/src/main/tenant.ts#L190-L206)
 
 ```ts
 export function brandingOf(tenant: Tenant): Branding {
@@ -3087,7 +3449,7 @@ settings never go to the pages.
 
 <!-- code: apps/desktop/src/main/tenant.ts#missingSettings -->
 
-[`src/main/tenant.ts`, lines 203–214](../../apps/desktop/src/main/tenant.ts#L203-L214)
+[`src/main/tenant.ts`, lines 208–219](../../apps/desktop/src/main/tenant.ts#L208-L219)
 
 ```ts
 /** The tenant.json settings still to be filled in before anyone can sign in, by name. */
@@ -3120,7 +3482,7 @@ status is `unconfigured` and the chat box shows the list instead of a sign-in bu
 
 <!-- code: apps/desktop/src/main/tenant.ts#DevOverrideSchema -->
 
-[`src/main/tenant.ts`, lines 216–230](../../apps/desktop/src/main/tenant.ts#L216-L230)
+[`src/main/tenant.ts`, lines 221–235](../../apps/desktop/src/main/tenant.ts#L221-L235)
 
 ```ts
 /**

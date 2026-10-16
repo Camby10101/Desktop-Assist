@@ -1,15 +1,18 @@
-import { createHash } from 'node:crypto'
+import { createHash, generateKeyPairSync, sign, type KeyObject } from 'node:crypto'
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { UpdateState } from '@shared/types'
 import {
   INSTALLER_ARGS,
   isNewer,
+  isSigned,
   parseVersion,
   releaseOf,
   saveDownload,
+  signedText,
   Updater,
 } from '../src/main/updates'
 
@@ -18,7 +21,22 @@ const DOWNLOADS = `https://github.com/${REPO}/releases/download/`
 const INSTALLER = Buffer.from('MZ pretend installer '.repeat(500))
 const SHA = createHash('sha256').update(INSTALLER).digest('hex')
 
-/** GitHub's answer for a release with the installer attached. */
+/** A release key: its private half signs, its public half (as tenant.json has it) checks. */
+function releaseKey(): { privateKey: KeyObject; publicKey: string } {
+  const { privateKey, publicKey } = generateKeyPairSync('ed25519')
+  return {
+    privateKey,
+    publicKey: publicKey.export({ type: 'spki', format: 'der' }).toString('base64'),
+  }
+}
+const KEY = releaseKey()
+/** A `.sig` file's contents: the key's signature of a version and an installer. */
+const signature = (version: string, file: Buffer = INSTALLER, key = KEY.privateKey) => {
+  const sha256 = createHash('sha256').update(file).digest('hex')
+  return sign(null, Buffer.from(signedText(version, sha256)), key).toString('base64') + '\n'
+}
+
+/** GitHub's answer for a release with the installer, and its signature, attached. */
 const release = (tag: string, asset: Record<string, unknown> = {}) => ({
   tag_name: tag,
   draft: false,
@@ -31,6 +49,11 @@ const release = (tag: string, asset: Record<string, unknown> = {}) => ({
       size: INSTALLER.length,
       digest: `sha256:${SHA}`,
       ...asset,
+    },
+    {
+      name: `Desktop.Assist-Setup-${tag.slice(1)}.exe.sig`,
+      browser_download_url: `${DOWNLOADS}${tag}/Desktop.Assist-Setup-${tag.slice(1)}.exe.sig`,
+      size: 89,
     },
   ],
 })
@@ -61,7 +84,22 @@ describe('releaseOf', () => {
         size: INSTALLER.length,
         sha256: SHA,
       },
+      signature: `${DOWNLOADS}v1.0.1/Desktop.Assist-Setup-1.0.1.exe.sig`,
     })
+  })
+
+  it("has no signature if the release has none, or it isn't downloaded from the repository", () => {
+    const payload = release('v1.0.1')
+    const unsigned = { ...payload, assets: payload.assets.slice(0, 2) }
+    expect(releaseOf(unsigned, DOWNLOADS)?.signature).toBeNull()
+    const elsewhere = {
+      ...payload,
+      assets: [
+        ...unsigned.assets,
+        { ...payload.assets[2], browser_download_url: 'https://evil.example/x.exe.sig' },
+      ],
+    }
+    expect(releaseOf(elsewhere, DOWNLOADS)?.signature).toBeNull()
   })
 
   it('ignores drafts, pre-releases, odd tags, and anything not downloaded from the repository', () => {
@@ -79,6 +117,27 @@ describe('releaseOf', () => {
     expect(
       releaseOf(release('v1.0.1', { digest: undefined }), DOWNLOADS)?.installer.sha256,
     ).toBeNull()
+  })
+})
+
+describe('signatures', () => {
+  it("checks the release key signed this version's installer", () => {
+    const signed = Buffer.from(signature('1.0.1'), 'base64')
+    expect(isSigned(KEY.publicKey, '1.0.1', SHA, signed)).toBe(true)
+    // Not another file, nor the same file passed off as another version.
+    expect(isSigned(KEY.publicKey, '1.0.1', SHA.replace(/^./, '0'), signed)).toBe(false)
+    expect(isSigned(KEY.publicKey, '1.0.2', SHA, signed)).toBe(false)
+    // Not signed with another key, and never a key that isn't one.
+    expect(isSigned(releaseKey().publicKey, '1.0.1', SHA, signed)).toBe(false)
+    expect(isSigned('not a key', '1.0.1', SHA, signed)).toBe(false)
+  })
+
+  it('agrees with scripts/release-signing.mjs, which signs releases', async () => {
+    const script = pathToFileURL(resolve(__dirname, '../../../scripts/release-signing.mjs')).href
+    const { signInstaller, publicKeyOf } = await import(script)
+    const signed = Buffer.from(signInstaller(KEY.privateKey, '1.0.1', INSTALLER), 'base64')
+    expect(publicKeyOf(KEY.privateKey)).toBe(KEY.publicKey)
+    expect(isSigned(KEY.publicKey, '1.0.1', SHA, signed)).toBe(true)
   })
 })
 
@@ -129,6 +188,8 @@ function updater(
     file?: Buffer
     dev?: boolean
     current?: string
+    /** What the release's `.sig` holds. */
+    sig?: string
   } = {},
 ) {
   const world = {
@@ -144,11 +205,13 @@ function updater(
     currentVersion: options.current ?? '1.0.0',
     latestUrl: `https://api.github.com/repos/${REPO}/releases/latest`,
     downloads: DOWNLOADS,
+    publicKey: KEY.publicKey,
     fetch: async (url) => {
       world.requests.push(url)
       if (url.endsWith('/releases/latest')) {
         return options.latest ? options.latest() : Response.json(release('v1.0.1'))
       }
+      if (url.endsWith('.sig')) return new Response(options.sig ?? signature('1.0.1', file))
       // The installer, in a few chunks.
       const body = new ReadableStream({
         start(controller) {
@@ -214,19 +277,49 @@ describe('Updater', () => {
   it("never runs a download that isn't the release's file", async () => {
     const tampered = Buffer.from(INSTALLER)
     tampered[100] = 0
-    const changed = updater({ file: tampered })
+    const changed = updater({ file: tampered, sig: signature('1.0.1') })
     expect(await changed.updater.checkAndInstall()).toEqual({
       status: 'error',
       message:
         "Couldn't download 1.0.1. The download isn't the release's file (its SHA-256 isn't the release's); try again.",
     })
     expect(changed.world.installed).toEqual([])
-    const short = updater({ file: INSTALLER.subarray(0, 1000) })
+    const short = updater({ file: INSTALLER.subarray(0, 1000), sig: signature('1.0.1') })
     const result = await short.updater.checkAndInstall()
     expect(result.status === 'error' && result.message).toContain(
       `1000 bytes, not ${INSTALLER.length}`,
     )
     expect(short.world.quit).toBe(0)
+  })
+
+  it("never runs an installer the release key didn't sign", async () => {
+    const refused = (reason: string) => ({
+      status: 'error',
+      message: `Didn't install 1.0.1. It isn't signed with the release key (${reason}), so it may not be genuine. Let IT know.`,
+    })
+    // No .sig on the release: nothing is downloaded.
+    const payload = release('v1.0.1')
+    const unsigned = updater({
+      latest: () => Response.json({ ...payload, assets: payload.assets.slice(0, 2) }),
+    })
+    expect(await unsigned.updater.checkAndInstall()).toEqual(
+      refused('the release has no signature'),
+    )
+    expect(unsigned.world.requests).toHaveLength(1)
+    // Signed with another key, or a genuine older installer passed off as 1.0.1: downloaded, but
+    // not kept or run.
+    const otherKey = signature('1.0.1', INSTALLER, releaseKey().privateKey)
+    for (const sig of [otherKey, signature('1.0.0')]) {
+      const { updater: u, world } = updater({ sig })
+      expect(await u.checkAndInstall()).toEqual(refused("its signature doesn't match"))
+      expect(world.saved).toBeNull()
+      expect(world.installed).toEqual([])
+      expect(world.quit).toBe(0)
+    }
+    const garbled = updater({ sig: 'not a signature' })
+    expect(await garbled.updater.checkAndInstall()).toEqual(
+      refused("its signature file isn't a signature"),
+    )
   })
 
   it('says why it could not check', async () => {

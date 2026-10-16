@@ -16,6 +16,20 @@ module.exports = {
   // name, "@desktop-assist/desktop", which becomes "@desktop-assistdesktop".
   extraMetadata: { name: 'desktop-assist' },
   npmRebuild: false,
+  // Electron's built-in switches, set in the .exe, as Electron's security checklist recommends.
+  // They stop the .exe being used to run other code: as plain Node (ELECTRON_RUN_AS_NODE), with
+  // NODE_OPTIONS or with Node's debugger (--inspect); or with a changed app.asar (its checksum
+  // is in the .exe, and Electron loads nothing but app.asar). Cookies are encrypted on disk with
+  // the Windows account's key. Pages loaded from file:// keep their usual Electron privileges,
+  // because the panel is one.
+  electronFuses: {
+    runAsNode: false,
+    enableNodeOptionsEnvironmentVariable: false,
+    enableNodeCliInspectArguments: false,
+    enableEmbeddedAsarIntegrityValidation: true,
+    onlyLoadAppFromAsar: true,
+    enableCookieEncryption: true,
+  },
   win: {
     // The bubble's logo. electron-builder turns it into the .exe's icon, which Windows also shows
     // for the Start menu shortcut, the installer and the uninstaller. Windows icons can't be made

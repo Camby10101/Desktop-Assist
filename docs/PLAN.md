@@ -81,7 +81,7 @@ against their own limit. The tenant setting `chatApp` picks `claude-desktop` or 
 - **Language:** **TypeScript 6**. TS 7 (the native compiler) isn't supported by typescript-eslint yet
 - **Desktop shell:** **Electron 44**. Transparent, frameless, always-on-top windows; tray; login items; `desktopCapturer`
 - **Build / dev:** **electron-vite 5** + **Vite 7**. Hot-reload dev loop. electron-vite 5 doesn't support Vite 8 yet
-- **Packaging:** **electron-builder**. Unsigned NSIS installer for now. MSI, signing and auto-update come in M4
+- **Packaging:** **electron-builder**. NSIS installer, not yet code-signed. Electron's fuses set in the `.exe`; updates from GitHub releases, signed with a release key kept off GitHub (5.2)
 - **UI:** **React 19** + **Tailwind CSS 4** + **lucide-react** icons. Light or dark mode (its own setting since M4, dark by default; it followed Windows before)
 - **Validation:** **zod 4**. Every IPC payload, saved file and tenant config is checked at runtime
 - **Tests:** **Vitest**. Pure logic (layout, bounce physics, autosave, screenshot files, tenant config)
@@ -420,7 +420,7 @@ tab, as asked). IT's setup guide: [ATLASSIAN_SETUP.md](ATLASSIAN_SETUP.md).
     request type's own fields and approvals still apply. **Report to IT** under the text box starts
     one.
   - **My requests**: the person's IT requests (open, and closed in the last 30 days) with their
-    status, marked "Mark Duong replied" or "Now Resolved" when IT has done something since they
+    status, marked "Grace Hopper replied" or "Now Resolved" when IT has done something since they
     last looked, with a Windows notification at the time (automatic replies don't count, and the
     first check only learns where things are). Opening a request marks it seen.
 
@@ -527,6 +527,41 @@ runs, up to date, a tampered file refused), and for real on the user's PC: the 1
 started with the update's arguments while 0.1.0 was running, closed it, installed silently and
 started 1.0.0 again by itself.
 
+### 5.2 also: locking down 1.0.0 before its release
+
+A check of what the 1.0.0 installer contains found no keys, tokens or passwords (nor in the git
+history); the company settings in it are identifiers that need a Morse Micro sign-in to use. It
+led to four changes:
+
+- **Electron's fuses** (`electronFuses` in `electron-builder.cjs`), switches built into the `.exe`:
+  it can't be run as plain Node (`ELECTRON_RUN_AS_NODE`), ignores `NODE_OPTIONS` and Node's
+  `--inspect`, loads only `app.asar` and checks it against a checksum in the `.exe`, and encrypts
+  cookies on disk. Pages from `file://` keep Electron's usual privileges, since the panel is one.
+- **No debugging in an installed copy**: started with `--remote-debugging-port`,
+  `--remote-debugging-pipe` or Node's inspector switches, it logs why and exits before any window
+  or connection exists (`src/main/debugging.ts`). Together with the fuses, another program on the
+  PC can't use Desktop Assist to run its own code or drive its pages (and through them Jira).
+- **Signed updates**: Check for updates only installs an installer signed with the release key
+  (Ed25519). The key's private half is a file on the PC that builds releases, never on GitHub;
+  `tenant.json` has the public half (`updates.publicKey`, required). The signature covers the
+  version and the installer's SHA-256, so an old genuine installer can't be passed off as newer.
+  `npm run release:key` made the key; `npm run dist` now signs the installer
+  (`scripts/release-signing.mjs`), and the `.sig` is attached to the release with it. So someone
+  who gets into the GitHub account can't push an update. [RELEASING.md](RELEASING.md) covers the
+  key (keep a copy off GitHub), and the GitHub side for the account owner: two-factor
+  authentication, few people with write access, perhaps a Morse Micro organisation.
+- **Made-up names** (Grace Hopper, Alan Turing) in the tests and docs, instead of two colleagues'
+  names taken from real Jira tickets. Earlier commits in the repository still have them.
+
+Tested with unit tests (302: signatures checked and refused, the script and the app agreeing, the
+key required in `tenant.json`, the debugging switches), end-to-end against the stand-in GitHub (16
+checks, adding: a release without a signature refused before downloading, one signed with another
+key refused and deleted), and on the built `.exe`: the fuses read back as set; it exits at once
+with `--remote-debugging-port` (also written `/remote-debugging-port`), `--remote-debugging-pipe`
+and `--inspect`, with nothing ever listening on the port; `ELECTRON_RUN_AS_NODE` and `NODE_OPTIONS`
+code doesn't run; and a copy with one letter of its code changed in `app.asar` stops with "ASAR
+Integrity Violation".
+
 ## 8. Milestones
 
 - **0** ✅ **Foundation**: Everything in §7 works in `npm run dev` and in the unsigned installer. Unit tests and lint pass.
@@ -538,7 +573,7 @@ started 1.0.0 again by itself.
 - **4** ✅ **Day-to-day improvements**: App logos, favourites, the service desk icon, screenshots keeping the page, the unresponsive bubble fixed, no tooltip, light/dark mode. See §7g.
 - **5** ✅ **Jira and the service desk**: The app-opening spinner, and Atlassian ideas 1 to 9. See §7h.
 - **5.1** ✅ **The bubble on top after starting**: always-on-top that survives a full-screen app. See §7h.
-- **5.2** ✅ **The bubble kept in front, and Check for updates**: the startup front check; updating from GitHub releases; version 1.0.0, the first release. See §7h.
+- **5.2** ✅ **The bubble kept in front, and Check for updates**: the startup front check; updating from GitHub releases, signed with a release key; the `.exe` locked down; version 1.0.0, the first release. See §7h.
 - 6 (next): To be chosen. Candidates:
   - Shipping: code signing (no "unrecognised app" warning), silent deployment through JumpCloud (with Claude Desktop), CI on GitHub Actions (tests and the installer on every pull request, and building the release), a "What's new" note after an update
   - Bubble and screenshots: a keyboard shortcut to open the panel and to take a screenshot, snipping a region or a window, pasting an image into the text box, hiding during full-screen apps and presentations, a first-run tour
@@ -600,6 +635,8 @@ Step-by-step instructions are in [CLAUDE_DESKTOP_SETUP.md](CLAUDE_DESKTOP_SETUP.
   mentions of the user), checked every five minutes; Windows notifications only for IT requests
 - M5 new requests → filled in on the panel, finished and sent on the portal (the request type's
   own form), not created through Jira
+- 5.2 updates → releases of the public GitHub repository, each installer signed with a release key
+  whose private half stays off GitHub, so the GitHub account alone can't push an update
 
 **Open**
 

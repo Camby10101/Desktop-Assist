@@ -104,6 +104,11 @@ const UpdatesFields = z.object({
   api: z.url({ protocol: /^https?$/ }),
   /** Where release files come from: <downloads>/<repo>/releases/download/…; nothing else is. */
   downloads: z.url({ protocol: /^https?$/ }),
+  /**
+   * The release key's public half, from `npm run release:key`: an Ed25519 key, base64. Only
+   * installers signed with its private half are run (see docs/RELEASING.md).
+   */
+  publicKey: z.string().regex(/^MCowBQYDK2VwAyEA[A-Za-z0-9+/]{43}=$/, 'an Ed25519 public key'),
 })
 
 export const UpdatesSchema = UpdatesFields.extend({

@@ -43,6 +43,7 @@ import { ChatSession } from './claude/ChatSession'
 import { classifyError } from './claude/errors'
 import { API_BASE_URL, buildSystemPrompt } from './claude/model'
 import { ClaudeDesktop, NEW_CHAT_LINK } from './claudeDesktop'
+import { debugSwitches } from './debugging'
 import { registerIpc, type BuiltInChat } from './ipc'
 import { createLog, type Log } from './log'
 import { mcpConnector } from './mcp/connector'
@@ -83,8 +84,18 @@ if (!app.isPackaged) {
 
 let controller: BubbleController | null = null
 let tray: Tray | null = null // module-level so it isn't garbage-collected
+// An installed copy won't start with debugging switched on: another program could use it to drive
+// the app, and through it Jira with the user's sign-in. Dev runs and the automated tests need it.
+const refusedSwitches = app.isPackaged
+  ? debugSwitches((name) => app.commandLine.hasSwitch(name))
+  : []
 
-if (!app.requestSingleInstanceLock()) {
+if (refusedSwitches.length) {
+  createLog(join(app.getPath('userData'), 'logs', 'desktop-assist.log'))(
+    `Refused to start with ${refusedSwitches.map((name) => `--${name}`).join(' ')}`,
+  )
+  app.exit(1)
+} else if (!app.requestSingleInstanceLock()) {
   app.quit()
 } else {
   // Launching it again just opens the panel of the copy that's already running.
@@ -202,6 +213,7 @@ async function start(): Promise<void> {
         currentVersion: app.getVersion(),
         latestUrl: `${updates.api}/repos/${updates.repo}/releases/latest`,
         downloads: `${updates.downloads}/${updates.repo}/releases/download/`,
+        publicKey: updates.publicKey,
         fetch: netFetch,
         save: (name, chunks) =>
           saveDownload(join(app.getPath('temp'), `${tenant.appName} update`), name, chunks),

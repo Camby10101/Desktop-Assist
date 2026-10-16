@@ -14,7 +14,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "dist": "npm run typecheck && electron-vite build && electron-builder --win"
+    "dist": "npm run typecheck && electron-vite build && electron-builder --win && node ../../scripts/release-signing.mjs sign"
   },
   "devDependencies": {
     "@anthropic-ai/sdk": "^0.132.0",

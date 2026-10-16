@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto'
+import { createHash, createPublicKey, verify } from 'node:crypto'
 import { createWriteStream } from 'node:fs'
 import { mkdir, rm } from 'node:fs/promises'
 import { basename, join } from 'node:path'
@@ -40,6 +40,8 @@ export interface Release {
     /** The installer's SHA-256 as GitHub worked it out (hex), if it says. */
     sha256: string | null
   }
+  /** Where the installer's signature is (`<installer>.sig`, on the same release), if it has one. */
+  signature: string | null
 }
 
 type Item = Record<string, unknown>
@@ -49,23 +51,23 @@ const isObject = (value: unknown): value is Item =>
 /**
  * The release in GitHub's answer for a repository's latest release, if it's a version with an
  * installer: an `.exe` with "Setup" in its name, downloaded from `downloads` (the repository's own
- * releases, https://github.com/<owner>/<name>/releases/download/).
+ * releases, https://github.com/<owner>/<name>/releases/download/). Its signature is the file of
+ * the same name plus `.sig`.
  */
 export function releaseOf(payload: unknown, downloads: string): Release | null {
   if (!isObject(payload) || payload['draft'] === true || payload['prerelease'] === true) return null
   const version = parseVersion(typeof payload['tag_name'] === 'string' ? payload['tag_name'] : '')
   if (!version) return null
   const assets = Array.isArray(payload['assets']) ? payload['assets'].filter(isObject) : []
+  const fromRepo = (a: Item) =>
+    typeof a['browser_download_url'] === 'string' && a['browser_download_url'].startsWith(downloads)
   const asset = assets.find(
-    (a) =>
-      typeof a['name'] === 'string' &&
-      /setup.*\.exe$/i.test(a['name']) &&
-      typeof a['browser_download_url'] === 'string' &&
-      a['browser_download_url'].startsWith(downloads),
+    (a) => typeof a['name'] === 'string' && /setup.*\.exe$/i.test(a['name']) && fromRepo(a),
   )
   if (!asset) return null
   const digest = typeof asset['digest'] === 'string' ? asset['digest'] : ''
   const sha256 = /^sha256:([0-9a-f]{64})$/i.exec(digest)?.[1]?.toLowerCase() ?? null
+  const signature = assets.find((a) => a['name'] === `${asset['name']}.sig` && fromRepo(a))
   return {
     version: version.join('.'),
     installer: {
@@ -74,6 +76,39 @@ export function releaseOf(payload: unknown, downloads: string): Release | null {
       size: typeof asset['size'] === 'number' ? asset['size'] : 0,
       sha256,
     },
+    signature: signature ? String(signature['browser_download_url']) : null,
+  }
+}
+
+/**
+ * What a release's signature signs: the version and the installer's SHA-256. Signing the version
+ * too means a genuine older installer can't be passed off as a newer release.
+ * scripts/release-signing.mjs signs the same text.
+ */
+export function signedText(version: string, sha256: string): string {
+  return `desktop-assist-update ${version} sha256:${sha256}`
+}
+
+/**
+ * Whether `signature` is the release key's signature of `version` and `sha256`. `publicKey` is
+ * the key's public half as tenant.json has it: an Ed25519 key, base64 (SPKI).
+ */
+export function isSigned(
+  publicKey: string,
+  version: string,
+  sha256: string,
+  signature: Uint8Array,
+): boolean {
+  try {
+    const key = createPublicKey({
+      key: Buffer.from(publicKey, 'base64'),
+      format: 'der',
+      type: 'spki',
+    })
+    if (key.asymmetricKeyType !== 'ed25519') return false
+    return verify(null, Buffer.from(signedText(version, sha256)), key, signature)
+  } catch {
+    return false
   }
 }
 
@@ -86,6 +121,12 @@ export interface UpdaterDeps {
   latestUrl: string
   /** Where the repository's release files are downloaded from; nothing else is downloaded. */
   downloads: string
+  /**
+   * The release key's public half (tenant.json `updates.publicKey`). An installer only runs if
+   * its release has a signature made with the key's private half, which is kept off GitHub: someone
+   * who gets into the GitHub account still can't publish an update.
+   */
+  publicKey: string
   fetch: Fetch
   /**
    * Saves the installer's chunks as they come in, replacing any earlier download; its path. If
@@ -106,8 +147,9 @@ export interface UpdaterDeps {
 
 /**
  * Settings → Check for updates: asks GitHub for the latest release and, if it's newer than this
- * copy, downloads its installer, checks it's exactly the file GitHub has, and runs it. The
- * installer replaces this copy silently and starts the new one; this app quits to let it.
+ * copy, downloads its installer, checks it's exactly the file GitHub has and that the release key
+ * signed it, and runs it. The installer replaces this copy silently and starts the new one; this
+ * app quits to let it.
  */
 export class Updater {
   private state: UpdateState = { status: 'idle' }
@@ -136,7 +178,9 @@ export class Updater {
     try {
       path = await this.download(release)
     } catch (error) {
-      return this.fail(`Couldn't download ${version}`, error)
+      const doing =
+        error instanceof Unsigned ? `Didn't install ${version}` : `Couldn't download ${version}`
+      return this.fail(doing, error)
     }
     if (!this.deps.install) return this.setState({ status: 'downloaded', version, path })
     this.setState({ status: 'installing', version })
@@ -165,9 +209,14 @@ export class Updater {
     return releaseOf(await response.json(), this.deps.downloads)
   }
 
-  /** Downloads the installer, checking its size and SHA-256 against the release's. */
+  /**
+   * Downloads the installer, checking its size and SHA-256 against the release's, and its
+   * signature against the release key.
+   */
   private async download(release: Release): Promise<string> {
     const { installer, version } = release
+    const signature = await this.signature(release)
+    const { publicKey } = this.deps
     const response = await this.deps.fetch(installer.url)
     if (!response.ok || !response.body) throw new Error(`The download answered ${response.status}`)
     const total = installer.size || Number(response.headers.get('content-length')) || 0
@@ -182,7 +231,8 @@ export class Updater {
     progress(0)
     const reader = response.body.getReader()
     // The file's chunks as they arrive, hashed and counted on their way to the disk. At the end it
-    // must be the release's file, or saving fails (and the file is deleted).
+    // must be the release's file, signed with the release key, or saving fails (and the file is
+    // deleted).
     async function* chunks(): AsyncGenerator<Uint8Array> {
       for (;;) {
         const { done, value } = await reader.read()
@@ -195,11 +245,27 @@ export class Updater {
       if (installer.size && received !== installer.size) {
         throw new Mismatch(`it's ${received} bytes, not ${installer.size}`)
       }
-      if (installer.sha256 && hash.digest('hex') !== installer.sha256) {
+      const sha256 = hash.digest('hex')
+      if (installer.sha256 && sha256 !== installer.sha256) {
         throw new Mismatch("its SHA-256 isn't the release's")
+      }
+      if (!isSigned(publicKey, version, sha256, signature)) {
+        throw new Unsigned("its signature doesn't match")
       }
     }
     return this.deps.save(installer.name, chunks())
+  }
+
+  /** The release's signature of its installer (64 bytes, base64 in `<installer>.sig`). */
+  private async signature(release: Release): Promise<Uint8Array> {
+    if (!release.signature) throw new Unsigned('the release has no signature')
+    const response = await this.deps.fetch(release.signature, {
+      signal: AbortSignal.timeout(15_000),
+    })
+    if (!response.ok) throw new Error(`The signature's download answered ${response.status}`)
+    const signature = Buffer.from((await response.text()).trim(), 'base64')
+    if (signature.length !== 64) throw new Unsigned("its signature file isn't a signature")
+    return signature
   }
 
   private fail(doing: string, error: unknown): UpdateState {
@@ -209,11 +275,13 @@ export class Updater {
         ? 'GitHub is busy; try again in a few minutes.'
         : error instanceof Mismatch
           ? `The download isn't the release's file (${error.message}); try again.`
-          : /fetch failed|ENOTFOUND|ECONNREFUSED|ETIMEDOUT|ERR_|network|abort|timeout/i.test(
-                String(error),
-              )
-            ? "Couldn't reach GitHub. Check you're online and try again."
-            : 'Try again later.'
+          : error instanceof Unsigned
+            ? `It isn't signed with the release key (${error.message}), so it may not be genuine. Let IT know.`
+            : /fetch failed|ENOTFOUND|ECONNREFUSED|ETIMEDOUT|ERR_|network|abort|timeout/i.test(
+                  String(error),
+                )
+              ? "Couldn't reach GitHub. Check you're online and try again."
+              : 'Try again later.'
     return this.setState({ status: 'error', message: `${doing}. ${reason}` })
   }
 
@@ -253,3 +321,6 @@ class Busy extends Error {}
 
 /** The download isn't the file the release has. */
 class Mismatch extends Error {}
+
+/** The release isn't signed with the release key: it may not be genuine, so it's never run. */
+class Unsigned extends Error {}
