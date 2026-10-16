@@ -48,6 +48,7 @@ import { createLog, type Log } from './log'
 import { mcpConnector } from './mcp/connector'
 import { sendInClaude } from './sendInClaude'
 import { uninstall } from './uninstall'
+import { INSTALLER_ARGS, saveDownload, Updater } from './updates'
 import { NotesStore } from './notes/NotesStore'
 import { ScreenshotService } from './screenshots/ScreenshotService'
 import { myRequestsUrl, ServiceDesk, windowsVersion } from './serviceDesk'
@@ -195,6 +196,34 @@ async function start(): Promise<void> {
       : null
   // Electron's fetch, so a proxy set in Windows is used.
   const netFetch = (url: string | URL, init?: RequestInit) => net.fetch(String(url), init)
+  const { updates } = tenant
+  const updater = updates
+    ? new Updater({
+        currentVersion: app.getVersion(),
+        latestUrl: `${updates.api}/repos/${updates.repo}/releases/latest`,
+        downloads: `${updates.downloads}/${updates.repo}/releases/download/`,
+        fetch: netFetch,
+        save: (name, chunks) =>
+          saveDownload(join(app.getPath('temp'), `${tenant.appName} update`), name, chunks),
+        // The installer runs on its own: it waits for this app to quit, replaces it, and starts
+        // the new version. A development run has no installed copy to replace.
+        install: app.isPackaged
+          ? (path) => spawn(path, INSTALLER_ARGS, { detached: true, stdio: 'ignore' }).unref()
+          : null,
+        notify,
+        quit: () => app.quit(),
+        onState: (state) => {
+          broadcast(IPC.updateState, state)
+          if (state.status === 'downloaded') {
+            log(
+              `Development run: downloaded ${state.version} to ${state.path}; an installed copy ` +
+                `would now run it with ${INSTALLER_ARGS.join(' ')}`,
+            )
+          }
+        },
+        onError: (message, error) => log(message, error),
+      })
+    : null
   const { portal, serviceDesk } = tenant
   let appsStatus: AppsState['status'] = 'loading'
   const portalApps = portal
@@ -305,6 +334,7 @@ async function start(): Promise<void> {
     atlassian,
     serviceDesk:
       serviceDesk && desk ? { desk, myRequestsUrl: myRequestsUrl(serviceDesk.url) } : null,
+    updater,
     actions: createActionHandlers({
       controller: bubble,
       screenshots,
@@ -476,6 +506,7 @@ async function withDevOverrides(tenant: Tenant): Promise<Tenant> {
     atlassian: override.atlassian
       ? { ...tenant.atlassian, ...override.atlassian }
       : tenant.atlassian,
+    updates: override.updates ? { ...tenant.updates, ...override.updates } : tenant.updates,
     signIn: override.signIn ? { ...tenant.signIn, ...override.signIn } : tenant.signIn,
     claudeAccess: override.claudeAccess
       ? { ...tenant.claudeAccess, ...override.claudeAccess }

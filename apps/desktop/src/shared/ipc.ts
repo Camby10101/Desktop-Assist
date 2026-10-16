@@ -24,6 +24,7 @@ import type {
   Settings,
   Theme,
   UninstallResult,
+  UpdateState,
 } from './types'
 
 /** IPC channel names. The preload maps them onto `window.assist`; src/main/ipc.ts handles them. */
@@ -85,6 +86,8 @@ export const IPC = {
   serviceDeskPcDetails: 'assist:service-desk-pc-details',
   serviceDeskRaise: 'assist:service-desk-raise',
   serviceDeskOpenMyRequests: 'assist:service-desk-open-my-requests',
+  updatesGet: 'assist:updates-get',
+  updatesCheck: 'assist:updates-check',
   // main → renderer
   modeChanged: 'assist:mode-changed',
   cornerChanged: 'assist:corner-changed',
@@ -95,6 +98,7 @@ export const IPC = {
   appsState: 'assist:apps-state',
   atlassianState: 'assist:atlassian-state',
   jiraFeed: 'assist:jira-feed',
+  updateState: 'assist:update-state',
 } as const
 
 /** The API the preload exposes to renderers as `window.assist`. */
@@ -216,6 +220,15 @@ export interface AssistApi {
     raise(request: NewRequest): Promise<RaiseResult>
     openMyRequests(): Promise<void>
   }
+  /** Settings → Check for updates (only when the tenant has `updates`). */
+  updates: {
+    get(): Promise<UpdateState>
+    /**
+     * Checks GitHub for a newer release and, if there is one, downloads and installs it (the app
+     * then closes and starts again). Returns straight away; progress via onUpdateState.
+     */
+    check(): Promise<UpdateState>
+  }
   /** Starts Desktop Assist's uninstaller and quits (installed copies only). */
   uninstall(): Promise<UninstallResult>
   onModeChanged(callback: (mode: Mode) => void): () => void
@@ -229,4 +242,5 @@ export interface AssistApi {
   onAppsState(callback: (state: AppsState) => void): () => void
   onAtlassianState(callback: (state: AtlassianState) => void): () => void
   onJiraFeed(callback: (feed: JiraFeed) => void): () => void
+  onUpdateState(callback: (state: UpdateState) => void): () => void
 }

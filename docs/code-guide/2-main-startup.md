@@ -6,7 +6,8 @@ The _main process_ is the Node.js side of an Electron app: the single process th
 windows, the files, the tray icon and the network. This page covers how it starts and how the
 pages talk to it. `index.ts` creates every service and wires them together, `ipc.ts` answers the
 pages' requests, and the smaller files hold the problem log, the tenant config, the user's
-preferences, the commands behind the action icons, uninstalling and the tray icon. The services
+preferences, the commands behind the action icons, uninstalling, checking for updates and the tray
+icon. The services
 themselves (sign-in, Claude, the bubble, the draft and screenshots, Claude Desktop, the Apps list,
 Jira and the service desk) each have their own page.
 
@@ -26,6 +27,8 @@ stages:
    also sets up the Apps list (`PortalApps`, see [Your apps](10-apps.md)). With `atlassian` it
    connects to Jira (`Atlassian`), and with the service desk's request types it sets up raising
    IT requests from the panel (`ServiceDesk`); see [Jira and the service desk](11-atlassian.md).
+   With `updates`, Settings offers Check for updates (`Updater`, see
+   [`updates.ts`](#srcmainupdatests-checking-for-updates)).
 3. **When the app quits**, a `before-quit` handler saves the draft before letting it close.
 
 The key idea is that the services don't know about each other or about Electron's globals. Each
@@ -36,7 +39,7 @@ tests can drive them with fakes. `index.ts` is the only file that knows about al
 
 <!-- code: apps/desktop/src/main/index.ts#SHUTDOWN_TIMEOUT_MS,PRODUCT_NAME,controller,tray -->
 
-[`src/main/index.ts`, lines 68–84](../../apps/desktop/src/main/index.ts#L68-L84)
+[`src/main/index.ts`, lines 69–85](../../apps/desktop/src/main/index.ts#L69-L85)
 
 ```ts
 const SHUTDOWN_TIMEOUT_MS = 2000
@@ -99,7 +102,7 @@ backend, the conversation and the JumpCloud sign-in) are in a separate function,
 
 <!-- code: apps/desktop/src/main/index.ts#start.tenant -->
 
-[`src/main/index.ts`, line 96](../../apps/desktop/src/main/index.ts#L96)
+[`src/main/index.ts`, line 97](../../apps/desktop/src/main/index.ts#L97)
 
 ```ts
 const tenant = await withDevOverrides(TenantSchema.parse(tenantConfig))
@@ -126,7 +129,7 @@ const tenant = await withDevOverrides(TenantSchema.parse(tenantConfig))
 
 <!-- code: apps/desktop/src/main/index.ts#start.userData,screenshotsDir,actionCount,log,notes,settings -->
 
-[`src/main/index.ts`, lines 100–111](../../apps/desktop/src/main/index.ts#L100-L111)
+[`src/main/index.ts`, lines 101–112](../../apps/desktop/src/main/index.ts#L101-L112)
 
 ```ts
 const userData = app.getPath('userData')
@@ -165,7 +168,7 @@ const settings = new SettingsService(join(userData, 'preferences.json'), screens
 
 <!-- code: apps/desktop/src/main/index.ts#start.bubbleWindow,panelWindow,windows,stopKeepingOnTop,windowsReady,broadcast -->
 
-[`src/main/index.ts`, lines 114–124](../../apps/desktop/src/main/index.ts#L114-L124)
+[`src/main/index.ts`, lines 115–125](../../apps/desktop/src/main/index.ts#L115-L125)
 
 ```ts
 // The windows are created after the last `await`: from here to registerIpc() below nothing
@@ -214,7 +217,7 @@ page's request is handled, its handler has been registered.
 
 <!-- code: apps/desktop/src/main/index.ts#start.bubble -->
 
-[`src/main/index.ts`, lines 126–138](../../apps/desktop/src/main/index.ts#L126-L138)
+[`src/main/index.ts`, lines 127–139](../../apps/desktop/src/main/index.ts#L127-L139)
 
 ```ts
 const bubble = new BubbleController({
@@ -262,7 +265,7 @@ touches Electron directly; everything it needs is passed in here.
 
 <!-- code: apps/desktop/src/main/index.ts#start.screenshots,notify,copyScreenshots -->
 
-[`src/main/index.ts`, lines 142–163](../../apps/desktop/src/main/index.ts#L142-L163)
+[`src/main/index.ts`, lines 143–164](../../apps/desktop/src/main/index.ts#L143-L164)
 
 ```ts
 const screenshots = new ScreenshotService(screenshotsDir, () =>
@@ -320,7 +323,7 @@ const copyScreenshots = async (paths: string[]) => {
 
 <!-- code: apps/desktop/src/main/index.ts#start.builtIn,claudeDesktop -->
 
-[`src/main/index.ts`, lines 166–195](../../apps/desktop/src/main/index.ts#L166-L195)
+[`src/main/index.ts`, lines 167–196](../../apps/desktop/src/main/index.ts#L167-L196)
 
 ```ts
 const builtIn =
@@ -395,16 +398,89 @@ exists.
   opening fails, the panel shows a short message; if the sending helper can't run, the user gets
   a notification. Either way the log gets the details.
 
-#### The Apps list
+#### The network, and checking for updates
 
-<!-- code: apps/desktop/src/main/index.ts#start.netFetch,appsStatus,portalApps -->
+<!-- code: apps/desktop/src/main/index.ts#start.netFetch,updater -->
 
-[`src/main/index.ts`, lines 196–221](../../apps/desktop/src/main/index.ts#L196-L221)
+[`src/main/index.ts`, lines 197–226](../../apps/desktop/src/main/index.ts#L197-L226)
 
 ```ts
 // Electron's fetch, so a proxy set in Windows is used.
 const netFetch = (url: string | URL, init?: RequestInit) => net.fetch(String(url), init)
 
+const updater = updates
+  ? new Updater({
+      currentVersion: app.getVersion(),
+      latestUrl: `${updates.api}/repos/${updates.repo}/releases/latest`,
+      downloads: `${updates.downloads}/${updates.repo}/releases/download/`,
+      fetch: netFetch,
+      save: (name, chunks) =>
+        saveDownload(join(app.getPath('temp'), `${tenant.appName} update`), name, chunks),
+      // The installer runs on its own: it waits for this app to quit, replaces it, and starts
+      // the new version. A development run has no installed copy to replace.
+      install: app.isPackaged
+        ? (path) => spawn(path, INSTALLER_ARGS, { detached: true, stdio: 'ignore' }).unref()
+        : null,
+      notify,
+      quit: () => app.quit(),
+      onState: (state) => {
+        broadcast(IPC.updateState, state)
+        if (state.status === 'downloaded') {
+          log(
+            `Development run: downloaded ${state.version} to ${state.path}; an installed copy ` +
+              `would now run it with ${INSTALLER_ARGS.join(' ')}`,
+          )
+        }
+      },
+      onError: (message, error) => log(message, error),
+    })
+  : null
+```
+
+<!-- /code -->
+
+- `netFetch`: Electron's `net.fetch()`, in the shape of the standard `fetch()`. Electron's version
+  goes through Chromium's network stack, so a proxy set up in Windows (common on company networks)
+  is used, as it is in the browser. Node's own `fetch` would ignore it. `String(url)` because
+  `net.fetch()` takes the address as text. Checking for updates, the Apps list and Jira all use it.
+- `const { updates } = tenant` (the line before `updater`): the tenant's `updates` settings (which
+  GitHub repository releases come from), or `undefined`. Without them there's no `updater`, and
+  Settings doesn't offer Check for updates.
+- `new Updater({`: Settings → Check for updates (see
+  [`updates.ts`](#srcmainupdatests-checking-for-updates)).
+- `currentVersion: app.getVersion()`: this copy's version, from `apps/desktop/package.json`
+  (`1.0.0`, the first release).
+- `` latestUrl: `${updates.api}/repos/${updates.repo}/releases/latest` ``: GitHub's API address for
+  the repository's latest release, such as
+  `https://api.github.com/repos/Camby10101/Desktop-Assist/releases/latest`.
+- `` downloads: `${updates.downloads}/${updates.repo}/releases/download/` ``: where the
+  repository's release files are, such as
+  `https://github.com/Camby10101/Desktop-Assist/releases/download/`. Nothing from anywhere else is
+  downloaded.
+- `saveDownload(join(app.getPath('temp'), ...), name, chunks)`: the installer is saved in a folder
+  of its own in Windows' temporary folder, `%TEMP%\Desktop Assist update`.
+- `install: app.isPackaged ? (path) => spawn(path, INSTALLER_ARGS, ...).unref() : null`: as the
+  comment says, the installer runs on its own: it waits for this app to quit, replaces it, and
+  starts the new version. It's started like the uninstaller (below): `detached`, with nothing
+  connected to it, and `unref()` so Node doesn't wait for it. A development run (`npm run dev`) has
+  no installed copy to replace, so there it's `null` and checking stops once the file is
+  downloaded.
+- `notify`, `quit: () => app.quit()`: the Windows notification helper above ("Updating to …"), and
+  quitting, which goes through `before-quit` and so saves the draft first.
+- `onState: (state) => {`: every change goes to the pages on `IPC.updateState`, for the settings
+  menu's row. `if (state.status === 'downloaded')`: in a development run, the log says where the
+  installer was saved and what an installed copy would now run it with, so the whole check can be
+  tried without installing anything.
+- `onError: (message, error) => log(message, error)`: why a check failed goes to the problem log;
+  the menu shows a short reason.
+
+#### The Apps list
+
+<!-- code: apps/desktop/src/main/index.ts#start.appsStatus,portalApps -->
+
+[`src/main/index.ts`, lines 228–250](../../apps/desktop/src/main/index.ts#L228-L250)
+
+```ts
 let appsStatus: AppsState['status'] = 'loading'
 
 const portalApps = portal
@@ -437,10 +513,6 @@ The apps in the user's JumpCloud User Portal, which the panel opens on or shows 
 icon (see [Your apps](10-apps.md)). It's only set up when the tenant has a `portal`; otherwise
 `portalApps` is `null` and the Apps channels aren't answered.
 
-- `netFetch`: Electron's `net.fetch()`, in the shape of the standard `fetch()`. Electron's version
-  goes through Chromium's network stack, so a proxy set up in Windows (common on company networks)
-  is used, as it is in the browser. Node's own `fetch` would ignore it. `String(url)` because
-  `net.fetch()` takes the address as text.
 - `const { portal, serviceDesk } = tenant` (the line before `appsStatus`): the portal and
   service desk settings from `tenant.json`, each `undefined` if the tenant has none.
 - `let appsStatus`: the list's previous status, for the same reason as `authState` in the built-in
@@ -471,7 +543,7 @@ icon (see [Your apps](10-apps.md)). It's only set up when the tenant has a `port
 
 <!-- code: apps/desktop/src/main/index.ts#start.requests,memoryPath,atlassianStatus,atlassian,desk -->
 
-[`src/main/index.ts`, lines 226–288](../../apps/desktop/src/main/index.ts#L226-L288)
+[`src/main/index.ts`, lines 255–317](../../apps/desktop/src/main/index.ts#L255-L317)
 
 ```ts
 const requests = serviceDesk?.requests
@@ -595,7 +667,7 @@ Two statements follow:
 
 <!-- code: apps/desktop/src/main/index.ts#start.onDisplayChange -->
 
-[`src/main/index.ts`, line 344](../../apps/desktop/src/main/index.ts#L344)
+[`src/main/index.ts`, line 374](../../apps/desktop/src/main/index.ts#L374)
 
 ```ts
 const onDisplayChange = () => bubble.displayChanged()
@@ -616,6 +688,7 @@ Everything else in this part of `start()` is plain statements:
 - `serviceDesk: serviceDesk && desk ? { desk, myRequestsUrl: myRequestsUrl(serviceDesk.url) } : null`:
   raising requests, and the portal's page of the user's requests (for "All your requests on the
   portal"), or `null` without request types.
+- `updater`: Check for updates, or `null` without `updates`.
 - `uninstall: () => uninstall({`: Settings → Uninstall (see
   [`uninstall()`](#uninstall)). Everything it needs from Electron and Node is passed in: where the
   running `.exe` is (`app.getPath('exe')`), `existsSync` to check the uninstaller is there,
@@ -646,7 +719,7 @@ Everything else in this part of `start()` is plain statements:
 
 <!-- code: apps/desktop/src/main/index.ts#start.shuttingDown -->
 
-[`src/main/index.ts`, lines 349–350](../../apps/desktop/src/main/index.ts#L349-L350)
+[`src/main/index.ts`, lines 379–380](../../apps/desktop/src/main/index.ts#L379-L380)
 
 ```ts
 // Save the text box before quitting. before-quit fires again after the second app.quit().
@@ -684,7 +757,7 @@ anything.
 
 <!-- code: apps/desktop/src/main/index.ts#start.stopWatchingFront -->
 
-[`src/main/index.ts`, lines 369–379](../../apps/desktop/src/main/index.ts#L369-L379)
+[`src/main/index.ts`, lines 399–409](../../apps/desktop/src/main/index.ts#L399-L409)
 
 ```ts
 // For its first ten minutes, make sure the bubble isn't stuck behind other apps' windows.
@@ -735,7 +808,7 @@ was part of `start()`. It returns a [`BuiltInChat`](#builtinchat): the `AuthMana
 
 <!-- code: apps/desktop/src/main/index.ts#startBuiltInChat.devBaseUrl,lastIdToken,backend,chat -->
 
-[`src/main/index.ts`, lines 399–423](../../apps/desktop/src/main/index.ts#L399-L423)
+[`src/main/index.ts`, lines 429–453](../../apps/desktop/src/main/index.ts#L429-L453)
 
 ```ts
 // Dev runs may point at a local test server; an installed app always talks to Anthropic.
@@ -808,7 +881,7 @@ const chat = new ChatSession({
 
 <!-- code: apps/desktop/src/main/index.ts#startBuiltInChat.missing,localIssuer,authState,auth -->
 
-[`src/main/index.ts`, lines 425–449](../../apps/desktop/src/main/index.ts#L425-L449)
+[`src/main/index.ts`, lines 455–479](../../apps/desktop/src/main/index.ts#L455-L479)
 
 ```ts
 const missing = missingSettings(signIn, claudeAccess)
@@ -885,7 +958,7 @@ Two statements end the function:
 
 <!-- code: apps/desktop/src/main/index.ts#safeStorageEncryptor -->
 
-[`src/main/index.ts`, lines 455–460](../../apps/desktop/src/main/index.ts#L455-L460)
+[`src/main/index.ts`, lines 485–490](../../apps/desktop/src/main/index.ts#L485-L490)
 
 ```ts
 /** Windows DPAPI through Electron: only this Windows user can decrypt what it encrypts. */
@@ -913,7 +986,7 @@ The encryption `SecretStore` uses for the saved sign-in. `SecretStore` only know
 
 <!-- code: apps/desktop/src/main/index.ts#withDevOverrides -->
 
-[`src/main/index.ts`, lines 462–484](../../apps/desktop/src/main/index.ts#L462-L484)
+[`src/main/index.ts`, lines 492–515](../../apps/desktop/src/main/index.ts#L492-L515)
 
 ```ts
 /**
@@ -933,6 +1006,7 @@ async function withDevOverrides(tenant: Tenant): Promise<Tenant> {
     atlassian: override.atlassian
       ? { ...tenant.atlassian, ...override.atlassian }
       : tenant.atlassian,
+    updates: override.updates ? { ...tenant.updates, ...override.updates } : tenant.updates,
     signIn: override.signIn ? { ...tenant.signIn, ...override.signIn } : tenant.signIn,
     claudeAccess: override.claudeAccess
       ? { ...tenant.claudeAccess, ...override.claudeAccess }
@@ -956,8 +1030,9 @@ example to try the built-in chat against a test identity provider, without editi
 - `override.signIn ? { ...tenant.signIn, ...override.signIn } : tenant.signIn`: `...` copies an
   object's properties, and later ones win, so the override's fields replace the tenant's. The
   merge only happens when the override has a `signIn`; a Claude Desktop tenant without one keeps
-  having none, rather than an empty object. `portal`, `atlassian` and `claudeAccess` work the same
-  way, so a dev run can point the Apps list or Jira at a test server. `startPage` is replaced like
+  having none, rather than an empty object. `portal`, `atlassian`, `updates` and `claudeAccess`
+  work the same way, so a dev run can point the Apps list, Jira or Check for updates at a test
+  server. `startPage` is replaced like
   `chatApp`.
 - `TenantSchema.parse({`: the result is checked again as a whole tenant, so an override can't
   produce an invalid config. For example, switching to the built-in chat without sign-in settings
@@ -967,7 +1042,7 @@ example to try the built-in chat against a test identity provider, without editi
 
 <!-- code: apps/desktop/src/main/index.ts#isLoopback -->
 
-[`src/main/index.ts`, lines 486–488](../../apps/desktop/src/main/index.ts#L486-L488)
+[`src/main/index.ts`, lines 517–519](../../apps/desktop/src/main/index.ts#L517-L519)
 
 ```ts
 function isLoopback(url: URL): boolean {
@@ -985,7 +1060,7 @@ in `hostname`. Used only to decide whether plain `http` is allowed for a dev ide
 
 <!-- code: apps/desktop/src/main/index.ts#toArea,electronDisplays -->
 
-[`src/main/index.ts`, lines 490–506](../../apps/desktop/src/main/index.ts#L490-L506)
+[`src/main/index.ts`, lines 521–537](../../apps/desktop/src/main/index.ts#L521-L537)
 
 ```ts
 /** Electron's `screen`, in the shape the bubble controller uses. All coordinates are DIPs. */
@@ -1034,7 +1109,7 @@ method is called, which happens after `start()` has begun.
 
 <!-- code: apps/desktop/src/main/index.ts#fail -->
 
-[`src/main/index.ts`, lines 508–512](../../apps/desktop/src/main/index.ts#L508-L512)
+[`src/main/index.ts`, lines 539–543](../../apps/desktop/src/main/index.ts#L539-L543)
 
 ```ts
 function fail(error: unknown): void {
@@ -1062,10 +1137,10 @@ A small log of problems, written to `%APPDATA%\Desktop Assist\logs\desktop-assis
 run, the `Desktop Assist (Dev)` folder) and printed to the terminal as well. An installed copy has
 no terminal, so without this file there would be no way to see why something failed on a user's PC,
 for example why Anthropic refused their sign-in. `start()` in `index.ts` creates the one log and
-gives it to the error callbacks of `NotesStore`, `ClaudeDesktop`, `PortalApps`, `Atlassian` and
-`ServiceDesk`, the uninstaller and the bubble controller's notes, or of `ChatSession` and
-`AuthManager` with the built-in chat. It's never given tokens, only errors and summaries such as the
-ID token summary.
+gives it to the error callbacks of `NotesStore`, `ClaudeDesktop`, `PortalApps`, `Atlassian`,
+`ServiceDesk` and `Updater`, the uninstaller and the bubble controller's notes, or of `ChatSession`
+and `AuthManager` with the built-in chat. It's never given tokens, only errors and summaries such as
+the ID token summary.
 
 ### `MAX_LOG_BYTES` and `Log`
 
@@ -1233,13 +1308,14 @@ send the main process something unexpected.
 Only the channels of the features in use are answered. With the built-in chat, the sign-in and
 chat channels have handlers; with Claude Desktop, the two `claudeDesktop...` channels do instead.
 The Apps list's channels are answered only when the tenant has a portal, Jira's only when it has
-an Atlassian site, and the service desk page's only when it lists request types.
+an Atlassian site, the service desk page's only when it lists request types, and Check for
+updates' only when it has `updates`.
 
 ### `BuiltInChat`
 
 <!-- code: apps/desktop/src/main/ipc.ts#BuiltInChat -->
 
-[`src/main/ipc.ts`, lines 34–38](../../apps/desktop/src/main/ipc.ts#L34-L38)
+[`src/main/ipc.ts`, lines 35–39](../../apps/desktop/src/main/ipc.ts#L35-L39)
 
 ```ts
 /** The built-in chat and the JumpCloud sign-in it needs. */
@@ -1261,7 +1337,7 @@ which one exists without the other.
 
 <!-- code: apps/desktop/src/main/ipc.ts#IpcContext -->
 
-[`src/main/ipc.ts`, lines 40–61](../../apps/desktop/src/main/ipc.ts#L40-L61)
+[`src/main/ipc.ts`, lines 41–64](../../apps/desktop/src/main/ipc.ts#L41-L64)
 
 ```ts
 export interface IpcContext {
@@ -1281,6 +1357,8 @@ export interface IpcContext {
   atlassian: Atlassian | null
   /** Raising IT requests and the user's requests page, or null without request types. */
   serviceDesk: { desk: ServiceDesk; myRequestsUrl: string } | null
+  /** Settings → Check for updates, or null when the tenant has no `updates`. */
+  updater: Updater | null
   actions: ActionHandlers
   /** Settings → Uninstall. */
   uninstall(): UninstallResult
@@ -1303,6 +1381,7 @@ are created there, so this file only needs their types, not how to build them.
 - `atlassian: Atlassian | null`, `serviceDesk: { desk: ServiceDesk; myRequestsUrl: string } | null`:
   as their comments say, Jira and Confluence, and raising IT requests with the address of the user's
   requests on the portal; each `null` when the tenant doesn't use it.
+- `updater: Updater | null`: as the comment says, Check for updates, or `null` without `updates`.
 - `uninstall(): UninstallResult`: Settings → Uninstall, ready-wired in `start()`.
 - `getState(): AppState`: builds the full snapshot a page asks for when it first loads (defined
   in `start()`).
@@ -1311,7 +1390,7 @@ are created there, so this file only needs their types, not how to build them.
 
 <!-- code: apps/desktop/src/main/ipc.ts#NoArgs,FilePath,IssueKey,TimeSpent,ASK_PROBLEMS,ExternalUrl -->
 
-[`src/main/ipc.ts`, lines 63–90](../../apps/desktop/src/main/ipc.ts#L63-L90)
+[`src/main/ipc.ts`, lines 66–93](../../apps/desktop/src/main/ipc.ts#L66-L93)
 
 ```ts
 const NoArgs = z.undefined()
@@ -1373,7 +1452,7 @@ Schemas used by several channels.
 
 <!-- code: apps/desktop/src/main/ipc.ts#registerIpc -->
 
-[`src/main/ipc.ts`, lines 92–323](../../apps/desktop/src/main/ipc.ts#L92-L323)
+[`src/main/ipc.ts`, lines 95–337](../../apps/desktop/src/main/ipc.ts#L95-L337)
 
 ```ts
 /** Wires every renderer request to the main process. All arguments are validated with zod. */
@@ -1479,6 +1558,17 @@ export function registerIpc(ctx: IpcContext): void {
   if (ctx.builtIn) registerBuiltInChat(ctx.builtIn)
   if (ctx.atlassian) registerAtlassian(ctx.atlassian)
   if (ctx.serviceDesk) registerServiceDesk(ctx.serviceDesk)
+  if (ctx.updater) registerUpdates(ctx.updater)
+
+  function registerUpdates(updater: Updater): void {
+    handle(IPC.updatesGet, NoArgs, () => updater.current)
+    // Checking, downloading and installing take a while, so this returns straight away (already
+    // "checking"); progress is broadcast on IPC.updateState.
+    handle(IPC.updatesCheck, NoArgs, () => {
+      void updater.checkAndInstall()
+      return updater.current
+    })
+  }
 
   function registerAtlassian(atlassian: Atlassian): void {
     handle(IPC.atlassianGet, NoArgs, () => atlassian.current)
@@ -1615,8 +1705,8 @@ export function registerIpc(ctx: IpcContext): void {
 Registers a handler for every channel the app uses, once, at startup. The first part sets up a
 sender check and two helpers; the rest is one line (or a few) per channel, grouped by area. The
 channels of the two kinds of chat are registered by two inner functions, `registerClaudeDesktop()`
-and `registerBuiltInChat()`, and only one of them runs. The Apps list, Jira and the service desk
-have inner functions of their own too.
+and `registerBuiltInChat()`, and only one of them runs. The Apps list, Jira, the service desk and
+Check for updates have inner functions of their own too.
 
 **The sender check and the two helpers**
 
@@ -1692,17 +1782,17 @@ have inner functions of their own too.
 - `handle(IPC.appUninstall, NoArgs, () => ctx.uninstall())`: Settings → Uninstall. On success the
   app is already quitting.
 
-**Built-in chat, Claude Desktop, the Apps list, Jira and the service desk**
+**Built-in chat, Claude Desktop, the Apps list, Jira, the service desk and updates**
 
 - `if (ctx.claudeDesktop) registerClaudeDesktop(ctx.claudeDesktop)`,
   `if (ctx.builtIn) registerBuiltInChat(ctx.builtIn)`: `start()` sets exactly one of the two, so
   only that chat's channels get handlers. If a page called one of the other chat's channels
   anyway, Electron would reject its promise, because nothing is registered for it.
 - `if (ctx.apps) registerApps(ctx.apps)`: the same for the Apps list, when there's a portal.
-  `registerAtlassian()` and `registerServiceDesk()` likewise run only when `start()` passed an
-  `atlassian` or a `serviceDesk`.
+  `registerAtlassian()`, `registerServiceDesk()` and `registerUpdates()` likewise run only when
+  `start()` passed an `atlassian`, a `serviceDesk` or an `updater`.
 - `function registerClaudeDesktop(...)`, `function registerBuiltInChat(...)`: declared inside
-  `registerIpc()`, so they can use `handle()` and `ctx`. The other three too. They're called above
+  `registerIpc()`, so they can use `handle()` and `ctx`. The other four too. They're called above
   the lines that declare them, which works because JavaScript sets up a block's `function`
   declarations before running it (this is called _hoisting_).
 
@@ -1775,6 +1865,16 @@ have inner functions of their own too.
   comes to the front, so the panel closes. The draft is kept, unlike after asking Claude: the
   request isn't sent until the user sends it on the portal.
 - `shell.openExternal(myRequestsUrl)`: "All your requests on the portal", then the panel closes.
+
+**Check for updates** (`registerUpdates()`)
+
+- `handle(IPC.updatesGet, NoArgs, () => updater.current)`: how the last check went, which the
+  panel asks for when it loads.
+- `void updater.checkAndInstall()`, `return updater.current`: as the comment says, checking,
+  downloading and installing take a while, so the call doesn't wait for them. `checkAndInstall()`
+  has already set `checking` before its first `await`, so the answer is `checking` (or, if a check
+  was already under way, how that one is going). Progress arrives as `IPC.updateState`
+  broadcasts.
 
 **Sign-in** (`registerBuiltInChat()`)
 
@@ -1981,6 +2081,538 @@ uninstalling from Windows Settings.
 - `deps.quit()`: the app quits (through `before-quit`, which saves the draft), so the uninstaller
   can delete its files. The uninstaller is already running by then.
 
+## `src/main/updates.ts`: checking for updates
+
+Settings → **Check for updates** keeps the app up to date without a trip to an installer. New
+versions are published as _releases_ of the tenant's GitHub repository (`updates.repo`): each one is
+tagged with its version, such as `v1.0.1`, and has the installer (`Desktop Assist-Setup-1.0.1.exe`)
+attached. One click does the whole job: ask GitHub's API for the latest release; if it's newer than
+this copy (`app.getVersion()`), download its installer, check it's exactly the file GitHub has (its
+size and SHA-256), and run it as an update. The installer waits for the app to quit, replaces it
+silently and starts the new version; the app says so in a Windows notification and quits. GitHub
+answers without a sign-in, so there's no secret involved.
+
+Everything outside (the network, the disk, starting the installer, the notification, quitting) is
+passed in, so `tests/updates.test.ts` runs it against a fake GitHub. `start()` in `index.ts`
+creates it when the tenant has `updates` (see
+[The network, and checking for updates](#the-network-and-checking-for-updates)), and the settings
+menu calls it through `IPC.updatesCheck`.
+
+### `INSTALLER_ARGS`
+
+<!-- code: apps/desktop/src/main/updates.ts#INSTALLER_ARGS -->
+
+[`src/main/updates.ts`, lines 9–14](../../apps/desktop/src/main/updates.ts#L9-L14)
+
+```ts
+/**
+ * What the installer is told when it runs as an update, as electron-builder's own updater does:
+ * `--updated` (it's an update: wait for the running app to close, keep the user's data), `/S`
+ * (silently, no window) and `--force-run` (start the app again when it's done).
+ */
+export const INSTALLER_ARGS = ['--updated', '/S', '--force-run']
+```
+
+<!-- /code -->
+
+What the installer is told when it runs as an update. As the comment says, these are what
+electron-builder's own updater passes to its NSIS installer, so the installer already knows them:
+
+- `--updated`: this is an update. The installer waits for the running app to close before
+  replacing it, and keeps the user's data.
+- `/S`: _silent_, NSIS's standard switch: no installer window, no questions.
+- `--force-run`: start the app again once it's installed, so the user gets the new version
+  straight back.
+
+### `parseVersion()` and `isNewer()`
+
+<!-- code: apps/desktop/src/main/updates.ts#parseVersion,isNewer -->
+
+[`src/main/updates.ts`, lines 16–31](../../apps/desktop/src/main/updates.ts#L16-L31)
+
+```ts
+/** A version as numbers: "v1.2.3" is [1, 2, 3]. Null if it isn't one. */
+export function parseVersion(value: string): [number, number, number] | null {
+  const match = /^v?(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/.exec(value.trim())
+  return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : null
+}
+
+/** Whether `candidate` is a later version than `current`. */
+export function isNewer(candidate: string, current: string): boolean {
+  const a = parseVersion(candidate)
+  const b = parseVersion(current)
+  if (!a || !b) return false
+  for (let i = 0; i < 3; i++) {
+    if (a[i] !== b[i]) return a[i]! > b[i]!
+  }
+  return false
+}
+```
+
+<!-- /code -->
+
+- `parseVersion(value)`: a version as three numbers, as the comment says. The pattern allows a
+  leading `v` (GitHub tags are usually `v1.2.3`) and ignores anything after a `-` or `+` (such as
+  `-beta.1`). `[number, number, number]` is a _tuple_: a list of exactly three numbers. Anything
+  else is `null`.
+- `isNewer(candidate, current)`: compares part by part: major, then minor, then patch. The first
+  part that differs decides, so `1.10.0` is newer than `1.9.9` (which comparing them as text would
+  get wrong). Equal versions, or one that can't be read, aren't newer, so the app never "updates"
+  to something it doesn't understand.
+- `a[i]!`: the `!` tells TypeScript the element is there; with `noUncheckedIndexedAccess` on, it
+  would otherwise count every element of an array as possibly missing.
+
+### `Release`, `Item`, `isObject` and `releaseOf()`
+
+<!-- code: apps/desktop/src/main/updates.ts#Release,Item,isObject,releaseOf -->
+
+[`src/main/updates.ts`, lines 33–78](../../apps/desktop/src/main/updates.ts#L33-L78)
+
+```ts
+/** A release with an installer attached. */
+export interface Release {
+  version: string
+  installer: {
+    name: string
+    url: string
+    size: number
+    /** The installer's SHA-256 as GitHub worked it out (hex), if it says. */
+    sha256: string | null
+  }
+}
+
+type Item = Record<string, unknown>
+
+const isObject = (value: unknown): value is Item =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+/**
+ * The release in GitHub's answer for a repository's latest release, if it's a version with an
+ * installer: an `.exe` with "Setup" in its name, downloaded from `downloads` (the repository's own
+ * releases, https://github.com/<owner>/<name>/releases/download/).
+ */
+export function releaseOf(payload: unknown, downloads: string): Release | null {
+  if (!isObject(payload) || payload['draft'] === true || payload['prerelease'] === true) return null
+  const version = parseVersion(typeof payload['tag_name'] === 'string' ? payload['tag_name'] : '')
+  if (!version) return null
+  const assets = Array.isArray(payload['assets']) ? payload['assets'].filter(isObject) : []
+  const asset = assets.find(
+    (a) =>
+      typeof a['name'] === 'string' &&
+      /setup.*\.exe$/i.test(a['name']) &&
+      typeof a['browser_download_url'] === 'string' &&
+      a['browser_download_url'].startsWith(downloads),
+  )
+  if (!asset) return null
+  const digest = typeof asset['digest'] === 'string' ? asset['digest'] : ''
+  const sha256 = /^sha256:([0-9a-f]{64})$/i.exec(digest)?.[1]?.toLowerCase() ?? null
+  return {
+    version: version.join('.'),
+    installer: {
+      name: String(asset['name']),
+      url: String(asset['browser_download_url']),
+      size: typeof asset['size'] === 'number' ? asset['size'] : 0,
+      sha256,
+    },
+  }
+}
+```
+
+<!-- /code -->
+
+`Release` is a release worth installing: its version (`1.0.1`) and its installer's name, address,
+size and SHA-256. `Item` and `isObject` are the same helpers as in `portalData.ts`. `releaseOf()`
+reads GitHub's answer for a repository's latest release, as the comment says.
+
+- `payload['draft'] === true || payload['prerelease'] === true`: drafts and pre-releases are never
+  installed. GitHub's "latest release" is never one of those anyway, so this is a second guard.
+- `parseVersion(... payload['tag_name'] ...)`: the release's tag must be a version.
+  `version.join('.')` writes it without the `v`.
+- `assets`: the files attached to the release. `/setup.*\.exe$/i` picks the installer by its name
+  (electron-builder calls it `<product>-Setup-<version>.exe`); any other files attached to the
+  release are ignored.
+- `a['browser_download_url'].startsWith(downloads)`: the file must come from the repository's own
+  releases, so even a strange answer can't make the app download something from elsewhere.
+- `/^sha256:([0-9a-f]{64})$/i.exec(digest)`: GitHub works out each attached file's SHA-256 itself
+  and gives it as `digest`, written `sha256:` and 64 hex digits. `?.[1]` takes the digits if it
+  matched; `?? null` covers a release without a digest (older ones), which is checked by its size
+  alone.
+- `size: typeof asset['size'] === 'number' ? asset['size'] : 0`: the file's size in bytes, or 0
+  when GitHub doesn't say.
+
+### `Fetch` and `UpdaterDeps`
+
+<!-- code: apps/desktop/src/main/updates.ts#Fetch,UpdaterDeps -->
+
+[`src/main/updates.ts`, lines 80–105](../../apps/desktop/src/main/updates.ts#L80-L105)
+
+```ts
+export type Fetch = (url: string, init?: RequestInit) => Promise<Response>
+
+export interface UpdaterDeps {
+  /** This copy's version (package.json). */
+  currentVersion: string
+  /** GitHub's API address for the latest release: …/repos/<owner>/<name>/releases/latest. */
+  latestUrl: string
+  /** Where the repository's release files are downloaded from; nothing else is downloaded. */
+  downloads: string
+  fetch: Fetch
+  /**
+   * Saves the installer's chunks as they come in, replacing any earlier download; its path. If
+   * the chunks fail (not the release's file), nothing is kept.
+   */
+  save(name: string, chunks: AsyncIterable<Uint8Array>): Promise<string>
+  /**
+   * Runs the installer on its own (it carries on once this app has quit) with INSTALLER_ARGS.
+   * False in a development run, which has no installed copy to replace: it stops at downloading.
+   */
+  install: ((path: string) => void) | null
+  /** Tells the user the app is about to close for the update. */
+  notify(message: { title: string; body: string }): void
+  quit(): void
+  onState(state: UpdateState): void
+  onError?(message: string, error?: unknown): void
+}
+```
+
+<!-- /code -->
+
+`Fetch` is the shape of the standard `fetch()`; `index.ts` passes Electron's (`netFetch`), so a
+proxy set in Windows is used. `UpdaterDeps` is everything `Updater` needs from outside:
+
+- `currentVersion`: this copy's version, from `package.json`.
+- `latestUrl`, `downloads`: as their comments say, GitHub's address for the latest release, and
+  the only place installers are downloaded from.
+- `save(name, chunks)`: as the comment says, saves the installer as it arrives and returns where
+  it is (`saveDownload()` below). `AsyncIterable<Uint8Array>` is a source of chunks of bytes that
+  arrive one at a time.
+- `install`: starts the installer on its own, with `INSTALLER_ARGS`. As the comment says, it's
+  `null` in a development run, which then stops at downloading.
+- `notify(message)`, `quit()`: a Windows notification, and quitting the app.
+- `onState(state)`: called on every change; `index.ts` broadcasts it to the pages.
+- `onError?(message, error?)`: a line for the problem log.
+
+### `Updater`
+
+<!-- code: apps/desktop/src/main/updates.ts#Updater.class -->
+
+[`src/main/updates.ts`, lines 107–112](../../apps/desktop/src/main/updates.ts#L107-L112)
+
+```ts
+/**
+ * Settings → Check for updates: asks GitHub for the latest release and, if it's newer than this
+ * copy, downloads its installer, checks it's exactly the file GitHub has, and runs it. The
+ * installer replaces this copy silently and starts the new one; this app quits to let it.
+ */
+export class Updater {
+  // …
+}
+```
+
+<!-- /code -->
+
+The class `index.ts` and `ipc.ts` use, with the comment that sums it up.
+
+<!-- code: apps/desktop/src/main/updates.ts#Updater.state,constructor,current -->
+
+[`src/main/updates.ts`, lines 113–119](../../apps/desktop/src/main/updates.ts#L113-L119)
+
+```ts
+private state: UpdateState = { status: 'idle' }
+
+constructor(private readonly deps: UpdaterDeps) {}
+
+get current(): UpdateState {
+  return this.state
+}
+```
+
+<!-- /code -->
+
+- `state`: how the last check is going (`UpdateState`), `idle` until the first one. Every change
+  goes through `setState()`, which also reports it.
+- `get current()`: the state as it is now, for `IPC.updatesGet` and the tests.
+
+### `Updater.checkAndInstall()`
+
+<!-- code: apps/desktop/src/main/updates.ts#Updater.checkAndInstall -->
+
+[`src/main/updates.ts`, lines 121–154](../../apps/desktop/src/main/updates.ts#L121-L154)
+
+```ts
+/** The whole job, one click: check, and if there's an update, download and install it. */
+async checkAndInstall(): Promise<UpdateState> {
+  if (['checking', 'downloading', 'installing'].includes(this.state.status)) return this.state
+  this.setState({ status: 'checking' })
+  let release: Release | null
+  try {
+    release = await this.latest()
+  } catch (error) {
+    return this.fail("Couldn't check for updates", error)
+  }
+  if (!release || !isNewer(release.version, this.deps.currentVersion)) {
+    return this.setState({ status: 'up-to-date', version: this.deps.currentVersion })
+  }
+  const { version } = release
+  let path: string
+  try {
+    path = await this.download(release)
+  } catch (error) {
+    return this.fail(`Couldn't download ${version}`, error)
+  }
+  if (!this.deps.install) return this.setState({ status: 'downloaded', version, path })
+  this.setState({ status: 'installing', version })
+  try {
+    this.deps.install(path)
+  } catch (error) {
+    return this.fail(`Couldn't start the ${version} installer`, error)
+  }
+  this.deps.notify({
+    title: `Updating to ${version}`,
+    body: 'Desktop Assist will close and start again in a moment.',
+  })
+  this.deps.quit()
+  return this.state
+}
+```
+
+<!-- /code -->
+
+The whole job, from one click, as the comment says.
+
+- `if (['checking', 'downloading', 'installing'].includes(this.state.status)) return this.state`:
+  one check at a time. A second click while one is under way just gets how it's going.
+- `release = await this.latest()`: the latest release, or `null` if there's none worth installing.
+  A failure becomes an `error` state ("Couldn't check for updates. …", see `fail()`).
+- `if (!release || !isNewer(release.version, this.deps.currentVersion))`: no release, or one that
+  isn't newer than this copy: `up-to-date`, with this copy's version for the menu to show.
+- `path = await this.download(release)`: downloads the installer and checks it. A failure, or a
+  file that isn't the release's, is `Couldn't download 1.0.1. …`.
+- `if (!this.deps.install) return this.setState({ status: 'downloaded', version, path })`: a
+  development run stops here.
+- `this.setState({ status: 'installing', version })`, `this.deps.install(path)`: the installer
+  starts, waiting for the app to quit. If it can't even be started, that's an error and the app
+  stays open.
+- `this.deps.notify({ ... })`: tells the user the app is about to close and start again ("Updating
+  to 1.0.1"), so it doesn't look like a crash.
+- `this.deps.quit()`: the app quits (through `before-quit`, which saves the draft), and the
+  installer gets on with it.
+
+### `Updater.latest()`
+
+<!-- code: apps/desktop/src/main/updates.ts#Updater.latest -->
+
+[`src/main/updates.ts`, lines 156–166](../../apps/desktop/src/main/updates.ts#L156-L166)
+
+```ts
+private async latest(): Promise<Release | null> {
+  const response = await this.deps.fetch(this.deps.latestUrl, {
+    headers: { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
+    signal: AbortSignal.timeout(15_000),
+  })
+  // No releases yet.
+  if (response.status === 404) return null
+  if (response.status === 403 || response.status === 429) throw new Busy()
+  if (!response.ok) throw new Error(`GitHub answered ${response.status}`)
+  return releaseOf(await response.json(), this.deps.downloads)
+}
+```
+
+<!-- /code -->
+
+Asks GitHub's API for the repository's latest release.
+
+- `Accept: 'application/vnd.github+json'`: GitHub's own JSON format, which its documentation asks
+  for. `X-GitHub-Api-Version: '2022-11-28'` pins the version of the API, so a later change at
+  GitHub can't change the shape of the answer.
+- `signal: AbortSignal.timeout(15_000)`: gives up after 15 seconds, so the menu can't spin for
+  ever.
+- `if (response.status === 404) return null`: as the comment says, GitHub answers "not found" when
+  the repository has no releases yet: nothing to install.
+- `response.status === 403 || response.status === 429`: GitHub turned the request away. It limits
+  how often apps that don't sign in can ask, so this becomes `Busy` and "try again in a few
+  minutes".
+- `releaseOf(await response.json(), this.deps.downloads)`: reads the answer.
+
+### `Updater.download()`
+
+<!-- code: apps/desktop/src/main/updates.ts#Updater.download -->
+
+[`src/main/updates.ts`, lines 168–203](../../apps/desktop/src/main/updates.ts#L168-L203)
+
+```ts
+/** Downloads the installer, checking its size and SHA-256 against the release's. */
+private async download(release: Release): Promise<string> {
+  const { installer, version } = release
+  const response = await this.deps.fetch(installer.url)
+  if (!response.ok || !response.body) throw new Error(`The download answered ${response.status}`)
+  const total = installer.size || Number(response.headers.get('content-length')) || 0
+  const hash = createHash('sha256')
+  let received = 0
+  let shown = -1
+  const progress = (percent: number) => {
+    if (percent === shown) return
+    shown = percent
+    this.setState({ status: 'downloading', version, percent })
+  }
+  progress(0)
+  const reader = response.body.getReader()
+  // The file's chunks as they arrive, hashed and counted on their way to the disk. At the end it
+  // must be the release's file, or saving fails (and the file is deleted).
+  async function* chunks(): AsyncGenerator<Uint8Array> {
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      hash.update(value)
+      received += value.length
+      progress(total ? Math.min(99, Math.floor((received / total) * 100)) : 0)
+      yield value
+    }
+    if (installer.size && received !== installer.size) {
+      throw new Mismatch(`it's ${received} bytes, not ${installer.size}`)
+    }
+    if (installer.sha256 && hash.digest('hex') !== installer.sha256) {
+      throw new Mismatch("its SHA-256 isn't the release's")
+    }
+  }
+  return this.deps.save(installer.name, chunks())
+}
+```
+
+<!-- /code -->
+
+Downloads the installer, as the comment says, checking it on the way: the file must be exactly
+the release's, or it's never run.
+
+- `await this.deps.fetch(installer.url)`: GitHub sends the download on to where it stores release
+  files, and `fetch` follows.
+- `const total = installer.size || Number(response.headers.get('content-length')) || 0`: the size
+  to show progress against: the release's, or what the download says, or unknown.
+- `createHash('sha256')`: Node's hashing, fed each chunk as it arrives, so the SHA-256 of the whole
+  file is ready at the end without reading it again.
+- `const progress = (percent: number) => {`: reports `downloading` with the percentage, but only
+  when the whole number changes. A large download comes in thousands of chunks, and the pages only
+  need a hundred updates at most.
+- `response.body.getReader()`: reads the download's body chunk by chunk.
+- `async function* chunks()`: an _async generator_. The `*` makes it a function that hands out
+  values one at a time (`yield value`) as whoever is reading asks for them, waiting (`await`) in
+  between. Here it reads the next chunk, adds it to the hash and the count, reports progress
+  (stopping at 99% until the file has been checked), and passes it on to be saved.
+- `if (installer.size && received !== installer.size)`, `hash.digest('hex') !== installer.sha256`:
+  after the last chunk, the size and the SHA-256 must be the release's. As the comment says, if
+  they aren't, `Mismatch` is thrown inside the generator, so it surfaces in `save()` as a failed
+  write, and the file is deleted. A file that isn't the release's never stays on disk to be run.
+- `return this.deps.save(installer.name, chunks())`: saving pulls the chunks through the
+  generator, and returns where the file is.
+
+### `Updater.fail()` and `Updater.setState()`
+
+<!-- code: apps/desktop/src/main/updates.ts#Updater.fail,setState -->
+
+[`src/main/updates.ts`, lines 205–224](../../apps/desktop/src/main/updates.ts#L205-L224)
+
+```ts
+private fail(doing: string, error: unknown): UpdateState {
+  this.deps.onError?.(`${doing}:`, error)
+  const reason =
+    error instanceof Busy
+      ? 'GitHub is busy; try again in a few minutes.'
+      : error instanceof Mismatch
+        ? `The download isn't the release's file (${error.message}); try again.`
+        : /fetch failed|ENOTFOUND|ECONNREFUSED|ETIMEDOUT|ERR_|network|abort|timeout/i.test(
+              String(error),
+            )
+          ? "Couldn't reach GitHub. Check you're online and try again."
+          : 'Try again later.'
+  return this.setState({ status: 'error', message: `${doing}. ${reason}` })
+}
+
+private setState(state: UpdateState): UpdateState {
+  this.state = state
+  this.deps.onState(state)
+  return state
+}
+```
+
+<!-- /code -->
+
+- `fail(doing, error)`: logs the details and sets an `error` state with what was being done and a
+  plain-English reason: GitHub is busy (`Busy`); the download isn't the release's file
+  (`Mismatch`, with what was wrong); GitHub couldn't be reached (the usual signs of no connection,
+  plus `ERR_`, Chromium's network errors, and `abort` or `timeout`, the 15-second limit); or just
+  "Try again later." The menu shows the message under Check for updates.
+- `setState(state)`: records the new state, reports it (`onState`) and returns it, so
+  `checkAndInstall()` can `return this.setState(...)`.
+
+### `saveDownload()`
+
+<!-- code: apps/desktop/src/main/updates.ts#saveDownload -->
+
+[`src/main/updates.ts`, lines 227–249](../../apps/desktop/src/main/updates.ts#L227-L249)
+
+```ts
+/**
+ * Saves a downloaded installer in `dir` (emptied first, so old downloads don't pile up) and
+ * returns its path. Only an `.exe`, and only the file's own name is used. If the download fails
+ * part way (or turns out not to be the release's file), the partial file is deleted.
+ */
+export async function saveDownload(
+  dir: string,
+  name: string,
+  chunks: AsyncIterable<Uint8Array>,
+): Promise<string> {
+  const file = basename(name)
+  if (!/\.exe$/i.test(file)) throw new Error(`${file} isn't an installer`)
+  await rm(dir, { recursive: true, force: true })
+  await mkdir(dir, { recursive: true })
+  const path = join(dir, file)
+  try {
+    await pipeline(Readable.from(chunks), createWriteStream(path))
+  } catch (error) {
+    await rm(path, { force: true })
+    throw error
+  }
+  return path
+}
+```
+
+<!-- /code -->
+
+Saves the downloaded installer, as the comment says. `index.ts` gives it the folder
+`%TEMP%\Desktop Assist update`.
+
+- `basename(name)`: only the file's own name is used, so a name with folders in it (`..\x.exe`,
+  say) can't write anywhere but `dir`.
+- `if (!/\.exe$/i.test(file))`: only an installer is ever saved.
+- `rm(dir, { recursive: true, force: true })`, `mkdir(dir, { recursive: true })`: empties the
+  folder first, so old downloads don't pile up.
+- `pipeline(Readable.from(chunks), createWriteStream(path))`: `Readable.from` turns the chunks into
+  a Node stream, and `pipeline` copies it into the file, waiting whenever the disk is slower than
+  the network. If either side fails (the download breaks off, or the generator throws `Mismatch` at
+  the end), the whole pipeline fails.
+- `catch (error) { await rm(path, { force: true }); throw error }`: the partial file is deleted,
+  and the failure passed on to `Updater`.
+
+### `Busy` and `Mismatch`
+
+<!-- code: apps/desktop/src/main/updates.ts#Busy,Mismatch -->
+
+[`src/main/updates.ts`, lines 251–255](../../apps/desktop/src/main/updates.ts#L251-L255)
+
+```ts
+/** GitHub turned the request away (its limit for apps that don't sign in). */
+class Busy extends Error {}
+
+/** The download isn't the file the release has. */
+class Mismatch extends Error {}
+```
+
+<!-- /code -->
+
+Two kinds of error, as their comments say, so `fail()` can tell them apart (`instanceof`) and say
+something useful: GitHub turned the request away, or the download isn't the release's file. Like
+`ToolError` in `McpAccount.ts`, each is a plain `Error` under a class name of its own.
+
 ## `src/main/tenant.ts`: the tenant config
 
 A _tenant_ is one company's branding and settings, from `tenants/<id>/tenant.json`. This file
@@ -1994,7 +2626,8 @@ the Claude access settings (`claudeAccess`). A tenant with the IT service desk i
 service desk's address (`serviceDesk`), and its request types to raise requests from the panel
 (`serviceDesk.requests`). A tenant with the Apps list (as its start page, or behind the Apps icon)
 also needs its app portal's settings (`portal`), and one with the Jira icon its Atlassian site
-(`atlassian`).
+(`atlassian`). A tenant whose releases are published on GitHub names the repository (`updates`), so
+Settings can offer Check for updates.
 
 None of the values here are secret. The client ID and the Claude IDs identify the app; on their
 own they don't grant access to anything.
@@ -2201,11 +2834,57 @@ connects once in the browser, so there's no secret here.
   the dev override can use them without the defaults (see `DevOverrideSchema`).
 - `AtlassianConfig`: the TypeScript type, with `mcpServer` and `knowledgeSpaces` always there.
 
+### `UpdatesFields`, `UpdatesSchema` and `UpdatesConfig`
+
+<!-- code: apps/desktop/src/main/tenant.ts#UpdatesFields,UpdatesSchema,UpdatesConfig -->
+
+[`src/main/tenant.ts`, lines 96–114](../../apps/desktop/src/main/tenant.ts#L96-L114)
+
+```ts
+/**
+ * Updating from Settings: the GitHub repository whose releases carry the installer. Releases are
+ * read from GitHub's public API, so the repository must be public; no token is needed.
+ */
+const UpdatesFields = z.object({
+  /** "owner/name". */
+  repo: z.string().regex(/^[\w.-]+\/[\w.-]+$/),
+  /** GitHub's API. */
+  api: z.url({ protocol: /^https?$/ }),
+  /** Where release files come from: <downloads>/<repo>/releases/download/…; nothing else is. */
+  downloads: z.url({ protocol: /^https?$/ }),
+})
+
+export const UpdatesSchema = UpdatesFields.extend({
+  api: UpdatesFields.shape.api.default('https://api.github.com'),
+  downloads: UpdatesFields.shape.downloads.default('https://github.com'),
+})
+
+export type UpdatesConfig = z.infer<typeof UpdatesSchema>
+```
+
+<!-- /code -->
+
+Where Check for updates looks for new releases. For Morse Micro, `tenant.json` has just
+`"updates": { "repo": "Camby10101/Desktop-Assist" }`.
+
+- `repo`: the GitHub repository, as "owner/name". `[\w.-]+` is one or more letters, digits, `_`,
+  `.` or `-` (`\w` covers the first three), so the pattern is two such names with one `/`
+  between them, and nothing else can end up in the addresses built from it.
+- `api`: GitHub's API. `http` is allowed as well as `https`, so a dev run can point it at a test
+  server on the PC.
+- `downloads`: as the comment says, where release files come from: an installer is only
+  downloaded from `<downloads>/<repo>/releases/download/`.
+- `UpdatesSchema = UpdatesFields.extend({ ... })`: the same fields, with GitHub's own addresses as
+  defaults (`https://api.github.com` and `https://github.com`), so a tenant only names its
+  repository. As for Atlassian, the fields are kept separately for the dev override, without the
+  defaults.
+- `UpdatesConfig`: the TypeScript type, with `api` and `downloads` always there.
+
 ### `SignInConfig` and `ClaudeAccessConfig`
 
 <!-- code: apps/desktop/src/main/tenant.ts#SignInConfig,ClaudeAccessConfig -->
 
-[`src/main/tenant.ts`, lines 96–97](../../apps/desktop/src/main/tenant.ts#L96-L97)
+[`src/main/tenant.ts`, lines 116–117](../../apps/desktop/src/main/tenant.ts#L116-L117)
 
 ```ts
 export type SignInConfig = z.infer<typeof SignInSchema>
@@ -2223,7 +2902,7 @@ and `AnthropicBackend.ts` use these types.
 
 <!-- code: apps/desktop/src/main/tenant.ts#CHAT_APPS -->
 
-[`src/main/tenant.ts`, lines 99–107](../../apps/desktop/src/main/tenant.ts#L99-L107)
+[`src/main/tenant.ts`, lines 119–127](../../apps/desktop/src/main/tenant.ts#L119-L127)
 
 ```ts
 /**
@@ -2253,7 +2932,7 @@ billed to the company.
 
 <!-- code: apps/desktop/src/main/tenant.ts#START_PAGES -->
 
-[`src/main/tenant.ts`, lines 109–113](../../apps/desktop/src/main/tenant.ts#L109-L113)
+[`src/main/tenant.ts`, lines 129–133](../../apps/desktop/src/main/tenant.ts#L129-L133)
 
 ```ts
 /**
@@ -2273,7 +2952,7 @@ Morse Micro opens on the Apps list, with the text box behind the Ask Claude icon
 
 <!-- code: apps/desktop/src/main/tenant.ts#TenantSchema,Tenant -->
 
-[`src/main/tenant.ts`, lines 115–161](../../apps/desktop/src/main/tenant.ts#L115-L161)
+[`src/main/tenant.ts`, lines 135–183](../../apps/desktop/src/main/tenant.ts#L135-L183)
 
 ```ts
 export const TenantSchema = z
@@ -2296,6 +2975,8 @@ export const TenantSchema = z
     serviceDesk: ServiceDeskSchema.optional(),
     /** Needed for the Jira icon. */
     atlassian: AtlassianSchema.optional(),
+    /** Offers Check for updates in Settings. */
+    updates: UpdatesSchema.optional(),
     /** Needed for the built-in chat only. */
     signIn: SignInSchema.optional(),
     claudeAccess: ClaudeAccessSchema.optional(),
@@ -2348,6 +3029,7 @@ The whole `tenant.json`.
 - `serviceDesk: ServiceDeskSchema.optional()`: only needed for the service desk icon.
 - `atlassian: AtlassianSchema.optional()`: only needed for the Jira icon (and for My requests on
   the service desk page).
+- `updates: UpdatesSchema.optional()`: as the comment says, offers Check for updates in Settings.
 - `signIn: SignInSchema.optional()`, `claudeAccess: ClaudeAccessSchema.optional()`: a Claude
   Desktop tenant can leave both out.
 - `.refine((tenant) => tenant.chatApp !== 'built-in' || ...)`: a check on the whole object, so it
@@ -2367,7 +3049,7 @@ The whole `tenant.json`.
 
 <!-- code: apps/desktop/src/main/tenant.ts#brandingOf -->
 
-[`src/main/tenant.ts`, lines 163–178](../../apps/desktop/src/main/tenant.ts#L163-L178)
+[`src/main/tenant.ts`, lines 185–201](../../apps/desktop/src/main/tenant.ts#L185-L201)
 
 ```ts
 export function brandingOf(tenant: Tenant): Branding {
@@ -2384,6 +3066,7 @@ export function brandingOf(tenant: Tenant): Branding {
     startPage,
     atlassianSite: tenant.atlassian?.site ?? null,
     requestTypes: tenant.serviceDesk?.requests?.requestTypes ?? null,
+    updates: tenant.updates !== undefined,
   }
 }
 ```
@@ -2393,8 +3076,10 @@ export function brandingOf(tenant: Tenant): Branding {
 The part of the tenant the pages need: names, the accent colour, the action list, `chatApp`, which
 tells the panel whether to show the built-in chat or hand questions to Claude Desktop, and the
 portal's name for the Apps list (`null` without a portal; `?.` reads `name` only if there's a
-`portal`), the start page, the Atlassian site (`null` without one), and the service desk's request
-types (`null` without them). It goes into the state snapshot from `getState`. The object is
+`portal`), the start page, the Atlassian site (`null` without one), the service desk's request
+types (`null` without them), and whether Settings offers Check for updates
+(`updates: tenant.updates !== undefined`, just `true` or `false`). It goes into the state snapshot
+from `getState`. The object is
 rebuilt field by field rather than passed as is, so the sign-in, Claude, portal and MCP server
 settings never go to the pages.
 
@@ -2402,7 +3087,7 @@ settings never go to the pages.
 
 <!-- code: apps/desktop/src/main/tenant.ts#missingSettings -->
 
-[`src/main/tenant.ts`, lines 180–191](../../apps/desktop/src/main/tenant.ts#L180-L191)
+[`src/main/tenant.ts`, lines 203–214](../../apps/desktop/src/main/tenant.ts#L203-L214)
 
 ```ts
 /** The tenant.json settings still to be filled in before anyone can sign in, by name. */
@@ -2435,13 +3120,13 @@ status is `unconfigured` and the chat box shows the list instead of a sign-in bu
 
 <!-- code: apps/desktop/src/main/tenant.ts#DevOverrideSchema -->
 
-[`src/main/tenant.ts`, lines 193–206](../../apps/desktop/src/main/tenant.ts#L193-L206)
+[`src/main/tenant.ts`, lines 216–230](../../apps/desktop/src/main/tenant.ts#L216-L230)
 
 ```ts
 /**
  * Dev runs only: a JSON file (path in DESKTOP_ASSIST_DEV_CONFIG) can override `chatApp`,
- * `startPage`, `portal`, `atlassian`, `signIn` and `claudeAccess`, so the app can be pointed at
- * test servers without editing tenant.json. Installed builds never read it.
+ * `startPage`, `portal`, `atlassian`, `updates`, `signIn` and `claudeAccess`, so the app can be
+ * pointed at test servers without editing tenant.json. Installed builds never read it.
  */
 export const DevOverrideSchema = z.object({
   chatApp: z.enum(CHAT_APPS).optional(),
@@ -2449,6 +3134,7 @@ export const DevOverrideSchema = z.object({
   portal: PortalSchema.partial().optional(),
   // Without the defaults, so a partial override can't reset what tenant.json sets.
   atlassian: AtlassianFields.partial().optional(),
+  updates: UpdatesFields.partial().optional(),
   signIn: SignInSchema.partial().optional(),
   claudeAccess: ClaudeAccessSchema.partial().optional(),
 })
@@ -2469,6 +3155,8 @@ changes.
   server. As the comment says, it's built from the fields without the defaults: otherwise an
   override that only gives `mcpServer` would also get `knowledgeSpaces: []`, and the merge in
   `withDevOverrides()` would wipe out the tenant's spaces.
+- `updates: UpdatesFields.partial().optional()`: the same for Check for updates, such as a test
+  server in place of GitHub's API (`api`), again without the defaults.
 
 ## `src/main/settings.ts`: the user's preferences
 

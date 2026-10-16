@@ -1,10 +1,10 @@
 # Desktop Assist: Plan & Tech Stack
 
 Status: **Milestones 0 (Foundation), 1 (Chat with Claude), 2.1 (bubble fixes), 3 (JumpCloud
-sign-in), 4 (logos, favourites, service desk, light/dark, the bubble-click fix) and features 3.1
-(questions open in Claude Desktop) and 3.2 (Apps list, Uninstall, fixes) complete**. Milestone 5
-(the app-opening spinner; Jira and the service desk) is in progress (§7h). Last updated
-2026-10-12.
+sign-in), 4 (logos, favourites, service desk, light/dark, the bubble-click fix) and 5 (the
+app-opening spinner; Jira and the service desk), its fixes 5.1 and 5.2 (the bubble kept in front;
+Check for updates), and features 3.1 (questions open in Claude Desktop) and 3.2 (Apps list,
+Uninstall, fixes) complete**. Version 1.0.0 is the first release (§7h). Last updated 2026-10-16.
 
 A Windows desktop assistant that runs in the background, shows a small circular company logo
 in the bottom-right corner of the screen, and opens a panel when clicked. It's built for Morse
@@ -378,7 +378,7 @@ Improvements asked for after trying 3.2 day to day (merged in pull request #6):
 
 Tested with unit tests (226, including recognising images from their bytes, the octet-stream logos, a page of HTML labelled as an image, the favourites order and the logo cache) and end-to-end (44 checks for the Apps list, now including starring an app, the order surviving a restart, unstarring, and the service desk link; the 3.1 (39) and built-in chat (47, 9) runs still pass).
 
-## 7h. Milestone 5 (in progress)
+## 7h. Milestone 5, 5.1 and 5.2 (version 1.0.0)
 
 Done so far: the spinner, then the Jira and Atlassian ideas 1 to 9 below (5 as a Notifications
 tab, as asked). IT's setup guide: [ATLASSIAN_SETUP.md](ATLASSIAN_SETUP.md).
@@ -507,7 +507,25 @@ is well, it logs nothing. Checked for real by covering the screen with another a
 just after starting: the 5 s check found the bubble "behind electron", brought it back in front, and
 the screen showed the bubble. The next sign-in where it happens will say in the log
 (`%APPDATA%\Desktop Assist\logs\desktop-assist.log`, "Bubble check …") what had covered it.
-Unit tests: 280.
+Unit tests: 280 (296 with the updater below).
+
+### 5.2 also: Check for updates, and version 1.0.0
+
+**Settings → Check for updates** asks GitHub for the repository's latest release (its public
+API; the repository is public, so no token is in the app). If it's a higher version than the copy
+running, it downloads the `…Setup….exe` attached to the release (showing the progress), checks the
+download's size and SHA-256 against what GitHub reports for that file (a mismatch is refused and
+deleted), then runs it as electron-builder's own updater does, `--updated /S --force-run`: silently,
+replacing the app, which quits for it, and starting the new version. A Windows notification says
+it's closing to update. Only files from the repository's own releases are downloaded. A development
+run stops after the download and logs what it would have run. `updates.repo` in `tenant.json`
+names the repository. The version is now **1.0.0**, the first release; publishing one is in
+[RELEASING.md](RELEASING.md). Tested with unit tests (versions, choosing the installer, the
+download checks, saving and deleting, the whole check, messages), end-to-end against a stand-in
+GitHub (11 checks: the progress, the downloaded file byte for byte, the command an installed copy
+runs, up to date, a tampered file refused), and for real on the user's PC: the 1.0.0 installer,
+started with the update's arguments while 0.1.0 was running, closed it, installed silently and
+started 1.0.0 again by itself.
 
 ## 8. Milestones
 
@@ -518,8 +536,11 @@ Unit tests: 280.
 - **3.1** ✅ **Each person's own Claude**: Questions open in Claude Desktop, against each person's own usage limit. See §7e.
 - **3.2** ✅ **Apps list, Uninstall, fixes**: The user's JumpCloud portal apps in the panel; Uninstall in Settings; the bubble, notification and auto-send fixes. See §7f.
 - **4** ✅ **Day-to-day improvements**: App logos, favourites, the service desk icon, screenshots keeping the page, the unresponsive bubble fixed, no tooltip, light/dark mode. See §7g.
-- 5 (in progress): The app-opening spinner, and Jira and the service desk (Atlassian ideas 1 to 9). See §7h. Other candidates:
-  - Shipping: code signing (no "unrecognised app" warning), auto-update, silent deployment through JumpCloud (with Claude Desktop), CI on GitHub Actions (tests and the installer on every pull request), real version numbers with a "What's new" note
+- **5** ✅ **Jira and the service desk**: The app-opening spinner, and Atlassian ideas 1 to 9. See §7h.
+- **5.1** ✅ **The bubble on top after starting**: always-on-top that survives a full-screen app. See §7h.
+- **5.2** ✅ **The bubble kept in front, and Check for updates**: the startup front check; updating from GitHub releases; version 1.0.0, the first release. See §7h.
+- 6 (next): To be chosen. Candidates:
+  - Shipping: code signing (no "unrecognised app" warning), silent deployment through JumpCloud (with Claude Desktop), CI on GitHub Actions (tests and the installer on every pull request, and building the release), a "What's new" note after an update
   - Bubble and screenshots: a keyboard shortcut to open the panel and to take a screenshot, snipping a region or a window, pasting an image into the text box, hiding during full-screen apps and presentations, a first-run tour
   - Apps and JumpCloud: recently opened apps near the top, arrow keys in the grid, company quick links that aren't JumpCloud apps, a password-expiry reminder
   - Help and Claude: quick prompts ("Explain this error", "Summarise this"), "Send my logs to IT", a stand-up helper (idea 10 in §7h)

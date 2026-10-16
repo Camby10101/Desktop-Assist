@@ -13,14 +13,17 @@ screen and opens a panel when clicked. Built for Morse Micro first. Branding liv
   Server for users).
 - [docs/ATLASSIAN_SETUP.md](docs/ATLASSIAN_SETUP.md): for IT, Jira (notifications, search,
   issues) and the service desk page (new requests, My requests).
+- [docs/RELEASING.md](docs/RELEASING.md): publishing a new version, which copies then update to
+  from Settings.
 - [docs/JUMPCLOUD_SETUP.md](docs/JUMPCLOUD_SETUP.md): for IT, setting up JumpCloud sign-in and
   Claude access for the built-in chat (not used by Morse Micro since 3.1).
 
 **Status:** Milestones 0 (Foundation), 1 (Chat with Claude), 2.1 (bubble fixes), 3 (JumpCloud
 sign-in) and 4 (logos, favourites, service desk, light/dark mode, bubble-click fix), and features
-3.1 (questions open in Claude Desktop) and 3.2 (Apps list, Uninstall) are complete. Milestone 5
-(the app-opening spinner; Jira and the service desk) is in progress (see
-[PLAN.md](docs/PLAN.md) §7h).
+3.1 (questions open in Claude Desktop) and 3.2 (Apps list, Uninstall) are complete, as are
+Milestone 5 (the app-opening spinner; Jira and the service desk) and its fixes 5.1 and 5.2 (the
+bubble kept in front, and Check for updates). This is version **1.0.0**, the first release (see
+[PLAN.md](docs/PLAN.md) §7h and [RELEASING.md](docs/RELEASING.md)).
 
 ## Features
 
@@ -60,7 +63,8 @@ sign-in) and 4 (logos, favourites, service desk, light/dark mode, bubble-click f
   - **Light or dark mode** (sun or moon) switches Desktop Assist's colours. It starts dark.
   - **Screenshot** saves the screen the bubble is on to `Pictures\Desktop Assist`.
   - **Settings**: Start with Windows, Send in Claude automatically, Open screenshots folder,
-    Clear text box and **Uninstall Desktop Assist**. (With the
+    Clear text box, **Check for updates** (downloads and installs a newer release from GitHub;
+    Desktop Assist closes and starts again on the new version) and **Uninstall Desktop Assist**. (With the
     built-in chat: Response style (Fast / Balanced / Thorough), New conversation, and who you're
     signed in as with **Log out**.)
   - **Bounce** sends the bubble bouncing around the screen, across all your monitors; click it to

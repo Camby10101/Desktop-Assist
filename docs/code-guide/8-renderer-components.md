@@ -1092,15 +1092,16 @@ passed as `children`.
 The small menu that opens beside the gear icon. `Panel` renders it only while the panel is open, the
 gear has toggled it on, and the tenant's list of actions includes `settings`. Its props are the
 `corner` and `offset` for positioning; the current `settings`, `branding` (app and company name, and
-which kind of chat), `version`, signed-in `user` and the `atlassianUser` connected to Atlassian to
-display; and one callback per menu item, `onUninstall` and `onDisconnectAtlassian` included. `Panel`
+which kind of chat), `version`, signed-in `user`, the `atlassianUser` connected to Atlassian and
+how Check for updates is going (`update`) to display; and one callback per menu item,
+`onUninstall`, `onDisconnectAtlassian` and `onCheckForUpdates` included. `Panel`
 closes it on Esc, on a click anywhere else in the panel, and when the panel closes.
 
 ### `CONFIRM_MS`, `EFFORTS`
 
 <!-- code: apps/desktop/src/renderer/src/components/SettingsMenu.tsx#CONFIRM_MS,EFFORTS -->
 
-[`src/renderer/src/components/SettingsMenu.tsx`, lines 16–22](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L16-L22)
+[`src/renderer/src/components/SettingsMenu.tsx`, lines 18–24](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L18-L24)
 
 ```tsx
 const CONFIRM_MS = 3000
@@ -1125,7 +1126,7 @@ const EFFORTS: { value: Effort; label: string; hint: string }[] = [
 
 <!-- code: apps/desktop/src/renderer/src/components/SettingsMenu.tsx#SettingsMenu -->
 
-[`src/renderer/src/components/SettingsMenu.tsx`, lines 24–221](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L24-L221)
+[`src/renderer/src/components/SettingsMenu.tsx`, lines 26–234](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L26-L234)
 
 ```tsx
 /** The menu that opens beside the gear icon, on the side facing the middle of the screen. */
@@ -1141,6 +1142,9 @@ export function SettingsMenu(props: {
   /** Who's connected to Atlassian, or null when nobody is. */
   atlassianUser: { name: string; email?: string } | null
   onDisconnectAtlassian: () => void
+  /** Check for updates, as it stands. */
+  update: UpdateState
+  onCheckForUpdates: () => void
   onToggleAutoStart: () => void
   onSetEffort: (effort: Effort) => void
   onToggleAutoSend: () => void
@@ -1288,6 +1292,14 @@ export function SettingsMenu(props: {
         </div>
       )}
 
+      {branding.updates && (
+        <UpdateItem
+          state={props.update}
+          version={props.version}
+          onCheck={props.onCheckForUpdates}
+        />
+      )}
+
       {props.atlassianUser && (
         <div className="mt-1 border-t border-black/10 pt-1 dark:border-white/10">
           <p
@@ -1334,8 +1346,9 @@ Draws the menu's rows. With the built-in chat: Start with Windows, Response styl
 screenshots folder, New conversation, who's signed in with Log out, and the version. With Claude
 Desktop the chat and its settings live in Claude Desktop, so there's no Response style and no
 sign-in; instead there's a "Send in Claude automatically" switch, and New conversation becomes
-Clear text box. When connected to Atlassian, either kind also says who as, with Disconnect
-Atlassian. Both kinds end with Uninstall, then the version. It keeps two pieces of its own
+Clear text box. When the tenant offers it, either kind has Check for updates, and when connected
+to Atlassian, it says who as, with Disconnect Atlassian. Both kinds end with Uninstall, then the
+version. It keeps two pieces of its own
 state.
 
 **State.** `useState(initial)` returns the current value and a function that changes it. Calling
@@ -1400,6 +1413,8 @@ switches the "New conversation" (or "Clear text box") row into its "Click again"
 - `props.user.name ?? props.user.email ?? 'you'`: the first of the name or the email that
   JumpCloud provided. `truncate` cuts a long one short with "…", and `title={props.user.email}`
   shows the email as a tooltip.
+- `{branding.updates && (`: Check for updates (`UpdateItem`, below), only when the tenant names
+  where releases come from.
 - `{props.atlassianUser && (`: when connected to Atlassian, who as ("Connected to Atlassian as
   Casey Jones", with the email as a tooltip), and **Disconnect Atlassian** with a plug icon
   (`Unplug`), which calls `onDisconnectAtlassian`. It needs no second click: nothing is lost, and
@@ -1412,19 +1427,90 @@ switches the "New conversation" (or "Clear text box") row into its "Click again"
   with Windows).
 - `` `Uninstall ${branding.appName}` ``: the label names the app, "Uninstall Desktop Assist".
 - `{branding.appName} {props.version} · {branding.companyName}`: the footer, for example
-  "Desktop Assist 0.1.0 · Morse Micro".
+  "Desktop Assist 1.0.0 · Morse Micro".
+
+### `UpdateItem`
+
+<!-- code: apps/desktop/src/renderer/src/components/SettingsMenu.tsx#UpdateItem -->
+
+[`src/renderer/src/components/SettingsMenu.tsx`, lines 236–274](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L236-L274)
+
+```tsx
+/** Check for updates, showing how it's going: checking, downloading, installing, or the answer. */
+function UpdateItem(props: { state: UpdateState; version: string; onCheck: () => void }) {
+  const { state } = props
+  const busy = ['checking', 'downloading', 'installing'].includes(state.status)
+  const [label, note] =
+    state.status === 'checking'
+      ? ['Checking for updates…', `Version ${props.version}`]
+      : state.status === 'downloading'
+        ? [`Downloading ${state.version}… ${state.percent}%`, 'It installs itself when done']
+        : state.status === 'installing'
+          ? [`Installing ${state.version}…`, 'Desktop Assist will close and start again']
+          : state.status === 'downloaded'
+            ? [`Downloaded ${state.version}`, 'Not installed: this is a development run']
+            : state.status === 'up-to-date'
+              ? ['Check for updates', `Up to date: version ${state.version}`]
+              : state.status === 'error'
+                ? ['Check for updates', state.message]
+                : ['Check for updates', `Version ${props.version}`]
+  return (
+    <MenuItem
+      icon={busy ? LoaderCircle : Download}
+      spin={busy}
+      disabled={busy}
+      onClick={props.onCheck}
+    >
+      <span className="min-w-0">
+        {label}
+        <span
+          className={cn(
+            'block text-[11px]',
+            state.status === 'error' ? 'text-red-600 dark:text-red-400' : 'text-zinc-500',
+          )}
+        >
+          {note}
+        </span>
+      </span>
+    </MenuItem>
+  )
+}
+```
+
+<!-- /code -->
+
+The **Check for updates** row, which, as the comment says, also shows how a check is going. The
+whole job happens in the main process (`Updater` in `src/main/updates.ts`; see
+[Main process: startup, IPC and app plumbing](2-main-startup.md)); this only draws its state.
+
+- `const busy = ['checking', 'downloading', 'installing'].includes(state.status)`: something is
+  under way. The icon turns into a spinning circle (`LoaderCircle`, `spin`), and the row can't be
+  clicked again (`disabled`).
+- `const [label, note] = ...`: the row's two lines, chosen by the state with a chain of `? :`,
+  and unpacked from a pair. For example "Checking for updates…", "Downloading 1.0.1… 42%" with "It
+  installs itself when done", "Installing 1.0.1…" with "Desktop Assist will close and start
+  again", or, when nothing is under way, "Check for updates" with the version this copy is, that
+  it's up to date, or what went wrong.
+- `'Not installed: this is a development run'`: in `npm run dev` a check stops once the installer
+  is downloaded (`downloaded`).
+- `state.status === 'error' ? 'text-red-600 dark:text-red-400' : 'text-zinc-500'`: a failure's
+  reason is red; every other note is grey.
+- `onClick={props.onCheck}`: the click goes to `Panel`, which asks the main process to start.
+  Unlike Uninstall, it needs no second click: nothing changes unless there's a newer release.
 
 ### `MenuItem`
 
 <!-- code: apps/desktop/src/renderer/src/components/SettingsMenu.tsx#MenuItem -->
 
-[`src/renderer/src/components/SettingsMenu.tsx`, lines 223–250](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L223-L250)
+[`src/renderer/src/components/SettingsMenu.tsx`, lines 276–305](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L276-L305)
 
 ```tsx
 function MenuItem(props: {
   icon: LucideIcon
   danger?: boolean
   disabled?: boolean
+  /** Spins the icon (something's under way). */
+  spin?: boolean
   onClick: () => void
   children: ReactNode
 }) {
@@ -1444,7 +1530,7 @@ function MenuItem(props: {
             : 'hover:bg-zinc-100 dark:hover:bg-zinc-800',
       )}
     >
-      <Icon size={16} aria-hidden />
+      <Icon size={16} className={cn('shrink-0', props.spin && 'animate-spin')} aria-hidden />
       {props.children}
     </button>
   )
@@ -1460,7 +1546,9 @@ One row of the menu: an icon and a label, as a button.
 - `const Icon = props.icon`: JSX treats a lowercase tag as an HTML element, so the component has
   to be in a capitalised variable before it can be written as `<Icon size={16} aria-hidden />`.
 - `disabled?: boolean`: a greyed-out row that can't be clicked (`disabled={props.disabled}` on the
-  button), used for Uninstall in a dev run.
+  button), used for Uninstall in a dev run, and for Check for updates while it's busy.
+- `spin?: boolean`: as its comment says, turns the icon (`animate-spin`) while something's under
+  way. `shrink-0` keeps the icon its full size when the label is long.
 - `props.danger ? 'bg-red-600 text-white'`: the red version, used for the armed "New
   conversation", "Clear text box" or Uninstall. Otherwise a disabled row is faded
   (`opacity-60`) with no hover, and an enabled one gets the grey hover.
@@ -1469,7 +1557,7 @@ One row of the menu: an icon and a label, as a button.
 
 <!-- code: apps/desktop/src/renderer/src/components/SettingsMenu.tsx#Switch -->
 
-[`src/renderer/src/components/SettingsMenu.tsx`, lines 252–269](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L252-L269)
+[`src/renderer/src/components/SettingsMenu.tsx`, lines 307–324](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L307-L324)
 
 ```tsx
 function Switch({ on }: { on: boolean }) {

@@ -5,8 +5,8 @@ and method with an explanation of what it does and why. Covers Milestones 0 (Fou
 (Chat with Claude), 2.1 (bubble fixes) and 3 (JumpCloud sign-in), and features 3.1 (questions go
 to Claude Desktop) and 3.2 (the Apps list, Uninstall in Settings, and fixes), and Milestone 4
 (app logos fixed, favourite apps, the IT service desk icon, light or dark mode, and a fix for
-clicks on the bubble), and Milestone 5 so far (a spinner while an app opens, and Jira and the IT
-service desk in the panel).
+clicks on the bubble), and Milestone 5 so far (a spinner while an app opens, Jira and the IT
+service desk in the panel, and Check for updates, from version 1.0.0, the first release).
 
 This page is the overview. The code itself is in the [code walkthrough](#6-code-walkthrough),
 one page per area of the app.
@@ -99,7 +99,8 @@ is in `src/main/mcp/`).
    `ChatSession` and the `AuthManager`). With a `portal`, also `PortalApps` (the Apps list), which
    starts loading the list in the background. With `atlassian`, also `Atlassian` (Jira), which
    uses a saved connection if there is one and starts checking notifications; with the service
-   desk's request types, also `ServiceDesk`. Then the IPC handlers and tray.
+   desk's request types, also `ServiceDesk`; with `updates`, also an `Updater` for Check for
+   updates. Then the IPC handlers and tray.
 3. With the built-in chat, **renew the saved sign-in** (`auth.init()`): if there isn't one, or
    JumpCloud refuses it, the chat box shows **Sign in with JumpCloud** instead of the chat. If
    JumpCloud can't be reached, the sign-in is kept and a banner offers Retry.
@@ -183,6 +184,21 @@ them.
 Settings → **Uninstall Desktop Assist** (click twice) → IPC `assist:app-uninstall` →
 `uninstall()` in `src/main/uninstall.ts` turns off Start with Windows, starts the installer's
 "Uninstall Desktop Assist.exe" and quits. The data folder and screenshots are kept.
+
+**Check for updates** (when the tenant has `updates`)
+
+1. Settings → **Check for updates** → `window.assist.updates.check()` → IPC
+   `assist:updates-check` → `Updater.checkAndInstall()` in `src/main/updates.ts`, which the call
+   doesn't wait for; the menu row follows along through `assist:update-state`.
+2. `Updater` asks GitHub's API for the tenant's repository's latest release. With no release, or
+   none newer than this copy (`app.getVersion()`), the row says it's up to date.
+3. Otherwise it downloads the installer attached to the release (from the repository's own
+   releases only) into `%TEMP%\Desktop Assist update`, showing the percentage, and checks its size
+   and SHA-256 against GitHub's; a file that doesn't match is deleted and never run.
+4. It starts the installer on its own with `--updated /S --force-run` (an update, silently, and
+   start the app again after), shows a Windows notification ("Updating to …") and quits. The
+   installer waits for the app to close, replaces it and starts the new version; the user's data
+   is kept. A development run stops after downloading.
 
 The rest of this section, up to **Typing in the text box**, is the built-in chat.
 
@@ -301,6 +317,7 @@ down; the press time tells the controller that this click's job is done, and it 
 - `docs/CLAUDE_DESKTOP_SETUP.md`: For IT: what each PC needs so questions open in Claude Desktop (Claude Desktop installed and signed in to the company account), and how to check it works.
 - `docs/APPS_SETUP.md`: For IT: turning on JumpCloud's MCP Server for Users for the Apps list, and what each person does to connect.
 - `docs/ATLASSIAN_SETUP.md`: For IT: Jira and the service desk: what each person does to connect to Atlassian, what an Atlassian admin may need to allow, the `tenant.json` settings, and troubleshooting.
+- `docs/RELEASING.md`: Releasing a new version: raising the version number, building the installer, and publishing it as a GitHub release that Check for updates picks up.
 - `docs/JUMPCLOUD_SETUP.md`: For IT, for the built-in chat only: how to create the JumpCloud app and the Claude Console federation, and which IDs to put in `tenant.json`.
 
 ---
@@ -311,7 +328,7 @@ A _tenant_ is one business's branding. The build includes exactly one, chosen by
 environment variable (default `morse-micro`). This is what makes the app easy to re-brand later.
 
 - `tenants/README.md`: How tenants work, and how to change the logo.
-- `tenants/morse-micro/tenant.json`: `id` (must match the folder name), `companyName`, `appName` (also the name of the screenshots folder), `accentColor` (the highlight colour), `actions` (which icons appear above the bubble, from the bubble upward: for Morse Micro Ask Claude, Jira, the IT service desk, screenshot, light or dark mode, settings, bounce and close), `chatApp` (where questions go: `claude-desktop`, as for Morse Micro, or `built-in`, the default), `startPage` (what the panel opens on: `ask`, the text box, by default, or `apps`, the Apps list, as for Morse Micro, whose `actions` then include `ask` to reach the text box), `portal` for the Apps list (the portal's name, its address, JumpCloud's apps server and the sign-in port), `serviceDesk` for the IT service desk icon (its `https` address, and optionally `requests`: the IT portal's number, its Jira project's key and the request types, to raise requests from the panel), `atlassian` for Jira (the site, the sign-in port, the Confluence spaces with IT's how-to articles, and optionally the MCP server, which defaults to Atlassian's), and for the built-in chat only: optionally `systemPrompt` (extra instructions for Claude), `signIn` (JumpCloud's address, the app's JumpCloud client ID and the sign-in port) and `claudeAccess` (the Claude Console organization, federation rule, service account and optional workspace IDs). The built-in chat needs `signIn` and `claudeAccess`; Claude Desktop needs neither; the Apps list needs `portal`; the service desk icon (`servicedesk` in `actions`) needs `serviceDesk`; the Jira icon (`jira`) needs `atlassian`. None of these are secret. See `docs/CLAUDE_DESKTOP_SETUP.md`, `docs/APPS_SETUP.md`, `docs/ATLASSIAN_SETUP.md` and `docs/JUMPCLOUD_SETUP.md`.
+- `tenants/morse-micro/tenant.json`: `id` (must match the folder name), `companyName`, `appName` (also the name of the screenshots folder), `accentColor` (the highlight colour), `actions` (which icons appear above the bubble, from the bubble upward: for Morse Micro Ask Claude, Jira, the IT service desk, screenshot, light or dark mode, settings, bounce and close), `chatApp` (where questions go: `claude-desktop`, as for Morse Micro, or `built-in`, the default), `startPage` (what the panel opens on: `ask`, the text box, by default, or `apps`, the Apps list, as for Morse Micro, whose `actions` then include `ask` to reach the text box), `portal` for the Apps list (the portal's name, its address, JumpCloud's apps server and the sign-in port), `serviceDesk` for the IT service desk icon (its `https` address, and optionally `requests`: the IT portal's number, its Jira project's key and the request types, to raise requests from the panel), `atlassian` for Jira (the site, the sign-in port, the Confluence spaces with IT's how-to articles, and optionally the MCP server, which defaults to Atlassian's), `updates` for Check for updates in Settings (the GitHub repository releases come from, `Camby10101/Desktop-Assist` for Morse Micro, and optionally GitHub's addresses), and for the built-in chat only: optionally `systemPrompt` (extra instructions for Claude), `signIn` (JumpCloud's address, the app's JumpCloud client ID and the sign-in port) and `claudeAccess` (the Claude Console organization, federation rule, service account and optional workspace IDs). The built-in chat needs `signIn` and `claudeAccess`; Claude Desktop needs neither; the Apps list needs `portal`; the service desk icon (`servicedesk` in `actions`) needs `serviceDesk`; the Jira icon (`jira`) needs `atlassian`. None of these are secret. See `docs/CLAUDE_DESKTOP_SETUP.md`, `docs/APPS_SETUP.md`, `docs/ATLASSIAN_SETUP.md` and `docs/JUMPCLOUD_SETUP.md`.
 - `tenants/morse-micro/logo.png`: The logo: the Morse Micro "Mμ" mark cut to a circle (512×512, transparent corners). It's the bubble, the tray icon and the `.exe` icon. A tenant can use `logo.svg` for the bubble instead (if both exist, the PNG wins), but then the tray falls back to a plain circle in the accent colour and the `.exe` gets Electron's default icon.
 
 ---
@@ -341,7 +358,7 @@ the area you're working on.
 1. [Shared code and the preload bridge](1-shared-and-preload.md):
    `src/shared` (sizes and layout constants, the action list, data types, the IPC contract, chip labels and "how long ago", the Claude Desktop download link, the Apps list's order, Jira issue keys) and `src/preload` (the `window.assist` bridge between the pages and the main process).
 2. [Main process: startup, IPC and app plumbing](2-main-startup.md):
-   `index.ts` (startup and shutdown, and choosing the built-in chat or Claude Desktop), `ipc.ts` (handling requests from the pages), `actions.ts`, `uninstall.ts`, `tenant.ts`, `settings.ts`, the tray icon.
+   `index.ts` (startup and shutdown, and choosing the built-in chat or Claude Desktop), `ipc.ts` (handling requests from the pages), `actions.ts`, `uninstall.ts`, `updates.ts` (Check for updates: the latest GitHub release, downloaded, checked and installed), `tenant.ts`, `settings.ts`, the tray icon.
 3. [JumpCloud sign-in](3-sign-in.md):
    `auth/` (`AuthManager`, OpenID Connect with JumpCloud, the loopback listener) and `storage/SecretStore.ts`.
 4. [Talking to Claude](4-claude.md):
@@ -385,7 +402,7 @@ Run with `npm test`. Each file tests code that doesn't need a real window or a r
 - `screenshotFiles.test.ts`: Screenshot names, never overwriting, finding the newest, the inside-the-folder check.
 - `screenshotStack.test.ts`: Stacking screenshots into one image for the clipboard: the width they're scaled to (the narrowest, capped), the order and the grey band between them (checked pixel by pixel), a single image left as it is, and refusing different widths, padded rows or an empty list.
 - `format.test.ts`: Chip labels, and "how long ago" (`timeAgo`).
-- `tenants.test.ts`: Every tenant folder has a valid `tenant.json` and a logo; `chatApp` defaults to the built-in chat, which needs `signIn` and `claudeAccess`, while Claude Desktop needs neither (and an unknown `chatApp` is refused); the Apps icon needs `portal`, whose address must be `https`; starting on the Apps list needs `portal` and the `ask` action; the service desk icon needs an `https` `serviceDesk` address; request types (at least one, with numeric IDs) reach the panel; the Jira icon needs `atlassian`, which gets Atlassian's MCP server by default; a dev override can change one Atlassian setting without resetting the others; the list of missing sign-in settings.
+- `tenants.test.ts`: Every tenant folder has a valid `tenant.json` and a logo; `chatApp` defaults to the built-in chat, which needs `signIn` and `claudeAccess`, while Claude Desktop needs neither (and an unknown `chatApp` is refused); the Apps icon needs `portal`, whose address must be `https`; starting on the Apps list needs `portal` and the `ask` action; the service desk icon needs an `https` `serviceDesk` address; request types (at least one, with numeric IDs) reach the panel; the Jira icon needs `atlassian`, which gets Atlassian's MCP server by default; a dev override can change one Atlassian setting without resetting the others; updates come from a GitHub repository, from GitHub itself by default, and offer Check for updates in Settings; the list of missing sign-in settings.
 - `trayIcon.test.ts`: The tray circle.
 - `chatSession.test.ts`: The conversation with a scripted fake backend: streaming, images before text, replaying replies unchanged (thinking included), busy/empty/signed-out, Stop with and without text, Retry, an expired sign-in, refusals and length limits, the tool loop, and New conversation ignoring a late reply.
 - `authManager.test.ts`: The sign-in with a fake JumpCloud (whose refresh tokens work once, like the real one): not set up, nothing saved, renewing at startup and saving the replacement token, offline and Retry, a refused sign-in, browser sign-in, Cancel, no refresh token, a port in use, handing out a different ID token each time, never refreshing twice at once, skipping an almost-expired ID token, Log out (revoking), and logging out during a renewal.
@@ -393,6 +410,7 @@ Run with `npm test`. Each file tests code that doesn't need a real window or a r
 - `portalApps.test.ts`: The Apps list: reading JumpCloud's answers (sorted by name, hidden apps skipped, a bare list or structured content, no list versus an empty one, `https` links only, the launch tool's ID argument, the sign-in link in a launch answer), telling images by their first bytes, fetching logos (`https` images only, judged by their bytes rather than their label, so uploaded logos labelled `application/octet-stream` work and mislabelled HTML doesn't, and not too big), starred apps first (`orderApps`), keeping fetched logos across a refresh, and `PortalApps` against a fake portal: asking to sign in without opening the browser, signing in through the browser and saving the connection, remembering the list until Refresh, opening an app through its launch link, asking for the launch tool only once, using the list's own link when JumpCloud is slow, refusing a sign-in that comes back with the wrong `state`, and Cancel; plus `SavedAuth` as a public client that keeps only what it was given.
 - `atlassian.test.ts`: Jira, with made-up answers and a fake Atlassian: issue keys in text, search words that can't break a query, mentions and text in Jira's document format, who assigned an issue (not the user themselves), the comments that mention the user, a request's latest reply from a person (not the user or an automatic one), Confluence results only on the company's site, the user and the site's cloud ID, and the prompt to Claude kept under the limit; then `Atlassian`: asking to connect without opening the browser, connecting and showing who assigned or mentioned the user, remembering what's been seen and not re-reading unchanged issues, telling the user once when IT replies until they look, opening an issue with its comments, moves and portal page, moving, commenting and logging time, searching Jira and Confluence (and finding an issue by its key), asking Claude with the issue's details, and going back to Connect when the connection ends (and forgetting it on Disconnect).
 - `serviceDesk.test.ts`: Raising IT requests: the portal's filled-in form address for a request type, the PC details under the description with the link kept short enough, Windows 11 called by its name, opening the form with the screenshot copied to paste, leaving the PC details out when asked, and refusing an empty request, an unknown request type and a missing screenshot.
+- `updates.test.ts`: Check for updates, with a fake GitHub: reading versions (with or without a `v`) and comparing them part by part; finding the installer and GitHub's SHA-256 in a release, ignoring drafts, pre-releases, odd tags and files not downloaded from the repository, and taking a release without a digest; saving the installer in an emptied folder by its own name only, only an `.exe`, and deleting what was saved if the download fails part way; and the `Updater`: up to date when the latest release is this version or there are none, downloading a newer one with progress, checking it, running the installer silently as an update and quitting, stopping at downloading in a development run, never running a download that isn't the release's file (wrong SHA-256 or too short), saying why it couldn't check (GitHub busy, offline), and doing one check at a time.
 - `uninstall.test.ts`: Finding the uninstaller next to the app, turning off Start with Windows before starting it and then quitting, doing nothing in a dev run or without an uninstaller, and staying open when it couldn't start.
 - `sendInClaude.test.ts`: The PowerShell helper's script, without running it: the question key (whitespace evened out, 60 characters), evening out Unicode spaces and fingerprinting the whole question (any extra text changes the hash), a question full of PowerShell code carried only as base64, no key pressed before Claude's box has been found to hold exactly the question, Ctrl+V only with a screenshot, the process name (another for tests, but nothing that could break out of its quotes), and reading the outcome from the last line printed.
 - `loopback.test.ts`: The browser-return listener: catches `/callback` and stops, 404 for anything else, shows JumpCloud's error safely escaped, Cancel, timeout, and a port in use.
