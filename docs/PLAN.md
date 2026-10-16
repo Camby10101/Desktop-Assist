@@ -492,6 +492,23 @@ With a per-person Atlassian connection:
 
 Suggested order: 1 and 2 first (small, useful every day, no new sign-in), then the Atlassian connection with 5 and 6.
 
+### 5.2: the bubble behind other apps after signing in, again
+
+5.1's fix wasn't enough: started by Windows at sign-in after other apps, the bubble could still
+sit behind them, though its window was always on top (checked on the user's PC that morning), and
+the five-second always-on-top check didn't help since nothing had taken always-on-top away. Starting
+the app behind a maximised or full-screen window by hand couldn't reproduce it: the bubble was in
+front, and drawn, every time. So rather than guess, the app now checks: 5 s, 20 s, 1, 3 and 10
+minutes after starting, it asks Windows (a small PowerShell check, only reading) which window is
+at the bubble's centre, and whether the bubble is always on top or hidden by Windows ("cloaked").
+If anything is wrong it brings the bubble back in front (on top again, and hidden and shown again
+if it was covered or cloaked), checks again, and logs what it found and whether that worked; all
+is well, it logs nothing. Checked for real by covering the screen with another always-on-top window
+just after starting: the 5 s check found the bubble "behind electron", brought it back in front, and
+the screen showed the bubble. The next sign-in where it happens will say in the log
+(`%APPDATA%\Desktop Assist\logs\desktop-assist.log`, "Bubble check …") what had covered it.
+Unit tests: 280.
+
 ## 8. Milestones
 
 - **0** ✅ **Foundation**: Everything in §7 works in `npm run dev` and in the unsigned installer. Unit tests and lint pass.

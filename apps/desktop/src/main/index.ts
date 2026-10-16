@@ -30,7 +30,14 @@ import { summarizeIdToken, type IdTokenSummary } from './auth/idToken'
 import { listenForRedirect } from './auth/loopback'
 import { createOidc } from './auth/oidc'
 import { BubbleController, type DisplayArea, type Displays } from './bubble/BubbleController'
-import { bubbleSurface, createOverlayWindow, keepOnTop, panelSurface } from './bubble/windows'
+import { runFrontCheck, watchBubbleFront } from './bubble/frontCheck'
+import {
+  bringToFront,
+  bubbleSurface,
+  createOverlayWindow,
+  keepOnTop,
+  panelSurface,
+} from './bubble/windows'
 import { AnthropicBackend } from './claude/AnthropicBackend'
 import { ChatSession } from './claude/ChatSession'
 import { classifyError } from './claude/errors'
@@ -359,6 +366,18 @@ async function start(): Promise<void> {
 
   await windowsReady
   bubble.start()
+  // For its first ten minutes, make sure the bubble isn't stuck behind other apps' windows.
+  const stopWatchingFront = watchBubbleFront({
+    isResting: () => bubble.currentMode === 'collapsed',
+    check: () =>
+      runFrontCheck(
+        bubbleWindow.getNativeWindowHandle().readBigUInt64LE(0).toString(),
+        process.pid,
+      ),
+    bringToFront: (reshow) => bringToFront(bubbleWindow, reshow),
+    log,
+  })
+  app.once('before-quit', stopWatchingFront)
 }
 
 /**

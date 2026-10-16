@@ -89,6 +89,20 @@ export function keepOnTop(win: BrowserWindow): () => void {
   return () => clearInterval(timer)
 }
 
+/**
+ * Puts an overlay window back on top, in front of every other window. With `reshow` it's also
+ * hidden and shown again, which makes Windows place (and draw) it afresh.
+ */
+export function bringToFront(win: BrowserWindow, reshow: boolean): void {
+  if (win.isDestroyed()) return
+  win.setAlwaysOnTop(true, ON_TOP_LEVEL)
+  win.moveTop()
+  if (reshow && win.isVisible()) {
+    win.hide()
+    win.showInactive()
+  }
+}
+
 export function bubbleSurface(win: BrowserWindow): Surface {
   return {
     setBounds: (bounds) => win.setBounds(bounds),

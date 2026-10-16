@@ -347,7 +347,8 @@ the area you're working on.
 4. [Talking to Claude](4-claude.md):
    `claude/` (the model settings, `AnthropicBackend`, error handling, `ChatSession`).
 5. [The bubble](5-bubble.md):
-   `bubble/` (`BubbleController`, the layout maths, bounce physics, creating the windows).
+   `bubble/` (`BubbleController`, the layout maths, bounce physics, creating the windows, and the
+   check that keeps the bubble in front after starting).
 6. [The draft, screenshots and safe files](6-drafts-and-screenshots.md):
    `notes/NotesStore.ts`, `screenshots/` (including stacking several screenshots into one image for the clipboard), `storage/jsonFile.ts`.
 7. [The pages: entry points, styles, hooks and views](7-renderer-pages.md):
@@ -378,6 +379,7 @@ Run with `npm test`. Each file tests code that doesn't need a real window or a r
 
 - `layout.test.ts`: Home positions in all four corners (including displays not at the origin), nearest-corner snapping, window sizes, and that the panel window opens into the screen and fits on it in every corner.
 - `bounce.test.ts`: Launch direction (away from each corner) and speed, bouncing off every edge, crossing onto the next monitor where two meet (over a taskbar between stacked monitors) and bouncing off an edge with no monitor beyond it, roaming both monitors without leaving them, getting back on screen when a monitor goes, and the glide.
+- `frontCheck.test.ts`: Reading the front check's answer, only digits taken as a window handle, what counts as needing help and how it's described, and the checks' timing: at 5 s, 20 s, 1, 3 and 10 minutes, silent while the bubble is in front, bringing it back (hidden and shown again only when it was behind something) and logging it, saying when it's still not in front, waiting while the bubble is open, logging a check that failed, and stopping.
 - `bubbleController.test.ts`: The bubble state machine with fake windows, a fake clock and two fake displays: open/close, blur (including staying open when another app takes the focus back just as it opens), clicking the bubble (staying closed when the press on the bubble is what closed the panel, even for a slow click, and reopening straight away after clicking somewhere else, however quick), logging a click ignored while capturing, the saved corner, dragging (follows the mouse, snaps to the nearest corner, onto another display, panel re-placed), bouncing across both displays and gliding back to its own display's corner, screenshots, and display changes (including unplugging the bubble's display).
 - `notesStore.test.ts`: Saving the draft, reloading, overtaken writes, damaged files, attachments.
 - `screenshotFiles.test.ts`: Screenshot names, never overwriting, finding the newest, the inside-the-folder check.

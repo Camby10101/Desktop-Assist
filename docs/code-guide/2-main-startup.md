@@ -36,7 +36,7 @@ tests can drive them with fakes. `index.ts` is the only file that knows about al
 
 <!-- code: apps/desktop/src/main/index.ts#SHUTDOWN_TIMEOUT_MS,PRODUCT_NAME,controller,tray -->
 
-[`src/main/index.ts`, lines 61–77](../../apps/desktop/src/main/index.ts#L61-L77)
+[`src/main/index.ts`, lines 68–84](../../apps/desktop/src/main/index.ts#L68-L84)
 
 ```ts
 const SHUTDOWN_TIMEOUT_MS = 2000
@@ -99,7 +99,7 @@ backend, the conversation and the JumpCloud sign-in) are in a separate function,
 
 <!-- code: apps/desktop/src/main/index.ts#start.tenant -->
 
-[`src/main/index.ts`, line 89](../../apps/desktop/src/main/index.ts#L89)
+[`src/main/index.ts`, line 96](../../apps/desktop/src/main/index.ts#L96)
 
 ```ts
 const tenant = await withDevOverrides(TenantSchema.parse(tenantConfig))
@@ -126,7 +126,7 @@ const tenant = await withDevOverrides(TenantSchema.parse(tenantConfig))
 
 <!-- code: apps/desktop/src/main/index.ts#start.userData,screenshotsDir,actionCount,log,notes,settings -->
 
-[`src/main/index.ts`, lines 93–104](../../apps/desktop/src/main/index.ts#L93-L104)
+[`src/main/index.ts`, lines 100–111](../../apps/desktop/src/main/index.ts#L100-L111)
 
 ```ts
 const userData = app.getPath('userData')
@@ -165,7 +165,7 @@ const settings = new SettingsService(join(userData, 'preferences.json'), screens
 
 <!-- code: apps/desktop/src/main/index.ts#start.bubbleWindow,panelWindow,windows,stopKeepingOnTop,windowsReady,broadcast -->
 
-[`src/main/index.ts`, lines 107–117](../../apps/desktop/src/main/index.ts#L107-L117)
+[`src/main/index.ts`, lines 114–124](../../apps/desktop/src/main/index.ts#L114-L124)
 
 ```ts
 // The windows are created after the last `await`: from here to registerIpc() below nothing
@@ -214,7 +214,7 @@ page's request is handled, its handler has been registered.
 
 <!-- code: apps/desktop/src/main/index.ts#start.bubble -->
 
-[`src/main/index.ts`, lines 119–131](../../apps/desktop/src/main/index.ts#L119-L131)
+[`src/main/index.ts`, lines 126–138](../../apps/desktop/src/main/index.ts#L126-L138)
 
 ```ts
 const bubble = new BubbleController({
@@ -262,7 +262,7 @@ touches Electron directly; everything it needs is passed in here.
 
 <!-- code: apps/desktop/src/main/index.ts#start.screenshots,notify,copyScreenshots -->
 
-[`src/main/index.ts`, lines 135–156](../../apps/desktop/src/main/index.ts#L135-L156)
+[`src/main/index.ts`, lines 142–163](../../apps/desktop/src/main/index.ts#L142-L163)
 
 ```ts
 const screenshots = new ScreenshotService(screenshotsDir, () =>
@@ -320,7 +320,7 @@ const copyScreenshots = async (paths: string[]) => {
 
 <!-- code: apps/desktop/src/main/index.ts#start.builtIn,claudeDesktop -->
 
-[`src/main/index.ts`, lines 159–188](../../apps/desktop/src/main/index.ts#L159-L188)
+[`src/main/index.ts`, lines 166–195](../../apps/desktop/src/main/index.ts#L166-L195)
 
 ```ts
 const builtIn =
@@ -399,7 +399,7 @@ exists.
 
 <!-- code: apps/desktop/src/main/index.ts#start.netFetch,appsStatus,portalApps -->
 
-[`src/main/index.ts`, lines 189–214](../../apps/desktop/src/main/index.ts#L189-L214)
+[`src/main/index.ts`, lines 196–221](../../apps/desktop/src/main/index.ts#L196-L221)
 
 ```ts
 // Electron's fetch, so a proxy set in Windows is used.
@@ -471,7 +471,7 @@ icon (see [Your apps](10-apps.md)). It's only set up when the tenant has a `port
 
 <!-- code: apps/desktop/src/main/index.ts#start.requests,memoryPath,atlassianStatus,atlassian,desk -->
 
-[`src/main/index.ts`, lines 219–281](../../apps/desktop/src/main/index.ts#L219-L281)
+[`src/main/index.ts`, lines 226–288](../../apps/desktop/src/main/index.ts#L226-L288)
 
 ```ts
 const requests = serviceDesk?.requests
@@ -595,7 +595,7 @@ Two statements follow:
 
 <!-- code: apps/desktop/src/main/index.ts#start.onDisplayChange -->
 
-[`src/main/index.ts`, line 337](../../apps/desktop/src/main/index.ts#L337)
+[`src/main/index.ts`, line 344](../../apps/desktop/src/main/index.ts#L344)
 
 ```ts
 const onDisplayChange = () => bubble.displayChanged()
@@ -646,7 +646,7 @@ Everything else in this part of `start()` is plain statements:
 
 <!-- code: apps/desktop/src/main/index.ts#start.shuttingDown -->
 
-[`src/main/index.ts`, lines 342–343](../../apps/desktop/src/main/index.ts#L342-L343)
+[`src/main/index.ts`, lines 349–350](../../apps/desktop/src/main/index.ts#L349-L350)
 
 ```ts
 // Save the text box before quitting. before-quit fires again after the second app.quit().
@@ -682,6 +682,41 @@ Finally, `await windowsReady` waits until both pages have painted, and `bubble.s
 bubble in its corner and shows it. Waiting avoids showing a window before its page has drawn
 anything.
 
+<!-- code: apps/desktop/src/main/index.ts#start.stopWatchingFront -->
+
+[`src/main/index.ts`, lines 369–379](../../apps/desktop/src/main/index.ts#L369-L379)
+
+```ts
+// For its first ten minutes, make sure the bubble isn't stuck behind other apps' windows.
+const stopWatchingFront = watchBubbleFront({
+  isResting: () => bubble.currentMode === 'collapsed',
+  check: () =>
+    runFrontCheck(
+      bubbleWindow.getNativeWindowHandle().readBigUInt64LE(0).toString(),
+      process.pid,
+    ),
+  bringToFront: (reshow) => bringToFront(bubbleWindow, reshow),
+  log,
+})
+```
+
+<!-- /code -->
+
+Then, for its first ten minutes, the app makes sure the bubble isn't stuck behind other apps'
+windows (`bubble/frontCheck.ts`, see [The bubble](5-bubble.md)). Started by Windows at sign-in,
+after other apps, the bubble could end up behind them even though its window was always on top.
+
+- `isResting: () => bubble.currentMode === 'collapsed'`: only a bubble resting in its corner is
+  checked; while the panel is open, or the bubble is being dragged or bouncing, the user can see it.
+- `getNativeWindowHandle().readBigUInt64LE(0).toString()`: the bubble window's Windows handle
+  (`HWND`), which the check gives Windows to ask about that window. Electron hands it over as the
+  bytes of a 64-bit number.
+- `process.pid`: this app's process, so another of its own windows (the open panel) at the
+  bubble's centre doesn't count as covering it.
+- `bringToFront(bubbleWindow, reshow)`: what the check does when the bubble isn't in front
+  (`bubble/windows.ts`).
+- `app.once('before-quit', stopWatchingFront)`: no checks after quitting has begun.
+
 ### `startBuiltInChat()`
 
 The built-in chat: Claude in the panel, reached through the Claude API with the user's JumpCloud
@@ -700,7 +735,7 @@ was part of `start()`. It returns a [`BuiltInChat`](#builtinchat): the `AuthMana
 
 <!-- code: apps/desktop/src/main/index.ts#startBuiltInChat.devBaseUrl,lastIdToken,backend,chat -->
 
-[`src/main/index.ts`, lines 380–404](../../apps/desktop/src/main/index.ts#L380-L404)
+[`src/main/index.ts`, lines 399–423](../../apps/desktop/src/main/index.ts#L399-L423)
 
 ```ts
 // Dev runs may point at a local test server; an installed app always talks to Anthropic.
@@ -773,7 +808,7 @@ const chat = new ChatSession({
 
 <!-- code: apps/desktop/src/main/index.ts#startBuiltInChat.missing,localIssuer,authState,auth -->
 
-[`src/main/index.ts`, lines 406–430](../../apps/desktop/src/main/index.ts#L406-L430)
+[`src/main/index.ts`, lines 425–449](../../apps/desktop/src/main/index.ts#L425-L449)
 
 ```ts
 const missing = missingSettings(signIn, claudeAccess)
@@ -850,7 +885,7 @@ Two statements end the function:
 
 <!-- code: apps/desktop/src/main/index.ts#safeStorageEncryptor -->
 
-[`src/main/index.ts`, lines 436–441](../../apps/desktop/src/main/index.ts#L436-L441)
+[`src/main/index.ts`, lines 455–460](../../apps/desktop/src/main/index.ts#L455-L460)
 
 ```ts
 /** Windows DPAPI through Electron: only this Windows user can decrypt what it encrypts. */
@@ -878,7 +913,7 @@ The encryption `SecretStore` uses for the saved sign-in. `SecretStore` only know
 
 <!-- code: apps/desktop/src/main/index.ts#withDevOverrides -->
 
-[`src/main/index.ts`, lines 443–465](../../apps/desktop/src/main/index.ts#L443-L465)
+[`src/main/index.ts`, lines 462–484](../../apps/desktop/src/main/index.ts#L462-L484)
 
 ```ts
 /**
@@ -932,7 +967,7 @@ example to try the built-in chat against a test identity provider, without editi
 
 <!-- code: apps/desktop/src/main/index.ts#isLoopback -->
 
-[`src/main/index.ts`, lines 467–469](../../apps/desktop/src/main/index.ts#L467-L469)
+[`src/main/index.ts`, lines 486–488](../../apps/desktop/src/main/index.ts#L486-L488)
 
 ```ts
 function isLoopback(url: URL): boolean {
@@ -950,7 +985,7 @@ in `hostname`. Used only to decide whether plain `http` is allowed for a dev ide
 
 <!-- code: apps/desktop/src/main/index.ts#toArea,electronDisplays -->
 
-[`src/main/index.ts`, lines 471–487](../../apps/desktop/src/main/index.ts#L471-L487)
+[`src/main/index.ts`, lines 490–506](../../apps/desktop/src/main/index.ts#L490-L506)
 
 ```ts
 /** Electron's `screen`, in the shape the bubble controller uses. All coordinates are DIPs. */
@@ -999,7 +1034,7 @@ method is called, which happens after `start()` has begun.
 
 <!-- code: apps/desktop/src/main/index.ts#fail -->
 
-[`src/main/index.ts`, lines 489–493](../../apps/desktop/src/main/index.ts#L489-L493)
+[`src/main/index.ts`, lines 508–512](../../apps/desktop/src/main/index.ts#L508-L512)
 
 ```ts
 function fail(error: unknown): void {
