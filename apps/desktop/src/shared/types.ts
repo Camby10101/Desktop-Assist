@@ -70,6 +70,8 @@ export interface Branding {
    * problem". Null when the service desk icon just opens the portal.
    */
   requestTypes: RequestType[] | null
+  /** Settings offers Check for updates (the tenant names where releases come from). */
+  updates: boolean
 }
 
 /** A kind of request on the IT help centre portal ("Other IT Issue", "Request new software"). */
@@ -210,7 +212,7 @@ export interface ServiceRequest {
   updated: string
   /** The request on the help centre portal. */
   url: string
-  /** What's new since the user last looked ("Mark Duong replied", "Now Resolved"), or null. */
+  /** What's new since the user last looked ("Grace Hopper replied", "Now Resolved"), or null. */
   news: string | null
 }
 
@@ -300,6 +302,20 @@ export interface NewRequest {
 export type RaiseResult =
   | { ok: true; screenshots: number }
   | { ok: false; reason: 'empty' | 'missing-screenshot' | 'failed' }
+
+/**
+ * Settings → Check for updates.
+ * - `downloaded`: a development run stops there: it has no installed copy to replace.
+ * - `installing`: the installer is running; the app is about to close and start again.
+ */
+export type UpdateState =
+  | { status: 'idle' }
+  | { status: 'checking' }
+  | { status: 'up-to-date'; version: string }
+  | { status: 'downloading'; version: string; percent: number }
+  | { status: 'downloaded'; version: string; path: string }
+  | { status: 'installing'; version: string }
+  | { status: 'error'; message: string }
 
 export type ActionResult = { ok: true; message?: string } | { ok: false; message: string }
 

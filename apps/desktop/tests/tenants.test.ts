@@ -145,6 +145,30 @@ describe('tenants', () => {
     expect(TenantSchema.safeParse({ ...tenant, atlassian: insecure }).success).toBe(false)
   })
 
+  it('can offer updates from a GitHub repository, from GitHub itself by default', () => {
+    const base = { id: 'x', companyName: 'X', appName: 'X', accentColor: '#000000' }
+    const tenant = { ...base, chatApp: 'claude-desktop', actions: ['close'] }
+    const publicKey = 'MCowBQYDK2VwAyEAVVUDKeMaBj3X+A0BV4uKVrM4XFieyOYA1DTzGw+2VcY='
+    const updates = { repo: 'Camby10101/Desktop-Assist', publicKey }
+    const parsed = TenantSchema.parse({ ...tenant, updates })
+    expect(parsed.updates).toEqual({
+      repo: 'Camby10101/Desktop-Assist',
+      api: 'https://api.github.com',
+      downloads: 'https://github.com',
+      publicKey,
+    })
+    expect(brandingOf(parsed).updates).toBe(true)
+    expect(brandingOf(TenantSchema.parse(tenant)).updates).toBe(false)
+    const parses = (value: object) => TenantSchema.safeParse({ ...tenant, updates: value }).success
+    expect(parses({ ...updates, repo: 'not a repo' })).toBe(false)
+    // Updates are only taken signed with the release key, so its public half is required.
+    expect(parses({ repo: 'Camby10101/Desktop-Assist' })).toBe(false)
+    expect(parses({ ...updates, publicKey: 'not a key' })).toBe(false)
+    expect(DevOverrideSchema.parse({ updates: { api: 'http://127.0.0.1:1' } }).updates).toEqual({
+      api: 'http://127.0.0.1:1',
+    })
+  })
+
   it('lets a dev override change one Atlassian setting without resetting the others', () => {
     const override = DevOverrideSchema.parse({
       atlassian: { mcpServer: 'http://127.0.0.1:1/v1/mcp' },

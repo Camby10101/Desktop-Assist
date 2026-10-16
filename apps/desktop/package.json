@@ -1,7 +1,7 @@
 {
   "name": "@desktop-assist/desktop",
   "productName": "Desktop Assist",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "Desktop assistant bubble for Windows",
   "author": "Morse Micro",
@@ -14,7 +14,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "dist": "npm run typecheck && electron-vite build && electron-builder --win"
+    "dist": "npm run typecheck && electron-vite build && electron-builder --win && node ../../scripts/release-signing.mjs sign"
   },
   "devDependencies": {
     "@anthropic-ai/sdk": "^0.132.0",

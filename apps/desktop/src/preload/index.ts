@@ -86,6 +86,10 @@ const api: AssistApi = {
     raise: (request) => ipcRenderer.invoke(IPC.serviceDeskRaise, request),
     openMyRequests: () => ipcRenderer.invoke(IPC.serviceDeskOpenMyRequests),
   },
+  updates: {
+    get: () => ipcRenderer.invoke(IPC.updatesGet),
+    check: () => ipcRenderer.invoke(IPC.updatesCheck),
+  },
   uninstall: () => ipcRenderer.invoke(IPC.appUninstall),
   onModeChanged: (callback) => subscribe(IPC.modeChanged, callback),
   onCornerChanged: (callback) => subscribe(IPC.cornerChanged, callback),
@@ -96,6 +100,7 @@ const api: AssistApi = {
   onAppsState: (callback) => subscribe(IPC.appsState, callback),
   onAtlassianState: (callback) => subscribe(IPC.atlassianState, callback),
   onJiraFeed: (callback) => subscribe(IPC.jiraFeed, callback),
+  onUpdateState: (callback) => subscribe(IPC.updateState, callback),
 }
 
 contextBridge.exposeInMainWorld('assist', api)

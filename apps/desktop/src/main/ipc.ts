@@ -30,6 +30,7 @@ import { MAX_NOTE_LENGTH, type NotesStore } from './notes/NotesStore'
 import type { ScreenshotService } from './screenshots/ScreenshotService'
 import type { ServiceDesk } from './serviceDesk'
 import type { SettingsService } from './settings'
+import type { Updater } from './updates'
 
 /** The built-in chat and the JumpCloud sign-in it needs. */
 export interface BuiltInChat {
@@ -54,6 +55,8 @@ export interface IpcContext {
   atlassian: Atlassian | null
   /** Raising IT requests and the user's requests page, or null without request types. */
   serviceDesk: { desk: ServiceDesk; myRequestsUrl: string } | null
+  /** Settings → Check for updates, or null when the tenant has no `updates`. */
+  updater: Updater | null
   actions: ActionHandlers
   /** Settings → Uninstall. */
   uninstall(): UninstallResult
@@ -192,6 +195,17 @@ export function registerIpc(ctx: IpcContext): void {
   if (ctx.builtIn) registerBuiltInChat(ctx.builtIn)
   if (ctx.atlassian) registerAtlassian(ctx.atlassian)
   if (ctx.serviceDesk) registerServiceDesk(ctx.serviceDesk)
+  if (ctx.updater) registerUpdates(ctx.updater)
+
+  function registerUpdates(updater: Updater): void {
+    handle(IPC.updatesGet, NoArgs, () => updater.current)
+    // Checking, downloading and installing take a while, so this returns straight away (already
+    // "checking"); progress is broadcast on IPC.updateState.
+    handle(IPC.updatesCheck, NoArgs, () => {
+      void updater.checkAndInstall()
+      return updater.current
+    })
+  }
 
   function registerAtlassian(atlassian: Atlassian): void {
     handle(IPC.atlassianGet, NoArgs, () => atlassian.current)

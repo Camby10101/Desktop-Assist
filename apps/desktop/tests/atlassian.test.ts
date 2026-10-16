@@ -24,8 +24,8 @@ import { NeedsSignInError, type McpConnector, type McpSession } from '../src/mai
 const json = (value: unknown) => ({ content: [{ type: 'text', text: JSON.stringify(value) }] })
 const SITE = 'https://example.atlassian.net'
 const ME = { accountId: '712020:me', name: 'Casey Jones' }
-const SAM = { accountId: '5cf7sam', displayName: 'Sam Bolin' }
-const MARK = { accountId: '712020:mark', displayName: 'Mark Duong' }
+const ALAN = { accountId: '5cf7alan', displayName: 'Alan Turing' }
+const GRACE = { accountId: '712020:grace', displayName: 'Grace Hopper' }
 const BOT = { accountId: '557058:automation', displayName: 'Automation for Jira' }
 const SELF = { accountId: ME.accountId, displayName: ME.name }
 const NOW = Date.parse('2026-10-12T00:00:00.000Z')
@@ -73,9 +73,9 @@ describe('reading Atlassian', () => {
     expect(adfText(doc)).toBe('Hi @Casey Jones, can you look?')
     expect(
       cleanMarkdown(
-        'Hi <custom data-type="mention" data-id="id-0">@Sam Bolin</custom> ![](blob:https://x/y)',
+        'Hi <custom data-type="mention" data-id="id-0">@Alan Turing</custom> ![](blob:https://x/y)',
       ),
-    ).toBe('Hi @Sam Bolin [image]')
+    ).toBe('Hi @Alan Turing [image]')
   })
 
   it('says who assigned an issue, unless it was the user themselves', () => {
@@ -84,28 +84,28 @@ describe('reading Atlassian', () => {
       fields: { summary: 'Printer', assignee: SELF },
       changelog: {
         histories: [
-          { id: '9', author: MARK, created: DAYS_AGO(1), items: [{ field: 'status', to: '3' }] },
+          { id: '9', author: GRACE, created: DAYS_AGO(1), items: [{ field: 'status', to: '3' }] },
           { id: '7', author, created, items: [{ field: 'assignee', to: ME.accountId }] },
         ],
       },
     })
-    expect(assignedNotification(assigned(SAM), ME, SINCE)).toEqual({
+    expect(assignedNotification(assigned(ALAN), ME, SINCE)).toEqual({
       id: 'assigned:ISD-1:7',
       kind: 'assigned',
       key: 'ISD-1',
       summary: 'Printer',
-      by: 'Sam Bolin',
+      by: 'Alan Turing',
       at: DAYS_AGO(2),
     })
     expect(assignedNotification(assigned(SELF), ME, SINCE)).toBeNull()
-    expect(assignedNotification(assigned(SAM, DAYS_AGO(20)), ME, SINCE)).toBeNull()
+    expect(assignedNotification(assigned(ALAN, DAYS_AGO(20)), ME, SINCE)).toBeNull()
     // Created already assigned to the user: the creator assigned it.
     const created = {
       key: 'SW-2',
-      fields: { summary: 'Build', assignee: SELF, creator: MARK, created: DAYS_AGO(3) },
+      fields: { summary: 'Build', assignee: SELF, creator: GRACE, created: DAYS_AGO(3) },
       changelog: { histories: [] },
     }
-    expect(assignedNotification(created, ME, SINCE)?.by).toBe('Mark Duong')
+    expect(assignedNotification(created, ME, SINCE)?.by).toBe('Grace Hopper')
   })
 
   it("finds the comments that mention the user, by someone else, with the comment's start", () => {
@@ -113,14 +113,14 @@ describe('reading Atlassian', () => {
       key: 'ISD-2',
       fields: {
         summary: 'TV flickering',
-        creator: SAM,
+        creator: ALAN,
         created: DAYS_AGO(30),
         description: adf('Old description for ', mentionOfMe),
         comment: {
           comments: [
             {
               id: '1',
-              author: SAM,
+              author: ALAN,
               created: DAYS_AGO(3),
               body: adf(mentionOfMe, ' new TV ordered'),
             },
@@ -130,8 +130,8 @@ describe('reading Atlassian', () => {
               created: DAYS_AGO(2),
               body: adf(mentionOfMe, ' note to self'),
             },
-            { id: '3', author: MARK, created: DAYS_AGO(1), body: adf('no mention here') },
-            { id: '4', author: MARK, created: DAYS_AGO(40), body: adf(mentionOfMe, ' too old') },
+            { id: '3', author: GRACE, created: DAYS_AGO(1), body: adf('no mention here') },
+            { id: '4', author: GRACE, created: DAYS_AGO(40), body: adf(mentionOfMe, ' too old') },
           ],
         },
       },
@@ -142,7 +142,7 @@ describe('reading Atlassian', () => {
         kind: 'mentioned',
         key: 'ISD-2',
         summary: 'TV flickering',
-        by: 'Sam Bolin',
+        by: 'Alan Turing',
         at: DAYS_AGO(3),
         excerpt: '@Casey Jones new TV ordered',
       },
@@ -160,7 +160,7 @@ describe('reading Atlassian', () => {
           comment: {
             comments: [
               { id: '1', author: BOT, created: DAYS_AGO(5), body: 'Thanks for raising it' },
-              { id: '2', author: MARK, created: DAYS_AGO(3), body: 'On it' },
+              { id: '2', author: GRACE, created: DAYS_AGO(3), body: 'On it' },
               { id: '3', author: SELF, created: DAYS_AGO(2), body: 'Thanks' },
             ],
           },
@@ -168,7 +168,7 @@ describe('reading Atlassian', () => {
       },
       ME,
     )
-    expect(info?.reply).toEqual({ id: '2', author: 'Mark Duong' })
+    expect(info?.reply).toEqual({ id: '2', author: 'Grace Hopper' })
     expect(info?.status).toEqual({ name: 'Waiting for support', category: 'indeterminate' })
   })
 
@@ -224,13 +224,13 @@ describe('reading Atlassian', () => {
       type: 'Incident',
       url: `${SITE}/browse/ISD-4`,
       assignee: null,
-      reporter: 'Sam Bolin',
+      reporter: 'Alan Turing',
       created: DAYS_AGO(3),
       updated: DAYS_AGO(1),
       description: 'It drops every hour.',
       comments: [
-        { id: '1', author: 'Mark', created: DAYS_AGO(2), body: 'x'.repeat(500) },
-        { id: '2', author: 'Sam', created: DAYS_AGO(1), body: 'Still happening' },
+        { id: '1', author: 'Grace', created: DAYS_AGO(2), body: 'x'.repeat(500) },
+        { id: '2', author: 'Alan', created: DAYS_AGO(1), body: 'Still happening' },
       ],
       portalUrl: null,
       transitions: [],
@@ -238,7 +238,7 @@ describe('reading Atlassian', () => {
     const full = issuePrompt(issue, 'summarise', 12_000)
     expect(full).toMatch(/^Summarise this Jira issue/)
     expect(full).toContain('ISD-4: VPN drops\nStatus: Open · Type: Incident · Assignee: Unassigned')
-    expect(full).toContain('Sam (2026-10-11):\nStill happening')
+    expect(full).toContain('Alan (2026-10-11):\nStill happening')
     const short = issuePrompt(issue, 'reply', 400)
     expect(short.length).toBeLessThanOrEqual(400)
     expect(short).toContain('Still happening')
@@ -262,7 +262,7 @@ interface World {
   requestStatus: string
 }
 
-/** Atlassian with a user, an issue Sam assigned them, a mention by Mark, and one IT request. */
+/** Atlassian with a user, an issue Alan assigned them, a mention by Grace, and one IT request. */
 function fakeAtlassian() {
   const world: World = {
     signedIn: false,
@@ -309,7 +309,7 @@ function fakeAtlassian() {
                     comments: [
                       {
                         id: '31',
-                        author: MARK,
+                        author: GRACE,
                         created: DAYS_AGO(1),
                         body: adf(mentionOfMe, ' please review'),
                       },
@@ -341,7 +341,7 @@ function fakeAtlassian() {
       case TOOLS.issue: {
         const key = String(args['issueIdOrKey'])
         if (args['expand'] === 'changelog') {
-          const author = key === 'SW-1' ? SAM : SELF // SW-2 the user took themselves
+          const author = key === 'SW-1' ? ALAN : SELF // SW-2 the user took themselves
           return json({
             issues: {
               nodes: [
@@ -375,13 +375,13 @@ function fakeAtlassian() {
                   status: { name: 'Open', statusCategory: { key: 'new' } },
                   issuetype: { name: 'Task' },
                   assignee: SELF,
-                  reporter: SAM,
+                  reporter: ALAN,
                   created: DAYS_AGO(3),
                   updated: DAYS_AGO(1),
                   description: 'The **printer** is jammed',
                 },
                 {
-                  comments: [{ id: '1', author: SAM, created: DAYS_AGO(2), body: 'Any news?' }],
+                  comments: [{ id: '1', author: ALAN, created: DAYS_AGO(2), body: 'Any news?' }],
                 },
               ),
             ],
@@ -517,11 +517,11 @@ describe('Atlassian', () => {
     expect(atlassian.currentFeed.notifications).toEqual({
       status: 'ready',
       items: [
-        expect.objectContaining({ kind: 'assigned', key: 'SW-1', by: 'Sam Bolin', unread: true }),
+        expect.objectContaining({ kind: 'assigned', key: 'SW-1', by: 'Alan Turing', unread: true }),
         expect.objectContaining({
           kind: 'mentioned',
           key: 'SW-3',
-          by: 'Mark Duong',
+          by: 'Grace Hopper',
           excerpt: '@Casey Jones please review',
           unread: true,
         }),
@@ -553,18 +553,18 @@ describe('Atlassian', () => {
     })
     world.requestComments = [
       ...world.requestComments,
-      { id: '51', author: MARK, created: DAYS_AGO(0), body: 'Fixed, please check' },
+      { id: '51', author: GRACE, created: DAYS_AGO(0), body: 'Fixed, please check' },
     ]
     await atlassian.feed(true)
-    expect(request()?.news).toBe('Mark Duong replied')
+    expect(request()?.news).toBe('Grace Hopper replied')
     expect(world.notified).toEqual([
-      { title: 'ISD-10: Mark Duong replied', body: 'Summary of ISD-10' },
+      { title: 'ISD-10: Grace Hopper replied', body: 'Summary of ISD-10' },
     ])
     await atlassian.feed(true)
     expect(world.notified).toHaveLength(1)
     world.requestStatus = 'Resolved'
     await atlassian.feed(true)
-    expect(request()?.news).toBe('Now Resolved · Mark Duong replied')
+    expect(request()?.news).toBe('Now Resolved · Grace Hopper replied')
     expect(world.notified.at(-1)?.title).toBe('ISD-10: Now Resolved')
     await atlassian.markRequestsRead('ISD-10')
     expect(request()?.news).toBeNull()
@@ -582,9 +582,9 @@ describe('Atlassian', () => {
       key: 'ISD-10',
       status: { name: 'Open', category: 'new' },
       assignee: ME.name,
-      reporter: 'Sam Bolin',
+      reporter: 'Alan Turing',
       description: 'The **printer** is jammed',
-      comments: [{ id: '1', author: 'Sam Bolin', body: 'Any news?' }],
+      comments: [{ id: '1', author: 'Alan Turing', body: 'Any news?' }],
       transitions: [
         { id: '21', name: 'Start progress' },
         { id: '31', name: 'Done' },
@@ -643,7 +643,7 @@ describe('Atlassian', () => {
     const result = await atlassian.prompt('SW-1', 'next-steps', 12_000)
     expect(result.ok && result.prompt).toMatch(/^Suggest the next steps/)
     expect(result.ok && result.prompt).toContain('SW-1: Summary of SW-1')
-    expect(result.ok && result.prompt).toContain('Sam Bolin (2026-10-10):\nAny news?')
+    expect(result.ok && result.prompt).toContain('Alan Turing (2026-10-10):\nAny news?')
     atlassian.dispose()
   })
 

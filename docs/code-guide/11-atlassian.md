@@ -447,7 +447,7 @@ function bodyText(body: unknown): string {
 
 Atlassian's server can turn ADF into Markdown itself, which is easier to show and to give to
 Claude, but it writes mentions and emoji as tags of its own, such as
-`<custom data-type="mention" ...>@Sam Bolin</custom>`.
+`<custom data-type="mention" ...>@Alan Turing</custom>`.
 
 - `cleanMarkdown()`: as the comment says, the tags become their text, and a pasted image (a
   `blob:` address that only works inside Jira) becomes `[image]`. An invisible zero-width
@@ -2029,7 +2029,7 @@ My requests, and what's new on them.
 - `known[info.key] ?? { seen: signature, notified: signature }`: a request seen for the first time
   starts as already seen, so a request the user has just raised isn't news to them.
 - `const news = newsOf(entry.seen, info)`: what's changed since the user last looked, shown in My
-  requests ("Now Resolved", "Mark Duong replied").
+  requests ("Now Resolved", "Grace Hopper replied").
 - `const fresh = newsOf(entry.notified, info)`: what's changed since the last Windows
   notification. As the comment says, each change gets one: `this.deps.notify(...)`, then
   `entry.notified = signature`.
@@ -2160,7 +2160,7 @@ const read = (notification: JiraNotification): JiraNotification =>
 
 /**
  * What's changed on a request since it was `before` ("status|latest reply"): "Now Resolved",
- * "Mark Duong replied", or both.
+ * "Grace Hopper replied", or both.
  */
 function newsOf(before: string, info: RequestInfo): string | null {
   const [status, reply] = before.split('|')
@@ -2496,7 +2496,7 @@ text box.
 ## What's tested
 
 `tests/atlassian.test.ts` checks the readers with made-up answers, and runs `Atlassian` against a
-fake Atlassian: a server with a user (Casey), an issue Sam assigned them, a mention by Mark, and
+fake Atlassian: a server with a user (Casey), an issue Alan assigned them, a mention by Grace, and
 one IT request whose comments and status a test can change; a fake browser that "connects"; an
 in-memory store and memory; and a fixed clock.
 

@@ -14,6 +14,7 @@ import type {
   PortalApp,
   StartPage,
   UninstallResult,
+  UpdateState,
 } from '@shared/types'
 import { ActionStack } from '../components/ActionStack'
 import { AppsList } from '../components/AppsList'
@@ -86,6 +87,7 @@ function Panel({ state }: { state: AppState }) {
   const [serviceDeskTab, setServiceDeskTab] = useState<ServiceDeskTab>('new')
   /** The Jira projects' keys, to only offer real issue keys from the text box. */
   const [projectKeys, setProjectKeys] = useState<string[] | null>(null)
+  const [update, setUpdate] = useState<UpdateState>({ status: 'idle' })
   /** Claude Desktop isn't installed, so questions can't be opened in it (checked on opening). */
   const [claudeMissing, setClaudeMissing] = useState(false)
   const [toast, showToast] = useToast()
@@ -113,6 +115,12 @@ function Panel({ state }: { state: AppState }) {
     void window.assist.atlassian.feed().then(setFeed)
     return () => unsubscribe.forEach((stop) => stop())
   }, [atlassianSite])
+  useEffect(() => {
+    if (!branding.updates) return
+    const unsubscribe = window.assist.onUpdateState(setUpdate)
+    void window.assist.updates.get().then(setUpdate)
+    return unsubscribe
+  }, [branding.updates])
   const atlassianConnected = atlassian.status === 'connected'
   useEffect(() => {
     if (!atlassianConnected) return
@@ -515,6 +523,8 @@ function Panel({ state }: { state: AppState }) {
           user={auth?.state === 'signed-in' || auth?.state === 'offline' ? auth.user : null}
           atlassianUser={atlassian.status === 'connected' ? atlassian.user : null}
           onDisconnectAtlassian={() => void disconnectAtlassian()}
+          update={update}
+          onCheckForUpdates={() => void window.assist.updates.check().then(setUpdate)}
           onToggleAutoStart={async () =>
             setSettings(await window.assist.settings.setAutoStart(!settings.autoStart))
           }

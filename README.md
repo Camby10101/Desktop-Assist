@@ -13,14 +13,18 @@ screen and opens a panel when clicked. Built for Morse Micro first. Branding liv
   Server for users).
 - [docs/ATLASSIAN_SETUP.md](docs/ATLASSIAN_SETUP.md): for IT, Jira (notifications, search,
   issues) and the service desk page (new requests, My requests).
+- [docs/RELEASING.md](docs/RELEASING.md): publishing a new version (built, signed with the release
+  key and attached to a GitHub release), which copies then update to from Settings; keeping
+  releases safe.
 - [docs/JUMPCLOUD_SETUP.md](docs/JUMPCLOUD_SETUP.md): for IT, setting up JumpCloud sign-in and
   Claude access for the built-in chat (not used by Morse Micro since 3.1).
 
 **Status:** Milestones 0 (Foundation), 1 (Chat with Claude), 2.1 (bubble fixes), 3 (JumpCloud
 sign-in) and 4 (logos, favourites, service desk, light/dark mode, bubble-click fix), and features
-3.1 (questions open in Claude Desktop) and 3.2 (Apps list, Uninstall) are complete. Milestone 5
-(the app-opening spinner; Jira and the service desk) is in progress (see
-[PLAN.md](docs/PLAN.md) §7h).
+3.1 (questions open in Claude Desktop) and 3.2 (Apps list, Uninstall) are complete, as are
+Milestone 5 (the app-opening spinner; Jira and the service desk) and its fixes 5.1 and 5.2 (the
+bubble kept in front, and Check for updates). This is version **1.0.0**, the first release (see
+[PLAN.md](docs/PLAN.md) §7h and [RELEASING.md](docs/RELEASING.md)).
 
 ## Features
 
@@ -60,7 +64,9 @@ sign-in) and 4 (logos, favourites, service desk, light/dark mode, bubble-click f
   - **Light or dark mode** (sun or moon) switches Desktop Assist's colours. It starts dark.
   - **Screenshot** saves the screen the bubble is on to `Pictures\Desktop Assist`.
   - **Settings**: Start with Windows, Send in Claude automatically, Open screenshots folder,
-    Clear text box and **Uninstall Desktop Assist**. (With the
+    Clear text box, **Check for updates** (downloads a newer release from GitHub, checks it's
+    signed with the release key, and installs it; Desktop Assist closes and starts again on the
+    new version) and **Uninstall Desktop Assist**. (With the
     built-in chat: Response style (Fast / Balanced / Thorough), New conversation, and who you're
     signed in as with **Log out**.)
   - **Bounce** sends the bubble bouncing around the screen, across all your monitors; click it to
@@ -87,13 +93,15 @@ sign-in) and 4 (logos, favourites, service desk, light/dark mode, bubble-click f
 
 **Install it like a normal app:**
 
-1. Run `npm run dist`. This builds `apps/desktop/dist/Desktop Assist-Setup-0.1.0.exe`.
+1. Run `npm run dist`. This builds `apps/desktop/dist/Desktop Assist-Setup-1.0.0.exe`. Its last
+   step signs the installer for Check for updates; on a PC without the release key it stops there
+   with a message, and the installer is still built (see [RELEASING.md](docs/RELEASING.md)).
 2. Run that installer. It installs for your user only and starts the app straight away.
 3. The installed app starts with Windows (turn this off in Settings). Find it again in the
    Start menu as **Desktop Assist**.
 
 Windows may warn about an unrecognised app because the installer isn't code-signed yet
-(**More info → Run anyway**). Code signing is a candidate for Milestone 5.
+(**More info → Run anyway**). Code signing is a candidate for Milestone 6.
 
 ## Development
 
@@ -106,7 +114,7 @@ npm run dev         # run with hot reload
 npm test            # unit tests (Vitest)
 npm run lint
 npm run typecheck
-npm run dist        # unsigned installer → apps/desktop/dist/
+npm run dist        # installer (and its .sig for updates) → apps/desktop/dist/
 npm run docs        # refresh the code shown in docs/code-guide after changing code
 npm run docs:pdf    # rebuild docs/CODE_GUIDE.pdf from those pages
 ```

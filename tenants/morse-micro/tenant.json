@@ -12,15 +12,42 @@
       "portalId": "1",
       "projectKey": "ISD",
       "requestTypes": [
-        { "id": "1561", "name": "Other IT Issue" },
-        { "id": "1565", "name": "Password Reset or Account Unlock" },
-        { "id": "1525", "name": "VPN or Remote Access Issue" },
-        { "id": "1560", "name": "Printing, Displays or Meeting Room Equipment Issue" },
-        { "id": "1571", "name": "Ask IT a question" },
-        { "id": "1355", "name": "Request new software" },
-        { "id": "1425", "name": "Other software/hardware request" },
-        { "id": "1388", "name": "Update or renew software license" },
-        { "id": "1604", "name": "Increase Tool Usage" }
+        {
+          "id": "1561",
+          "name": "Other IT Issue"
+        },
+        {
+          "id": "1565",
+          "name": "Password Reset or Account Unlock"
+        },
+        {
+          "id": "1525",
+          "name": "VPN or Remote Access Issue"
+        },
+        {
+          "id": "1560",
+          "name": "Printing, Displays or Meeting Room Equipment Issue"
+        },
+        {
+          "id": "1571",
+          "name": "Ask IT a question"
+        },
+        {
+          "id": "1355",
+          "name": "Request new software"
+        },
+        {
+          "id": "1425",
+          "name": "Other software/hardware request"
+        },
+        {
+          "id": "1388",
+          "name": "Update or renew software license"
+        },
+        {
+          "id": "1604",
+          "name": "Increase Tool Usage"
+        }
       ]
     }
   },
@@ -29,6 +56,10 @@
     "mcpServer": "https://mcp.atlassian.com/v1/mcp",
     "redirectPort": 47623,
     "knowledgeSpaces": ["INFRA"]
+  },
+  "updates": {
+    "repo": "Camby10101/Desktop-Assist",
+    "publicKey": "MCowBQYDK2VwAyEAVVUDKeMaBj3X+A0BV4uKVrM4XFieyOYA1DTzGw+2VcY="
   },
   "portal": {
     "name": "JumpCloud",

@@ -93,6 +93,31 @@ export const AtlassianSchema = AtlassianFields.extend({
 
 export type AtlassianConfig = z.infer<typeof AtlassianSchema>
 
+/**
+ * Updating from Settings: the GitHub repository whose releases carry the installer. Releases are
+ * read from GitHub's public API, so the repository must be public; no token is needed.
+ */
+const UpdatesFields = z.object({
+  /** "owner/name". */
+  repo: z.string().regex(/^[\w.-]+\/[\w.-]+$/),
+  /** GitHub's API. */
+  api: z.url({ protocol: /^https?$/ }),
+  /** Where release files come from: <downloads>/<repo>/releases/download/…; nothing else is. */
+  downloads: z.url({ protocol: /^https?$/ }),
+  /**
+   * The release key's public half, from `npm run release:key`: an Ed25519 key, base64. Only
+   * installers signed with its private half are run (see docs/RELEASING.md).
+   */
+  publicKey: z.string().regex(/^MCowBQYDK2VwAyEA[A-Za-z0-9+/]{43}=$/, 'an Ed25519 public key'),
+})
+
+export const UpdatesSchema = UpdatesFields.extend({
+  api: UpdatesFields.shape.api.default('https://api.github.com'),
+  downloads: UpdatesFields.shape.downloads.default('https://github.com'),
+})
+
+export type UpdatesConfig = z.infer<typeof UpdatesSchema>
+
 export type SignInConfig = z.infer<typeof SignInSchema>
 export type ClaudeAccessConfig = z.infer<typeof ClaudeAccessSchema>
 
@@ -132,6 +157,8 @@ export const TenantSchema = z
     serviceDesk: ServiceDeskSchema.optional(),
     /** Needed for the Jira icon. */
     atlassian: AtlassianSchema.optional(),
+    /** Offers Check for updates in Settings. */
+    updates: UpdatesSchema.optional(),
     /** Needed for the built-in chat only. */
     signIn: SignInSchema.optional(),
     claudeAccess: ClaudeAccessSchema.optional(),
@@ -174,6 +201,7 @@ export function brandingOf(tenant: Tenant): Branding {
     startPage,
     atlassianSite: tenant.atlassian?.site ?? null,
     requestTypes: tenant.serviceDesk?.requests?.requestTypes ?? null,
+    updates: tenant.updates !== undefined,
   }
 }
 
@@ -192,8 +220,8 @@ export function missingSettings(signIn: SignInConfig, access: ClaudeAccessConfig
 
 /**
  * Dev runs only: a JSON file (path in DESKTOP_ASSIST_DEV_CONFIG) can override `chatApp`,
- * `startPage`, `portal`, `atlassian`, `signIn` and `claudeAccess`, so the app can be pointed at
- * test servers without editing tenant.json. Installed builds never read it.
+ * `startPage`, `portal`, `atlassian`, `updates`, `signIn` and `claudeAccess`, so the app can be
+ * pointed at test servers without editing tenant.json. Installed builds never read it.
  */
 export const DevOverrideSchema = z.object({
   chatApp: z.enum(CHAT_APPS).optional(),
@@ -201,6 +229,7 @@ export const DevOverrideSchema = z.object({
   portal: PortalSchema.partial().optional(),
   // Without the defaults, so a partial override can't reset what tenant.json sets.
   atlassian: AtlassianFields.partial().optional(),
+  updates: UpdatesFields.partial().optional(),
   signIn: SignInSchema.partial().optional(),
   claudeAccess: ClaudeAccessSchema.partial().optional(),
 })

@@ -1901,11 +1901,44 @@ windows and stops it when quitting.
 - `!win.isDestroyed()`: never touch a window that has been closed.
 - `return () => clearInterval(timer)`: the caller gets the way to stop it.
 
+### `bringToFront()`
+
+<!-- code: apps/desktop/src/main/bubble/windows.ts#bringToFront -->
+
+[`src/main/bubble/windows.ts`, lines 92–104](../../apps/desktop/src/main/bubble/windows.ts#L92-L104)
+
+```ts
+/**
+ * Puts an overlay window back on top, in front of every other window. With `reshow` it's also
+ * hidden and shown again, which makes Windows place (and draw) it afresh.
+ */
+export function bringToFront(win: BrowserWindow, reshow: boolean): void {
+  if (win.isDestroyed()) return
+  win.setAlwaysOnTop(true, ON_TOP_LEVEL)
+  win.moveTop()
+  if (reshow && win.isVisible()) {
+    win.hide()
+    win.showInactive()
+  }
+}
+```
+
+<!-- /code -->
+
+Puts an overlay window back in front of everything. The front check (`frontCheck.ts`, below)
+calls it for the bubble when Windows says something else is at the bubble's centre.
+
+- `win.setAlwaysOnTop(true, ON_TOP_LEVEL)`, `win.moveTop()`: makes it always on top again, and
+  moves it to the top of the always-on-top windows, in front of any other app's.
+- `if (reshow && win.isVisible())`: when it was behind another window or hidden by Windows, it's
+  also hidden and shown again, which makes Windows place it and draw it afresh. Only a window
+  that's showing: a hidden one is hidden on purpose.
+
 ### `bubbleSurface()`, `panelSurface()`
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#bubbleSurface,panelSurface -->
 
-[`src/main/bubble/windows.ts`, lines 92–115](../../apps/desktop/src/main/bubble/windows.ts#L92-L115)
+[`src/main/bubble/windows.ts`, lines 106–129](../../apps/desktop/src/main/bubble/windows.ts#L106-L129)
 
 ```ts
 export function bubbleSurface(win: BrowserWindow): Surface {
@@ -1951,7 +1984,7 @@ forwards each call to the matching Electron method.
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#resetClickThrough -->
 
-[`src/main/bubble/windows.ts`, lines 117–129](../../apps/desktop/src/main/bubble/windows.ts#L117-L129)
+[`src/main/bubble/windows.ts`, lines 131–143](../../apps/desktop/src/main/bubble/windows.ts#L131-L143)
 
 ```ts
 /**
@@ -1989,7 +2022,7 @@ been hidden, for example for a screenshot.
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#lockDown -->
 
-[`src/main/bubble/windows.ts`, lines 131–140](../../apps/desktop/src/main/bubble/windows.ts#L131-L140)
+[`src/main/bubble/windows.ts`, lines 145–154](../../apps/desktop/src/main/bubble/windows.ts#L145-L154)
 
 ```ts
 function lockDown(win: BrowserWindow, view: View): void {
@@ -2024,7 +2057,7 @@ Basic safety and crash recovery for both pages.
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#addEditContextMenu -->
 
-[`src/main/bubble/windows.ts`, lines 142–163](../../apps/desktop/src/main/bubble/windows.ts#L142-L163)
+[`src/main/bubble/windows.ts`, lines 156–177](../../apps/desktop/src/main/bubble/windows.ts#L156-L177)
 
 ```ts
 /** Right-click menu for the text box: spelling suggestions plus the usual edit commands. */
@@ -2067,3 +2100,339 @@ without this you couldn't cut, paste or fix spelling with the mouse.
   and behaviour. The same goes for redo, cut, copy, paste and select all.
 - `Menu.buildFromTemplate(template).popup({ window: win })`: builds the menu and shows it at the
   pointer.
+
+## `src/main/bubble/frontCheck.ts`: keeping the bubble in front
+
+Started by Windows at sign-in, after other apps were already open, the bubble could sit behind
+them, although its window was always on top, until the user minimised everything and restored it.
+It couldn't be reproduced by starting the app behind other windows by hand (the bubble was in
+front every time), so instead of guessing at the cause, Desktop Assist now checks: a few times in
+its first ten minutes it asks Windows which window is at the bubble's centre, and if it isn't the
+bubble, brings the bubble back to the front and writes what it found in the log. That fixes it
+whatever the cause, and the log says what happened.
+
+Windows has no Electron API for "which window is here", so the check is a small PowerShell
+script, run hidden like the one that sends questions in Claude Desktop (`sendInClaude.ts`). It
+only reads; moving the window is done in Electron (`bringToFront()` in `windows.ts`).
+
+### `FRONT_CHECKS_MS`
+
+<!-- code: apps/desktop/src/main/bubble/frontCheck.ts#FRONT_CHECKS_MS -->
+
+[`src/main/bubble/frontCheck.ts`, lines 4–11](../../apps/desktop/src/main/bubble/frontCheck.ts#L4-L11)
+
+```ts
+// Making sure the bubble can be seen after Desktop Assist starts. Started by Windows at sign-in,
+// after other apps, the bubble could sit behind them although its window was always on top, until
+// the user minimised everything and restored it. So for its first ten minutes the app asks Windows
+// what's at the bubble's centre, and if it isn't the bubble, brings the bubble back to the front
+// and says so in the log.
+
+/** When the bubble is checked, counted from when it first appears. */
+export const FRONT_CHECKS_MS = [5_000, 20_000, 60_000, 180_000, 600_000]
+```
+
+<!-- /code -->
+
+When the bubble is checked: 5 and 20 seconds, then 1, 3 and 10 minutes after it first appears.
+Early, for when it starts behind apps already open; later, for apps that were still starting.
+Each check runs PowerShell for about a second, so there are only a few.
+
+### `FrontCheck`
+
+<!-- code: apps/desktop/src/main/bubble/frontCheck.ts#FrontCheck -->
+
+[`src/main/bubble/frontCheck.ts`, lines 13–25](../../apps/desktop/src/main/bubble/frontCheck.ts#L13-L25)
+
+```ts
+/** What Windows says about the bubble's window. */
+export interface FrontCheck {
+  /** Shown (IsWindowVisible). */
+  visible: boolean
+  /** Always on top (the WS_EX_TOPMOST style). */
+  topmost: boolean
+  /** Hidden by Windows' compositor (DWMWA_CLOAKED), which can happen while the desktop starts. */
+  cloaked: boolean
+  /** The window at the bubble's centre is the bubble's own (or another of this app's). */
+  inFront: boolean
+  /** The app whose window is there instead, if it isn't. */
+  coveredBy: string | null
+}
+```
+
+<!-- /code -->
+
+What Windows says about the bubble's window.
+
+- `topmost`: the window's `WS_EX_TOPMOST` style, Windows' own "always on top".
+- `cloaked`: Windows' compositor can hide ("cloak") a window that's still shown, for example one on
+  another virtual desktop, or one shown while the desktop is still starting. A cloaked window is
+  invisible, just like one that's behind everything.
+- `inFront`: the real test. A window can be shown, always on top and not cloaked, and still not
+  be what's on screen at that spot.
+
+### `frontCheckScript()`
+
+<!-- code: apps/desktop/src/main/bubble/frontCheck.ts#frontCheckScript -->
+
+[`src/main/bubble/frontCheck.ts`, lines 27–78](../../apps/desktop/src/main/bubble/frontCheck.ts#L27-L78)
+
+```ts
+/**
+ * The PowerShell that asks Windows. It finds the window at the centre of the bubble's window
+ * (WindowFromPoint, then its top-level window) and compares it with the bubble's. Prints one line
+ * of JSON. It only reads: it never moves or changes a window.
+ */
+export function frontCheckScript(hwnd: string, appPid: number): string {
+  if (!/^\d+$/.test(hwnd)) throw new Error('Unexpected window handle')
+  return `
+$ErrorActionPreference = 'Stop'
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public static class DaFront {
+  [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left, Top, Right, Bottom; }
+  [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X, Y; }
+  [DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(IntPtr value);
+  [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
+  [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
+  [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(POINT p);
+  [DllImport("user32.dll")] public static extern IntPtr GetAncestor(IntPtr h, uint flags);
+  [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] public static extern IntPtr GetWindowLongPtr(IntPtr h, int index);
+  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint processId);
+  [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr h, int attribute, out int value, int size);
+}
+"@
+# Real pixels for both the window's place and the point looked at, whatever each screen's scaling.
+try { [void][DaFront]::SetProcessDpiAwarenessContext([IntPtr]-4) } catch {}
+$bubble = [IntPtr][long]'${hwnd}'
+$rect = New-Object DaFront+RECT
+[void][DaFront]::GetWindowRect($bubble, [ref]$rect)
+$centre = New-Object DaFront+POINT
+$centre.X = [int](($rect.Left + $rect.Right) / 2)
+$centre.Y = [int](($rect.Top + $rect.Bottom) / 2)
+$there = [DaFront]::GetAncestor([DaFront]::WindowFromPoint($centre), 2)
+$owner = [uint32]0
+[void][DaFront]::GetWindowThreadProcessId($there, [ref]$owner)
+$inFront = ($there -eq $bubble) -or ($owner -eq ${appPid})
+$coveredBy = $null
+if (-not $inFront) {
+  try { $coveredBy = (Get-Process -Id $owner).ProcessName } catch { $coveredBy = "process $owner" }
+}
+$cloaked = 0
+[void][DaFront]::DwmGetWindowAttribute($bubble, 14, [ref]$cloaked, 4)
+[pscustomobject]@{
+  visible = [DaFront]::IsWindowVisible($bubble)
+  topmost = (([DaFront]::GetWindowLongPtr($bubble, -20).ToInt64() -band 8) -ne 0)
+  cloaked = ($cloaked -ne 0)
+  inFront = [bool]$inFront
+  coveredBy = $coveredBy
+} | ConvertTo-Json -Compress
+`
+}
+```
+
+<!-- /code -->
+
+The PowerShell. `Add-Type` compiles a few lines of C# that call Windows' own functions
+(`DllImport`), since PowerShell can't call them directly.
+
+- `if (!/^\d+$/.test(hwnd))`: the window handle goes into the script as text, so only digits are
+  accepted: nothing that could change what the script does.
+- `SetProcessDpiAwarenessContext([IntPtr]-4)`: "per-monitor aware". Without it, Windows would give
+  PowerShell positions scaled to its idea of one screen's scaling, which can be wrong on another
+  monitor. With it, the window's place and the point looked at are both in real pixels.
+- `GetWindowRect` and the centre: the middle of the bubble's window, which is the middle of the
+  bubble.
+- `WindowFromPoint($centre)` then `GetAncestor(..., 2)`: the window Windows would give a click at
+  that point, then its top-level window (2 is `GA_ROOT`). That's what the user sees there.
+- `$inFront = ($there -eq $bubble) -or ($owner -eq ${appPid})`: the bubble, or another of this
+  app's windows (the panel, when it's open over that spot).
+- `(Get-Process -Id $owner).ProcessName`: the name of the app in front instead, for the log.
+- `DwmGetWindowAttribute($bubble, 14, ...)`: 14 is `DWMWA_CLOAKED`.
+- `ConvertTo-Json -Compress`: one line of JSON for `parseFrontCheck()`.
+
+### `parseFrontCheck()`
+
+<!-- code: apps/desktop/src/main/bubble/frontCheck.ts#parseFrontCheck -->
+
+[`src/main/bubble/frontCheck.ts`, lines 80–96](../../apps/desktop/src/main/bubble/frontCheck.ts#L80-L96)
+
+```ts
+/** The check's answer: the JSON on the last line it printed. Null if there isn't any. */
+export function parseFrontCheck(output: string): FrontCheck | null {
+  const last = output.trim().split(/\r?\n/).at(-1)?.trim() ?? ''
+  try {
+    const value = JSON.parse(last) as Record<string, unknown>
+    if (typeof value['inFront'] !== 'boolean') return null
+    return {
+      visible: value['visible'] === true,
+      topmost: value['topmost'] === true,
+      cloaked: value['cloaked'] === true,
+      inFront: value['inFront'],
+      coveredBy: typeof value['coveredBy'] === 'string' ? value['coveredBy'] : null,
+    }
+  } catch {
+    return null
+  }
+}
+```
+
+<!-- /code -->
+
+The check's answer, from the last line PowerShell printed (anything before it, such as a warning,
+is ignored). Null if that isn't the JSON expected.
+
+### `runFrontCheck()`
+
+<!-- code: apps/desktop/src/main/bubble/frontCheck.ts#runFrontCheck -->
+
+[`src/main/bubble/frontCheck.ts`, lines 98–128](../../apps/desktop/src/main/bubble/frontCheck.ts#L98-L128)
+
+```ts
+/** Runs the check in Windows PowerShell, hidden. */
+export function runFrontCheck(hwnd: string, appPid: number): Promise<FrontCheck> {
+  const powershell = join(
+    process.env['SystemRoot'] ?? 'C:\\Windows',
+    'System32',
+    'WindowsPowerShell',
+    'v1.0',
+    'powershell.exe',
+  )
+  const encoded = Buffer.from(frontCheckScript(hwnd, appPid), 'utf16le').toString('base64')
+  return new Promise((resolve, reject) => {
+    const child = spawn(
+      powershell,
+      ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded],
+      { windowsHide: true, timeout: 30_000 },
+    )
+    let output = ''
+    let errors = ''
+    child.stdout.on('data', (chunk: Buffer) => (output += chunk.toString()))
+    child.stderr.on('data', (chunk: Buffer) => (errors += chunk.toString()))
+    child.on('error', reject)
+    child.on('close', (code) => {
+      const check = parseFrontCheck(output)
+      if (check) resolve(check)
+      else
+        reject(
+          new Error(`The bubble check failed (exit ${code}): ${errors.trim() || output.trim()}`),
+        )
+    })
+  })
+}
+```
+
+<!-- /code -->
+
+Runs the script in Windows PowerShell, the same way `sendInClaude()` does: hidden
+(`windowsHide`), with the script passed as base64 (`-EncodedCommand`) so nothing in it is read as
+separate arguments, and stopped after 30 seconds if it hangs.
+
+### `needsHelp()`, `describe()`
+
+<!-- code: apps/desktop/src/main/bubble/frontCheck.ts#needsHelp,describe -->
+
+[`src/main/bubble/frontCheck.ts`, lines 130–143](../../apps/desktop/src/main/bubble/frontCheck.ts#L130-L143)
+
+```ts
+/** Whether the check found anything wrong with a shown bubble. */
+export function needsHelp(check: FrontCheck): boolean {
+  return check.visible && (!check.inFront || !check.topmost || check.cloaked)
+}
+
+/** In words, for the log: "behind Chrome, not always on top". */
+export function describe(check: FrontCheck): string {
+  const parts = [
+    check.inFront ? 'in front' : `behind ${check.coveredBy ?? 'another window'}`,
+    !check.topmost && 'not always on top',
+    check.cloaked && 'hidden by Windows',
+  ].filter(Boolean)
+  return parts.join(', ')
+}
+```
+
+<!-- /code -->
+
+- `needsHelp`: a shown bubble that's behind something, not always on top, or cloaked. A hidden
+  bubble (`visible` false) is hidden on purpose, during a screenshot for instance.
+- `describe`: the check in words for the log, e.g. "behind chrome, not always on top".
+
+### `FrontWatchDeps`, `watchBubbleFront()`
+
+<!-- code: apps/desktop/src/main/bubble/frontCheck.ts#FrontWatchDeps,watchBubbleFront -->
+
+[`src/main/bubble/frontCheck.ts`, lines 145–191](../../apps/desktop/src/main/bubble/frontCheck.ts#L145-L191)
+
+```ts
+export interface FrontWatchDeps {
+  /** Whether the bubble is resting in its corner (checks wait while it's open, dragged, …). */
+  isResting(): boolean
+  check(): Promise<FrontCheck>
+  /** Puts the bubble back on top and in front. `reshow` also hides and shows it again. */
+  bringToFront(reshow: boolean): void
+  log(message: string, error?: unknown): void
+  /** Tests replace the clock. */
+  setTimeout?(run: () => void, ms: number): unknown
+}
+
+/**
+ * Checks the bubble at FRONT_CHECKS_MS after it first appears and, whenever it's not in front,
+ * brings it back and checks again. Logs only when something was wrong. Returns a function that
+ * stops any checks still to come.
+ */
+export function watchBubbleFront(deps: FrontWatchDeps): () => void {
+  const later = deps.setTimeout ?? ((run: () => void, ms: number) => setTimeout(run, ms).unref())
+  let stopped = false
+  const checkNow = async (when: string): Promise<void> => {
+    if (stopped) return
+    // Open, dragged or bouncing: the user can see it. Look again in a minute.
+    if (!deps.isResting()) {
+      later(() => void checkNow(when), 60_000)
+      return
+    }
+    try {
+      const before = await deps.check()
+      if (!needsHelp(before)) return
+      deps.bringToFront(before.cloaked || !before.inFront)
+      await new Promise<void>((resolve) => later(resolve, 1000))
+      const after = await deps.check()
+      deps.log(
+        `Bubble check ${when} after starting: ${describe(before)}. ` +
+          (needsHelp(after) ? `Still ${describe(after)}.` : 'Brought back to the front.'),
+      )
+    } catch (error) {
+      deps.log(`Bubble check ${when} after starting failed:`, error)
+    }
+  }
+  for (const ms of FRONT_CHECKS_MS) {
+    later(() => void checkNow(ms < 60_000 ? `${ms / 1000} s` : `${ms / 60_000} min`), ms)
+  }
+  return () => {
+    stopped = true
+  }
+}
+```
+
+<!-- /code -->
+
+Runs the checks. `index.ts` starts it once the bubble first shows.
+
+- `later(...)`: `setTimeout`, with `.unref()` so a pending check never keeps the app running; tests
+  pass their own clock.
+- `if (!deps.isResting())`: while the panel is open or the bubble is moving, the check waits a
+  minute and tries again.
+- `if (!needsHelp(before)) return`: the usual case. Nothing is logged when all is well.
+- `deps.bringToFront(before.cloaked || !before.inFront)`: back on top and in front; hidden and
+  shown again too if it was behind something or cloaked (just putting it back on top is enough
+  when that was all that was wrong).
+- `await new Promise(... later(resolve, 1000))`, then `deps.check()` again: a second later, did it
+  work? The log line says what was wrong and whether the bubble is now in front ("Brought back to
+  the front") or still not.
+- `` ms < 60_000 ? `${ms / 1000} s` : `${ms / 60_000} min` ``: the check's name for the log ("5 s",
+  "3 min").
+- The returned function: stops any checks still to come (on quitting).
+
+Checked for real by starting the app and then covering the whole screen with another
+always-on-top window: the 5 s check found the bubble "behind electron" (the covering window's app),
+brought it back, and the screen at the bubble's centre then showed the bubble, not the cover.

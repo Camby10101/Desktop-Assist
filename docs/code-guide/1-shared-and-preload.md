@@ -428,7 +428,7 @@ isn't enough.
 
 The shapes of the data that travels between the main process and the pages: the bubble's mode,
 the draft, settings, branding, sign-in status, chat messages, the Apps list, Jira and the service
-desk, and the answers to requests. The
+desk, checking for updates, and the answers to requests. The
 file holds only types, so nothing in it exists at runtime; every file imports it with
 `import type`.
 
@@ -591,7 +591,7 @@ Where questions are answered, set per tenant (`chatApp` in `tenant.json`, checke
 
 <!-- code: apps/desktop/src/shared/types.ts#Branding,RequestType,StartPage -->
 
-[`src/shared/types.ts`, lines 56–82](../../apps/desktop/src/shared/types.ts#L56-L82)
+[`src/shared/types.ts`, lines 56–84](../../apps/desktop/src/shared/types.ts#L56-L84)
 
 ```ts
 export interface Branding {
@@ -611,6 +611,8 @@ export interface Branding {
    * problem". Null when the service desk icon just opens the portal.
    */
   requestTypes: RequestType[] | null
+  /** Settings offers Check for updates (the tenant names where releases come from). */
+  updates: boolean
 }
 
 /** A kind of request on the IT help centre portal ("Other IT Issue", "Request new software"). */
@@ -637,6 +639,8 @@ shows. `atlassianSite` is the company's Atlassian site (`https://morsemicro.atla
 Jira links and the Jira page, or `null` without one. `requestTypes` lists the request types the
 service desk page offers, as its comment says; `null` means the service desk icon just opens the
 portal. `RequestType` is one of them: its ID, as in the portal's addresses, and its name.
+`updates` says whether Settings offers Check for updates, as its comment says; which repository the
+releases come from stays in the main process.
 
 `startPage` is what the card shows when the panel opens: the text box (`ask`) or the Apps list
 (`apps`). `StartPage` is the type of those two. The panel's `view` (what's showing right now) can
@@ -646,7 +650,7 @@ also be the Jira page or the service desk page (`View` in `PanelView.tsx`).
 
 <!-- code: apps/desktop/src/shared/types.ts#SignedInUser,AuthStatus -->
 
-[`src/shared/types.ts`, lines 84–103](../../apps/desktop/src/shared/types.ts#L84-L103)
+[`src/shared/types.ts`, lines 86–105](../../apps/desktop/src/shared/types.ts#L86-L105)
 
 ```ts
 export interface SignedInUser {
@@ -695,7 +699,7 @@ token ever reaches them. With Claude Desktop there is no `AuthManager` and no st
 
 <!-- code: apps/desktop/src/shared/types.ts#ChatMessage,SendResult -->
 
-[`src/shared/types.ts`, lines 105–121](../../apps/desktop/src/shared/types.ts#L105-L121)
+[`src/shared/types.ts`, lines 107–123](../../apps/desktop/src/shared/types.ts#L107-L123)
 
 ```ts
 /** One message as the chat shows it. */
@@ -742,7 +746,7 @@ draft, which the panel shows. The reply itself arrives later, through `onChatMes
 
 <!-- code: apps/desktop/src/shared/types.ts#AskResult -->
 
-[`src/shared/types.ts`, lines 123–129](../../apps/desktop/src/shared/types.ts#L123-L129)
+[`src/shared/types.ts`, lines 125–131](../../apps/desktop/src/shared/types.ts#L125-L131)
 
 ```ts
 /**
@@ -777,7 +781,7 @@ Claude Desktop has opened with the question filled in. The failures come from
 
 <!-- code: apps/desktop/src/shared/types.ts#AppState -->
 
-[`src/shared/types.ts`, lines 131–142](../../apps/desktop/src/shared/types.ts#L131-L142)
+[`src/shared/types.ts`, lines 133–144](../../apps/desktop/src/shared/types.ts#L133-L144)
 
 ```ts
 export interface AppState {
@@ -816,7 +820,7 @@ asks with `atlassian.get()` and `atlassian.feed()`, and keeps up through `onAtla
 
 <!-- code: apps/desktop/src/shared/types.ts#PortalApp,AppsState -->
 
-[`src/shared/types.ts`, lines 144–163](../../apps/desktop/src/shared/types.ts#L144-L163)
+[`src/shared/types.ts`, lines 146–165](../../apps/desktop/src/shared/types.ts#L146-L165)
 
 ```ts
 /** One app from the user's JumpCloud User Portal, as the Apps list shows it. */
@@ -863,7 +867,7 @@ sets the state and broadcasts every change on `assist:apps-state`.
 
 <!-- code: apps/desktop/src/shared/types.ts#UninstallResult -->
 
-[`src/shared/types.ts`, lines 165–167](../../apps/desktop/src/shared/types.ts#L165-L167)
+[`src/shared/types.ts`, lines 167–169](../../apps/desktop/src/shared/types.ts#L167-L169)
 
 ```ts
 /** Settings → Uninstall. On success the app is already quitting. */
@@ -885,7 +889,7 @@ quitting, so the page has nothing more to do.
 
 <!-- code: apps/desktop/src/shared/types.ts#AtlassianState -->
 
-[`src/shared/types.ts`, lines 169–179](../../apps/desktop/src/shared/types.ts#L169-L179)
+[`src/shared/types.ts`, lines 171–181](../../apps/desktop/src/shared/types.ts#L171-L181)
 
 ```ts
 /**
@@ -918,7 +922,7 @@ The connection to Atlassian, as the comment says, which `Atlassian` in
 
 <!-- code: apps/desktop/src/shared/types.ts#StatusCategory,IssueStatus,JiraNotification,ServiceRequest -->
 
-[`src/shared/types.ts`, lines 181–215](../../apps/desktop/src/shared/types.ts#L181-L215)
+[`src/shared/types.ts`, lines 183–217](../../apps/desktop/src/shared/types.ts#L183-L217)
 
 ```ts
 /** How far along an issue is, by its status's category in Jira (which sets its colour). */
@@ -953,7 +957,7 @@ export interface ServiceRequest {
   updated: string
   /** The request on the help centre portal. */
   url: string
-  /** What's new since the user last looked ("Mark Duong replied", "Now Resolved"), or null. */
+  /** What's new since the user last looked ("Grace Hopper replied", "Now Resolved"), or null. */
   news: string | null
 }
 ```
@@ -972,7 +976,7 @@ export interface ServiceRequest {
 
 <!-- code: apps/desktop/src/shared/types.ts#FeedList,JiraFeed -->
 
-[`src/shared/types.ts`, lines 217–228](../../apps/desktop/src/shared/types.ts#L217-L228)
+[`src/shared/types.ts`, lines 219–230](../../apps/desktop/src/shared/types.ts#L219-L230)
 
 ```ts
 /** A list the main process keeps up to date in the background. */
@@ -1001,7 +1005,7 @@ export interface JiraFeed {
 
 <!-- code: apps/desktop/src/shared/types.ts#IssueSummary,ConfluencePage,SearchResult -->
 
-[`src/shared/types.ts`, lines 230–250](../../apps/desktop/src/shared/types.ts#L230-L250)
+[`src/shared/types.ts`, lines 232–252](../../apps/desktop/src/shared/types.ts#L232-L252)
 
 ```ts
 /** An issue in a list of search results. */
@@ -1037,7 +1041,7 @@ What the Search tab shows: Jira issues (`IssueSummary`, with the issue's address
 
 <!-- code: apps/desktop/src/shared/types.ts#IssueComment,IssueTransition,IssueDetail,IssueResult -->
 
-[`src/shared/types.ts`, lines 252–283](../../apps/desktop/src/shared/types.ts#L252-L283)
+[`src/shared/types.ts`, lines 254–285](../../apps/desktop/src/shared/types.ts#L254-L285)
 
 ```ts
 export interface IssueComment {
@@ -1092,7 +1096,7 @@ What the issue view shows.
 
 <!-- code: apps/desktop/src/shared/types.ts#IssuePrompt,AskAboutIssueResult -->
 
-[`src/shared/types.ts`, lines 285–289](../../apps/desktop/src/shared/types.ts#L285-L289)
+[`src/shared/types.ts`, lines 287–291](../../apps/desktop/src/shared/types.ts#L287-L291)
 
 ```ts
 /** What to ask Claude about an issue. */
@@ -1112,7 +1116,7 @@ export type AskAboutIssueResult = { ok: true; inChat: boolean } | { ok: false; m
 
 <!-- code: apps/desktop/src/shared/types.ts#NewRequest,RaiseResult -->
 
-[`src/shared/types.ts`, lines 291–302](../../apps/desktop/src/shared/types.ts#L291-L302)
+[`src/shared/types.ts`, lines 293–304](../../apps/desktop/src/shared/types.ts#L293-L304)
 
 ```ts
 /** A request filled in on the panel, to finish on the help centre portal. */
@@ -1141,11 +1145,49 @@ The service desk page's form, and the answer to sending it (see `ServiceDesk.rai
   has gone from the folder, or the request type wasn't one of the tenant's or the browser couldn't
   be opened.
 
+### `UpdateState`
+
+<!-- code: apps/desktop/src/shared/types.ts#UpdateState -->
+
+[`src/shared/types.ts`, lines 306–318](../../apps/desktop/src/shared/types.ts#L306-L318)
+
+```ts
+/**
+ * Settings → Check for updates.
+ * - `downloaded`: a development run stops there: it has no installed copy to replace.
+ * - `installing`: the installer is running; the app is about to close and start again.
+ */
+export type UpdateState =
+  | { status: 'idle' }
+  | { status: 'checking' }
+  | { status: 'up-to-date'; version: string }
+  | { status: 'downloading'; version: string; percent: number }
+  | { status: 'downloaded'; version: string; path: string }
+  | { status: 'installing'; version: string }
+  | { status: 'error'; message: string }
+```
+
+<!-- /code -->
+
+How Settings → Check for updates is going, which `Updater` in `src/main/updates.ts` sets and
+broadcasts on `assist:update-state` (see
+[Main process: startup, IPC and app plumbing](2-main-startup.md)). The settings menu's row shows
+it.
+
+- `idle`: nothing checked yet.
+- `checking`, then `up-to-date` with this copy's version, or `downloading` a newer `version` with
+  how far it's got (`percent`, 0 to 99).
+- `downloaded`: as the comment says, a development run stops there, with the `path` the installer
+  was saved to.
+- `installing`: as the comment says, the installer is running and the app is about to close and
+  start again.
+- `error`: what went wrong, in plain English.
+
 ### `ActionResult` and `AttachResult`
 
 <!-- code: apps/desktop/src/shared/types.ts#ActionResult,AttachResult -->
 
-[`src/shared/types.ts`, lines 304–311](../../apps/desktop/src/shared/types.ts#L304-L311)
+[`src/shared/types.ts`, lines 320–327](../../apps/desktop/src/shared/types.ts#L320-L327)
 
 ```ts
 export type ActionResult = { ok: true; message?: string } | { ok: false; message: string }
@@ -1187,13 +1229,13 @@ Messages come in three styles:
   frequent or one-way signals such as each keystroke in the text box. In `AssistApi`, the methods
   that return `void` are these; the ones that return a `Promise` are requests.
 - **Pushed by the main process**: `webContents.send()` to a window, which the page receives
-  through one of the `on...` listeners. These are the last nine channels.
+  through one of the `on...` listeners. These are the last ten channels.
 
 ### `IPC`
 
 <!-- code: apps/desktop/src/shared/ipc.ts#IPC -->
 
-[`src/shared/ipc.ts`, lines 29–98](../../apps/desktop/src/shared/ipc.ts#L29-L98)
+[`src/shared/ipc.ts`, lines 30–102](../../apps/desktop/src/shared/ipc.ts#L30-L102)
 
 ```ts
 /** IPC channel names. The preload maps them onto `window.assist`; src/main/ipc.ts handles them. */
@@ -1255,6 +1297,8 @@ export const IPC = {
   serviceDeskPcDetails: 'assist:service-desk-pc-details',
   serviceDeskRaise: 'assist:service-desk-raise',
   serviceDeskOpenMyRequests: 'assist:service-desk-open-my-requests',
+  updatesGet: 'assist:updates-get',
+  updatesCheck: 'assist:updates-check',
   // main → renderer
   modeChanged: 'assist:mode-changed',
   cornerChanged: 'assist:corner-changed',
@@ -1265,6 +1309,7 @@ export const IPC = {
   appsState: 'assist:apps-state',
   atlassianState: 'assist:atlassian-state',
   jiraFeed: 'assist:jira-feed',
+  updateState: 'assist:update-state',
 } as const
 ```
 
@@ -1286,11 +1331,14 @@ name: a typo is a compile error instead of a message nobody hears.
   [Jira and the service desk](11-atlassian.md)), answered only when the tenant has `atlassian`.
   `serviceDeskPcDetails` to `serviceDeskOpenMyRequests`: the service desk page, answered only when
   the tenant lists request types.
+- `updatesGet`, `updatesCheck`: Check for updates in Settings, answered only when the tenant has
+  `updates`.
 - `authSignIn` to `chatNew`, and `claudeDesktopAsk` and `claudeDesktopInstalled`: the first group
   belongs to the built-in chat and the second to Claude Desktop. The main process only answers
   the group the tenant uses (`registerIpc()` in `src/main/ipc.ts`).
 - `// main → renderer`: the channels from here on go the other way. `atlassianState` and `jiraFeed`
-  carry the Atlassian connection and the notifications and requests. `broadcast()` in `start()`
+  carry the Atlassian connection and the notifications and requests, and `updateState` how Check
+  for updates is going. `broadcast()` in `start()`
   (`src/main/index.ts`) sends them to both windows, except `clickThroughReset`, which
   `resetClickThrough()` in `src/main/bubble/windows.ts` sends only to the panel.
 
@@ -1298,7 +1346,7 @@ name: a typo is a compile error instead of a message nobody hears.
 
 <!-- code: apps/desktop/src/shared/ipc.ts#AssistApi -->
 
-[`src/shared/ipc.ts`, lines 100–232](../../apps/desktop/src/shared/ipc.ts#L100-L232)
+[`src/shared/ipc.ts`, lines 104–246](../../apps/desktop/src/shared/ipc.ts#L104-L246)
 
 ```ts
 /** The API the preload exposes to renderers as `window.assist`. */
@@ -1420,6 +1468,15 @@ export interface AssistApi {
     raise(request: NewRequest): Promise<RaiseResult>
     openMyRequests(): Promise<void>
   }
+  /** Settings → Check for updates (only when the tenant has `updates`). */
+  updates: {
+    get(): Promise<UpdateState>
+    /**
+     * Checks GitHub for a newer release and, if there is one, downloads and installs it (the app
+     * then closes and starts again). Returns straight away; progress via onUpdateState.
+     */
+    check(): Promise<UpdateState>
+  }
   /** Starts Desktop Assist's uninstaller and quits (installed copies only). */
   uninstall(): Promise<UninstallResult>
   onModeChanged(callback: (mode: Mode) => void): () => void
@@ -1433,6 +1490,7 @@ export interface AssistApi {
   onAppsState(callback: (state: AppsState) => void): () => void
   onAtlassianState(callback: (state: AtlassianState) => void): () => void
   onJiraFeed(callback: (feed: JiraFeed) => void): () => void
+  onUpdateState(callback: (state: UpdateState) => void): () => void
 }
 ```
 
@@ -1440,11 +1498,11 @@ export interface AssistApi {
 
 The API a page sees as `window.assist`. Each method maps onto one channel in `IPC`. Related calls
 are grouped into nested objects (`notes`, `screenshots`, `settings`, `auth`, `claudeDesktop`,
-`chat`, `apps`, `atlassian`, `serviceDesk`), which is only for readability. Every page gets all of
-them, but `auth` and `chat` only work with the built-in chat, `claudeDesktop` only with Claude
-Desktop, `apps` only when the tenant has a portal, `atlassian` only when it has an Atlassian site,
-and `serviceDesk` only when it lists request types; the panel checks `branding` to know which to
-call.
+`chat`, `apps`, `atlassian`, `serviceDesk`, `updates`), which is only for readability. Every page
+gets all of them, but `auth` and `chat` only work with the built-in chat, `claudeDesktop` only with
+Claude Desktop, `apps` only when the tenant has a portal, `atlassian` only when it has an Atlassian
+site, `serviceDesk` only when it lists request types, and `updates` only when it has `updates`; the
+panel checks `branding` to know which to call.
 
 - `getState(): Promise<AppState>`: called once when a page loads (`useAssistState()`).
 - `bubbleClick(pressedAt?: number): void`: this and the next three are fire-and-forget calls into
@@ -1500,6 +1558,9 @@ call.
   Desktop or the built-in chat.
 - `serviceDesk.raise(request: NewRequest)`: as the comment says, opens the portal's form, filled
   in. Like `claudeDesktop.ask()`, the screenshots come from the main process's copy of the draft.
+- `updates.check(): Promise<UpdateState>`: as the comment says, checks for a newer release and
+  installs it, but returns straight away, already `checking`; progress arrives through
+  `onUpdateState`. If there's an update, the app closes and starts again as the new version.
 - `uninstall(): Promise<UninstallResult>`: starts the uninstaller; the app quits if it worked.
 - `onModeChanged(callback: (mode: Mode) => void): () => void`: each `on...` method starts
   listening and returns a function that stops. That suits React's `useEffect`, whose cleanup
@@ -1743,7 +1804,7 @@ listening. Every `on...` method in `api` uses it.
 
 <!-- code: apps/desktop/src/preload/index.ts#api -->
 
-[`src/preload/index.ts`, lines 12–99](../../apps/desktop/src/preload/index.ts#L12-L99)
+[`src/preload/index.ts`, lines 12–104](../../apps/desktop/src/preload/index.ts#L12-L104)
 
 ```ts
 const api: AssistApi = {
@@ -1823,6 +1884,10 @@ const api: AssistApi = {
     raise: (request) => ipcRenderer.invoke(IPC.serviceDeskRaise, request),
     openMyRequests: () => ipcRenderer.invoke(IPC.serviceDeskOpenMyRequests),
   },
+  updates: {
+    get: () => ipcRenderer.invoke(IPC.updatesGet),
+    check: () => ipcRenderer.invoke(IPC.updatesCheck),
+  },
   uninstall: () => ipcRenderer.invoke(IPC.appUninstall),
   onModeChanged: (callback) => subscribe(IPC.modeChanged, callback),
   onCornerChanged: (callback) => subscribe(IPC.cornerChanged, callback),
@@ -1833,6 +1898,7 @@ const api: AssistApi = {
   onAppsState: (callback) => subscribe(IPC.appsState, callback),
   onAtlassianState: (callback) => subscribe(IPC.atlassianState, callback),
   onJiraFeed: (callback) => subscribe(IPC.jiraFeed, callback),
+  onUpdateState: (callback) => subscribe(IPC.updateState, callback),
 }
 ```
 

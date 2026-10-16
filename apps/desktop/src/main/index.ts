@@ -30,17 +30,26 @@ import { summarizeIdToken, type IdTokenSummary } from './auth/idToken'
 import { listenForRedirect } from './auth/loopback'
 import { createOidc } from './auth/oidc'
 import { BubbleController, type DisplayArea, type Displays } from './bubble/BubbleController'
-import { bubbleSurface, createOverlayWindow, keepOnTop, panelSurface } from './bubble/windows'
+import { runFrontCheck, watchBubbleFront } from './bubble/frontCheck'
+import {
+  bringToFront,
+  bubbleSurface,
+  createOverlayWindow,
+  keepOnTop,
+  panelSurface,
+} from './bubble/windows'
 import { AnthropicBackend } from './claude/AnthropicBackend'
 import { ChatSession } from './claude/ChatSession'
 import { classifyError } from './claude/errors'
 import { API_BASE_URL, buildSystemPrompt } from './claude/model'
 import { ClaudeDesktop, NEW_CHAT_LINK } from './claudeDesktop'
+import { debugSwitches } from './debugging'
 import { registerIpc, type BuiltInChat } from './ipc'
 import { createLog, type Log } from './log'
 import { mcpConnector } from './mcp/connector'
 import { sendInClaude } from './sendInClaude'
 import { uninstall } from './uninstall'
+import { INSTALLER_ARGS, saveDownload, Updater } from './updates'
 import { NotesStore } from './notes/NotesStore'
 import { ScreenshotService } from './screenshots/ScreenshotService'
 import { myRequestsUrl, ServiceDesk, windowsVersion } from './serviceDesk'
@@ -75,8 +84,18 @@ if (!app.isPackaged) {
 
 let controller: BubbleController | null = null
 let tray: Tray | null = null // module-level so it isn't garbage-collected
+// An installed copy won't start with debugging switched on: another program could use it to drive
+// the app, and through it Jira with the user's sign-in. Dev runs and the automated tests need it.
+const refusedSwitches = app.isPackaged
+  ? debugSwitches((name) => app.commandLine.hasSwitch(name))
+  : []
 
-if (!app.requestSingleInstanceLock()) {
+if (refusedSwitches.length) {
+  createLog(join(app.getPath('userData'), 'logs', 'desktop-assist.log'))(
+    `Refused to start with ${refusedSwitches.map((name) => `--${name}`).join(' ')}`,
+  )
+  app.exit(1)
+} else if (!app.requestSingleInstanceLock()) {
   app.quit()
 } else {
   // Launching it again just opens the panel of the copy that's already running.
@@ -188,6 +207,35 @@ async function start(): Promise<void> {
       : null
   // Electron's fetch, so a proxy set in Windows is used.
   const netFetch = (url: string | URL, init?: RequestInit) => net.fetch(String(url), init)
+  const { updates } = tenant
+  const updater = updates
+    ? new Updater({
+        currentVersion: app.getVersion(),
+        latestUrl: `${updates.api}/repos/${updates.repo}/releases/latest`,
+        downloads: `${updates.downloads}/${updates.repo}/releases/download/`,
+        publicKey: updates.publicKey,
+        fetch: netFetch,
+        save: (name, chunks) =>
+          saveDownload(join(app.getPath('temp'), `${tenant.appName} update`), name, chunks),
+        // The installer runs on its own: it waits for this app to quit, replaces it, and starts
+        // the new version. A development run has no installed copy to replace.
+        install: app.isPackaged
+          ? (path) => spawn(path, INSTALLER_ARGS, { detached: true, stdio: 'ignore' }).unref()
+          : null,
+        notify,
+        quit: () => app.quit(),
+        onState: (state) => {
+          broadcast(IPC.updateState, state)
+          if (state.status === 'downloaded') {
+            log(
+              `Development run: downloaded ${state.version} to ${state.path}; an installed copy ` +
+                `would now run it with ${INSTALLER_ARGS.join(' ')}`,
+            )
+          }
+        },
+        onError: (message, error) => log(message, error),
+      })
+    : null
   const { portal, serviceDesk } = tenant
   let appsStatus: AppsState['status'] = 'loading'
   const portalApps = portal
@@ -298,6 +346,7 @@ async function start(): Promise<void> {
     atlassian,
     serviceDesk:
       serviceDesk && desk ? { desk, myRequestsUrl: myRequestsUrl(serviceDesk.url) } : null,
+    updater,
     actions: createActionHandlers({
       controller: bubble,
       screenshots,
@@ -359,6 +408,18 @@ async function start(): Promise<void> {
 
   await windowsReady
   bubble.start()
+  // For its first ten minutes, make sure the bubble isn't stuck behind other apps' windows.
+  const stopWatchingFront = watchBubbleFront({
+    isResting: () => bubble.currentMode === 'collapsed',
+    check: () =>
+      runFrontCheck(
+        bubbleWindow.getNativeWindowHandle().readBigUInt64LE(0).toString(),
+        process.pid,
+      ),
+    bringToFront: (reshow) => bringToFront(bubbleWindow, reshow),
+    log,
+  })
+  app.once('before-quit', stopWatchingFront)
 }
 
 /**
@@ -457,6 +518,7 @@ async function withDevOverrides(tenant: Tenant): Promise<Tenant> {
     atlassian: override.atlassian
       ? { ...tenant.atlassian, ...override.atlassian }
       : tenant.atlassian,
+    updates: override.updates ? { ...tenant.updates, ...override.updates } : tenant.updates,
     signIn: override.signIn ? { ...tenant.signIn, ...override.signIn } : tenant.signIn,
     claudeAccess: override.claudeAccess
       ? { ...tenant.claudeAccess, ...override.claudeAccess }

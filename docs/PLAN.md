@@ -1,10 +1,10 @@
 # Desktop Assist: Plan & Tech Stack
 
 Status: **Milestones 0 (Foundation), 1 (Chat with Claude), 2.1 (bubble fixes), 3 (JumpCloud
-sign-in), 4 (logos, favourites, service desk, light/dark, the bubble-click fix) and features 3.1
-(questions open in Claude Desktop) and 3.2 (Apps list, Uninstall, fixes) complete**. Milestone 5
-(the app-opening spinner; Jira and the service desk) is in progress (§7h). Last updated
-2026-10-12.
+sign-in), 4 (logos, favourites, service desk, light/dark, the bubble-click fix) and 5 (the
+app-opening spinner; Jira and the service desk), its fixes 5.1 and 5.2 (the bubble kept in front;
+Check for updates), and features 3.1 (questions open in Claude Desktop) and 3.2 (Apps list,
+Uninstall, fixes) complete**. Version 1.0.0 is the first release (§7h). Last updated 2026-10-16.
 
 A Windows desktop assistant that runs in the background, shows a small circular company logo
 in the bottom-right corner of the screen, and opens a panel when clicked. It's built for Morse
@@ -81,7 +81,7 @@ against their own limit. The tenant setting `chatApp` picks `claude-desktop` or 
 - **Language:** **TypeScript 6**. TS 7 (the native compiler) isn't supported by typescript-eslint yet
 - **Desktop shell:** **Electron 44**. Transparent, frameless, always-on-top windows; tray; login items; `desktopCapturer`
 - **Build / dev:** **electron-vite 5** + **Vite 7**. Hot-reload dev loop. electron-vite 5 doesn't support Vite 8 yet
-- **Packaging:** **electron-builder**. Unsigned NSIS installer for now. MSI, signing and auto-update come in M4
+- **Packaging:** **electron-builder**. NSIS installer, not yet code-signed. Electron's fuses set in the `.exe`; updates from GitHub releases, signed with a release key kept off GitHub (5.2)
 - **UI:** **React 19** + **Tailwind CSS 4** + **lucide-react** icons. Light or dark mode (its own setting since M4, dark by default; it followed Windows before)
 - **Validation:** **zod 4**. Every IPC payload, saved file and tenant config is checked at runtime
 - **Tests:** **Vitest**. Pure logic (layout, bounce physics, autosave, screenshot files, tenant config)
@@ -378,7 +378,7 @@ Improvements asked for after trying 3.2 day to day (merged in pull request #6):
 
 Tested with unit tests (226, including recognising images from their bytes, the octet-stream logos, a page of HTML labelled as an image, the favourites order and the logo cache) and end-to-end (44 checks for the Apps list, now including starring an app, the order surviving a restart, unstarring, and the service desk link; the 3.1 (39) and built-in chat (47, 9) runs still pass).
 
-## 7h. Milestone 5 (in progress)
+## 7h. Milestone 5, 5.1 and 5.2 (version 1.0.0)
 
 Done so far: the spinner, then the Jira and Atlassian ideas 1 to 9 below (5 as a Notifications
 tab, as asked). IT's setup guide: [ATLASSIAN_SETUP.md](ATLASSIAN_SETUP.md).
@@ -420,7 +420,7 @@ tab, as asked). IT's setup guide: [ATLASSIAN_SETUP.md](ATLASSIAN_SETUP.md).
     request type's own fields and approvals still apply. **Report to IT** under the text box starts
     one.
   - **My requests**: the person's IT requests (open, and closed in the last 30 days) with their
-    status, marked "Mark Duong replied" or "Now Resolved" when IT has done something since they
+    status, marked "Grace Hopper replied" or "Now Resolved" when IT has done something since they
     last looked, with a Windows notification at the time (automatic replies don't count, and the
     first check only learns where things are). Opening a request marks it seen.
 
@@ -492,6 +492,76 @@ With a per-person Atlassian connection:
 
 Suggested order: 1 and 2 first (small, useful every day, no new sign-in), then the Atlassian connection with 5 and 6.
 
+### 5.2: the bubble behind other apps after signing in, again
+
+5.1's fix wasn't enough: started by Windows at sign-in after other apps, the bubble could still
+sit behind them, though its window was always on top (checked on the user's PC that morning), and
+the five-second always-on-top check didn't help since nothing had taken always-on-top away. Starting
+the app behind a maximised or full-screen window by hand couldn't reproduce it: the bubble was in
+front, and drawn, every time. So rather than guess, the app now checks: 5 s, 20 s, 1, 3 and 10
+minutes after starting, it asks Windows (a small PowerShell check, only reading) which window is
+at the bubble's centre, and whether the bubble is always on top or hidden by Windows ("cloaked").
+If anything is wrong it brings the bubble back in front (on top again, and hidden and shown again
+if it was covered or cloaked), checks again, and logs what it found and whether that worked; all
+is well, it logs nothing. Checked for real by covering the screen with another always-on-top window
+just after starting: the 5 s check found the bubble "behind electron", brought it back in front, and
+the screen showed the bubble. The next sign-in where it happens will say in the log
+(`%APPDATA%\Desktop Assist\logs\desktop-assist.log`, "Bubble check …") what had covered it.
+Unit tests: 280 (296 with the updater below).
+
+### 5.2 also: Check for updates, and version 1.0.0
+
+**Settings → Check for updates** asks GitHub for the repository's latest release (its public
+API; the repository is public, so no token is in the app). If it's a higher version than the copy
+running, it downloads the `…Setup….exe` attached to the release (showing the progress), checks the
+download's size and SHA-256 against what GitHub reports for that file (a mismatch is refused and
+deleted), then runs it as electron-builder's own updater does, `--updated /S --force-run`: silently,
+replacing the app, which quits for it, and starting the new version. A Windows notification says
+it's closing to update. Only files from the repository's own releases are downloaded. A development
+run stops after the download and logs what it would have run. `updates.repo` in `tenant.json`
+names the repository. The version is now **1.0.0**, the first release; publishing one is in
+[RELEASING.md](RELEASING.md). Tested with unit tests (versions, choosing the installer, the
+download checks, saving and deleting, the whole check, messages), end-to-end against a stand-in
+GitHub (11 checks: the progress, the downloaded file byte for byte, the command an installed copy
+runs, up to date, a tampered file refused), and for real on the user's PC: the 1.0.0 installer,
+started with the update's arguments while 0.1.0 was running, closed it, installed silently and
+started 1.0.0 again by itself.
+
+### 5.2 also: locking down 1.0.0 before its release
+
+A check of what the 1.0.0 installer contains found no keys, tokens or passwords (nor in the git
+history); the company settings in it are identifiers that need a Morse Micro sign-in to use. It
+led to four changes:
+
+- **Electron's fuses** (`electronFuses` in `electron-builder.cjs`), switches built into the `.exe`:
+  it can't be run as plain Node (`ELECTRON_RUN_AS_NODE`), ignores `NODE_OPTIONS` and Node's
+  `--inspect`, loads only `app.asar` and checks it against a checksum in the `.exe`, and encrypts
+  cookies on disk. Pages from `file://` keep Electron's usual privileges, since the panel is one.
+- **No debugging in an installed copy**: started with `--remote-debugging-port`,
+  `--remote-debugging-pipe` or Node's inspector switches, it logs why and exits before any window
+  or connection exists (`src/main/debugging.ts`). Together with the fuses, another program on the
+  PC can't use Desktop Assist to run its own code or drive its pages (and through them Jira).
+- **Signed updates**: Check for updates only installs an installer signed with the release key
+  (Ed25519). The key's private half is a file on the PC that builds releases, never on GitHub;
+  `tenant.json` has the public half (`updates.publicKey`, required). The signature covers the
+  version and the installer's SHA-256, so an old genuine installer can't be passed off as newer.
+  `npm run release:key` made the key; `npm run dist` now signs the installer
+  (`scripts/release-signing.mjs`), and the `.sig` is attached to the release with it. So someone
+  who gets into the GitHub account can't push an update. [RELEASING.md](RELEASING.md) covers the
+  key (keep a copy off GitHub), and the GitHub side for the account owner: two-factor
+  authentication, few people with write access, perhaps a Morse Micro organisation.
+- **Made-up names** (Grace Hopper, Alan Turing) in the tests and docs, instead of two colleagues'
+  names taken from real Jira tickets. Earlier commits in the repository still have them.
+
+Tested with unit tests (302: signatures checked and refused, the script and the app agreeing, the
+key required in `tenant.json`, the debugging switches), end-to-end against the stand-in GitHub (16
+checks, adding: a release without a signature refused before downloading, one signed with another
+key refused and deleted), and on the built `.exe`: the fuses read back as set; it exits at once
+with `--remote-debugging-port` (also written `/remote-debugging-port`), `--remote-debugging-pipe`
+and `--inspect`, with nothing ever listening on the port; `ELECTRON_RUN_AS_NODE` and `NODE_OPTIONS`
+code doesn't run; and a copy with one letter of its code changed in `app.asar` stops with "ASAR
+Integrity Violation".
+
 ## 8. Milestones
 
 - **0** ✅ **Foundation**: Everything in §7 works in `npm run dev` and in the unsigned installer. Unit tests and lint pass.
@@ -501,8 +571,11 @@ Suggested order: 1 and 2 first (small, useful every day, no new sign-in), then t
 - **3.1** ✅ **Each person's own Claude**: Questions open in Claude Desktop, against each person's own usage limit. See §7e.
 - **3.2** ✅ **Apps list, Uninstall, fixes**: The user's JumpCloud portal apps in the panel; Uninstall in Settings; the bubble, notification and auto-send fixes. See §7f.
 - **4** ✅ **Day-to-day improvements**: App logos, favourites, the service desk icon, screenshots keeping the page, the unresponsive bubble fixed, no tooltip, light/dark mode. See §7g.
-- 5 (in progress): The app-opening spinner, and Jira and the service desk (Atlassian ideas 1 to 9). See §7h. Other candidates:
-  - Shipping: code signing (no "unrecognised app" warning), auto-update, silent deployment through JumpCloud (with Claude Desktop), CI on GitHub Actions (tests and the installer on every pull request), real version numbers with a "What's new" note
+- **5** ✅ **Jira and the service desk**: The app-opening spinner, and Atlassian ideas 1 to 9. See §7h.
+- **5.1** ✅ **The bubble on top after starting**: always-on-top that survives a full-screen app. See §7h.
+- **5.2** ✅ **The bubble kept in front, and Check for updates**: the startup front check; updating from GitHub releases, signed with a release key; the `.exe` locked down; version 1.0.0, the first release. See §7h.
+- 6 (next): To be chosen. Candidates:
+  - Shipping: code signing (no "unrecognised app" warning), silent deployment through JumpCloud (with Claude Desktop), CI on GitHub Actions (tests and the installer on every pull request, and building the release), a "What's new" note after an update
   - Bubble and screenshots: a keyboard shortcut to open the panel and to take a screenshot, snipping a region or a window, pasting an image into the text box, hiding during full-screen apps and presentations, a first-run tour
   - Apps and JumpCloud: recently opened apps near the top, arrow keys in the grid, company quick links that aren't JumpCloud apps, a password-expiry reminder
   - Help and Claude: quick prompts ("Explain this error", "Summarise this"), "Send my logs to IT", a stand-up helper (idea 10 in §7h)
@@ -562,6 +635,8 @@ Step-by-step instructions are in [CLAUDE_DESKTOP_SETUP.md](CLAUDE_DESKTOP_SETUP.
   mentions of the user), checked every five minutes; Windows notifications only for IT requests
 - M5 new requests → filled in on the panel, finished and sent on the portal (the request type's
   own form), not created through Jira
+- 5.2 updates → releases of the public GitHub repository, each installer signed with a release key
+  whose private half stays off GitHub, so the GitHub account alone can't push an update
 
 **Open**
 

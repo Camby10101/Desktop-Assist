@@ -1165,7 +1165,7 @@ types, the service desk icon swaps in the service desk page; a Jira issue opens 
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#ASK_ERRORS -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 31–37](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L31-L37)
+[`src/renderer/src/views/PanelView.tsx`, lines 32–38](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L32-L38)
 
 ```tsx
 /** What to say when a question couldn't be handed to Claude Desktop. */
@@ -1195,7 +1195,7 @@ The toast for each way handing a question to Claude Desktop can fail (`AskResult
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#UNINSTALL_ERRORS -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 39–44](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L39-L44)
+[`src/renderer/src/views/PanelView.tsx`, lines 40–45](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L40-L45)
 
 ```tsx
 /** What to say when Settings → Uninstall couldn't start the uninstaller. */
@@ -1216,7 +1216,7 @@ app can always be uninstalled.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#View,EMPTY_FEED -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 46–54](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L46-L54)
+[`src/renderer/src/views/PanelView.tsx`, lines 47–55](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L47-L55)
 
 ```tsx
 /**
@@ -1241,7 +1241,7 @@ const EMPTY_FEED: JiraFeed = {
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#PanelView -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 56–62](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L56-L62)
+[`src/renderer/src/views/PanelView.tsx`, lines 57–63](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L57-L63)
 
 ```tsx
 /** Everything that appears around the bubble when it's clicked. */
@@ -1272,7 +1272,7 @@ returns. The sections after it take its values and functions one at a time.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 64–532](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L64-L532)
+[`src/renderer/src/views/PanelView.tsx`, lines 65–542](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L65-L542)
 
 ```tsx
 function Panel({ state }: { state: AppState }) {
@@ -1300,6 +1300,7 @@ function Panel({ state }: { state: AppState }) {
   const [serviceDeskTab, setServiceDeskTab] = useState<ServiceDeskTab>('new')
   /** The Jira projects' keys, to only offer real issue keys from the text box. */
   const [projectKeys, setProjectKeys] = useState<string[] | null>(null)
+  const [update, setUpdate] = useState<UpdateState>({ status: 'idle' })
   /** Claude Desktop isn't installed, so questions can't be opened in it (checked on opening). */
   const [claudeMissing, setClaudeMissing] = useState(false)
   const [toast, showToast] = useToast()
@@ -1327,6 +1328,12 @@ function Panel({ state }: { state: AppState }) {
     void window.assist.atlassian.feed().then(setFeed)
     return () => unsubscribe.forEach((stop) => stop())
   }, [atlassianSite])
+  useEffect(() => {
+    if (!branding.updates) return
+    const unsubscribe = window.assist.onUpdateState(setUpdate)
+    void window.assist.updates.get().then(setUpdate)
+    return unsubscribe
+  }, [branding.updates])
   const atlassianConnected = atlassian.status === 'connected'
   useEffect(() => {
     if (!atlassianConnected) return
@@ -1729,6 +1736,8 @@ function Panel({ state }: { state: AppState }) {
           user={auth?.state === 'signed-in' || auth?.state === 'offline' ? auth.user : null}
           atlassianUser={atlassian.status === 'connected' ? atlassian.user : null}
           onDisconnectAtlassian={() => void disconnectAtlassian()}
+          update={update}
+          onCheckForUpdates={() => void window.assist.updates.check().then(setUpdate)}
           onToggleAutoStart={async () =>
             setSettings(await window.assist.settings.setAutoStart(!settings.autoStart))
           }
@@ -1783,6 +1792,8 @@ Props and state:
   until they're known.
 - `const [claudeMissing, setClaudeMissing] = useState(false)`: whether Claude Desktop was found
   to be missing, which shows a banner with a Download button.
+- `const [update, setUpdate] = useState<UpdateState>({ status: 'idle' })`: how Check for updates
+  is going, for the settings menu's row.
 - `const [toast, showToast] = useToast()`: the current toast and the function to show one.
 
 Effects:
@@ -1801,6 +1812,10 @@ Effects:
   start (`atlassian.get()`, `atlassian.feed()`), so the bell's dot can show before the Jira page
   is ever opened. The cleanup stops both subscriptions: `unsubscribe` is the list of the two stop
   functions, and `forEach` calls each.
+- `if (!branding.updates) return`: when the tenant offers Check for updates, its progress is kept
+  up to date from `onUpdateState`, and asked for once at the start (`updates.get()`), so the menu
+  shows how the last check went. `onUpdateState` returns its own stop function, which is returned
+  as the cleanup.
 - `const atlassianConnected = atlassian.status === 'connected'`: used by several things below.
 - `if (!atlassianConnected) return`: once connected, the Jira project keys are asked for
   (`atlassian.projectKeys()`), with the same `alive` guard as below. The effect runs again if the
@@ -1881,6 +1896,9 @@ The JSX it returns:
 - `atlassianUser={atlassian.status === 'connected' ? atlassian.user : null}`,
   `onDisconnectAtlassian`: who's connected to Atlassian, for the menu's "Connected to Atlassian as"
   and **Disconnect Atlassian** (`disconnectAtlassian`, below).
+- `update={update}`, `onCheckForUpdates={() => void window.assist.updates.check().then(setUpdate)}`:
+  the Check for updates row and its click. The answer (`checking`) shows at once; the rest of the
+  progress arrives through `onUpdateState`.
 - `onToggleAutoStart={async () =>`: flips Start with Windows and shows the settings the main
   process returns.
 - `onToggleAutoSend={() => void toggleAutoSend()}`: the menu's "Send in Claude automatically"
@@ -1893,7 +1911,7 @@ The JSX it returns:
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.signedIn,busy,canSend -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 158–165](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L158-L165)
+[`src/renderer/src/views/PanelView.tsx`, lines 166–173](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L166-L173)
 
 ```tsx
 // Not signed in: the chat box shows the sign-in instead of the chat. While a saved sign-in is
@@ -1931,7 +1949,7 @@ Values worked out on every render from the current state.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.runAction -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 167–194](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L167-L194)
+[`src/renderer/src/views/PanelView.tsx`, lines 175–202](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L175-L202)
 
 ```tsx
 async function runAction(id: ActionId) {
@@ -2005,7 +2023,7 @@ Runs when an action icon is clicked (`ActionStack`'s `onAction`).
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.changeDraft -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 196–199](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L196-L199)
+[`src/renderer/src/views/PanelView.tsx`, lines 204–207](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L204-L207)
 
 ```tsx
 function changeDraft(next: string) {
@@ -2024,7 +2042,7 @@ writes notes.json about half a second after typing stops, so an unsent message s
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.send -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 201–213](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L201-L213)
+[`src/renderer/src/views/PanelView.tsx`, lines 209–221](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L209-L221)
 
 ```tsx
 async function send() {
@@ -2064,7 +2082,7 @@ The other two reasons, `busy` and `empty`, are ignored: `canSend` already rules 
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.askInClaudeDesktop -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 215–227](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L215-L227)
+[`src/renderer/src/views/PanelView.tsx`, lines 223–235](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L223-L235)
 
 ```tsx
 async function askInClaudeDesktop() {
@@ -2109,7 +2127,7 @@ Claude automatically" on) carries on in the main process; the panel isn't told h
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.toggleFavorite -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 229–231](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L229-L231)
+[`src/renderer/src/views/PanelView.tsx`, lines 237–239](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L237-L239)
 
 ```tsx
 async function toggleFavorite(app: PortalApp, favorite: boolean) {
@@ -2127,7 +2145,7 @@ with the starred apps first.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.openApp -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 233–244](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L233-L244)
+[`src/renderer/src/views/PanelView.tsx`, lines 241–252](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L241-L252)
 
 ```tsx
 async function openApp(app: PortalApp) {
@@ -2162,7 +2180,7 @@ panel stays open with a toast, and the portal itself is one click away at the bo
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.openIssue,report,disconnectAtlassian -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 246–266](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L246-L266)
+[`src/renderer/src/views/PanelView.tsx`, lines 254–274](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L254-L274)
 
 ```tsx
 /** Opens a Jira issue in the card if connected to Atlassian, otherwise in the browser. */
@@ -2205,7 +2223,7 @@ async function disconnectAtlassian() {
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.attachLatest,removeAttachment,openAttachment -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 268–284](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L268-L284)
+[`src/renderer/src/views/PanelView.tsx`, lines 276–292](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L276-L292)
 
 ```tsx
 async function attachLatest() {
@@ -2246,7 +2264,7 @@ result.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.copy -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 286–289](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L286-L289)
+[`src/renderer/src/views/PanelView.tsx`, lines 294–297](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L294-L297)
 
 ```tsx
 async function copy(text: string) {
@@ -2264,7 +2282,7 @@ The Copy button on Claude's replies. The main process writes the text to the cli
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.signOut,clearText,uninstall,newConversation,setEffort,toggleAutoSend -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 291–324](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L291-L324)
+[`src/renderer/src/views/PanelView.tsx`, lines 299–332](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L299-L332)
 
 ```tsx
 async function signOut() {
@@ -2331,7 +2349,7 @@ Settings menu actions.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.closeSettingsOnOutsideClick -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 326–332](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L326-L332)
+[`src/renderer/src/views/PanelView.tsx`, lines 334–340](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L334-L340)
 
 ```tsx
 // Clicking anywhere else in the panel closes the settings menu.
@@ -2361,7 +2379,7 @@ the panel (`BubbleController.panelBlurred`), and the mode effect above closes th
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.signInPrompt,banner -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 334–379](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L334-L379)
+[`src/renderer/src/views/PanelView.tsx`, lines 342–387](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L342-L387)
 
 ```tsx
 const signInPrompt =
@@ -2460,7 +2478,7 @@ one saying Claude Desktop isn't installed. With the built-in chat, it depends on
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.settingsIndex -->
 
-[`src/renderer/src/views/PanelView.tsx`, line 381](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L381)
+[`src/renderer/src/views/PanelView.tsx`, line 389](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L389)
 
 ```tsx
 const settingsIndex = branding.actions.indexOf('settings')
@@ -2475,7 +2493,7 @@ bubble. It's `-1` if the tenant doesn't show Settings, and then the menu is neve
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.issueKeys,unreadNotifications,requestNews,pageContent,page -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 382–458](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L382-L458)
+[`src/renderer/src/views/PanelView.tsx`, lines 390–466](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L390-L466)
 
 ```tsx
 // Only keys of real projects, once the projects are known.

@@ -1,6 +1,8 @@
 import {
+  Download,
   Eraser,
   FolderOpen,
+  LoaderCircle,
   LogOut,
   Unplug,
   MessageSquarePlus,
@@ -9,7 +11,7 @@ import {
 } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { PANEL_LAYOUT, UI, type Corner } from '@shared/geometry'
-import type { Branding, Effort, Settings, SignedInUser } from '@shared/types'
+import type { Branding, Effort, Settings, SignedInUser, UpdateState } from '@shared/types'
 import { anchored } from '../lib/anchor'
 import { cn } from '../lib/cn'
 
@@ -34,6 +36,9 @@ export function SettingsMenu(props: {
   /** Who's connected to Atlassian, or null when nobody is. */
   atlassianUser: { name: string; email?: string } | null
   onDisconnectAtlassian: () => void
+  /** Check for updates, as it stands. */
+  update: UpdateState
+  onCheckForUpdates: () => void
   onToggleAutoStart: () => void
   onSetEffort: (effort: Effort) => void
   onToggleAutoSend: () => void
@@ -181,6 +186,14 @@ export function SettingsMenu(props: {
         </div>
       )}
 
+      {branding.updates && (
+        <UpdateItem
+          state={props.update}
+          version={props.version}
+          onCheck={props.onCheckForUpdates}
+        />
+      )}
+
       {props.atlassianUser && (
         <div className="mt-1 border-t border-black/10 pt-1 dark:border-white/10">
           <p
@@ -220,10 +233,52 @@ export function SettingsMenu(props: {
   )
 }
 
+/** Check for updates, showing how it's going: checking, downloading, installing, or the answer. */
+function UpdateItem(props: { state: UpdateState; version: string; onCheck: () => void }) {
+  const { state } = props
+  const busy = ['checking', 'downloading', 'installing'].includes(state.status)
+  const [label, note] =
+    state.status === 'checking'
+      ? ['Checking for updates…', `Version ${props.version}`]
+      : state.status === 'downloading'
+        ? [`Downloading ${state.version}… ${state.percent}%`, 'It installs itself when done']
+        : state.status === 'installing'
+          ? [`Installing ${state.version}…`, 'Desktop Assist will close and start again']
+          : state.status === 'downloaded'
+            ? [`Downloaded ${state.version}`, 'Not installed: this is a development run']
+            : state.status === 'up-to-date'
+              ? ['Check for updates', `Up to date: version ${state.version}`]
+              : state.status === 'error'
+                ? ['Check for updates', state.message]
+                : ['Check for updates', `Version ${props.version}`]
+  return (
+    <MenuItem
+      icon={busy ? LoaderCircle : Download}
+      spin={busy}
+      disabled={busy}
+      onClick={props.onCheck}
+    >
+      <span className="min-w-0">
+        {label}
+        <span
+          className={cn(
+            'block text-[11px]',
+            state.status === 'error' ? 'text-red-600 dark:text-red-400' : 'text-zinc-500',
+          )}
+        >
+          {note}
+        </span>
+      </span>
+    </MenuItem>
+  )
+}
+
 function MenuItem(props: {
   icon: LucideIcon
   danger?: boolean
   disabled?: boolean
+  /** Spins the icon (something's under way). */
+  spin?: boolean
   onClick: () => void
   children: ReactNode
 }) {
@@ -243,7 +298,7 @@ function MenuItem(props: {
             : 'hover:bg-zinc-100 dark:hover:bg-zinc-800',
       )}
     >
-      <Icon size={16} aria-hidden />
+      <Icon size={16} className={cn('shrink-0', props.spin && 'animate-spin')} aria-hidden />
       {props.children}
     </button>
   )

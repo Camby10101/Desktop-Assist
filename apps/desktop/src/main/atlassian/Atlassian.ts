@@ -657,7 +657,7 @@ const read = (notification: JiraNotification): JiraNotification =>
 
 /**
  * What's changed on a request since it was `before` ("status|latest reply"): "Now Resolved",
- * "Mark Duong replied", or both.
+ * "Grace Hopper replied", or both.
  */
 function newsOf(before: string, info: RequestInfo): string | null {
   const [status, reply] = before.split('|')
