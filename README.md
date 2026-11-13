@@ -1,7 +1,7 @@
 # Desktop Assist
 
-A Windows desktop assistant: a small logo bubble that sits in the bottom-right corner of the
-screen and opens a panel when clicked. Built for Morse Micro first. Branding lives in
+A Windows desktop assistant: a small character that stands on the taskbar near the bottom-right
+corner of the screen and opens a panel when clicked. Built for Morse Micro first. Branding lives in
 [`tenants/`](tenants/README.md), so another business can use it later.
 
 - [docs/PLAN.md](docs/PLAN.md): the plan, architecture, milestones and decisions.
@@ -28,10 +28,15 @@ bubble kept in front, and Check for updates). This is version **1.0.0**, the fir
 
 ## Features
 
-- **Bubble**: always on top, hidden from the taskbar and Alt+Tab. Click it to open or close the
-  panel; Esc or clicking elsewhere also closes it.
-- **Drag it anywhere**, even onto another monitor. Let go and it snaps to the nearest corner of
-  that screen, and the panel flips to open toward the middle. It remembers the spot next time.
+- **The character** (the "bubble"): a small figure standing on the taskbar, always on top,
+  hidden from the taskbar and Alt+Tab. It stands bobbing gently, strolls left and right near its
+  corner now and then, and once it's been left alone a while sometimes hops or waves. Click it to
+  open or close the panel (it stops where it is); Esc or clicking elsewhere also closes it. For now
+  it's a blank placeholder figure, to be replaced by real artwork.
+- **Drag it anywhere**, even onto another monitor: it dangles from the pointer. Let go and it drops
+  onto that screen's taskbar, and from then on lives near the nearer bottom corner, walking back
+  if it was dropped far away. The panel opens toward the middle of the screen. It remembers the
+  corner next time.
 - **Ask Claude**: type a question in the box beside the bubble and press Enter (or **Ask in
   Claude**). The Claude Desktop app opens a new chat and the question is sent there, with any
   attached screenshots pasted in, and Claude answers. It's your own Claude account, so it counts
@@ -69,8 +74,8 @@ bubble kept in front, and Check for updates). This is version **1.0.0**, the fir
     new version) and **Uninstall Desktop Assist**. (With the
     built-in chat: Response style (Fast / Balanced / Thorough), New conversation, and who you're
     signed in as with **Log out**.)
-  - **Bounce** sends the bubble bouncing around the screen, across all your monitors; click it to
-    send it gliding home to its corner.
+  - **Bounce** sends the character bouncing around the screen, across all your monitors; click it
+    to bring it back to where it stood.
   - **Close** quits the app.
 - **Attach screenshot** adds the newest screenshot to your next question; click it again to add
   the one before, and so on (it says when there are no more). **Report to IT** turns
@@ -84,11 +89,12 @@ bubble kept in front, and Check for updates). This is version **1.0.0**, the fir
 
 1. Install [Node.js](https://nodejs.org) 24.
 2. Open a terminal in the `Desktop-Assist` folder and run `npm install` (first time only).
-3. Run `npm run dev`. The bubble appears in the bottom-right corner of your screen.
-4. Click the bubble, type a question and press Enter: Claude Desktop opens and sends it. (Claude
+3. Run `npm run dev`. The character appears on the taskbar in the bottom-right corner of your
+   screen.
+4. Click the character, type a question and press Enter: Claude Desktop opens and sends it. (Claude
    Desktop must be installed and signed in; with the built-in chat, click **Sign in with
    JumpCloud** first.)
-5. To stop it, use the power icon above the bubble, Quit from the tray icon, or Ctrl+C in the
+5. To stop it, use the power icon above the character, Quit from the tray icon, or Ctrl+C in the
    terminal.
 
 **Install it like a normal app:**
@@ -136,8 +142,8 @@ variables:
 To build for a different tenant: `$env:TENANT = '<folder name>'; npm run dev`.
 
 **Changing the logo:** replace `tenants/morse-micro/logo.png` (currently the Morse Micro "Mμ"
-mark, cut to a circle) and restart. The same image is also the tray icon and the installed app's
-icon. See [tenants/README.md](tenants/README.md) for tips.
+mark, cut to a circle) and restart. It's the tray icon and the installed app's icon (the bubble on
+screen is the character). See [tenants/README.md](tenants/README.md) for tips.
 
 ## Layout
 

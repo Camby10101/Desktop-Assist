@@ -1,13 +1,17 @@
-import { UI, type Corner, type Point, type Rect } from '@shared/geometry'
+import { FIDGET_MS, isFidget, type Pose } from '@shared/character'
+import { UI, isLeftCorner, isTopCorner, type Corner, type Point, type Rect } from '@shared/geometry'
 import type { Mode } from '@shared/types'
 import { glideDuration, glidePosition, launch, step, type Motion } from './bounce'
 import {
   bubbleWindowBounds,
-  homePosition,
+  insetAt,
+  maxInset,
   nearestCorner,
   panelWindowBounds,
+  restPosition,
   travelAreas,
 } from './layout'
+import { WANDER, activityDelay, fallDuration, fallPosition, nextActivity, walkStep } from './wander'
 
 /** The parts of a window the controller drives. Electron windows are adapted in windows.ts. */
 export interface Surface {
@@ -39,7 +43,7 @@ export interface Displays {
   cursor(): Point
 }
 
-/** Where the bubble rests: a corner of a particular display. */
+/** Where the character lives: near a bottom corner of a particular display. */
 export interface BubbleAnchor {
   displayId: number
   corner: Corner
@@ -53,8 +57,10 @@ export interface BubbleControllerDeps {
   /** Where the bubble was last time, if saved. */
   initialAnchor?: BubbleAnchor | null
   onModeChange(mode: Mode): void
-  /** The bubble settled in a new corner or on a new display. */
+  /** The character settled near the other bottom corner or on another display. */
   onAnchorChange(anchor: BubbleAnchor): void
+  /** What the character is doing changed (the bubble's page animates it). */
+  onPoseChange?(pose: Pose): void
   now?: () => number
   random?: () => number
   /** Things worth a line in the log, such as a click on the bubble that didn't open it. */
@@ -84,21 +90,34 @@ export const OPEN_BLUR_GRACE_MS = 400
 export const HIDE_SETTLE_MS = 150
 
 /**
- * The bubble's state machine. Owns the mode, the bubble's position and its anchor (the display
- * and corner it rests in), and moves/shows/hides the two windows to match:
+ * The bubble's state machine. The bubble is a character standing on the taskbar near one of the
+ * bottom corners. This owns the mode, the character's position, its pose and its anchor (the
+ * display and bottom corner it lives near), and moves/shows/hides the two windows to match:
  *
  *   collapsed ⇄ expanded                     click, Esc, blur
- *   collapsed/expanded → dragging → returning → collapsed     drag, release (snaps to a corner)
+ *   collapsed/expanded → dragging → returning → collapsed     drag, release (falls to the taskbar)
  *   * → bouncing → returning → collapsed     Bounce action, then a click
  *   expanded → capturing → expanded          screenshot
+ *
+ * While collapsed and left alone, it wanders: now and then it walks somewhere else near its corner
+ * and, once it's been alone a while, sometimes fidgets instead. Dropped far from its corner, it
+ * walks back. Anything the user does stops it where it is.
  */
 export class BubbleController {
   private mode: Mode = 'collapsed'
+  private pose: Pose = 'idle'
   private position: Point = { x: 0, y: 0 }
   private anchor: BubbleAnchor
+  /** How far along the taskbar from its corner it stands (see restPosition). */
+  private inset = 0
   private motion: Motion | null = null
   private ticker: ReturnType<typeof setInterval> | null = null
   private hideTimer: ReturnType<typeof setTimeout> | null = null
+  /** The next thing it does on its own, or the end of a fidget. */
+  private idleTimer: ReturnType<typeof setTimeout> | null = null
+  private walking = false
+  /** When the user last did something with it (a mode change); fidgets wait for a quiet spell. */
+  private lastInteraction: number
   private lastBlurCollapse = Number.NEGATIVE_INFINITY
   private expandedAt = Number.NEGATIVE_INFINITY
   private expandAfterReturn = false
@@ -109,17 +128,23 @@ export class BubbleController {
     // Wall-clock time, so it compares with the time a click was pressed in the bubble's page.
     this.now = deps.now ?? (() => Date.now())
     this.random = deps.random ?? Math.random
+    this.lastInteraction = this.now()
     // Set now, not in start(): the pages ask for the corner as soon as they load, which can be
-    // before start() runs.
+    // before start() runs. A top corner saved by an older version means the bottom one below it.
     const saved = deps.initialAnchor
+    const corner = bottomOf(saved?.corner ?? DEFAULT_CORNER)
     this.anchor =
       saved && deps.displays.byId(saved.displayId)
-        ? { ...saved }
-        : { displayId: deps.displays.primary().id, corner: saved?.corner ?? DEFAULT_CORNER }
+        ? { displayId: saved.displayId, corner }
+        : { displayId: deps.displays.primary().id, corner }
   }
 
   get currentMode(): Mode {
     return this.mode
+  }
+
+  get currentPose(): Pose {
+    return this.pose
   }
 
   get bubblePosition(): Point {
@@ -130,11 +155,12 @@ export class BubbleController {
     return this.anchor.corner
   }
 
-  /** Puts the bubble in its saved corner (or bottom-right of the main display) and shows it. */
+  /** Stands the character in its saved corner (or bottom-right of the main display) and shows it. */
   start(): void {
-    this.position = this.home()
+    this.position = this.rest()
     this.placeWindows()
     this.deps.bubble.show()
+    this.scheduleActivity(true)
   }
 
   /** A click on the bubble. `pressedAt` is when its mouse button went down (wall-clock ms). */
@@ -163,7 +189,7 @@ export class BubbleController {
     }
   }
 
-  /** Opens the panel. While bouncing, glides home first and then opens. */
+  /** Opens the panel where the character stands. While bouncing, glides home first and then opens. */
   expand(): void {
     switch (this.mode) {
       case 'expanded':
@@ -181,6 +207,7 @@ export class BubbleController {
         return
       case 'collapsed':
         this.cancelHide()
+        // Stops any walk first, which puts the panel where the character now stands.
         this.setMode('expanded')
         this.expandedAt = this.now()
         this.deps.panel.show()
@@ -209,21 +236,24 @@ export class BubbleController {
     this.collapse()
   }
 
-  /** The mouse pressed on the bubble and moved: the bubble follows the pointer until released. */
+  /** The mouse pressed on the character and moved: it dangles from the pointer until released. */
   startDrag(): void {
     if (this.mode !== 'collapsed' && this.mode !== 'expanded') return
     this.cancelHide()
     this.deps.panel.hide()
+    this.setMode('dragging')
     const cursor = this.deps.displays.cursor()
     const grab = { x: cursor.x - this.position.x, y: cursor.y - this.position.y }
-    this.setMode('dragging')
     this.runTicker(() => {
       const now = this.deps.displays.cursor()
       this.moveBubble({ x: now.x - grab.x, y: now.y - grab.y })
     })
   }
 
-  /** Released: snap to the nearest corner of the display the bubble was dropped on. */
+  /**
+   * Released: the character falls onto the taskbar of the display it was dropped on, and from then
+   * on lives near that display's nearer bottom corner. Dropped far from it, it walks back.
+   */
   endDrag(): void {
     if (this.mode !== 'dragging') return
     this.stopTicker()
@@ -232,19 +262,18 @@ export class BubbleController {
       y: Math.round(this.position.y + UI.bubbleSize / 2),
     }
     const display = this.deps.displays.nearest(centre)
-    this.setAnchor({
-      displayId: display.id,
-      corner: nearestCorner(display.workArea, this.position),
-    })
-    this.glideHome()
+    const corner = nearestCorner(display.workArea, this.position)
+    this.setAnchor({ displayId: display.id, corner })
+    this.inset = insetAt(display.workArea, corner, this.position.x)
+    this.fall()
   }
 
   startBounce(): void {
     if (this.mode !== 'collapsed' && this.mode !== 'expanded') return
     this.cancelHide()
     this.deps.panel.hide()
-    this.motion = launch(this.position, this.random, this.anchor.corner)
     this.setMode('bouncing')
+    this.motion = launch(this.position, this.random, this.anchor.corner)
     this.runTicker((dtMs) => {
       if (!this.motion) return
       // Across every display. The anchor doesn't change, so a click brings it home.
@@ -272,21 +301,26 @@ export class BubbleController {
   }
 
   /**
-   * The resolution, taskbar or monitors changed. If the bubble's display was unplugged, it moves
-   * to the same corner of the main display. Moving bubbles re-read the display every frame.
+   * The resolution, taskbar or monitors changed. If the character's display was unplugged, it
+   * moves to the same corner of the main display. Moving characters re-read the display every
+   * frame; one standing (or strolling) is put back on the taskbar, as far from its corner as fits.
    */
   displayChanged(): void {
     if (!this.deps.displays.byId(this.anchor.displayId)) {
       this.setAnchor({ displayId: this.deps.displays.primary().id, corner: this.anchor.corner })
     }
     if (this.mode === 'bouncing' || this.mode === 'returning' || this.mode === 'dragging') return
-    this.position = this.home()
+    this.stopIdling()
+    this.inset = Math.min(this.inset, maxInset(this.display().workArea))
+    this.position = this.rest()
     this.placeWindows()
+    if (this.mode === 'collapsed') this.scheduleActivity(false)
   }
 
   dispose(): void {
     this.stopTicker()
     this.cancelHide()
+    this.cancelActivity()
   }
 
   /** The anchor's display, or the main display if it's gone. */
@@ -294,34 +328,130 @@ export class BubbleController {
     return this.deps.displays.byId(this.anchor.displayId) ?? this.deps.displays.primary()
   }
 
-  private home(): Point {
-    return homePosition(this.display().workArea, this.anchor.corner)
+  /** Where the character stands now: on the taskbar, `inset` from its corner. */
+  private rest(): Point {
+    return restPosition(this.display().workArea, this.anchor.corner, this.inset)
   }
 
-  /** Glides the bubble into its anchor corner, then switches to collapsed. */
-  private glideHome(): void {
-    this.motion = null
+  /** After a drop: falls onto the taskbar, then walks back toward its corner if it's far off. */
+  private fall(): void {
     const from = { ...this.position }
-    const duration = glideDuration(from, this.home())
+    const duration = fallDuration(from, this.rest())
     const startedAt = this.now()
     this.setMode('returning')
     this.runTicker(() => {
-      // Re-read home every frame in case the display changes mid-glide.
-      const home = this.home()
+      const to = this.rest()
       const t = (this.now() - startedAt) / duration
       if (t < 1) {
-        this.moveBubble(glidePosition(from, home, t))
+        this.moveBubble(fallPosition(from, to, t))
         return
       }
-      this.stopTicker()
-      this.position = home
-      this.placeWindows()
-      this.setMode('collapsed')
-      if (this.expandAfterReturn) {
-        this.expandAfterReturn = false
-        this.expand()
-      }
+      this.settle()
+      if (this.mode === 'collapsed' && this.inset > this.zone()) this.walkTo(this.zone())
     })
+  }
+
+  /** Glides the character back to where it stands (after a bounce), then switches to collapsed. */
+  private glideHome(): void {
+    this.motion = null
+    const from = { ...this.position }
+    const duration = glideDuration(from, this.rest())
+    const startedAt = this.now()
+    this.setMode('returning')
+    this.runTicker(() => {
+      // Re-read where it stands every frame in case the display changes mid-glide.
+      const t = (this.now() - startedAt) / duration
+      if (t < 1) {
+        this.moveBubble(glidePosition(from, this.rest(), t))
+        return
+      }
+      this.settle()
+    })
+  }
+
+  /** The end of a fall or a glide: standing, collapsed, and opening if that was asked for. */
+  private settle(): void {
+    this.stopTicker()
+    this.position = this.rest()
+    this.placeWindows()
+    this.setMode('collapsed')
+    if (this.expandAfterReturn) {
+      this.expandAfterReturn = false
+      this.expand()
+    }
+  }
+
+  /** How far from its corner it wanders on its display. */
+  private zone(): number {
+    return Math.min(WANDER.zone, maxInset(this.display().workArea))
+  }
+
+  /** Waits a while, then does something on its own (see doActivity). Collapsed only. */
+  private scheduleActivity(first: boolean): void {
+    this.cancelActivity()
+    if (this.mode !== 'collapsed') return
+    this.idleTimer = setTimeout(() => this.doActivity(), activityDelay(this.random, first))
+  }
+
+  private doActivity(): void {
+    this.idleTimer = null
+    if (this.mode !== 'collapsed') return
+    const idleMs = this.now() - this.lastInteraction
+    const activity = nextActivity(idleMs, this.inset, this.zone(), this.random)
+    if (activity.kind === 'walk') {
+      this.walkTo(activity.to)
+      return
+    }
+    this.setPose(activity.pose)
+    this.idleTimer = setTimeout(() => {
+      this.idleTimer = null
+      this.setPose('idle')
+      this.scheduleActivity(false)
+    }, FIDGET_MS[activity.pose])
+  }
+
+  /** Walks along the taskbar to `target` (an inset), then waits for the next thing to do. */
+  private walkTo(target: number): void {
+    this.cancelActivity()
+    const to = Math.min(Math.max(target, 0), maxInset(this.display().workArea))
+    if (Math.abs(to - this.inset) < 1) {
+      this.scheduleActivity(false)
+      return
+    }
+    // Insets grow toward the middle: from the right-hand corner, that's walking left.
+    const inward = to > this.inset
+    const left = isLeftCorner(this.anchor.corner) ? !inward : inward
+    this.walking = true
+    this.setPose(left ? 'walk-left' : 'walk-right')
+    this.runTicker((dtMs) => {
+      this.inset = walkStep(this.inset, to, dtMs)
+      this.moveBubble(this.rest())
+      if (this.inset !== to) return
+      this.stopWalking()
+      this.scheduleActivity(false)
+    })
+  }
+
+  /** Stops a walk where it is, standing idle, with the panel moved to open from there. */
+  private stopWalking(): void {
+    if (!this.walking) return
+    this.walking = false
+    this.stopTicker()
+    this.position = this.rest()
+    this.placeWindows()
+    this.setPose('idle')
+  }
+
+  /** Stops whatever it was doing on its own: the next activity, a fidget, a walk. */
+  private stopIdling(): void {
+    this.cancelActivity()
+    this.stopWalking()
+    if (isFidget(this.pose)) this.setPose('idle')
+  }
+
+  private cancelActivity(): void {
+    if (this.idleTimer) clearTimeout(this.idleTimer)
+    this.idleTimer = null
   }
 
   private runTicker(onFrame: (dtMs: number) => void): void {
@@ -362,9 +492,32 @@ export class BubbleController {
     this.hideTimer = null
   }
 
+  /**
+   * Every change of mode is something the user did (or the end of it), so it restarts the quiet
+   * spell, stops anything the character was doing on its own, and sets its pose: dangling while
+   * it's moved about, standing otherwise. Back to collapsed, it waits to do something again.
+   */
   private setMode(mode: Mode): void {
     if (mode === this.mode) return
+    if (this.mode === 'collapsed') this.stopIdling()
     this.mode = mode
+    this.lastInteraction = this.now()
     this.deps.onModeChange(mode)
+    this.setPose(
+      mode === 'dragging' || mode === 'bouncing' || mode === 'returning' ? 'dragged' : 'idle',
+    )
+    if (mode === 'collapsed') this.scheduleActivity(false)
   }
+
+  private setPose(pose: Pose): void {
+    if (pose === this.pose) return
+    this.pose = pose
+    this.deps.onPoseChange?.(pose)
+  }
+}
+
+/** The bottom corner on the same side: the character always stands at the bottom. */
+function bottomOf(corner: Corner): Corner {
+  if (!isTopCorner(corner)) return corner
+  return isLeftCorner(corner) ? 'bottom-left' : 'bottom-right'
 }

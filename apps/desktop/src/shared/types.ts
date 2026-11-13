@@ -1,10 +1,11 @@
 import type { ActionId } from './actions'
+import type { Pose } from './character'
 import type { Corner } from './geometry'
 
 /**
- * What the bubble is doing. The main process owns this; renderers only display it.
+ * What the bubble (the character) is doing. The main process owns this; renderers only display it.
  * - `dragging`: following the mouse while the user drags it.
- * - `returning`: gliding into its corner after a bounce or a drag.
+ * - `returning`: falling onto the taskbar after a drag, or gliding back after a bounce.
  * - `capturing`: windows are hidden while a screenshot is taken.
  */
 export type Mode = 'collapsed' | 'expanded' | 'dragging' | 'bouncing' | 'returning' | 'capturing'
@@ -132,8 +133,10 @@ export type AskResult =
 
 export interface AppState {
   mode: Mode
-  /** The screen corner the bubble rests in; the panel lays itself out to open away from it. */
+  /** The bottom corner the character lives near; the panel lays itself out to open away from it. */
   corner: Corner
+  /** What the character is doing, for the bubble's page to animate. */
+  pose: Pose
   notes: Notes
   settings: Settings
   branding: Branding

@@ -50,8 +50,8 @@ React to fill and a script tag that starts the app. The interesting part is the 
   are blocked.
 - `style-src 'self' 'unsafe-inline'`: the app's stylesheets plus inline styles. During
   `npm run dev`, Vite injects the CSS as `<style>` tags, which needs `'unsafe-inline'`.
-- `img-src 'self' data:`: images from the app (the tenant's logo) or `data:` URLs, which is how
-  screenshot thumbnails arrive (see `useThumbnail` below).
+- `img-src 'self' data:`: images from the app itself or `data:` URLs, which is how screenshot
+  thumbnails and the Apps list's logos arrive (see `useThumbnail` below).
 - `connect-src 'self'`: the page can't `fetch` anything from the internet. Only the main process
   talks to Claude and JumpCloud.
 - `object-src 'none'; base-uri 'none'; form-action 'none'`: no plugins (`<object>`, `<embed>`), no
@@ -557,12 +557,12 @@ copy of the state.
 
 <!-- code: apps/desktop/src/renderer/src/hooks/useAssistState.ts#useAssistState -->
 
-[`src/renderer/src/hooks/useAssistState.ts`, lines 4–38](../../apps/desktop/src/renderer/src/hooks/useAssistState.ts#L4-L38)
+[`src/renderer/src/hooks/useAssistState.ts`, lines 4–39](../../apps/desktop/src/renderer/src/hooks/useAssistState.ts#L4-L39)
 
 ```ts
 /**
  * The app state, kept live for the parts the main process changes on its own: the mode, the
- * bubble's corner, the sign-in status and the chat. (Notes and settings only change through this
+ * character's corner and pose, the sign-in status and the chat. (Notes and settings only change through this
  * window's own requests, so the panel tracks their results itself.)
  *
  * Subscriptions start before the state is fetched. Events that arrive before the reply are
@@ -577,6 +577,7 @@ export function useAssistState(): AppState | null {
       setState((current) => (current ? change(current) : current))
     const unsubscribe = [
       window.assist.onModeChanged((mode) => update((s) => ({ ...s, mode }))),
+      window.assist.onPoseChanged((pose) => update((s) => ({ ...s, pose }))),
       window.assist.onCornerChanged((corner) => update((s) => ({ ...s, corner }))),
       window.assist.onAuthStatus((auth) => update((s) => ({ ...s, auth }))),
       window.assist.onChatMessage((message) =>
@@ -599,9 +600,9 @@ export function useAssistState(): AppState | null {
 
 <!-- /code -->
 
-Fetches the whole app state (`AppState` in src/shared/types.ts: mode, corner, draft, settings,
-branding, version, sign-in status and chat) when the page loads, then applies the changes the main
-process broadcasts. It returns `null` until the first reply arrives.
+Fetches the whole app state (`AppState` in src/shared/types.ts: mode, corner, pose, draft,
+settings, branding, version, sign-in status and chat) when the page loads, then applies the
+changes the main process broadcasts. It returns `null` until the first reply arrives.
 
 The order matters. The listeners are attached before `getState` is called, and the main process
 builds the reply in one go. Messages from the main process reach a window in the order they were
@@ -623,6 +624,9 @@ later one arrives after it. Nothing is missed and nothing is applied twice.
 - `window.assist.onModeChanged(`: each `on...` function listens for one main-process broadcast
   (sent to both windows by `broadcast` in src/main/index.ts) and returns a function that stops
   listening (`subscribe` in src/preload/index.ts).
+- `window.assist.onPoseChanged((pose) => update((s) => ({ ...s, pose })))`: the character's pose,
+  which changes often (every walk and fidget). Only the bubble's page uses it, to animate the
+  character, but both windows get the broadcast and keep it, like everything else here.
 - `upsert(s.chat, message)`: a streaming reply arrives many times with the same id and growing
   text (from `ChatSession`, at most every 50 ms), so it replaces the old copy rather than being
   added again.
@@ -639,7 +643,7 @@ them, so `Panel` tracks their results itself.
 
 <!-- code: apps/desktop/src/renderer/src/hooks/useAssistState.ts#upsert -->
 
-[`src/renderer/src/hooks/useAssistState.ts`, lines 40–46](../../apps/desktop/src/renderer/src/hooks/useAssistState.ts#L40-L46)
+[`src/renderer/src/hooks/useAssistState.ts`, lines 41–47](../../apps/desktop/src/renderer/src/hooks/useAssistState.ts#L41-L47)
 
 ```ts
 function upsert(messages: ChatMessage[], message: ChatMessage): ChatMessage[] {
@@ -660,7 +664,7 @@ copies the array first, so the old array React is holding is left unchanged.
 
 <!-- code: apps/desktop/src/renderer/src/hooks/useAssistState.ts#useAccentColor -->
 
-[`src/renderer/src/hooks/useAssistState.ts`, lines 48–53](../../apps/desktop/src/renderer/src/hooks/useAssistState.ts#L48-L53)
+[`src/renderer/src/hooks/useAssistState.ts`, lines 49–54](../../apps/desktop/src/renderer/src/hooks/useAssistState.ts#L49-L54)
 
 ```ts
 /** Applies the tenant's accent colour to the `accent` Tailwind colour. */
@@ -914,49 +918,19 @@ sent-screenshot thumbnails in `MessageList` use it too (see
   picture isn't shown for it. Comparing paths here means the effect doesn't have to clear the old
   result itself.
 
-## `src/renderer/src/views/BubbleView.tsx`: the logo bubble
+## `src/renderer/src/views/BubbleView.tsx`: the character's page
 
-The page shown in the small bubble window: one round button with the tenant's logo. A click asks
-the main process what to do; pressing and moving drags the bubble.
-
-### `logos`, `logoUrl`
-
-<!-- code: apps/desktop/src/renderer/src/views/BubbleView.tsx#logos,logoUrl -->
-
-[`src/renderer/src/views/BubbleView.tsx`, lines 7–14](../../apps/desktop/src/renderer/src/views/BubbleView.tsx#L7-L14)
-
-```tsx
-// The tenant's logo: logo.png, or logo.svg (if a tenant has both, the PNG wins).
-const logos = import.meta.glob<string>('@tenant/logo.{png,svg}', {
-  eager: true,
-  query: '?url',
-  import: 'default',
-})
-
-const logoUrl =
-  Object.entries(logos).find(([path]) => path.endsWith('.png'))?.[1] ?? Object.values(logos)[0]
-```
-
-<!-- /code -->
-
-Finds the tenant's logo at build time.
-
-- `import.meta.glob<string>('@tenant/logo.{png,svg}', {`: a Vite feature that imports every file
-  matching a pattern. `@tenant` is the build's tenant folder (set up in electron.vite.config.ts), so
-  this matches `logo.png` and/or `logo.svg`. The result is an object from file path to import.
-- `eager: true`: import the files straight away, rather than as functions that load them later.
-- `query: '?url'`: import each file as its URL (Vite copies the image into the build).
-- `import: 'default'`: take each module's default export, which is that URL.
-- `Object.entries(logos).find(([path]) => path.endsWith('.png'))?.[1]`: the PNG's URL if there is
-  one.
-- `?? Object.values(logos)[0]`: otherwise the only other match, the SVG. Every tenant must have a
-  logo; tests/tenants.test.ts checks.
+The page shown in the small bubble window: one button filling the window, with the character
+drawn inside it (`Character`, see [The UI components](8-renderer-components.md)). A click asks the
+main process what to do; pressing and moving drags the character. What the character is doing
+(its pose) comes from the main process too. The page used to show the tenant's logo in a round
+button; the logo is now only the tray icon and the `.exe` icon.
 
 ### `ACTION_LABEL`, `DRAG_THRESHOLD`
 
 <!-- code: apps/desktop/src/renderer/src/views/BubbleView.tsx#ACTION_LABEL,DRAG_THRESHOLD -->
 
-[`src/renderer/src/views/BubbleView.tsx`, lines 16–26](../../apps/desktop/src/renderer/src/views/BubbleView.tsx#L16-L26)
+[`src/renderer/src/views/BubbleView.tsx`, lines 7–17](../../apps/desktop/src/renderer/src/views/BubbleView.tsx#L7-L17)
 
 ```tsx
 const ACTION_LABEL: Record<Mode, string> = {
@@ -984,13 +958,14 @@ const DRAG_THRESHOLD = 5
 
 <!-- code: apps/desktop/src/renderer/src/views/BubbleView.tsx#BubbleView -->
 
-[`src/renderer/src/views/BubbleView.tsx`, lines 28–109](../../apps/desktop/src/renderer/src/views/BubbleView.tsx#L28-L109)
+[`src/renderer/src/views/BubbleView.tsx`, lines 19–87](../../apps/desktop/src/renderer/src/views/BubbleView.tsx#L19-L87)
 
 ```tsx
 /**
- * The always-on-top logo bubble. A click goes to the main process, which decides what it means.
- * Press and move to drag it: the main process makes it follow the mouse, and on release snaps it
- * to the nearest corner of whichever display it's on.
+ * The always-on-top character (the "bubble"), filling its small window. A click goes to the main
+ * process, which decides what it means. Press and move to drag it: the main process makes it
+ * follow the mouse, and on release it falls onto the taskbar. What it's doing (its pose) comes
+ * from the main process too; Character animates it.
  */
 export function BubbleView() {
   // No useClickThrough here: the bubble window always takes the mouse (see bubble/windows.ts).
@@ -1034,39 +1009,25 @@ export function BubbleView() {
   }
 
   return (
-    <div className="flex h-full w-full items-center justify-center">
-      <button
-        data-hit
-        type="button"
-        aria-label={`${ACTION_LABEL[mode]} ${appName}`}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={endPress}
-        onLostPointerCapture={endPress}
-        onClick={() => {
-          if (swallowClick.current) swallowClick.current = false
-          // A click from the keyboard has no press: it's "now".
-          else window.assist.bubbleClick(pressedAt.current ?? Date.now())
-          pressedAt.current = undefined
-        }}
-        style={{ width: UI.bubbleSize, height: UI.bubbleSize }}
-        className={cn(
-          'overflow-hidden rounded-full shadow-[0_2px_6px_rgba(0,0,0,0.35)] outline-none',
-          'transition-[transform,box-shadow] duration-150 ease-out motion-reduce:transition-none',
-          mode === 'dragging' ? 'scale-105' : 'hover:scale-105 active:scale-95',
-          // Always a 2px white border; while the panel is open, a purple one outside it.
-          'ring-2',
-          mode === 'expanded' ? 'ring-accent ring-offset-2 ring-offset-white' : 'ring-white',
-        )}
-      >
-        <img
-          src={logoUrl}
-          alt=""
-          draggable={false}
-          className="pointer-events-none size-full object-contain"
-        />
-      </button>
-    </div>
+    <button
+      data-hit
+      type="button"
+      aria-label={`${ACTION_LABEL[mode]} ${appName}`}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={endPress}
+      onLostPointerCapture={endPress}
+      onClick={() => {
+        if (swallowClick.current) swallowClick.current = false
+        // A click from the keyboard has no press: it's "now".
+        else window.assist.bubbleClick(pressedAt.current ?? Date.now())
+        pressedAt.current = undefined
+      }}
+      style={{ width: BUBBLE_BOX, height: BUBBLE_BOX }}
+      className="block cursor-grab outline-offset-[-2px] active:cursor-grabbing"
+    >
+      <Character pose={state?.pose ?? 'idle'} expanded={mode === 'expanded'} />
+    </button>
   )
 }
 ```
@@ -1074,13 +1035,14 @@ export function BubbleView() {
 <!-- /code -->
 
 The bubble itself. It decides nothing on its own: clicks and drags are sent to `BubbleController`
-in the main process, which owns the bubble's mode and position. In JSX, attributes are _props_, the
-inputs a component receives. On built-in elements like `<button>` they become HTML attributes and
-event handlers (`onClick`, `onPointerDown`); on our own components they arrive as the function's
-argument (see `Panel` below).
+in the main process, which owns the character's mode, pose and position. In JSX, attributes are
+_props_, the inputs a component receives. On built-in elements like `<button>` they become HTML
+attributes and event handlers (`onClick`, `onPointerDown`); on our own components they arrive as
+the function's argument (see `Panel` below).
 
-- `const state = useAssistState()`: the bubble needs only the mode (for its look and label) and the
-  branding. Until the state arrives, it falls back to `'collapsed'` and `'Desktop Assist'`.
+- `const state = useAssistState()`: the bubble needs only the mode (for its label and the
+  character's shadow), the pose and the branding. Until the state arrives, it falls back to
+  `'collapsed'`, `'idle'` and `'Desktop Assist'`.
 - `useAccentColor(state?.branding.accentColor)`: `?.` because `state` is `null` at first.
 - `const press = useRef<{ x: number; y: number; dragging: boolean } | null>(null)`: `useRef` gives
   a box (`.current`) that keeps its contents between renders, but unlike state, changing it doesn't
@@ -1104,14 +1066,14 @@ argument (see `Panel` below).
   starts.
 - `window.assist.bubbleDragStart()`: tells the main process to start following the mouse.
 - `function endPress() {`: runs on release. If the press had become a drag, it arms
-  `swallowClick` and calls `bubbleDragEnd()`, and `BubbleController.endDrag` snaps the bubble to
-  the nearest corner. If it was a plain click, it does nothing and the `click` event that follows
+  `swallowClick` and calls `bubbleDragEnd()`, and `BubbleController.endDrag` drops the character
+  onto the taskbar. If it was a plain click, it does nothing and the `click` event that follows
   handles it.
 - `onLostPointerCapture={endPress}`: capture can also end without a release (the system can take
   it away), so this ends the press too. After a normal release both events fire; the second call
   finds `press.current` already `null` and does nothing.
 - `onClick={() => {`: a real click calls `bubbleClick()`, and `BubbleController.clickBubble`
-  decides what it means: open, close, or glide home from a bounce.
+  decides what it means: open, close, or glide back from a bounce.
 - `window.assist.bubbleClick(pressedAt.current ?? Date.now())`: the click goes with its press
   time. As the comment says, a click from the keyboard (Enter or Space on the focused button) has
   no press, so it's "now". `pressedAt.current = undefined` then forgets it, so it can't be
@@ -1122,22 +1084,21 @@ argument (see `Panel` below).
   so here it has no effect.
 - `ACTION_LABEL[mode]`: the `aria-label` reads, for example, "Close Desktop Assist" while the panel
   is open.
-- `style={{ width: UI.bubbleSize, height: UI.bubbleSize }}`: 56 pixels, the same number the main
-  process uses to size the window (`BUBBLE_BOX`, 56 plus 8 on each side).
-- `<div className="flex h-full w-full items-center justify-center">`: centres the button in the
-  window. The 8-pixel margin around it leaves room for the shadow and ring.
-- `shadow-[0_2px_6px_rgba(0,0,0,0.35)]`: square brackets give a Tailwind class a custom value (the
-  underscores stand for spaces).
-- `motion-reduce:transition-none`: no animation if animations are turned off in Windows.
-- `mode === 'dragging' ? 'scale-105' : 'hover:scale-105 active:scale-95'`: slightly larger while
-  dragged or hovered, slightly smaller while pressed.
-- `ring-accent ring-offset-2 ring-offset-white`: while the panel is open, a 2-pixel white gap and
-  then an accent-coloured ring. Otherwise the ring itself is white. Tailwind rings are drawn with
-  `box-shadow`, which is why `box-shadow` is in the transition list.
-- `draggable={false}`: stops the browser's own drag-the-image behaviour, which would take over the
-  pointer.
-- `pointer-events-none size-full object-contain`: the image ignores the mouse, so every event goes
-  to the button; it fills the button without distortion.
+- `style={{ width: BUBBLE_BOX, height: BUBBLE_BOX }}`: 72 pixels square, the whole window
+  (`BUBBLE_BOX` in `src/shared/geometry.ts`, the same number the main process sizes the window
+  with). The character is drawn across the whole window, so the button covers all of it and a
+  press anywhere on the window reaches it.
+- `block`: lays the button out as a box of its own rather than inline like a word of text, so
+  nothing adds space around it in the small window.
+- `cursor-grab`, `active:cursor-grabbing`: an open hand over the character, and a closed one while
+  the button is held, a hint that it can be picked up.
+- `outline-offset-[-2px]`: the keyboard focus outline (`:focus-visible` in `styles.css`) is drawn
+  2 pixels inside the button instead of outside it, where the window's edge would cut it off.
+  Square brackets give a Tailwind class a custom value.
+- `<Character pose={state?.pose ?? 'idle'} expanded={mode === 'expanded'} />`: the figure, in the
+  pose the main process chose (standing until the state arrives). `expanded` turns its shadow the
+  accent colour while the panel is open, as the logo's accent ring used to. All the animation is
+  in `Character` and its stylesheet; this page only passes the pose on.
 
 ## `src/renderer/src/views/PanelView.tsx`: everything around the bubble
 

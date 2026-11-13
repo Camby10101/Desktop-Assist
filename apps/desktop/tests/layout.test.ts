@@ -2,52 +2,87 @@ import { describe, expect, it } from 'vitest'
 import { actionOffset, BUBBLE_BOX, panelWindowSize, UI, type Corner } from '@shared/geometry'
 import {
   bubbleWindowBounds,
-  homePosition,
+  insetAt,
+  maxInset,
   nearestCorner,
   panelWindowBounds,
+  restPosition,
   travelAreas,
   travelBox,
 } from '../src/main/bubble/layout'
 
 const workArea = { x: 0, y: 0, width: 1920, height: 1040 } // 1080p minus a 40px taskbar
 const CORNERS: Corner[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
+const BOTTOM: Corner[] = ['bottom-left', 'bottom-right']
+/** The character's box stands so its window's bottom edge is on the taskbar. */
+const STANDING_Y = 1040 - UI.bubblePad - 56
 
-describe('homePosition', () => {
-  it('sits in the bottom-right corner by default, 16px in from the work area edges', () => {
-    expect(homePosition(workArea)).toEqual({ x: 1920 - 16 - 56, y: 1040 - 16 - 56 })
+describe('restPosition', () => {
+  it('stands on the taskbar in the bottom-right corner by default, 16px in from the side', () => {
+    expect(restPosition(workArea)).toEqual({ x: 1920 - 16 - 56, y: STANDING_Y })
+    expect(bubbleWindowBounds(restPosition(workArea))).toMatchObject({
+      y: 1040 - BUBBLE_BOX, // the window's bottom edge is the taskbar's top
+    })
   })
 
-  it('sits 16px in from the edges in every corner', () => {
-    expect(homePosition(workArea, 'top-left')).toEqual({ x: 16, y: 16 })
-    expect(homePosition(workArea, 'top-right')).toEqual({ x: 1920 - 72, y: 16 })
-    expect(homePosition(workArea, 'bottom-left')).toEqual({ x: 16, y: 1040 - 72 })
+  it('stands in the bottom-left corner too; a top corner means the bottom one below it', () => {
+    expect(restPosition(workArea, 'bottom-left')).toEqual({ x: 16, y: STANDING_Y })
+    expect(restPosition(workArea, 'top-left')).toEqual({ x: 16, y: STANDING_Y })
+    expect(restPosition(workArea, 'top-right')).toEqual(restPosition(workArea, 'bottom-right'))
+  })
+
+  it('stands further along toward the middle by its inset, never off the work area', () => {
+    expect(restPosition(workArea, 'bottom-right', 100)).toEqual({
+      x: 1920 - 72 - 100,
+      y: STANDING_Y,
+    })
+    expect(restPosition(workArea, 'bottom-left', 100)).toEqual({ x: 16 + 100, y: STANDING_Y })
+    expect(restPosition(workArea, 'bottom-left', 99_999).x).toBe(1920 - 72)
+    expect(restPosition(workArea, 'bottom-left', -50).x).toBe(16)
   })
 
   it('follows a work area that does not start at the origin (a second monitor, a top taskbar)', () => {
     const second = { x: 1920, y: 40, width: 1280, height: 984 }
-    expect(homePosition(second, 'top-left')).toEqual({ x: 1920 + 16, y: 40 + 16 })
-    expect(homePosition(second)).toEqual({ x: 1920 + 1280 - 72, y: 40 + 984 - 72 })
+    expect(restPosition(second, 'bottom-left')).toEqual({ x: 1920 + 16, y: 40 + 984 - 64 })
+    expect(restPosition(second)).toEqual({ x: 1920 + 1280 - 72, y: 40 + 984 - 64 })
+  })
+})
+
+describe('insetAt and maxInset', () => {
+  it('turn a position back into an inset, the opposite of restPosition', () => {
+    for (const corner of BOTTOM) {
+      for (const inset of [0, 37, 240, 900]) {
+        expect(insetAt(workArea, corner, restPosition(workArea, corner, inset).x)).toBe(inset)
+      }
+    }
+  })
+
+  it('keep it on the work area', () => {
+    expect(maxInset(workArea)).toBe(1920 - 2 * 16 - 56)
+    expect(insetAt(workArea, 'bottom-right', 5000)).toBe(0) // off the right edge: in the corner
+    expect(insetAt(workArea, 'bottom-right', -5000)).toBe(maxInset(workArea))
+    expect(maxInset({ x: 0, y: 0, width: 50, height: 50 })).toBe(0)
   })
 })
 
 describe('nearestCorner', () => {
-  it('picks the corner of the quarter the bubble is in', () => {
-    expect(nearestCorner(workArea, { x: 100, y: 100 })).toBe('top-left')
-    expect(nearestCorner(workArea, { x: 1500, y: 100 })).toBe('top-right')
+  it('picks the bottom corner on the side of the half the character is in', () => {
+    expect(nearestCorner(workArea, { x: 100, y: 100 })).toBe('bottom-left')
+    expect(nearestCorner(workArea, { x: 1500, y: 100 })).toBe('bottom-right')
     expect(nearestCorner(workArea, { x: 100, y: 900 })).toBe('bottom-left')
     expect(nearestCorner(workArea, { x: 1500, y: 900 })).toBe('bottom-right')
   })
 
-  it('measures from the bubble centre, on displays that are not at the origin', () => {
+  it('measures from the character centre, on displays that are not at the origin', () => {
     const second = { x: -1280, y: 0, width: 1280, height: 1024 } // a monitor to the left
-    // Bubble's left edge is right of the middle only once its centre is: -640 is the middle.
-    expect(nearestCorner(second, { x: -660, y: 10 })).toBe('top-right')
-    expect(nearestCorner(second, { x: -700, y: 10 })).toBe('top-left')
+    // Its left edge is right of the middle only once its centre is: -640 is the middle.
+    expect(nearestCorner(second, { x: -660, y: 10 })).toBe('bottom-right')
+    expect(nearestCorner(second, { x: -700, y: 10 })).toBe('bottom-left')
   })
 
-  it('every home position snaps back to its own corner', () => {
-    for (const corner of CORNERS) {
-      expect(nearestCorner(workArea, homePosition(workArea, corner))).toBe(corner)
+  it('every resting place belongs to its own corner', () => {
+    for (const corner of BOTTOM) {
+      expect(nearestCorner(workArea, restPosition(workArea, corner, 240))).toBe(corner)
     }
   })
 })
@@ -71,8 +106,10 @@ describe('bubbleWindowBounds', () => {
 
 describe('panelWindowBounds', () => {
   it('shares the bubble window corner that points into the screen corner', () => {
+    // A top-corner box, as the panel's layout still allows, for completeness.
+    const topHome = (corner: Corner) => ({ ...restPosition(workArea, corner), y: 16 })
     for (const corner of CORNERS) {
-      const home = homePosition(workArea, corner)
+      const home = corner.startsWith('top') ? topHome(corner) : restPosition(workArea, corner)
       const bubble = bubbleWindowBounds(home)
       const panel = panelWindowBounds(home, 4, corner)
       const left = corner.endsWith('left')
@@ -82,9 +119,21 @@ describe('panelWindowBounds', () => {
     }
   })
 
-  it('fits on screen in every corner', () => {
-    for (const corner of CORNERS) {
-      const panel = panelWindowBounds(homePosition(workArea, corner), 4, corner)
+  it('fits on screen from wherever the character wanders near either bottom corner', () => {
+    for (const corner of BOTTOM) {
+      for (const inset of [0, 240]) {
+        const panel = panelWindowBounds(restPosition(workArea, corner, inset), 4, corner)
+        expect(panel.x).toBeGreaterThanOrEqual(workArea.x)
+        expect(panel.y).toBeGreaterThanOrEqual(workArea.y)
+        expect(panel.x + panel.width).toBeLessThanOrEqual(workArea.x + workArea.width)
+        expect(panel.y + panel.height).toBeLessThanOrEqual(workArea.y + workArea.height)
+      }
+    }
+  })
+
+  it('fits on screen with the character anywhere in its half of the screen', () => {
+    for (const corner of BOTTOM) {
+      const panel = panelWindowBounds(restPosition(workArea, corner, 1920 / 2 - 72), 4, corner)
       expect(panel.x).toBeGreaterThanOrEqual(workArea.x)
       expect(panel.y).toBeGreaterThanOrEqual(workArea.y)
       expect(panel.x + panel.width).toBeLessThanOrEqual(workArea.x + workArea.width)

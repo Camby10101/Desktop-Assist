@@ -92,6 +92,7 @@ const api: AssistApi = {
   },
   uninstall: () => ipcRenderer.invoke(IPC.appUninstall),
   onModeChanged: (callback) => subscribe(IPC.modeChanged, callback),
+  onPoseChanged: (callback) => subscribe(IPC.poseChanged, callback),
   onCornerChanged: (callback) => subscribe(IPC.cornerChanged, callback),
   onClickThroughReset: (callback) => subscribe(IPC.clickThroughReset, callback),
   onAuthStatus: (callback) => subscribe(IPC.authStatus, callback),

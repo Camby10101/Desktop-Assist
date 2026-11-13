@@ -1,4 +1,5 @@
 import type { CommandActionId } from './actions'
+import type { Pose } from './character'
 import type { Corner, Point } from './geometry'
 import type {
   ActionResult,
@@ -90,6 +91,7 @@ export const IPC = {
   updatesCheck: 'assist:updates-check',
   // main → renderer
   modeChanged: 'assist:mode-changed',
+  poseChanged: 'assist:pose-changed',
   cornerChanged: 'assist:corner-changed',
   clickThroughReset: 'assist:click-through-reset',
   authStatus: 'assist:auth-status',
@@ -108,7 +110,7 @@ export interface AssistApi {
   bubbleClick(pressedAt?: number): void
   /** The bubble was pressed and moved: the main process makes it follow the mouse. */
   bubbleDragStart(): void
-  /** Released: the bubble snaps to the nearest corner of the display it's on. */
+  /** Released: the character falls onto the taskbar of the display it's on. */
   bubbleDragEnd(): void
   collapse(): void
   /** Tell the main process whether the pointer is over real UI (true) or a see-through area. */
@@ -232,6 +234,8 @@ export interface AssistApi {
   /** Starts Desktop Assist's uninstaller and quits (installed copies only). */
   uninstall(): Promise<UninstallResult>
   onModeChanged(callback: (mode: Mode) => void): () => void
+  /** The character's pose changed (walking, fidgeting, dangling...). */
+  onPoseChanged(callback: (pose: Pose) => void): () => void
   onCornerChanged(callback: (corner: Corner) => void): () => void
   /** The panel was just shown with click-through reset; `pointer` is where the mouse is now. */
   onClickThroughReset(callback: (pointer: Point) => void): () => void

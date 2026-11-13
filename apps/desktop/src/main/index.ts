@@ -143,6 +143,7 @@ async function start(): Promise<void> {
     initialAnchor: settings.bubbleAnchor,
     onDiagnostic: (message) => log(message),
     onModeChange: (mode) => broadcast(IPC.modeChanged, mode),
+    onPoseChange: (pose) => broadcast(IPC.poseChanged, pose),
     onAnchorChange: (anchor) => {
       broadcast(IPC.cornerChanged, anchor.corner)
       void settings.setBubbleAnchor(anchor) // remembered for next time
@@ -367,6 +368,7 @@ async function start(): Promise<void> {
     getState: () => ({
       mode: bubble.currentMode,
       corner: bubble.corner,
+      pose: bubble.currentPose,
       notes: notes.get(),
       settings: settings.get(),
       branding: brandingOf(tenant),

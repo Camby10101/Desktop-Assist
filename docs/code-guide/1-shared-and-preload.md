@@ -6,7 +6,8 @@ The app runs as two kinds of process: the **main process** (Node.js, which owns 
 files, sign-in and Claude) and a **renderer** for each window (Chromium, which draws the React
 UI). They talk over **IPC** (inter-process communication): one side sends a message on a named
 _channel_ and the other side listens on it. `src/shared` holds the TypeScript both sides must
-agree on (window sizes, action names, data shapes and the list of channels), imported as
+agree on (window sizes, the character's poses, action names, data shapes and the list of
+channels), imported as
 `@shared/...` and bundled into each part. `src/preload/index.ts` is the small script that turns
 that list of channels into `window.assist`, the only way a page can reach the main process.
 
@@ -23,7 +24,9 @@ display scaled to 150%, one DIP is 1.5 real pixels. Electron's window and screen
 the page's CSS pixels both work in DIPs, so one number means the same thing on both sides.
 
 The key idea is that the panel's layout is measured from the corner the bubble sits in, not from
-the top-left of the window. That way one set of numbers works in all four screen corners.
+the top-left of the window. That way one set of numbers works in all four screen corners. (The
+bubble is now a character that only ever stands near one of the two bottom corners, but the
+layout still works from any of the four.)
 
 ### `Point`, `Size` and `Rect`
 
@@ -61,10 +64,13 @@ Plain shapes for positions and sizes, used all over the main process and the ren
 
 <!-- code: apps/desktop/src/shared/geometry.ts#Corner,isLeftCorner,isTopCorner -->
 
-[`src/shared/geometry.ts`, lines 16–20](../../apps/desktop/src/shared/geometry.ts#L16-L20)
+[`src/shared/geometry.ts`, lines 16–23](../../apps/desktop/src/shared/geometry.ts#L16-L23)
 
 ```ts
-/** The screen corner the bubble rests in. The panel always opens toward the screen's middle. */
+/**
+ * A screen corner. The character lives near a bottom one; the panel lays itself out from the
+ * bubble's corner (any of the four) to open toward the screen's middle.
+ */
 export type Corner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 
 export const isLeftCorner = (corner: Corner): boolean => corner.endsWith('left')
@@ -75,15 +81,20 @@ export const isTopCorner = (corner: Corner): boolean => corner.startsWith('top')
 <!-- /code -->
 
 `Corner` is a _union of string literals_: a value of this type can only be one of those four
-strings, and TypeScript rejects anything else at compile time. The bubble rests in one corner of
-a display's work area (the screen minus the taskbar), and everything else opens toward the middle
-of the screen from there. The two helpers answer "which side is the bubble on?", which is all
-the layout code needs in order to mirror itself.
+strings, and TypeScript rejects anything else at compile time. As the comment says, the
+character lives near one of the two bottom corners, standing on the taskbar, so in practice the
+corner is always `bottom-left` or `bottom-right` (the logo bubble it replaced could rest in any
+of the four); the panel's layout still handles all four. Everything else opens toward the middle of the screen from the corner. The two helpers
+answer "which side is the bubble on?", which is all the layout code needs in order to mirror
+itself.
 
 - `corner.endsWith('left')`: every name is "vertical-horizontal", so the horizontal side is the
   end of the string and the vertical side is the start.
-- Callers: `homePosition()` and `panelWindowBounds()` in `src/main/bubble/layout.ts`, `launch()`
-  in `src/main/bubble/bounce.ts` (a bounce sets off away from the corner), and `anchored()` in
+- Callers: `restPosition()`, `insetAt()` and `panelWindowBounds()` in
+  `src/main/bubble/layout.ts`; `bottomOf()` and `walkTo()` in `BubbleController.ts` (turning a
+  saved top corner into the bottom one, and choosing which way the character faces as it walks);
+  `launch()` in
+  `src/main/bubble/bounce.ts` (a bounce sets off away from the corner); and `anchored()` in
   `src/renderer/src/lib/anchor.ts`, which turns an offset into CSS `left`/`right` and
   `top`/`bottom`.
 
@@ -91,14 +102,18 @@ the layout code needs in order to mirror itself.
 
 <!-- code: apps/desktop/src/shared/geometry.ts#UI -->
 
-[`src/shared/geometry.ts`, lines 22–40](../../apps/desktop/src/shared/geometry.ts#L22-L40)
+[`src/shared/geometry.ts`, lines 25–47](../../apps/desktop/src/shared/geometry.ts#L25-L47)
 
 ```ts
 export const UI = {
-  /** Gap between the bubble and the edges of the work area. */
+  /** Gap between the character and the side of the work area when it's right in its corner. */
   edgeMargin: 16,
+  /** The bubble's box, which its position is measured from (its top-left corner). */
   bubbleSize: 56,
-  /** Transparent margin around the bubble inside its window (room for the shadow and ring). */
+  /**
+   * The bubble's window is this much bigger than the box on every side. The character is drawn
+   * across the whole window, its feet on the window's bottom edge.
+   */
   bubblePad: 8,
   /** Space between the bubble and the chat card / action stack. */
   gap: 12,
@@ -121,10 +136,13 @@ Every fixed measurement of the UI in one object, in DIPs.
 
 - `as const`: makes the object read-only and keeps each value's exact type (`56` rather than
   `number`). Nothing can change these numbers at runtime by accident.
-- `edgeMargin: 16`: how far the resting bubble sits from the work area's edges
-  (`homePosition()` in `src/main/bubble/layout.ts`).
-- `bubblePad: 8`: the bubble's window is a little bigger than the bubble itself, so the drop
-  shadow and the ring around the bubble aren't clipped by the window edge.
+- `edgeMargin: 16`: as the comment says, how far the character stands from the side of the work
+  area when it's right in its corner (`restPosition()` in `src/main/bubble/layout.ts`).
+- `bubbleSize: 56`: the bubble's box, which positions are measured from. It was the size of the
+  round logo.
+- `bubblePad: 8`: the bubble's window is this much bigger than the box on every side. As the
+  comment says, the character is drawn across the whole window, and `restPosition()` uses
+  `bubblePad` to put the window's bottom edge, where the character's feet are, on the taskbar.
 - `panelWidth: 400` and `panelMaxHeight: 520`: the chat card's width and its tallest height.
   `ChatBox.tsx` sets them as the card's CSS `width` and `maxHeight`; the card starts as just the
   text box and grows as the conversation fills it.
@@ -139,7 +157,7 @@ Every fixed measurement of the UI in one object, in DIPs.
 
 <!-- code: apps/desktop/src/shared/geometry.ts#BUBBLE_BOX -->
 
-[`src/shared/geometry.ts`, lines 42–43](../../apps/desktop/src/shared/geometry.ts#L42-L43)
+[`src/shared/geometry.ts`, lines 49–50](../../apps/desktop/src/shared/geometry.ts#L49-L50)
 
 ```ts
 /** The bubble window is the bubble plus its padding on every side. */
@@ -150,13 +168,14 @@ export const BUBBLE_BOX = UI.bubbleSize + UI.bubblePad * 2
 
 The bubble window's width and height: 56 + 8 + 8 = 72. `start()` in `src/main/index.ts` creates
 the bubble window at this size, and `bubbleWindowBounds()` in `src/main/bubble/layout.ts` places
-it. The bubble window only ever moves; it never changes size.
+it. The bubble window only ever moves; it never changes size. In the renderer, `BubbleView`'s
+button and the `Character` drawing are this size too, filling the window.
 
 ### `PANEL_LAYOUT`
 
 <!-- code: apps/desktop/src/shared/geometry.ts#PANEL_LAYOUT -->
 
-[`src/shared/geometry.ts`, lines 45–56](../../apps/desktop/src/shared/geometry.ts#L45-L56)
+[`src/shared/geometry.ts`, lines 52–63](../../apps/desktop/src/shared/geometry.ts#L52-L63)
 
 ```ts
 /**
@@ -215,7 +234,7 @@ images):
 
 <!-- code: apps/desktop/src/shared/geometry.ts#actionStackHeight,actionOffset -->
 
-[`src/shared/geometry.ts`, lines 58–65](../../apps/desktop/src/shared/geometry.ts#L58-L65)
+[`src/shared/geometry.ts`, lines 65–72](../../apps/desktop/src/shared/geometry.ts#L65-L72)
 
 ```ts
 export function actionStackHeight(actionCount: number): number {
@@ -243,7 +262,7 @@ Two small sums over the icon stack.
 
 <!-- code: apps/desktop/src/shared/geometry.ts#panelWindowSize -->
 
-[`src/shared/geometry.ts`, lines 67–74](../../apps/desktop/src/shared/geometry.ts#L67-L74)
+[`src/shared/geometry.ts`, lines 74–81](../../apps/desktop/src/shared/geometry.ts#L74-L81)
 
 ```ts
 export function panelWindowSize(actionCount: number): Size {
@@ -268,6 +287,62 @@ is no flicker. The unused parts are transparent and let clicks through to whatev
   full height plus room for a toast (8 + 520 + 40 = 568), or the icon stack. With the usual four
   icons the stack ends at 76 + 184 = 260, so the card decides and the window is 584 tall. The
   stack only matters with 11 or more icons.
+
+## `src/shared/character.ts`: the character's poses
+
+The bubble is drawn as a small character standing on the taskbar, and this file names what it can
+be doing: its _pose_. As the comment at the top says, the main process decides the pose
+(`BubbleController` in `src/main/bubble/BubbleController.ts`) and the bubble's page animates it
+(`Character.tsx` in `src/renderer/src/components`), so both import the names from here. The pose
+travels to the page on `assist:pose-changed` and in `AppState.pose`.
+
+### `Pose`, `Fidget`, `FIDGET_MS` and `isFidget`
+
+<!-- code: apps/desktop/src/shared/character.ts#Pose,Fidget,FIDGET_MS,isFidget -->
+
+[`src/shared/character.ts`, lines 1–21](../../apps/desktop/src/shared/character.ts#L1-L21)
+
+```ts
+// The character that stands in for the bubble: what it's doing (its pose), shared by the main
+// process (which decides) and the bubble's page (which animates it).
+
+/**
+ * - `idle`: standing, bobbing gently.
+ * - `fidget-1`, `fidget-2`: a short animation (a hop, a wave) now and then, once it's been left
+ *   alone for a while.
+ * - `walk-left`, `walk-right`: walking along the taskbar (the window moves with it).
+ * - `dragged`: dangling while it's dragged, thrown about by Bounce, or falling after a drop.
+ */
+export type Pose = 'idle' | 'fidget-1' | 'fidget-2' | 'walk-left' | 'walk-right' | 'dragged'
+
+export type Fidget = 'fidget-1' | 'fidget-2'
+
+/** How long each fidget plays (ms): the main process goes back to idle after it. */
+export const FIDGET_MS: Record<Fidget, number> = {
+  'fidget-1': 1200,
+  'fidget-2': 2000,
+}
+
+export const isFidget = (pose: Pose): pose is Fidget => pose === 'fidget-1' || pose === 'fidget-2'
+```
+
+<!-- /code -->
+
+- `Pose`: the six poses, with what each looks like in the comment above it. The mode
+  (`Mode` in `types.ts`) says what the app is doing; the pose only says how the figure looks.
+  `idle` and the two fidgets happen while it stands; `walk-left` and `walk-right` while the main
+  process moves its window along the taskbar; `dragged` whenever it's being moved about (dragged,
+  bounced, or falling after a drop).
+- `Fidget`: just the two fidgets, a narrower type for the code that only deals with those
+  (`FIDGET_MS` here, and `Activity` in `src/main/bubble/wander.ts`).
+- `FIDGET_MS`: as the comment says, how long each fidget plays: 1.2 seconds for the hop
+  (`fidget-1`), 2 seconds for the wave (`fidget-2`). Both sides use it. The main process waits
+  this long before setting the pose back to `idle`, and `Character` passes the same number to
+  the CSS animation as its duration, so the two always agree. `Record<Fidget, number>` makes
+  TypeScript insist on a length for each fidget.
+- `isFidget`: whether a pose is one of the fidgets. Its return type, `pose is Fidget`, is a _type
+  guard_: where it returns true, TypeScript treats `pose` as a `Fidget`, so `FIDGET_MS[pose]`
+  type-checks without a cast.
 
 ## `src/shared/actions.ts`: the action registry
 
@@ -426,8 +501,8 @@ isn't enough.
 
 ## `src/shared/types.ts`: data shapes
 
-The shapes of the data that travels between the main process and the pages: the bubble's mode,
-the draft, settings, branding, sign-in status, chat messages, the Apps list, Jira and the service
+The shapes of the data that travels between the main process and the pages: the bubble's mode
+(the character's pose is in `character.ts`), the draft, settings, branding, sign-in status, chat messages, the Apps list, Jira and the service
 desk, checking for updates, and the answers to requests. The
 file holds only types, so nothing in it exists at runtime; every file imports it with
 `import type`.
@@ -447,13 +522,13 @@ Two ideas run through it:
 
 <!-- code: apps/desktop/src/shared/types.ts#Mode -->
 
-[`src/shared/types.ts`, lines 4–10](../../apps/desktop/src/shared/types.ts#L4-L10)
+[`src/shared/types.ts`, lines 5–11](../../apps/desktop/src/shared/types.ts#L5-L11)
 
 ```ts
 /**
- * What the bubble is doing. The main process owns this; renderers only display it.
+ * What the bubble (the character) is doing. The main process owns this; renderers only display it.
  * - `dragging`: following the mouse while the user drags it.
- * - `returning`: gliding into its corner after a bounce or a drag.
+ * - `returning`: falling onto the taskbar after a drag, or gliding back after a bounce.
  * - `capturing`: windows are hidden while a screenshot is taken.
  */
 export type Mode = 'collapsed' | 'expanded' | 'dragging' | 'bouncing' | 'returning' | 'capturing'
@@ -461,17 +536,20 @@ export type Mode = 'collapsed' | 'expanded' | 'dragging' | 'bouncing' | 'returni
 
 <!-- /code -->
 
-What the bubble is doing right now. Only `BubbleController` (`src/main/bubble/BubbleController.ts`)
-changes it, through its private `setMode()`, and each change is broadcast to both windows on
-`assist:mode-changed`. `collapsed` is just the bubble; `expanded` means the panel is open;
-`bouncing` is the Bounce animation. The panel shows its contents only while the mode is
-`expanded`, and `BubbleView` styles the bubble differently while `dragging` and `expanded`.
+What the bubble (the character) is doing right now. Only `BubbleController`
+(`src/main/bubble/BubbleController.ts`) changes it, through its private `setMode()`, and each
+change is broadcast to both windows on `assist:mode-changed`. `collapsed` is just the character,
+standing on the taskbar (walking and fidgeting on its own don't change the mode); `expanded` means
+the panel is open; `bouncing` is the Bounce animation. As the comment says, `returning` is the fall
+onto the taskbar after a drag, or the glide back after a bounce. The panel shows its contents only
+while the mode is `expanded`, and `BubbleView` turns the character's shadow the accent colour then.
+How the figure moves is the separate `Pose` (`src/shared/character.ts`).
 
 ### `Attachment` and `Notes`
 
 <!-- code: apps/desktop/src/shared/types.ts#Attachment,Notes -->
 
-[`src/shared/types.ts`, lines 12–27](../../apps/desktop/src/shared/types.ts#L12-L27)
+[`src/shared/types.ts`, lines 13–28](../../apps/desktop/src/shared/types.ts#L13-L28)
 
 ```ts
 export interface Attachment {
@@ -512,7 +590,7 @@ survives a restart.
 
 <!-- code: apps/desktop/src/shared/types.ts#Effort,Settings,Theme -->
 
-[`src/shared/types.ts`, lines 29–48](../../apps/desktop/src/shared/types.ts#L29-L48)
+[`src/shared/types.ts`, lines 30–49](../../apps/desktop/src/shared/types.ts#L30-L49)
 
 ```ts
 /** How hard Claude thinks before answering (the API's `effort`), shown as Fast/Balanced/Thorough. */
@@ -565,7 +643,7 @@ Thorough. `Settings` is what the settings menu shows; `SettingsService.get()` in
 
 <!-- code: apps/desktop/src/shared/types.ts#ChatApp -->
 
-[`src/shared/types.ts`, lines 50–54](../../apps/desktop/src/shared/types.ts#L50-L54)
+[`src/shared/types.ts`, lines 51–55](../../apps/desktop/src/shared/types.ts#L51-L55)
 
 ```ts
 /**
@@ -591,7 +669,7 @@ Where questions are answered, set per tenant (`chatApp` in `tenant.json`, checke
 
 <!-- code: apps/desktop/src/shared/types.ts#Branding,RequestType,StartPage -->
 
-[`src/shared/types.ts`, lines 56–84](../../apps/desktop/src/shared/types.ts#L56-L84)
+[`src/shared/types.ts`, lines 57–85](../../apps/desktop/src/shared/types.ts#L57-L85)
 
 ```ts
 export interface Branding {
@@ -650,7 +728,7 @@ also be the Jira page or the service desk page (`View` in `PanelView.tsx`).
 
 <!-- code: apps/desktop/src/shared/types.ts#SignedInUser,AuthStatus -->
 
-[`src/shared/types.ts`, lines 86–105](../../apps/desktop/src/shared/types.ts#L86-L105)
+[`src/shared/types.ts`, lines 87–106](../../apps/desktop/src/shared/types.ts#L87-L106)
 
 ```ts
 export interface SignedInUser {
@@ -699,7 +777,7 @@ token ever reaches them. With Claude Desktop there is no `AuthManager` and no st
 
 <!-- code: apps/desktop/src/shared/types.ts#ChatMessage,SendResult -->
 
-[`src/shared/types.ts`, lines 107–123](../../apps/desktop/src/shared/types.ts#L107-L123)
+[`src/shared/types.ts`, lines 108–124](../../apps/desktop/src/shared/types.ts#L108-L124)
 
 ```ts
 /** One message as the chat shows it. */
@@ -746,7 +824,7 @@ draft, which the panel shows. The reply itself arrives later, through `onChatMes
 
 <!-- code: apps/desktop/src/shared/types.ts#AskResult -->
 
-[`src/shared/types.ts`, lines 125–131](../../apps/desktop/src/shared/types.ts#L125-L131)
+[`src/shared/types.ts`, lines 126–132](../../apps/desktop/src/shared/types.ts#L126-L132)
 
 ```ts
 /**
@@ -781,13 +859,15 @@ Claude Desktop has opened with the question filled in. The failures come from
 
 <!-- code: apps/desktop/src/shared/types.ts#AppState -->
 
-[`src/shared/types.ts`, lines 133–144](../../apps/desktop/src/shared/types.ts#L133-L144)
+[`src/shared/types.ts`, lines 134–147](../../apps/desktop/src/shared/types.ts#L134-L147)
 
 ```ts
 export interface AppState {
   mode: Mode
-  /** The screen corner the bubble rests in; the panel lays itself out to open away from it. */
+  /** The bottom corner the character lives near; the panel lays itself out to open away from it. */
   corner: Corner
+  /** What the character is doing, for the bubble's page to animate. */
+  pose: Pose
   notes: Notes
   settings: Settings
   branding: Branding
@@ -803,9 +883,13 @@ export interface AppState {
 Everything a page needs when it first loads, returned by `window.assist.getState()`. It is put
 together by the `getState` function that `start()` in `src/main/index.ts` passes to
 `registerIpc()`. After that first load, `useAssistState()` in the renderer keeps `mode`, `corner`,
-`auth` and `chat` up to date from the `on...` events. `notes` and `settings` only change through
-the page's own requests, so the panel takes their new values from the replies.
+`pose`, `auth` and `chat` up to date from the `on...` events. `notes` and `settings` only change
+through the page's own requests, so the panel takes their new values from the replies.
 
+- `corner: Corner`: as the comment says, the bottom corner the character lives near. The panel
+  lays itself out from it.
+- `pose: Pose`: as the comment says, what the character is doing, so the bubble's page can animate
+  it from the moment it loads.
 - `version: string`: `app.getVersion()`, shown in the settings menu.
 - `auth: AuthStatus | null`: the sign-in status of the built-in chat, or `null` with Claude
   Desktop, which has its own sign-in. The pages check for `null` before reading `auth.state`.
@@ -820,7 +904,7 @@ asks with `atlassian.get()` and `atlassian.feed()`, and keeps up through `onAtla
 
 <!-- code: apps/desktop/src/shared/types.ts#PortalApp,AppsState -->
 
-[`src/shared/types.ts`, lines 146–165](../../apps/desktop/src/shared/types.ts#L146-L165)
+[`src/shared/types.ts`, lines 149–168](../../apps/desktop/src/shared/types.ts#L149-L168)
 
 ```ts
 /** One app from the user's JumpCloud User Portal, as the Apps list shows it. */
@@ -867,7 +951,7 @@ sets the state and broadcasts every change on `assist:apps-state`.
 
 <!-- code: apps/desktop/src/shared/types.ts#UninstallResult -->
 
-[`src/shared/types.ts`, lines 167–169](../../apps/desktop/src/shared/types.ts#L167-L169)
+[`src/shared/types.ts`, lines 170–172](../../apps/desktop/src/shared/types.ts#L170-L172)
 
 ```ts
 /** Settings → Uninstall. On success the app is already quitting. */
@@ -889,7 +973,7 @@ quitting, so the page has nothing more to do.
 
 <!-- code: apps/desktop/src/shared/types.ts#AtlassianState -->
 
-[`src/shared/types.ts`, lines 171–181](../../apps/desktop/src/shared/types.ts#L171-L181)
+[`src/shared/types.ts`, lines 174–184](../../apps/desktop/src/shared/types.ts#L174-L184)
 
 ```ts
 /**
@@ -922,7 +1006,7 @@ The connection to Atlassian, as the comment says, which `Atlassian` in
 
 <!-- code: apps/desktop/src/shared/types.ts#StatusCategory,IssueStatus,JiraNotification,ServiceRequest -->
 
-[`src/shared/types.ts`, lines 183–217](../../apps/desktop/src/shared/types.ts#L183-L217)
+[`src/shared/types.ts`, lines 186–220](../../apps/desktop/src/shared/types.ts#L186-L220)
 
 ```ts
 /** How far along an issue is, by its status's category in Jira (which sets its colour). */
@@ -976,7 +1060,7 @@ export interface ServiceRequest {
 
 <!-- code: apps/desktop/src/shared/types.ts#FeedList,JiraFeed -->
 
-[`src/shared/types.ts`, lines 219–230](../../apps/desktop/src/shared/types.ts#L219-L230)
+[`src/shared/types.ts`, lines 222–233](../../apps/desktop/src/shared/types.ts#L222-L233)
 
 ```ts
 /** A list the main process keeps up to date in the background. */
@@ -1005,7 +1089,7 @@ export interface JiraFeed {
 
 <!-- code: apps/desktop/src/shared/types.ts#IssueSummary,ConfluencePage,SearchResult -->
 
-[`src/shared/types.ts`, lines 232–252](../../apps/desktop/src/shared/types.ts#L232-L252)
+[`src/shared/types.ts`, lines 235–255](../../apps/desktop/src/shared/types.ts#L235-L255)
 
 ```ts
 /** An issue in a list of search results. */
@@ -1041,7 +1125,7 @@ What the Search tab shows: Jira issues (`IssueSummary`, with the issue's address
 
 <!-- code: apps/desktop/src/shared/types.ts#IssueComment,IssueTransition,IssueDetail,IssueResult -->
 
-[`src/shared/types.ts`, lines 254–285](../../apps/desktop/src/shared/types.ts#L254-L285)
+[`src/shared/types.ts`, lines 257–288](../../apps/desktop/src/shared/types.ts#L257-L288)
 
 ```ts
 export interface IssueComment {
@@ -1096,7 +1180,7 @@ What the issue view shows.
 
 <!-- code: apps/desktop/src/shared/types.ts#IssuePrompt,AskAboutIssueResult -->
 
-[`src/shared/types.ts`, lines 287–291](../../apps/desktop/src/shared/types.ts#L287-L291)
+[`src/shared/types.ts`, lines 290–294](../../apps/desktop/src/shared/types.ts#L290-L294)
 
 ```ts
 /** What to ask Claude about an issue. */
@@ -1116,7 +1200,7 @@ export type AskAboutIssueResult = { ok: true; inChat: boolean } | { ok: false; m
 
 <!-- code: apps/desktop/src/shared/types.ts#NewRequest,RaiseResult -->
 
-[`src/shared/types.ts`, lines 293–304](../../apps/desktop/src/shared/types.ts#L293-L304)
+[`src/shared/types.ts`, lines 296–307](../../apps/desktop/src/shared/types.ts#L296-L307)
 
 ```ts
 /** A request filled in on the panel, to finish on the help centre portal. */
@@ -1149,7 +1233,7 @@ The service desk page's form, and the answer to sending it (see `ServiceDesk.rai
 
 <!-- code: apps/desktop/src/shared/types.ts#UpdateState -->
 
-[`src/shared/types.ts`, lines 306–318](../../apps/desktop/src/shared/types.ts#L306-L318)
+[`src/shared/types.ts`, lines 309–321](../../apps/desktop/src/shared/types.ts#L309-L321)
 
 ```ts
 /**
@@ -1187,7 +1271,7 @@ it.
 
 <!-- code: apps/desktop/src/shared/types.ts#ActionResult,AttachResult -->
 
-[`src/shared/types.ts`, lines 320–327](../../apps/desktop/src/shared/types.ts#L320-L327)
+[`src/shared/types.ts`, lines 323–330](../../apps/desktop/src/shared/types.ts#L323-L330)
 
 ```ts
 export type ActionResult = { ok: true; message?: string } | { ok: false; message: string }
@@ -1229,13 +1313,13 @@ Messages come in three styles:
   frequent or one-way signals such as each keystroke in the text box. In `AssistApi`, the methods
   that return `void` are these; the ones that return a `Promise` are requests.
 - **Pushed by the main process**: `webContents.send()` to a window, which the page receives
-  through one of the `on...` listeners. These are the last ten channels.
+  through one of the `on...` listeners. These are the last eleven channels.
 
 ### `IPC`
 
 <!-- code: apps/desktop/src/shared/ipc.ts#IPC -->
 
-[`src/shared/ipc.ts`, lines 30–102](../../apps/desktop/src/shared/ipc.ts#L30-L102)
+[`src/shared/ipc.ts`, lines 31–104](../../apps/desktop/src/shared/ipc.ts#L31-L104)
 
 ```ts
 /** IPC channel names. The preload maps them onto `window.assist`; src/main/ipc.ts handles them. */
@@ -1301,6 +1385,7 @@ export const IPC = {
   updatesCheck: 'assist:updates-check',
   // main → renderer
   modeChanged: 'assist:mode-changed',
+  poseChanged: 'assist:pose-changed',
   cornerChanged: 'assist:corner-changed',
   clickThroughReset: 'assist:click-through-reset',
   authStatus: 'assist:auth-status',
@@ -1336,7 +1421,8 @@ name: a typo is a compile error instead of a message nobody hears.
 - `authSignIn` to `chatNew`, and `claudeDesktopAsk` and `claudeDesktopInstalled`: the first group
   belongs to the built-in chat and the second to Claude Desktop. The main process only answers
   the group the tenant uses (`registerIpc()` in `src/main/ipc.ts`).
-- `// main → renderer`: the channels from here on go the other way. `atlassianState` and `jiraFeed`
+- `// main → renderer`: the channels from here on go the other way. `poseChanged` carries the
+  character's pose (see `character.ts`) every time it changes, `atlassianState` and `jiraFeed`
   carry the Atlassian connection and the notifications and requests, and `updateState` how Check
   for updates is going. `broadcast()` in `start()`
   (`src/main/index.ts`) sends them to both windows, except `clickThroughReset`, which
@@ -1346,7 +1432,7 @@ name: a typo is a compile error instead of a message nobody hears.
 
 <!-- code: apps/desktop/src/shared/ipc.ts#AssistApi -->
 
-[`src/shared/ipc.ts`, lines 104–246](../../apps/desktop/src/shared/ipc.ts#L104-L246)
+[`src/shared/ipc.ts`, lines 106–250](../../apps/desktop/src/shared/ipc.ts#L106-L250)
 
 ```ts
 /** The API the preload exposes to renderers as `window.assist`. */
@@ -1356,7 +1442,7 @@ export interface AssistApi {
   bubbleClick(pressedAt?: number): void
   /** The bubble was pressed and moved: the main process makes it follow the mouse. */
   bubbleDragStart(): void
-  /** Released: the bubble snaps to the nearest corner of the display it's on. */
+  /** Released: the character falls onto the taskbar of the display it's on. */
   bubbleDragEnd(): void
   collapse(): void
   /** Tell the main process whether the pointer is over real UI (true) or a see-through area. */
@@ -1480,6 +1566,8 @@ export interface AssistApi {
   /** Starts Desktop Assist's uninstaller and quits (installed copies only). */
   uninstall(): Promise<UninstallResult>
   onModeChanged(callback: (mode: Mode) => void): () => void
+  /** The character's pose changed (walking, fidgeting, dangling...). */
+  onPoseChanged(callback: (pose: Pose) => void): () => void
   onCornerChanged(callback: (corner: Corner) => void): () => void
   /** The panel was just shown with click-through reset; `pointer` is where the mouse is now. */
   onClickThroughReset(callback: (pointer: Point) => void): () => void
@@ -1509,6 +1597,8 @@ panel checks `branding` to know which to call.
   `BubbleController` (`clickBubble()`, `startDrag()`, `endDrag()`, `collapse()`). `pressedAt` is
   when the mouse button went down, which tells the main process whether the press itself closed
   the panel.
+- `bubbleDragEnd(): void`: as its comment says, on release the character falls onto the taskbar of
+  the display it's on (`BubbleController.endDrag()`).
 - `setInteractive(interactive: boolean): void`: the heart of click-through. `useClickThrough()`
   sends `true` when the pointer moves onto an element marked `data-hit` and `false` when it
   leaves; the main process then turns mouse input on or off for that window with
@@ -1565,6 +1655,8 @@ panel checks `branding` to know which to call.
 - `onModeChanged(callback: (mode: Mode) => void): () => void`: each `on...` method starts
   listening and returns a function that stops. That suits React's `useEffect`, whose cleanup
   step can simply call it (see `useAssistState()`).
+- `onPoseChanged(callback: (pose: Pose) => void): () => void`: as its comment says, the character's
+  pose changed. The bubble's page uses it to animate the character.
 - `onClickThroughReset(callback: (pointer: Point) => void): () => void`: `pointer` is the mouse
   position relative to the panel window, so the page can decide at once whether the pointer is
   over real UI.
@@ -1804,7 +1896,7 @@ listening. Every `on...` method in `api` uses it.
 
 <!-- code: apps/desktop/src/preload/index.ts#api -->
 
-[`src/preload/index.ts`, lines 12–104](../../apps/desktop/src/preload/index.ts#L12-L104)
+[`src/preload/index.ts`, lines 12–105](../../apps/desktop/src/preload/index.ts#L12-L105)
 
 ```ts
 const api: AssistApi = {
@@ -1890,6 +1982,7 @@ const api: AssistApi = {
   },
   uninstall: () => ipcRenderer.invoke(IPC.appUninstall),
   onModeChanged: (callback) => subscribe(IPC.modeChanged, callback),
+  onPoseChanged: (callback) => subscribe(IPC.poseChanged, callback),
   onCornerChanged: (callback) => subscribe(IPC.cornerChanged, callback),
   onClickThroughReset: (callback) => subscribe(IPC.clickThroughReset, callback),
   onAuthStatus: (callback) => subscribe(IPC.authStatus, callback),
@@ -1915,6 +2008,8 @@ The implementation of `AssistApi`: one line per method, each sending its channel
   (`NoArgs` in `src/main/ipc.ts`).
 - `ipcRenderer.send(IPC.bubbleClick, pressedAt)`: fire and forget, as for the other `void`
   methods, with the press time.
+- `onPoseChanged: (callback) => subscribe(IPC.poseChanged, callback)`: the character's pose, passed
+  on as it arrives, like the mode and the corner.
 - `subscribe(IPC.chatReset, () => callback())`: the reset carries no data, so the page's callback
   is called with no arguments, matching its `() => void` type.
 - `ipcRenderer.invoke(IPC.appsGet, refresh ?? false)`: `refresh` is optional for the page, but

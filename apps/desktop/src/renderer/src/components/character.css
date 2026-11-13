@@ -1,0 +1,308 @@
+/*
+ * The character's animations, one set per pose (Character.tsx sets data-pose on the <svg>).
+ * Lengths are in the drawing's units (DIPs of the 72 × 72 window); rotations turn each part
+ * about its joint: shoulders for the arms, hips for the legs, the feet for the whole figure.
+ */
+
+.character {
+  display: block;
+  overflow: visible;
+}
+.character g,
+.character ellipse {
+  transform-box: view-box;
+}
+
+/* A plain white figure with a dark outline shows up on light and dark desktops alike. */
+.ch-part {
+  fill: #fff;
+  stroke: #334155;
+  stroke-width: 1.6;
+}
+.ch-figure {
+  filter: drop-shadow(0 1px 1.2px rgb(0 0 0 / 0.35));
+}
+
+/* Its shadow on the taskbar, in the accent colour while the panel is open. */
+.ch-shadow {
+  fill: rgb(0 0 0 / 0.28);
+  transform-origin: 36px 70px;
+  transition:
+    opacity 0.2s,
+    fill 0.2s;
+}
+.character[data-expanded] .ch-shadow {
+  fill: var(--color-accent);
+  opacity: 0.8;
+}
+
+.ch-hover,
+.ch-lean,
+.ch-move {
+  transform-origin: 36px 69px;
+}
+.ch-hover,
+.ch-lean {
+  transition: transform 0.2s ease-out;
+}
+button:hover .ch-hover {
+  transform: scale(1.05);
+}
+
+/* The joints, and the arms' resting angle: hanging a little away from the body. */
+.ch-arm-a {
+  transform-origin: 25px 31px;
+  transform: rotate(10deg);
+}
+.ch-arm-b {
+  transform-origin: 47px 31px;
+  transform: rotate(-10deg);
+}
+.ch-leg-a {
+  transform-origin: 33px 49px;
+}
+.ch-leg-b {
+  transform-origin: 39px 49px;
+}
+/* Where each limb joins the body; walking moves them to the middle (seen from the side). */
+.ch-arm-a-pos,
+.ch-arm-b-pos,
+.ch-leg-a-pos,
+.ch-leg-b-pos {
+  transition: transform 0.15s ease-out;
+}
+
+/* idle: standing, bobbing gently as if breathing. */
+.character[data-pose='idle'] .ch-move {
+  animation: ch-bob 2.4s ease-in-out infinite;
+}
+.character[data-pose='idle'] .ch-shadow {
+  animation: ch-shadow-bob 2.4s ease-in-out infinite;
+}
+@keyframes ch-bob {
+  50% {
+    transform: translateY(-2.5px);
+  }
+}
+@keyframes ch-shadow-bob {
+  50% {
+    transform: scaleX(0.85);
+  }
+}
+
+/* walk-left, walk-right: side on, legs striding and arms swinging, leaning into the walk. */
+.character[data-pose^='walk'] .ch-arm-a-pos {
+  transform: translateX(11px);
+}
+.character[data-pose^='walk'] .ch-arm-b-pos {
+  transform: translateX(-11px);
+}
+.character[data-pose^='walk'] .ch-leg-a-pos {
+  transform: translateX(3px);
+}
+.character[data-pose^='walk'] .ch-leg-b-pos {
+  transform: translateX(-3px);
+}
+.character[data-pose^='walk'] .ch-leg-a {
+  animation: ch-stride 0.6s ease-in-out infinite;
+}
+.character[data-pose^='walk'] .ch-leg-b {
+  animation: ch-stride 0.6s ease-in-out infinite reverse;
+}
+.character[data-pose^='walk'] .ch-arm-a {
+  animation: ch-swing 0.6s ease-in-out infinite reverse;
+}
+.character[data-pose^='walk'] .ch-arm-b {
+  animation: ch-swing 0.6s ease-in-out infinite;
+}
+.character[data-pose^='walk'] .ch-move {
+  animation: ch-step 0.3s ease-in-out infinite;
+}
+.character[data-pose='walk-left'] .ch-lean {
+  transform: rotate(-7deg);
+}
+.character[data-pose='walk-right'] .ch-lean {
+  transform: rotate(7deg);
+}
+@keyframes ch-stride {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(24deg);
+  }
+  75% {
+    transform: rotate(-24deg);
+  }
+}
+@keyframes ch-swing {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(20deg);
+  }
+  75% {
+    transform: rotate(-20deg);
+  }
+}
+@keyframes ch-step {
+  50% {
+    transform: translateY(-1.5px);
+  }
+}
+
+/* fidget-1: a hop, crouching first and landing with a squash, arms flung up. */
+.character[data-pose='fidget-1'] .ch-move {
+  animation: ch-hop var(--ch-fidget) ease-in-out;
+}
+.character[data-pose='fidget-1'] .ch-arm-a {
+  animation: ch-hop-arm-a var(--ch-fidget) ease-in-out;
+}
+.character[data-pose='fidget-1'] .ch-arm-b {
+  animation: ch-hop-arm-b var(--ch-fidget) ease-in-out;
+}
+.character[data-pose='fidget-1'] .ch-shadow {
+  animation: ch-hop-shadow var(--ch-fidget) ease-in-out;
+}
+@keyframes ch-hop {
+  0%,
+  80%,
+  100% {
+    transform: none;
+  }
+  20% {
+    transform: scale(1.08, 0.88);
+  }
+  45% {
+    transform: translateY(-8px) scale(0.95, 1.06);
+  }
+  65% {
+    transform: scale(1.06, 0.92);
+  }
+}
+@keyframes ch-hop-arm-a {
+  0%,
+  75%,
+  100% {
+    transform: rotate(10deg);
+  }
+  45% {
+    transform: rotate(70deg);
+  }
+}
+@keyframes ch-hop-arm-b {
+  0%,
+  75%,
+  100% {
+    transform: rotate(-10deg);
+  }
+  45% {
+    transform: rotate(-70deg);
+  }
+}
+@keyframes ch-hop-shadow {
+  45% {
+    transform: scaleX(0.6);
+    opacity: 0.5;
+  }
+}
+
+/* fidget-2: a wave, one arm raised and waving, the head tilted. */
+.character[data-pose='fidget-2'] .ch-arm-b {
+  animation: ch-wave var(--ch-fidget) ease-in-out;
+}
+.character[data-pose='fidget-2'] .ch-move {
+  animation: ch-tilt var(--ch-fidget) ease-in-out;
+}
+@keyframes ch-wave {
+  0%,
+  100% {
+    transform: rotate(-10deg);
+  }
+  15%,
+  75% {
+    transform: rotate(-150deg);
+  }
+  30%,
+  60% {
+    transform: rotate(-125deg);
+  }
+  45% {
+    transform: rotate(-158deg);
+  }
+  90% {
+    transform: rotate(-10deg);
+  }
+}
+@keyframes ch-tilt {
+  15%,
+  75% {
+    transform: rotate(-3deg);
+  }
+}
+
+/* dragged: hanging from the pointer by its head, swaying, arms up and legs kicking. */
+.character[data-pose='dragged'] .ch-move {
+  transform-origin: 36px 10px;
+  animation: ch-dangle 1.2s ease-in-out infinite;
+}
+.character[data-pose='dragged'] .ch-arm-a {
+  animation: ch-flail-a 0.5s ease-in-out infinite alternate;
+}
+.character[data-pose='dragged'] .ch-arm-b {
+  animation: ch-flail-b 0.5s ease-in-out infinite alternate;
+}
+.character[data-pose='dragged'] .ch-leg-a {
+  animation: ch-kick 0.4s ease-in-out infinite alternate;
+}
+.character[data-pose='dragged'] .ch-leg-b {
+  animation: ch-kick 0.4s ease-in-out infinite alternate-reverse;
+}
+.character[data-pose='dragged'] .ch-shadow {
+  opacity: 0;
+}
+@keyframes ch-dangle {
+  0%,
+  100% {
+    transform: rotate(-8deg);
+  }
+  50% {
+    transform: rotate(8deg);
+  }
+}
+@keyframes ch-flail-a {
+  from {
+    transform: rotate(140deg);
+  }
+  to {
+    transform: rotate(165deg);
+  }
+}
+@keyframes ch-flail-b {
+  from {
+    transform: rotate(-140deg);
+  }
+  to {
+    transform: rotate(-165deg);
+  }
+}
+@keyframes ch-kick {
+  from {
+    transform: rotate(-14deg);
+  }
+  to {
+    transform: rotate(14deg);
+  }
+}
+
+/* Reduced motion (a Windows setting): it still walks, but holds still otherwise. */
+@media (prefers-reduced-motion: reduce) {
+  .character,
+  .character * {
+    animation: none !important;
+    transition: none !important;
+  }
+}

@@ -4,7 +4,8 @@ Status: **Milestones 0 (Foundation), 1 (Chat with Claude), 2.1 (bubble fixes), 3
 sign-in), 4 (logos, favourites, service desk, light/dark, the bubble-click fix) and 5 (the
 app-opening spinner; Jira and the service desk), its fixes 5.1 and 5.2 (the bubble kept in front;
 Check for updates), and features 3.1 (questions open in Claude Desktop) and 3.2 (Apps list,
-Uninstall, fixes) complete**. Version 1.0.0 is the first release (§7h). Last updated 2026-10-16.
+Uninstall, fixes) complete**. Version 1.0.0 is the first release (§7h). On trial (branch
+`character`): the bubble as an animated character (§7i). Last updated 2026-11-13.
 
 A Windows desktop assistant that runs in the background, shows a small circular company logo
 in the bottom-right corner of the screen, and opens a panel when clicked. It's built for Morse
@@ -47,6 +48,8 @@ account and usage limit (§7e); the built-in chat stays available as a tenant se
   The text box opens to its **left**, aligned to its bottom edge,
   and **grows upward** as you type. Action icons stack **above** the bubble.
 - **Collapse** by clicking the bubble again, pressing Esc, or clicking anywhere else.
+- On trial since 6: the bubble is an animated character standing on the taskbar near a bottom
+  corner instead of the logo in a corner (§7i).
 - Only one copy runs at a time. Launching it again just opens the panel.
 
 ## 2. Important: which "Claude" this connects to (from M1)
@@ -269,7 +272,7 @@ Federation (§4, §5).
 - **Not set up**: Until IT fills in `tenant.json`, the chat box says sign-in isn't set up and lists the missing settings. Nothing is contacted.
 - **Config**: `tenant.json` gains `signIn` (issuer, client ID, redirect port) and `claudeAccess` (organization, federation rule, service account and optional workspace IDs). None of them are secret. Dev runs can override them from a file named by `DESKTOP_ASSIST_DEV_CONFIG`.
 - **Focus ring**: Keyboard focus is now purple everywhere, instead of following the Windows accent colour.
-- **Icons**: The tray icon and the `.exe` icon (also used for the Start menu shortcut and the installer) are the bubble's logo.
+- **Icons**: The tray icon and the `.exe` icon (also used for the Start menu shortcut and the installer) are the tenant's logo (also the bubble's, until the character in §7i).
 - **Diagnostics**: Errors show Anthropic's request reference, and the full details go to `%APPDATA%\Desktop Assist\logs\desktop-assist.log` (and the terminal in dev runs). When Anthropic refuses the sign-in swap, the log also records a summary of the ID token that was sent (issuer, audience, email, lifetime, signing key; never the token), to compare with the federation rule.
 
 Tested with unit tests (159, including the sign-in manager, the loopback listener and the fallback rule) and an
@@ -562,6 +565,42 @@ and `--inspect`, with nothing ever listening on the port; `ELECTRON_RUN_AS_NODE`
 code doesn't run; and a copy with one letter of its code changed in `app.asar` stops with "ASAR
 Integrity Violation".
 
+## 7i. On trial: the bubble as an animated character (branch `character`)
+
+The logo bubble becomes a small character standing on the taskbar. For now it's a **blank
+placeholder figure** (a white head, body, arms and legs with a dark outline, so it shows on light
+and dark desktops), drawn in SVG; real artwork replaces the shapes later, keyed by the same poses.
+
+- **Poses** (decided by the main process, animated in CSS by the bubble's page):
+  - **Idle**: standing, bobbing gently.
+  - **Walk left / walk right**: side on, legs striding and arms swinging, leaning into the walk,
+    while the window moves along the taskbar (80 DIP a second).
+  - **Two fidgets**, only once it's been left alone for 30 s: a **hop** (crouch, jump with arms
+    flung up, land with a squash) and a **wave**.
+  - **Dragged**: hanging from the pointer by its head, swaying, arms up and legs kicking. Also
+    while Bounce throws it about, and while it falls after a drop.
+- **Where it lives**: no longer stuck in a corner, but near one of the bottom corners. It stands on
+  the taskbar (its window's bottom edge on the work area's) and strolls within 240 DIP of its
+  corner: every 8 to 20 s (5 to 12 s after settling) it walks somewhere else in that stretch, or,
+  once it's been alone 30 s, sometimes fidgets instead.
+- **Dragging**: dropped, it falls onto the taskbar of that display with gravity, and from then on
+  lives near that display's nearer bottom corner (the half of the screen it's in). Dropped further
+  than 240 DIP from that corner, it walks back. The corner is remembered as before; a top corner
+  saved by 1.0.0 means the bottom corner below it.
+- **Anything the user does stops it where it is**: clicking it opens the panel from where it
+  stands (the panel still opens toward the middle of the screen); dragging or Bounce interrupt a
+  walk or a fidget. Nothing happens on its own while the panel is open.
+- Bounce still roams every monitor; a click brings it back to where it stood.
+- With Windows' reduced-motion setting it still walks, but holds still otherwise.
+
+Tested with unit tests (where it stands and which corner it belongs to; choosing walks and
+fidgets, walking, falling; the controller with fake timers: standing, strolling both ways,
+fidgeting only after a quiet spell, stopping when clicked with the panel where it stands, nothing
+while open, dangling while dragged, falling where dropped, walking back from far away, another
+display, Bounce, display changes) and the real app: it stood on the taskbar, walked left about
+190 DIP at walking speed, and hopped once it had been left alone 30 s; a contact sheet of every
+pose drawn with the real CSS.
+
 ## 8. Milestones
 
 - **0** ✅ **Foundation**: Everything in §7 works in `npm run dev` and in the unsigned installer. Unit tests and lint pass.
@@ -574,7 +613,8 @@ Integrity Violation".
 - **5** ✅ **Jira and the service desk**: The app-opening spinner, and Atlassian ideas 1 to 9. See §7h.
 - **5.1** ✅ **The bubble on top after starting**: always-on-top that survives a full-screen app. See §7h.
 - **5.2** ✅ **The bubble kept in front, and Check for updates**: the startup front check; updating from GitHub releases, signed with a release key; the `.exe` locked down; version 1.0.0, the first release. See §7h.
-- 6 (next): To be chosen. Candidates:
+- **6** 🧪 **The character** (on trial, branch `character`): the bubble as an animated character on the taskbar near a bottom corner. See §7i.
+- 7 (next): To be chosen. Candidates:
   - Shipping: code signing (no "unrecognised app" warning), silent deployment through JumpCloud (with Claude Desktop), CI on GitHub Actions (tests and the installer on every pull request, and building the release), a "What's new" note after an update
   - Bubble and screenshots: a keyboard shortcut to open the panel and to take a screenshot, snipping a region or a window, pasting an image into the text box, hiding during full-screen apps and presentations, a first-run tour
   - Apps and JumpCloud: recently opened apps near the top, arrow keys in the grid, company quick links that aren't JumpCloud apps, a password-expiry reminder

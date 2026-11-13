@@ -15,6 +15,10 @@ either from the start or behind an icon, depending on the tenant; that component
 covered in [Your apps](10-apps.md). It can also show the Jira page, the service desk page or a
 Jira issue, which are in [The Jira and service desk pages](12-atlassian-pages.md).
 
+One more component belongs to the bubble's page instead: `Character`, with its stylesheet
+`character.css`, the animated figure that stands in for the bubble. `BubbleView` renders it, and
+it's covered at the end of this page.
+
 ## `src/renderer/src/components/ChatBox.tsx`: the chat card
 
 The card beside the bubble, with the text box at its bottom. `Panel` renders one `ChatBox` and
@@ -166,8 +170,9 @@ switches mouse input on only while the pointer is over an element that is, or is
 marked `data-hit`. So every piece of real UI must carry it. Here it's the whole card, which covers
 everything inside it; in `SettingsMenu` it's the menu, and in `ActionStack` each icon.
 
-**How the layout mirrors for each corner.** The bubble can rest in any corner of the screen, and
-the panel always opens toward the middle. The panel window shares its outer corner with the
+**How the layout mirrors for each corner.** The layout works from any corner of the screen,
+though the character only ever lives near the two bottom ones, and the panel always opens toward
+the middle. The panel window shares its outer corner with the
 bubble's window (`panelWindowBounds` in [The bubble](5-bubble.md)), so the components measure
 their positions from that corner. `PANEL_LAYOUT` in `src/shared/geometry.ts` gives each piece's
 distance from it, `X` across and `Y` away from the screen edge (see
@@ -1847,3 +1852,490 @@ draft (the file itself stays in the screenshots folder).
   screen readers, such as "Remove Screenshot 14:03".
 - `onClick={props.onRemove}`: `Panel.removeAttachment` asks the main process to drop it from the
   saved draft and shows the updated list.
+
+## `src/renderer/src/components/Character.tsx` and `character.css`: the character
+
+The figure that stands in for the bubble, the one component used by the bubble's page rather than
+the panel's. For now it's a blank placeholder: a head, a body, two arms and two legs, plain white
+with a dark outline. It decides nothing itself: the main process chooses the pose (`Pose` in
+`src/shared/character.ts`) and moves the window while the character walks, `BubbleView` passes the
+pose in, and `character.css` animates it. When there's real artwork, it replaces the shapes here
+and the animations in the stylesheet, keyed by the same poses, and nothing in the main process has
+to change.
+
+### `Character`
+
+<!-- code: apps/desktop/src/renderer/src/components/Character.tsx#Character -->
+
+[`src/renderer/src/components/Character.tsx`, lines 6–63](../../apps/desktop/src/renderer/src/components/Character.tsx#L6-L63)
+
+```tsx
+/**
+ * The character that stands in for the bubble: a blank placeholder figure (head, body, arms and
+ * legs), drawn to fill the bubble's window with its feet on the window's bottom edge, which the
+ * main process keeps on the taskbar. Each pose is a CSS animation in character.css; the main
+ * process decides the pose (and moves the window while it walks). When there's real artwork, it
+ * replaces the shapes here and the animations, keyed by the same poses.
+ *
+ * The drawing's units are DIPs of a 72 × 72 window (BUBBLE_BOX); a different BUBBLE_BOX scales it.
+ */
+export function Character(props: { pose: Pose; expanded: boolean }) {
+  const { pose } = props
+  // Fidgets play once, for as long as the main process waits before going back to idle.
+  const style = isFidget(pose)
+    ? ({ '--ch-fidget': `${FIDGET_MS[pose]}ms` } as CSSProperties)
+    : undefined
+  return (
+    <svg
+      viewBox="0 0 72 72"
+      width={BUBBLE_BOX}
+      height={BUBBLE_BOX}
+      className="character"
+      data-pose={pose}
+      data-expanded={props.expanded || undefined}
+      style={style}
+      aria-hidden
+    >
+      <ellipse className="ch-shadow" cx="36" cy="70" rx="12" ry="2" />
+      <g className="ch-hover">
+        <g className="ch-lean">
+          <g className="ch-move ch-figure">
+            <g className="ch-arm-a-pos">
+              <g className="ch-arm-a">
+                <rect className="ch-part" x="22.5" y="29" width="5" height="18" rx="2.5" />
+              </g>
+            </g>
+            <g className="ch-leg-a-pos">
+              <g className="ch-leg-a">
+                <rect className="ch-part" x="30" y="47" width="6" height="22" rx="3" />
+              </g>
+            </g>
+            <g className="ch-leg-b-pos">
+              <g className="ch-leg-b">
+                <rect className="ch-part" x="36" y="47" width="6" height="22" rx="3" />
+              </g>
+            </g>
+            <rect className="ch-part" x="27" y="27" width="18" height="25" rx="8" />
+            <circle className="ch-part" cx="36" cy="19" r="9" />
+            <g className="ch-arm-b-pos">
+              <g className="ch-arm-b">
+                <rect className="ch-part" x="44.5" y="29" width="5" height="18" rx="2.5" />
+              </g>
+            </g>
+          </g>
+        </g>
+      </g>
+    </svg>
+  )
+}
+```
+
+<!-- /code -->
+
+An SVG drawing of the figure. Its props are the `pose` and whether the panel is open (`expanded`).
+
+- `// Fidgets play once`: as the comment says. For a fidget, the component sets the CSS variable
+  `--ch-fidget` to the fidget's length from `FIDGET_MS` (`1200ms` for the hop, `2000ms` for the
+  wave), and the fidget's animations in `character.css` use `var(--ch-fidget)` as their duration.
+  The main process's timer (`BubbleController.doActivity()`) uses the same number, so the figure
+  finishes its hop or wave just as the pose goes back to `idle`. `isFidget(pose)` also tells
+  TypeScript that `pose` is a `Fidget` there, so `FIDGET_MS[pose]` type-checks.
+- `as CSSProperties`: React's type for `style` doesn't list custom properties such as
+  `--ch-fidget`, so the object is cast to it. Other poses get no `style` at all (`undefined`).
+- `viewBox="0 0 72 72"` with `width={BUBBLE_BOX}` and `height={BUBBLE_BOX}`: as the comment says,
+  the drawing's units are DIPs of the 72 × 72 window. The `viewBox` sets the drawing's own
+  coordinates and `width` and `height` its size on the page; they match, so one unit is one DIP. A
+  different `BUBBLE_BOX` would scale the same drawing.
+- The feet: the legs run from `y="47"` down to 69, and the shadow under them is centred at 70,
+  just above the window's bottom edge (72). The main process keeps that edge on the taskbar
+  (`restPosition()` in [The bubble](5-bubble.md)), so the figure stands on it.
+- `data-pose={pose}`: the stylesheet picks each pose's animations with selectors such as
+  `.character[data-pose='idle']`, so changing the pose is just changing this attribute.
+- `data-expanded={props.expanded || undefined}`: there only while the panel is open (React leaves
+  out an attribute whose value is `undefined`). It turns the shadow the accent colour.
+- `aria-hidden`: the drawing is decoration; the button around it carries the `aria-label`.
+- The shapes are drawn in order, back to front: the shadow, the far arm (`ch-arm-a`), both legs,
+  the body, the head, and last the near arm (`ch-arm-b`), in front of the body.
+
+**The nested groups.** Each limb sits in two groups. The outer one, ending `-pos`
+(`ch-arm-a-pos` and so on), moves the limb's joint: when the character walks, it slides the arms
+and legs toward the middle, so the figure is seen side on. The inner one (`ch-arm-a`) turns the
+limb about its joint (the shoulder or the hip) to swing, wave or kick. An element has only one
+`transform`, so a slide and a turn on the same element would replace each other; on two nested
+groups they add up. The whole figure is nested the same way: `ch-move` moves the figure itself
+(bobbing, stepping, hopping, dangling; `ch-figure` on the same group gives it its drop shadow),
+`ch-lean` around it tilts it into a walk, and `ch-hover`, the outermost, makes it a little bigger
+while the pointer is over the button. The shadow is outside all of them, so it stays on the
+taskbar.
+
+### `character.css`
+
+<!-- code: apps/desktop/src/renderer/src/components/character.css -->
+
+[`src/renderer/src/components/character.css`, lines 1–308](../../apps/desktop/src/renderer/src/components/character.css#L1-L308)
+
+```css
+/*
+ * The character's animations, one set per pose (Character.tsx sets data-pose on the <svg>).
+ * Lengths are in the drawing's units (DIPs of the 72 × 72 window); rotations turn each part
+ * about its joint: shoulders for the arms, hips for the legs, the feet for the whole figure.
+ */
+
+.character {
+  display: block;
+  overflow: visible;
+}
+.character g,
+.character ellipse {
+  transform-box: view-box;
+}
+
+/* A plain white figure with a dark outline shows up on light and dark desktops alike. */
+.ch-part {
+  fill: #fff;
+  stroke: #334155;
+  stroke-width: 1.6;
+}
+.ch-figure {
+  filter: drop-shadow(0 1px 1.2px rgb(0 0 0 / 0.35));
+}
+
+/* Its shadow on the taskbar, in the accent colour while the panel is open. */
+.ch-shadow {
+  fill: rgb(0 0 0 / 0.28);
+  transform-origin: 36px 70px;
+  transition:
+    opacity 0.2s,
+    fill 0.2s;
+}
+.character[data-expanded] .ch-shadow {
+  fill: var(--color-accent);
+  opacity: 0.8;
+}
+
+.ch-hover,
+.ch-lean,
+.ch-move {
+  transform-origin: 36px 69px;
+}
+.ch-hover,
+.ch-lean {
+  transition: transform 0.2s ease-out;
+}
+button:hover .ch-hover {
+  transform: scale(1.05);
+}
+
+/* The joints, and the arms' resting angle: hanging a little away from the body. */
+.ch-arm-a {
+  transform-origin: 25px 31px;
+  transform: rotate(10deg);
+}
+.ch-arm-b {
+  transform-origin: 47px 31px;
+  transform: rotate(-10deg);
+}
+.ch-leg-a {
+  transform-origin: 33px 49px;
+}
+.ch-leg-b {
+  transform-origin: 39px 49px;
+}
+/* Where each limb joins the body; walking moves them to the middle (seen from the side). */
+.ch-arm-a-pos,
+.ch-arm-b-pos,
+.ch-leg-a-pos,
+.ch-leg-b-pos {
+  transition: transform 0.15s ease-out;
+}
+
+/* idle: standing, bobbing gently as if breathing. */
+.character[data-pose='idle'] .ch-move {
+  animation: ch-bob 2.4s ease-in-out infinite;
+}
+.character[data-pose='idle'] .ch-shadow {
+  animation: ch-shadow-bob 2.4s ease-in-out infinite;
+}
+@keyframes ch-bob {
+  50% {
+    transform: translateY(-2.5px);
+  }
+}
+@keyframes ch-shadow-bob {
+  50% {
+    transform: scaleX(0.85);
+  }
+}
+
+/* walk-left, walk-right: side on, legs striding and arms swinging, leaning into the walk. */
+.character[data-pose^='walk'] .ch-arm-a-pos {
+  transform: translateX(11px);
+}
+.character[data-pose^='walk'] .ch-arm-b-pos {
+  transform: translateX(-11px);
+}
+.character[data-pose^='walk'] .ch-leg-a-pos {
+  transform: translateX(3px);
+}
+.character[data-pose^='walk'] .ch-leg-b-pos {
+  transform: translateX(-3px);
+}
+.character[data-pose^='walk'] .ch-leg-a {
+  animation: ch-stride 0.6s ease-in-out infinite;
+}
+.character[data-pose^='walk'] .ch-leg-b {
+  animation: ch-stride 0.6s ease-in-out infinite reverse;
+}
+.character[data-pose^='walk'] .ch-arm-a {
+  animation: ch-swing 0.6s ease-in-out infinite reverse;
+}
+.character[data-pose^='walk'] .ch-arm-b {
+  animation: ch-swing 0.6s ease-in-out infinite;
+}
+.character[data-pose^='walk'] .ch-move {
+  animation: ch-step 0.3s ease-in-out infinite;
+}
+.character[data-pose='walk-left'] .ch-lean {
+  transform: rotate(-7deg);
+}
+.character[data-pose='walk-right'] .ch-lean {
+  transform: rotate(7deg);
+}
+@keyframes ch-stride {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(24deg);
+  }
+  75% {
+    transform: rotate(-24deg);
+  }
+}
+@keyframes ch-swing {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(20deg);
+  }
+  75% {
+    transform: rotate(-20deg);
+  }
+}
+@keyframes ch-step {
+  50% {
+    transform: translateY(-1.5px);
+  }
+}
+
+/* fidget-1: a hop, crouching first and landing with a squash, arms flung up. */
+.character[data-pose='fidget-1'] .ch-move {
+  animation: ch-hop var(--ch-fidget) ease-in-out;
+}
+.character[data-pose='fidget-1'] .ch-arm-a {
+  animation: ch-hop-arm-a var(--ch-fidget) ease-in-out;
+}
+.character[data-pose='fidget-1'] .ch-arm-b {
+  animation: ch-hop-arm-b var(--ch-fidget) ease-in-out;
+}
+.character[data-pose='fidget-1'] .ch-shadow {
+  animation: ch-hop-shadow var(--ch-fidget) ease-in-out;
+}
+@keyframes ch-hop {
+  0%,
+  80%,
+  100% {
+    transform: none;
+  }
+  20% {
+    transform: scale(1.08, 0.88);
+  }
+  45% {
+    transform: translateY(-8px) scale(0.95, 1.06);
+  }
+  65% {
+    transform: scale(1.06, 0.92);
+  }
+}
+@keyframes ch-hop-arm-a {
+  0%,
+  75%,
+  100% {
+    transform: rotate(10deg);
+  }
+  45% {
+    transform: rotate(70deg);
+  }
+}
+@keyframes ch-hop-arm-b {
+  0%,
+  75%,
+  100% {
+    transform: rotate(-10deg);
+  }
+  45% {
+    transform: rotate(-70deg);
+  }
+}
+@keyframes ch-hop-shadow {
+  45% {
+    transform: scaleX(0.6);
+    opacity: 0.5;
+  }
+}
+
+/* fidget-2: a wave, one arm raised and waving, the head tilted. */
+.character[data-pose='fidget-2'] .ch-arm-b {
+  animation: ch-wave var(--ch-fidget) ease-in-out;
+}
+.character[data-pose='fidget-2'] .ch-move {
+  animation: ch-tilt var(--ch-fidget) ease-in-out;
+}
+@keyframes ch-wave {
+  0%,
+  100% {
+    transform: rotate(-10deg);
+  }
+  15%,
+  75% {
+    transform: rotate(-150deg);
+  }
+  30%,
+  60% {
+    transform: rotate(-125deg);
+  }
+  45% {
+    transform: rotate(-158deg);
+  }
+  90% {
+    transform: rotate(-10deg);
+  }
+}
+@keyframes ch-tilt {
+  15%,
+  75% {
+    transform: rotate(-3deg);
+  }
+}
+
+/* dragged: hanging from the pointer by its head, swaying, arms up and legs kicking. */
+.character[data-pose='dragged'] .ch-move {
+  transform-origin: 36px 10px;
+  animation: ch-dangle 1.2s ease-in-out infinite;
+}
+.character[data-pose='dragged'] .ch-arm-a {
+  animation: ch-flail-a 0.5s ease-in-out infinite alternate;
+}
+.character[data-pose='dragged'] .ch-arm-b {
+  animation: ch-flail-b 0.5s ease-in-out infinite alternate;
+}
+.character[data-pose='dragged'] .ch-leg-a {
+  animation: ch-kick 0.4s ease-in-out infinite alternate;
+}
+.character[data-pose='dragged'] .ch-leg-b {
+  animation: ch-kick 0.4s ease-in-out infinite alternate-reverse;
+}
+.character[data-pose='dragged'] .ch-shadow {
+  opacity: 0;
+}
+@keyframes ch-dangle {
+  0%,
+  100% {
+    transform: rotate(-8deg);
+  }
+  50% {
+    transform: rotate(8deg);
+  }
+}
+@keyframes ch-flail-a {
+  from {
+    transform: rotate(140deg);
+  }
+  to {
+    transform: rotate(165deg);
+  }
+}
+@keyframes ch-flail-b {
+  from {
+    transform: rotate(-140deg);
+  }
+  to {
+    transform: rotate(-165deg);
+  }
+}
+@keyframes ch-kick {
+  from {
+    transform: rotate(-14deg);
+  }
+  to {
+    transform: rotate(14deg);
+  }
+}
+
+/* Reduced motion (a Windows setting): it still walks, but holds still otherwise. */
+@media (prefers-reduced-motion: reduce) {
+  .character,
+  .character * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+```
+
+<!-- /code -->
+
+The character's look, and one set of animations per pose. `Character.tsx` imports it
+(`import './character.css'`), and Vite bundles it with the page's other styles. As the comment at
+the top says, lengths are in the drawing's units, and rotations turn each part about its joint.
+
+- `overflow: visible`: parts of the figure that reach past the drawing's edge (a raised arm, a
+  hop) aren't cut off at the edge of the `<svg>`.
+- `transform-box: view-box`: every `transform-origin` below is then a point in the drawing itself,
+  measured from its top-left, so `25px 31px` is the left shoulder.
+- `.ch-part`: white with a slate outline (`#334155`). As the comment says, that shows up on light
+  and dark desktops alike, so it doesn't change with the app's light or dark mode.
+- `.ch-figure`: a soft drop shadow around the whole figure.
+- `.ch-shadow`: the shadow on the taskbar, shrinking about its own centre (`36px 70px`). As the
+  comment says, it takes the accent colour while the panel is open (`data-expanded`), where the
+  logo used to get an accent ring; the `transition` fades between the two.
+- `.ch-hover, .ch-lean, .ch-move`: their origin is the point between the feet (`36px 69px`), so
+  the figure grows and leans from where it stands. `button:hover .ch-hover` makes it 5% bigger
+  with the pointer over it.
+- `.ch-arm-a`, `.ch-arm-b`: the shoulders as origins, and, as the comment says, the arms' resting
+  angle, 10° out from the body. `.ch-leg-a` and `.ch-leg-b` turn about the hips.
+- `.ch-arm-a-pos` and the other `-pos` groups: a 0.15 s transition, so the limbs slide to the middle
+  when a walk starts and back when it stops, rather than jumping.
+
+Pose by pose:
+
+- **`idle`**: `ch-bob` lifts the figure 2.5 units and lets it down again over 2.4 seconds, round
+  and round, as if breathing, and `ch-shadow-bob` narrows the shadow to 85% at the top. A
+  keyframes rule with only `50%` animates from the element's usual state to that and back.
+- **`walk-left`, `walk-right`**: `[data-pose^='walk']` matches both (`^=` means "starts with"). The
+  `-pos` groups slide the arms 11 units and the legs 3 units to the middle, turning the figure side
+  on. The legs stride (`ch-stride`, 24° each way) and the arms swing (`ch-swing`, 20°) over 0.6
+  seconds; `reverse` runs one of each pair backwards, so the legs go opposite ways, and each arm
+  swings against the leg on its side, as people walk. `ch-step` bobs the body 1.5 units every 0.3
+  seconds, once a step. `ch-lean` tilts the figure 7° the way it's going: `rotate(-7deg)` (the top
+  toward the left) for `walk-left`. The window itself is moved by the main process.
+- **`fidget-1`**, the hop: `ch-hop` crouches with a squash (wider and shorter) at 20%, jumps 8 units
+  up, slightly stretched, at 45%, lands with a smaller squash at 65% and stands from 80%. The arms
+  fling up to 70° at the top of the jump (`ch-hop-arm-a`, `ch-hop-arm-b`), and the shadow shrinks
+  and fades while the figure is in the air (`ch-hop-shadow`). Each plays once, for
+  `var(--ch-fidget)`.
+- **`fidget-2`**, the wave: `ch-wave` raises the near arm to about 150°, waves it back and forth
+  between 125° and 158°, and lowers it, while `ch-tilt` tips the figure 3° as if tilting its head.
+  Also once, for `var(--ch-fidget)`.
+- **`dragged`**: `ch-move` gets a new origin, the top of the head (`36px 10px`), and `ch-dangle`
+  sways it 8° each way from there, like something held up by its head. The arms flail overhead
+  (between 140° and 165°; `alternate` plays the animation forwards then backwards, so they wave to
+  and fro) and the legs kick 14° each way, out of step with each other (`alternate-reverse`). The
+  shadow is hidden, since the figure is off the ground. This is the pose for dragging, Bounce and
+  the fall after a drop.
+- **Reduced motion**: `@media (prefers-reduced-motion: reduce)` applies when animations are turned
+  off in Windows. Every animation and transition on the character stops (`!important` overrides
+  the rules above). As the comment says, it still walks, because the walk's movement along the
+  taskbar is the main process moving the window; the figure just goes along standing still.

@@ -13,17 +13,24 @@ export interface Size {
 
 export interface Rect extends Point, Size {}
 
-/** The screen corner the bubble rests in. The panel always opens toward the screen's middle. */
+/**
+ * A screen corner. The character lives near a bottom one; the panel lays itself out from the
+ * bubble's corner (any of the four) to open toward the screen's middle.
+ */
 export type Corner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 
 export const isLeftCorner = (corner: Corner): boolean => corner.endsWith('left')
 export const isTopCorner = (corner: Corner): boolean => corner.startsWith('top')
 
 export const UI = {
-  /** Gap between the bubble and the edges of the work area. */
+  /** Gap between the character and the side of the work area when it's right in its corner. */
   edgeMargin: 16,
+  /** The bubble's box, which its position is measured from (its top-left corner). */
   bubbleSize: 56,
-  /** Transparent margin around the bubble inside its window (room for the shadow and ring). */
+  /**
+   * The bubble's window is this much bigger than the box on every side. The character is drawn
+   * across the whole window, its feet on the window's bottom edge.
+   */
   bubblePad: 8,
   /** Space between the bubble and the chat card / action stack. */
   gap: 12,

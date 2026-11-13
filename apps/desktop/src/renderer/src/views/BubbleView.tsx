@@ -1,17 +1,8 @@
 import { useRef, type PointerEvent } from 'react'
-import { UI } from '@shared/geometry'
+import { BUBBLE_BOX } from '@shared/geometry'
 import type { Mode } from '@shared/types'
+import { Character } from '../components/Character'
 import { useAccentColor, useAssistState } from '../hooks/useAssistState'
-import { cn } from '../lib/cn'
-
-// The tenant's logo: logo.png, or logo.svg (if a tenant has both, the PNG wins).
-const logos = import.meta.glob<string>('@tenant/logo.{png,svg}', {
-  eager: true,
-  query: '?url',
-  import: 'default',
-})
-const logoUrl =
-  Object.entries(logos).find(([path]) => path.endsWith('.png'))?.[1] ?? Object.values(logos)[0]
 
 const ACTION_LABEL: Record<Mode, string> = {
   collapsed: 'Open',
@@ -26,9 +17,10 @@ const ACTION_LABEL: Record<Mode, string> = {
 const DRAG_THRESHOLD = 5
 
 /**
- * The always-on-top logo bubble. A click goes to the main process, which decides what it means.
- * Press and move to drag it: the main process makes it follow the mouse, and on release snaps it
- * to the nearest corner of whichever display it's on.
+ * The always-on-top character (the "bubble"), filling its small window. A click goes to the main
+ * process, which decides what it means. Press and move to drag it: the main process makes it
+ * follow the mouse, and on release it falls onto the taskbar. What it's doing (its pose) comes
+ * from the main process too; Character animates it.
  */
 export function BubbleView() {
   // No useClickThrough here: the bubble window always takes the mouse (see bubble/windows.ts).
@@ -72,38 +64,24 @@ export function BubbleView() {
   }
 
   return (
-    <div className="flex h-full w-full items-center justify-center">
-      <button
-        data-hit
-        type="button"
-        aria-label={`${ACTION_LABEL[mode]} ${appName}`}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={endPress}
-        onLostPointerCapture={endPress}
-        onClick={() => {
-          if (swallowClick.current) swallowClick.current = false
-          // A click from the keyboard has no press: it's "now".
-          else window.assist.bubbleClick(pressedAt.current ?? Date.now())
-          pressedAt.current = undefined
-        }}
-        style={{ width: UI.bubbleSize, height: UI.bubbleSize }}
-        className={cn(
-          'overflow-hidden rounded-full shadow-[0_2px_6px_rgba(0,0,0,0.35)] outline-none',
-          'transition-[transform,box-shadow] duration-150 ease-out motion-reduce:transition-none',
-          mode === 'dragging' ? 'scale-105' : 'hover:scale-105 active:scale-95',
-          // Always a 2px white border; while the panel is open, a purple one outside it.
-          'ring-2',
-          mode === 'expanded' ? 'ring-accent ring-offset-2 ring-offset-white' : 'ring-white',
-        )}
-      >
-        <img
-          src={logoUrl}
-          alt=""
-          draggable={false}
-          className="pointer-events-none size-full object-contain"
-        />
-      </button>
-    </div>
+    <button
+      data-hit
+      type="button"
+      aria-label={`${ACTION_LABEL[mode]} ${appName}`}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={endPress}
+      onLostPointerCapture={endPress}
+      onClick={() => {
+        if (swallowClick.current) swallowClick.current = false
+        // A click from the keyboard has no press: it's "now".
+        else window.assist.bubbleClick(pressedAt.current ?? Date.now())
+        pressedAt.current = undefined
+      }}
+      style={{ width: BUBBLE_BOX, height: BUBBLE_BOX }}
+      className="block cursor-grab outline-offset-[-2px] active:cursor-grabbing"
+    >
+      <Character pose={state?.pose ?? 'idle'} expanded={mode === 'expanded'} />
+    </button>
   )
 }

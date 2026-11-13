@@ -78,7 +78,7 @@ Until these are filled in, the app says sign-in isn't set up yet. How to get the
 `morse-micro/logo.png` is the Morse Micro "Mμ" mark, cut to a circle (512×512, transparent
 corners). To change it, replace that file and restart `npm run dev`. No code changes are needed.
 
-The bubble is a 56px circle with no background of its own, and the image is scaled to fit
-inside it without cropping. A square image of the logo mark (not the full wordmark), already cut
-to a circle with its own background colour and transparent corners, at least 256×256 pixels,
-looks best.
+The logo is the tray icon and the installed app's icon; the bubble on screen is now an animated
+character, not the logo. A square image of the logo mark (not the full wordmark), already cut to a
+circle with its own background colour and transparent corners, at least 256×256 pixels, looks
+best.

@@ -9,7 +9,8 @@ import {
   type Rect,
 } from '@shared/geometry'
 
-// Positions are the top-left corner of the bubble circle itself, not of its window.
+// Positions are the top-left corner of the bubble's box (where the character is drawn, inside
+// its window's padding), not of its window.
 
 export interface TravelBox {
   minX: number
@@ -18,25 +19,38 @@ export interface TravelBox {
   maxY: number
 }
 
-/** The bubble's resting place in `corner` of the work area (the screen minus the taskbar). */
-export function homePosition(workArea: Rect, corner: Corner = 'bottom-right'): Point {
+/** How far from its corner the character can stand on this work area and still be wholly on it. */
+export function maxInset(workArea: Rect): number {
+  return Math.max(0, workArea.width - 2 * UI.edgeMargin - UI.bubbleSize)
+}
+
+/**
+ * Where the character stands: on the taskbar (its window's bottom edge on the work area's), in the
+ * bottom corner on `corner`'s side, `inset` along toward the middle of the screen. Only the side
+ * of `corner` matters: the character always stands at the bottom.
+ */
+export function restPosition(workArea: Rect, corner: Corner = 'bottom-right', inset = 0): Point {
+  const along = Math.min(Math.max(inset, 0), maxInset(workArea))
   return {
     x: isLeftCorner(corner)
-      ? workArea.x + UI.edgeMargin
-      : workArea.x + workArea.width - UI.edgeMargin - UI.bubbleSize,
-    y: isTopCorner(corner)
-      ? workArea.y + UI.edgeMargin
-      : workArea.y + workArea.height - UI.edgeMargin - UI.bubbleSize,
+      ? workArea.x + UI.edgeMargin + along
+      : workArea.x + workArea.width - UI.edgeMargin - UI.bubbleSize - along,
+    y: workArea.y + workArea.height - UI.bubblePad - UI.bubbleSize,
   }
 }
 
-/** The corner nearest the bubble: whichever quarter of the work area its centre is in. */
+/** The inset (see restPosition) of a character standing at `x`, kept on the work area. */
+export function insetAt(workArea: Rect, corner: Corner, x: number): number {
+  const inset = isLeftCorner(corner)
+    ? x - (workArea.x + UI.edgeMargin)
+    : workArea.x + workArea.width - UI.edgeMargin - UI.bubbleSize - x
+  return Math.min(Math.max(inset, 0), maxInset(workArea))
+}
+
+/** The bottom corner nearest the character: whichever half of the work area its centre is in. */
 export function nearestCorner(workArea: Rect, bubble: Point): Corner {
   const centreX = bubble.x + UI.bubbleSize / 2
-  const centreY = bubble.y + UI.bubbleSize / 2
-  const top = centreY < workArea.y + workArea.height / 2
-  const left = centreX < workArea.x + workArea.width / 2
-  return `${top ? 'top' : 'bottom'}-${left ? 'left' : 'right'}`
+  return centreX < workArea.x + workArea.width / 2 ? 'bottom-left' : 'bottom-right'
 }
 
 /**

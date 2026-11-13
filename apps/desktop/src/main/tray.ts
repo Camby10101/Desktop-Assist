@@ -1,7 +1,7 @@
 import { Menu, nativeImage, Tray, type NativeImage } from 'electron'
 import { circleBitmap } from './trayIcon'
 
-// The tenant's logo, the same image as the bubble. Only a PNG can be used: Windows can't draw a
+// The tenant's logo. Only a PNG can be used: Windows can't draw a
 // tray icon from SVG. `?asset` makes the build copy the file and gives its path at runtime.
 const logos = import.meta.glob<string>('@tenant/logo.png', {
   query: '?asset',

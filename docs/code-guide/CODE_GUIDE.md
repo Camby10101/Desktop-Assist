@@ -6,7 +6,8 @@ and method with an explanation of what it does and why. Covers Milestones 0 (Fou
 to Claude Desktop) and 3.2 (the Apps list, Uninstall in Settings, and fixes), and Milestone 4
 (app logos fixed, favourite apps, the IT service desk icon, light or dark mode, and a fix for
 clicks on the bubble), and Milestone 5 so far (a spinner while an app opens, Jira and the IT
-service desk in the panel, and Check for updates, from version 1.0.0, the first release).
+service desk in the panel, and Check for updates, from version 1.0.0, the first release), and, on
+trial on the `character` branch, the bubble as an animated character standing on the taskbar.
 
 This page is the overview. The code itself is in the [code walkthrough](#6-code-walkthrough),
 one page per area of the app.
@@ -46,7 +47,8 @@ streaming Claude reply. Every channel is listed in `src/shared/ipc.ts`.
 **Why two windows?** The bubble and the panel are separate, transparent, always-on-top windows.
 Both load the same web page; the URL's `?view=bubble` or `?view=panel` decides which UI it
 shows. Keeping the bubble in its own tiny window means it never resizes (no flicker when the
-panel opens), and only a 72×72 window moves around during Bounce.
+panel opens), and only a 72×72 window moves around during Bounce, a drag or a walk. (The bubble is
+now a small animated character standing on the taskbar, but the code still calls it the bubble.)
 
 **Click-through.** The panel window is a large rectangle, but most of it is transparent. So
 that you can still click whatever is underneath those empty areas, the panel window starts out
@@ -104,7 +106,7 @@ is in `src/main/mcp/`).
 3. With the built-in chat, **renew the saved sign-in** (`auth.init()`): if there isn't one, or
    JumpCloud refuses it, the chat box shows **Sign in with JumpCloud** instead of the chat. If
    JumpCloud can't be reached, the sign-in is kept and a banner offers Retry.
-4. Once both pages have painted, `controller.start()` shows the bubble in its saved corner (bottom-right of the main display the first time).
+4. Once both pages have painted, `controller.start()` stands the character on the taskbar in its saved corner (bottom-right of the main display the first time), shows it, and starts the wait for the first thing it does on its own.
 
 **Asking in Claude Desktop** (when the tenant's `chatApp` is `claude-desktop`)
 
@@ -273,8 +275,9 @@ clipboard and pasted into Claude).
 **Bounce**
 
 Bounce icon → `BubbleController.startBounce()` hides the panel and runs a 60 fps timer that
-calls `bounce.step()` and moves the bubble window across all the monitors. Clicking the bubble calls `glideHome()`,
-which animates it back to its corner of its own display with `bounce.glidePosition()`.
+calls `bounce.step()` and moves the bubble window across all the monitors, with the character
+dangling (the `dragged` pose). Clicking it calls `glideHome()`, which animates it back to where it
+stood on its own display with `bounce.glidePosition()`.
 
 **Light or dark mode**
 
@@ -288,17 +291,25 @@ uses; `SettingsService.init()` applies the saved mode before any window shows.
 
 `BubbleView` notes when the mouse button goes down, and on the click calls
 `window.assist.bubbleClick(pressedAt)` → IPC `assist:bubble-click` →
-`BubbleController.clickBubble(pressedAt)`. Collapsed, it opens the panel; open, it closes it.
+`BubbleController.clickBubble(pressedAt)`. Collapsed, it opens the panel; open, it closes it. A
+character that's walking stops where it is, and the panel opens beside it there.
 Both windows can take the keyboard focus (a bubble that couldn't sometimes lost its mouse presses
 on Windows), so pressing the bubble while the panel is open closes the panel as the button goes
 down; the press time tells the controller that this click's job is done, and it doesn't reopen.
 
+**The character on its own** (see [The bubble](5-bubble.md))
+
+1. While the panel is closed, `BubbleController.scheduleActivity()` waits 8 to 20 seconds (5 to 12 the first time), then `doActivity()` asks `wander.nextActivity()` what to do.
+2. Usually it's a walk: `walkTo()` moves the bubble window along the taskbar a frame at a time, to somewhere else within 240 DIPs of its corner (`wander.walkTarget()`), with the pose `walk-left` or `walk-right`. Once nobody has done anything with the character for 30 seconds, it's sometimes a fidget instead, a hop or a wave, which lasts as long as `FIDGET_MS` in `src/shared/character.ts` says.
+3. Each change of pose is broadcast (`assist:pose-changed`), and `Character` in the bubble's page plays the matching CSS animation (`character.css`).
+4. Any change of mode (a click, a drag, Bounce, the panel closing) stops whatever the character was doing on its own, where it is, and starts the 30 seconds again.
+
 **Dragging the bubble**
 
-1. `BubbleView` sees the mouse pressed on the bubble and moved more than 5 pixels → `window.assist.bubbleDragStart()` → `BubbleController.startDrag()`.
-2. The controller notes where the bubble was grabbed and, 60 times a second, moves the bubble window to follow the mouse pointer (it reads the real pointer from the main process, which keeps it smooth across monitors with different scaling).
-3. On release → `bubbleDragEnd()` → `endDrag()`: the display under the bubble is found, then the nearest of its four corners (`nearestCorner()`), and the bubble glides there.
-4. The new anchor (display + corner) is saved to `preferences.json` and broadcast to the panel, which re-lays itself out to open toward the middle of the screen: in a left corner the chat opens to the right, in a top corner the icons drop below the bubble and the chat grows downward.
+1. `BubbleView` sees the mouse pressed on the character and moved more than 5 pixels → `window.assist.bubbleDragStart()` → `BubbleController.startDrag()`. The change of mode stops anything the character was doing on its own, and its pose becomes `dragged`, so it dangles.
+2. The controller notes where the character was grabbed and, 60 times a second, moves the bubble window to follow the mouse pointer (it reads the real pointer from the main process, which keeps it smooth across monitors with different scaling).
+3. On release → `bubbleDragEnd()` → `endDrag()`: the display under the character is found, then the bottom corner on the side of it the character is on (`nearestCorner()`), and how far along the taskbar from that corner it was let go (`insetAt()`). It falls straight down onto the taskbar, speeding up as it goes (`fall()`, with `wander.fallPosition()`). If it lands further from the corner than 240 DIPs, it then walks back.
+4. The new anchor (display + corner) is saved to `preferences.json` and broadcast to the panel, which re-lays itself out to open toward the middle of the screen: near the bottom-left corner the chat opens to the right of the character instead of the left. The panel opens from wherever the character stands.
 
 ---
 
@@ -332,7 +343,7 @@ environment variable (default `morse-micro`). This is what makes the app easy to
 
 - `tenants/README.md`: How tenants work, and how to change the logo.
 - `tenants/morse-micro/tenant.json`: `id` (must match the folder name), `companyName`, `appName` (also the name of the screenshots folder), `accentColor` (the highlight colour), `actions` (which icons appear above the bubble, from the bubble upward: for Morse Micro Ask Claude, Jira, the IT service desk, screenshot, light or dark mode, settings, bounce and close), `chatApp` (where questions go: `claude-desktop`, as for Morse Micro, or `built-in`, the default), `startPage` (what the panel opens on: `ask`, the text box, by default, or `apps`, the Apps list, as for Morse Micro, whose `actions` then include `ask` to reach the text box), `portal` for the Apps list (the portal's name, its address, JumpCloud's apps server and the sign-in port), `serviceDesk` for the IT service desk icon (its `https` address, and optionally `requests`: the IT portal's number, its Jira project's key and the request types, to raise requests from the panel), `atlassian` for Jira (the site, the sign-in port, the Confluence spaces with IT's how-to articles, and optionally the MCP server, which defaults to Atlassian's), `updates` for Check for updates in Settings (the GitHub repository releases come from, `Camby10101/Desktop-Assist` for Morse Micro, and optionally GitHub's addresses), and for the built-in chat only: optionally `systemPrompt` (extra instructions for Claude), `signIn` (JumpCloud's address, the app's JumpCloud client ID and the sign-in port) and `claudeAccess` (the Claude Console organization, federation rule, service account and optional workspace IDs). The built-in chat needs `signIn` and `claudeAccess`; Claude Desktop needs neither; the Apps list needs `portal`; the service desk icon (`servicedesk` in `actions`) needs `serviceDesk`; the Jira icon (`jira`) needs `atlassian`. None of these are secret. See `docs/CLAUDE_DESKTOP_SETUP.md`, `docs/APPS_SETUP.md`, `docs/ATLASSIAN_SETUP.md` and `docs/JUMPCLOUD_SETUP.md`.
-- `tenants/morse-micro/logo.png`: The logo: the Morse Micro "Mμ" mark cut to a circle (512×512, transparent corners). It's the bubble, the tray icon and the `.exe` icon. A tenant can use `logo.svg` for the bubble instead (if both exist, the PNG wins), but then the tray falls back to a plain circle in the accent colour and the `.exe` gets Electron's default icon.
+- `tenants/morse-micro/logo.png`: The logo: the Morse Micro "Mμ" mark cut to a circle (512×512, transparent corners). It's the tray icon and the `.exe` icon; the bubble on screen is now the animated character, not the logo. A tenant with only a `logo.svg` gets a plain circle in the accent colour in the tray and Electron's default icon for the `.exe`.
 
 ---
 
@@ -359,7 +370,7 @@ with notes on the lines that need them. Read them in order the first time; after
 the area you're working on.
 
 1. [Shared code and the preload bridge](1-shared-and-preload.md):
-   `src/shared` (sizes and layout constants, the action list, data types, the IPC contract, chip labels and "how long ago", the Claude Desktop download link, the Apps list's order, Jira issue keys) and `src/preload` (the `window.assist` bridge between the pages and the main process).
+   `src/shared` (sizes and layout constants, the character's poses, the action list, data types, the IPC contract, chip labels and "how long ago", the Claude Desktop download link, the Apps list's order, Jira issue keys) and `src/preload` (the `window.assist` bridge between the pages and the main process).
 2. [Main process: startup, IPC and app plumbing](2-main-startup.md):
    `index.ts` (startup and shutdown, and choosing the built-in chat or Claude Desktop), `ipc.ts` (handling requests from the pages), `actions.ts`, `uninstall.ts`, `updates.ts` (Check for updates: the latest GitHub release, downloaded, checked against its signature and installed) with `scripts/release-signing.mjs` (signing releases), `debugging.ts` (no debugging in an installed copy), `tenant.ts`, `settings.ts`, the tray icon.
 3. [JumpCloud sign-in](3-sign-in.md):
@@ -367,14 +378,15 @@ the area you're working on.
 4. [Talking to Claude](4-claude.md):
    `claude/` (the model settings, `AnthropicBackend`, error handling, `ChatSession`).
 5. [The bubble](5-bubble.md):
-   `bubble/` (`BubbleController`, the layout maths, bounce physics, creating the windows, and the
-   check that keeps the bubble in front after starting).
+   `bubble/` (`BubbleController`, the layout maths, `wander.ts` with what the character does on
+   its own and how it falls, bounce physics, creating the windows, and the check that keeps the
+   bubble in front after starting).
 6. [The draft, screenshots and safe files](6-drafts-and-screenshots.md):
    `notes/NotesStore.ts`, `screenshots/` (including stacking several screenshots into one image for the clipboard), `storage/jsonFile.ts`.
 7. [The pages: entry points, styles, hooks and views](7-renderer-pages.md):
-   `src/renderer`: `index.html`, `main.tsx`, `styles.css`, `lib/`, `hooks/`, `BubbleView`, `PanelView`.
+   `src/renderer`: `index.html`, `main.tsx`, `styles.css`, `lib/`, `hooks/`, `BubbleView` (the character's page), `PanelView`.
 8. [The UI components](8-renderer-components.md):
-   `src/renderer/src/components`: the chat box (with its Open buttons for issue keys and Report to IT), messages, Markdown, sign-in panel, settings menu, action icons, screenshot chips.
+   `src/renderer/src/components`: the chat box (with its Open buttons for issue keys and Report to IT), messages, Markdown, sign-in panel, settings menu, action icons, screenshot chips, and the character (`Character.tsx`, the figure, and `character.css`, an animation for each pose).
 9. [Claude Desktop: handing questions over](9-claude-desktop.md):
    `claudeDesktop.ts` (feature 3.1: opening a question in the Claude Desktop app with a link, the screenshots on the clipboard, the notifications, checking it's installed), `sendInClaude.ts` (sending the question there: a hidden PowerShell helper that uses Windows UI Automation to find Claude's text box, then presses Ctrl+V and Enter) and what's tested.
 10. [Your apps: the JumpCloud apps list](10-apps.md):
@@ -397,10 +409,11 @@ changes. Then `npm run docs:pdf` rebuilds `docs/CODE_GUIDE.pdf`, the whole guide
 
 Run with `npm test`. Each file tests code that doesn't need a real window or a real API.
 
-- `layout.test.ts`: Home positions in all four corners (including displays not at the origin), nearest-corner snapping, window sizes, and that the panel window opens into the screen and fits on it in every corner.
+- `layout.test.ts`: Where the character stands: on the taskbar (its window's bottom edge on the work area's) in either bottom corner, a top corner meaning the bottom one below it, further along toward the middle by its inset but never off the work area, and on displays not at the origin; turning a position back into an inset (`insetAt`, `maxInset`); the bottom corner for each half of the screen, measured from the character's centre; window sizes; and that the panel window shares the bubble window's corner and fits on screen wherever the character stands in its half of the screen.
 - `bounce.test.ts`: Launch direction (away from each corner) and speed, bouncing off every edge, crossing onto the next monitor where two meet (over a taskbar between stacked monitors) and bouncing off an edge with no monitor beyond it, roaming both monitors without leaving them, getting back on screen when a monitor goes, and the glide.
+- `wander.test.ts`: What the character does on its own: the waits (shorter after settling, longer after that), only strolling until it's been left alone 30 seconds and then sometimes one of its two fidgets, where it walks to (somewhere else in its zone at least 40 DIPs away, toward its corner or away from it, back into the zone from beyond it, and the far end of a zone too small to choose from), walking at walking speed without passing the target, and the fall (as long as gravity takes, a short hop when dropped over the taskbar, speeding up and landing exactly where it stands).
 - `frontCheck.test.ts`: Reading the front check's answer, only digits taken as a window handle, what counts as needing help and how it's described, and the checks' timing: at 5 s, 20 s, 1, 3 and 10 minutes, silent while the bubble is in front, bringing it back (hidden and shown again only when it was behind something) and logging it, saying when it's still not in front, waiting while the bubble is open, logging a check that failed, and stopping.
-- `bubbleController.test.ts`: The bubble state machine with fake windows, a fake clock and two fake displays: open/close, blur (including staying open when another app takes the focus back just as it opens), clicking the bubble (staying closed when the press on the bubble is what closed the panel, even for a slow click, and reopening straight away after clicking somewhere else, however quick), logging a click ignored while capturing, the saved corner, dragging (follows the mouse, snaps to the nearest corner, onto another display, panel re-placed), bouncing across both displays and gliding back to its own display's corner, screenshots, and display changes (including unplugging the bubble's display).
+- `bubbleController.test.ts`: The bubble state machine with fake windows, a fake clock and two fake displays: starting on the taskbar, the saved corner and display (a top corner saved by an older version taken as the bottom one); on its own (standing, then strolling along the taskbar and standing again, walking both ways, fidgeting only after 30 seconds alone and for as long as the fidget lasts, stopping where it is when clicked with the panel opening from there, nothing while the panel is open, and dangling instead of fidgeting when dragged); open/close, blur (including staying open when another app takes the focus back just as it opens), clicking the bubble (staying closed when the press on the bubble is what closed the panel, even for a slow click, and reopening straight away after clicking somewhere else, however quick), logging a click ignored while capturing; dragging (dangling from the mouse, falling straight down onto the taskbar, walking back toward the nearer corner when dropped far away, living near a corner of the other display, the panel re-placed, opening while it walks back, dropping it near its own corner keeping the corner); bouncing across both displays and gliding back to where it stood; screenshots; and display changes (including unplugging the character's display, and stopping a walk to stand it back on a moved taskbar).
 - `notesStore.test.ts`: Saving the draft, reloading, overtaken writes, damaged files, attachments.
 - `screenshotFiles.test.ts`: Screenshot names, never overwriting, finding the newest, the inside-the-folder check.
 - `screenshotStack.test.ts`: Stacking screenshots into one image for the clipboard: the width they're scaled to (the narrowest, capped), the order and the grey band between them (checked pixel by pixel), a single image left as it is, and refusing different widths, padded rows or an empty list.

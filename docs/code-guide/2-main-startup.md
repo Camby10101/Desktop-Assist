@@ -233,7 +233,7 @@ page's request is handled, its handler has been registered.
 
 <!-- code: apps/desktop/src/main/index.ts#start.bubble -->
 
-[`src/main/index.ts`, lines 138–150](../../apps/desktop/src/main/index.ts#L138-L150)
+[`src/main/index.ts`, lines 138–151](../../apps/desktop/src/main/index.ts#L138-L151)
 
 ```ts
 const bubble = new BubbleController({
@@ -244,6 +244,7 @@ const bubble = new BubbleController({
   initialAnchor: settings.bubbleAnchor,
   onDiagnostic: (message) => log(message),
   onModeChange: (mode) => broadcast(IPC.modeChanged, mode),
+  onPoseChange: (pose) => broadcast(IPC.poseChanged, pose),
   onAnchorChange: (anchor) => {
     broadcast(IPC.cornerChanged, anchor.corner)
     void settings.setBubbleAnchor(anchor) // remembered for next time
@@ -254,22 +255,26 @@ const bubble = new BubbleController({
 <!-- /code -->
 
 `BubbleController` is the bubble's state machine: it decides when the panel opens, where the
-bubble sits, and moves and shows the windows to match (see [The bubble](5-bubble.md)). It never
-touches Electron directly; everything it needs is passed in here.
+character stands and what it's doing, and moves and shows the windows to match (see
+[The bubble](5-bubble.md)). It never touches Electron directly; everything it needs is passed in
+here.
 
 - `bubbleSurface(bubbleWindow)`, `panelSurface(panelWindow)`: small adapters (in
   `bubble/windows.ts`) that give the controller just "set bounds, show, hide, focus" for each
   window.
 - `displays: electronDisplays`: the adapter for Electron's `screen` module, defined further down
   this file ([`electronDisplays`](#toarea-and-electrondisplays)).
-- `initialAnchor: settings.bubbleAnchor`: the corner and display the bubble was dragged to last
+- `initialAnchor: settings.bubbleAnchor`: the corner and display the character was dragged to last
   time, or `null` the first time.
 - `onModeChange`: every mode change (collapsed, expanded, dragging and so on) is broadcast, so the
   pages can animate to match.
+- `onPoseChange: (pose) => broadcast(IPC.poseChanged, pose)`: every change of the character's pose
+  (standing, walking, a fidget, dangling) is broadcast too, and the bubble's page animates the
+  character to match.
 - `onDiagnostic: (message) => log(message)`: the controller notes bubble clicks it ignored, and a
   blur it ignored just after opening, in the problem log (see [The bubble](5-bubble.md)).
-- `onAnchorChange`: when the bubble settles in a new corner, the panel is told (it lays itself out
-  to open away from that corner) and the new anchor is saved. `void` in front of a promise means
+- `onAnchorChange`: when the character settles near the other bottom corner or on another display,
+  the panel is told (it lays itself out to open away from that corner) and the new anchor is saved. `void` in front of a promise means
   "start this and don't wait for it"; it also tells the linter the missing `await` is deliberate.
 - `controller = bubble` (the next line): makes the controller reachable from the module-level
   `second-instance` handler.
@@ -281,7 +286,7 @@ touches Electron directly; everything it needs is passed in here.
 
 <!-- code: apps/desktop/src/main/index.ts#start.screenshots,notify,copyScreenshots -->
 
-[`src/main/index.ts`, lines 154–175](../../apps/desktop/src/main/index.ts#L154-L175)
+[`src/main/index.ts`, lines 155–176](../../apps/desktop/src/main/index.ts#L155-L176)
 
 ```ts
 const screenshots = new ScreenshotService(screenshotsDir, () =>
@@ -339,7 +344,7 @@ const copyScreenshots = async (paths: string[]) => {
 
 <!-- code: apps/desktop/src/main/index.ts#start.builtIn,claudeDesktop -->
 
-[`src/main/index.ts`, lines 178–207](../../apps/desktop/src/main/index.ts#L178-L207)
+[`src/main/index.ts`, lines 179–208](../../apps/desktop/src/main/index.ts#L179-L208)
 
 ```ts
 const builtIn =
@@ -418,7 +423,7 @@ exists.
 
 <!-- code: apps/desktop/src/main/index.ts#start.netFetch,updater -->
 
-[`src/main/index.ts`, lines 208–238](../../apps/desktop/src/main/index.ts#L208-L238)
+[`src/main/index.ts`, lines 209–239](../../apps/desktop/src/main/index.ts#L209-L239)
 
 ```ts
 // Electron's fetch, so a proxy set in Windows is used.
@@ -497,7 +502,7 @@ const updater = updates
 
 <!-- code: apps/desktop/src/main/index.ts#start.appsStatus,portalApps -->
 
-[`src/main/index.ts`, lines 240–262](../../apps/desktop/src/main/index.ts#L240-L262)
+[`src/main/index.ts`, lines 241–263](../../apps/desktop/src/main/index.ts#L241-L263)
 
 ```ts
 let appsStatus: AppsState['status'] = 'loading'
@@ -562,7 +567,7 @@ icon (see [Your apps](10-apps.md)). It's only set up when the tenant has a `port
 
 <!-- code: apps/desktop/src/main/index.ts#start.requests,memoryPath,atlassianStatus,atlassian,desk -->
 
-[`src/main/index.ts`, lines 267–329](../../apps/desktop/src/main/index.ts#L267-L329)
+[`src/main/index.ts`, lines 268–330](../../apps/desktop/src/main/index.ts#L268-L330)
 
 ```ts
 const requests = serviceDesk?.requests
@@ -686,7 +691,7 @@ Two statements follow:
 
 <!-- code: apps/desktop/src/main/index.ts#start.onDisplayChange -->
 
-[`src/main/index.ts`, line 386](../../apps/desktop/src/main/index.ts#L386)
+[`src/main/index.ts`, line 388](../../apps/desktop/src/main/index.ts#L388)
 
 ```ts
 const onDisplayChange = () => bubble.displayChanged()
@@ -720,9 +725,9 @@ Everything else in this part of `start()` is plain statements:
 - `openServiceDesk: serviceDesk ? () => shell.openExternal(serviceDesk.url) : null`: opens the
   service desk's address from `tenant.json` in the browser, or `null` when the tenant has none.
 - `getState: () => ({`: builds the snapshot a page asks for when it first loads: the bubble's mode
-  and corner, the draft, the settings, the branding, the app version (`app.getVersion()`, from
-  `package.json`), the sign-in status and the chat so far. After that the page keeps up through
-  the broadcasts above.
+  and corner, the character's pose (`bubble.currentPose`), the draft, the settings, the branding,
+  the app version (`app.getVersion()`, from `package.json`), the sign-in status and the chat so far.
+  After that the page keeps up through the broadcasts above.
 - `auth: builtIn?.auth.status ?? null`, `chat: builtIn?.chat.list() ?? []`: `?.` reads on only if
   `builtIn` isn't `null` (otherwise the whole expression is `undefined`), and `??` gives the value
   to use instead. So with Claude Desktop there's no sign-in status (`null`) and the chat is always
@@ -731,14 +736,14 @@ Everything else in this part of `start()` is plain statements:
   `onQuit` quits (see [`createTray()`](#createtray)).
 - `screen.on('display-added', onDisplayChange)`: the same handler also runs for
   `display-removed` and `display-metrics-changed` (a resolution, scaling or taskbar change).
-  `BubbleController.displayChanged()` moves the bubble back into its corner, or onto the main
-  display if its own display was unplugged.
+  `BubbleController.displayChanged()` stands the character back on the taskbar near its corner, or
+  on the main display if its own display was unplugged.
 
 #### Quitting
 
 <!-- code: apps/desktop/src/main/index.ts#start.shuttingDown -->
 
-[`src/main/index.ts`, lines 391–392](../../apps/desktop/src/main/index.ts#L391-L392)
+[`src/main/index.ts`, lines 393–394](../../apps/desktop/src/main/index.ts#L393-L394)
 
 ```ts
 // Save the text box before quitting. before-quit fires again after the second app.quit().
@@ -770,13 +775,13 @@ Quit or the Close icon. It doesn't fire when Windows shuts down or logs off, whi
   it doesn't wait for asynchronous work, so `session-end` (a Windows-only window event) saves the
   draft with a blocking write instead.
 
-Finally, `await windowsReady` waits until both pages have painted, and `bubble.start()` puts the
-bubble in its corner and shows it. Waiting avoids showing a window before its page has drawn
-anything.
+Finally, `await windowsReady` waits until both pages have painted, and `bubble.start()` stands the
+character on the taskbar in its corner and shows it. Waiting avoids showing a window before its
+page has drawn anything.
 
 <!-- code: apps/desktop/src/main/index.ts#start.stopWatchingFront -->
 
-[`src/main/index.ts`, lines 411–421](../../apps/desktop/src/main/index.ts#L411-L421)
+[`src/main/index.ts`, lines 413–423](../../apps/desktop/src/main/index.ts#L413-L423)
 
 ```ts
 // For its first ten minutes, make sure the bubble isn't stuck behind other apps' windows.
@@ -798,8 +803,9 @@ Then, for its first ten minutes, the app makes sure the bubble isn't stuck behin
 windows (`bubble/frontCheck.ts`, see [The bubble](5-bubble.md)). Started by Windows at sign-in,
 after other apps, the bubble could end up behind them even though its window was always on top.
 
-- `isResting: () => bubble.currentMode === 'collapsed'`: only a bubble resting in its corner is
-  checked; while the panel is open, or the bubble is being dragged or bouncing, the user can see it.
+- `isResting: () => bubble.currentMode === 'collapsed'`: only a character standing on the taskbar
+  (or strolling along it, which is still `collapsed`) is checked; while the panel is open, or the
+  character is being dragged or bouncing, the user can see it.
 - `getNativeWindowHandle().readBigUInt64LE(0).toString()`: the bubble window's Windows handle
   (`HWND`), which the check gives Windows to ask about that window. Electron hands it over as the
   bytes of a 64-bit number.
@@ -827,7 +833,7 @@ was part of `start()`. It returns a [`BuiltInChat`](#builtinchat): the `AuthMana
 
 <!-- code: apps/desktop/src/main/index.ts#startBuiltInChat.devBaseUrl,lastIdToken,backend,chat -->
 
-[`src/main/index.ts`, lines 441–465](../../apps/desktop/src/main/index.ts#L441-L465)
+[`src/main/index.ts`, lines 443–467](../../apps/desktop/src/main/index.ts#L443-L467)
 
 ```ts
 // Dev runs may point at a local test server; an installed app always talks to Anthropic.
@@ -900,7 +906,7 @@ const chat = new ChatSession({
 
 <!-- code: apps/desktop/src/main/index.ts#startBuiltInChat.missing,localIssuer,authState,auth -->
 
-[`src/main/index.ts`, lines 467–491](../../apps/desktop/src/main/index.ts#L467-L491)
+[`src/main/index.ts`, lines 469–493](../../apps/desktop/src/main/index.ts#L469-L493)
 
 ```ts
 const missing = missingSettings(signIn, claudeAccess)
@@ -977,7 +983,7 @@ Two statements end the function:
 
 <!-- code: apps/desktop/src/main/index.ts#safeStorageEncryptor -->
 
-[`src/main/index.ts`, lines 497–502](../../apps/desktop/src/main/index.ts#L497-L502)
+[`src/main/index.ts`, lines 499–504](../../apps/desktop/src/main/index.ts#L499-L504)
 
 ```ts
 /** Windows DPAPI through Electron: only this Windows user can decrypt what it encrypts. */
@@ -1005,7 +1011,7 @@ The encryption `SecretStore` uses for the saved sign-in. `SecretStore` only know
 
 <!-- code: apps/desktop/src/main/index.ts#withDevOverrides -->
 
-[`src/main/index.ts`, lines 504–527](../../apps/desktop/src/main/index.ts#L504-L527)
+[`src/main/index.ts`, lines 506–529](../../apps/desktop/src/main/index.ts#L506-L529)
 
 ```ts
 /**
@@ -1061,7 +1067,7 @@ example to try the built-in chat against a test identity provider, without editi
 
 <!-- code: apps/desktop/src/main/index.ts#isLoopback -->
 
-[`src/main/index.ts`, lines 529–531](../../apps/desktop/src/main/index.ts#L529-L531)
+[`src/main/index.ts`, lines 531–533](../../apps/desktop/src/main/index.ts#L531-L533)
 
 ```ts
 function isLoopback(url: URL): boolean {
@@ -1079,7 +1085,7 @@ in `hostname`. Used only to decide whether plain `http` is allowed for a dev ide
 
 <!-- code: apps/desktop/src/main/index.ts#toArea,electronDisplays -->
 
-[`src/main/index.ts`, lines 533–549](../../apps/desktop/src/main/index.ts#L533-L549)
+[`src/main/index.ts`, lines 535–551](../../apps/desktop/src/main/index.ts#L535-L551)
 
 ```ts
 /** Electron's `screen`, in the shape the bubble controller uses. All coordinates are DIPs. */
@@ -1128,7 +1134,7 @@ method is called, which happens after `start()` has begun.
 
 <!-- code: apps/desktop/src/main/index.ts#fail -->
 
-[`src/main/index.ts`, lines 551–555](../../apps/desktop/src/main/index.ts#L551-L555)
+[`src/main/index.ts`, lines 553–557](../../apps/desktop/src/main/index.ts#L553-L557)
 
 ```ts
 function fail(error: unknown): void {
@@ -3572,7 +3578,9 @@ type Preferences = z.infer<typeof PreferencesSchema>
   unless the user has turned it off: a missing value counts as on (see `get()`), so it's on for
   everyone who installed before the setting existed too.
 - `bubbleAnchor`: a display ID and one of the four corners (`BubbleAnchor` in
-  `BubbleController.ts`).
+  `BubbleController.ts`). The character only ever saves a bottom corner, but the schema still
+  accepts all four, so a top corner saved by an older version still loads; the controller then
+  takes it as the bottom corner below it.
 - `type Preferences = z.infer<typeof PreferencesSchema>`: the type derived from the schema.
 
 ### `SettingsService`
@@ -3798,11 +3806,11 @@ async setBubbleAnchor(anchor: BubbleAnchor): Promise<void> {
 
 <!-- /code -->
 
-Where the bubble rests. `get bubbleAnchor()` is a _getter_: it's read like a property
-(`settings.bubbleAnchor`, in `start()`), but runs this code. It returns `null` if the bubble has
-never been moved, and `BubbleController.start()` then uses the bottom-right corner of the main
-display. `setBubbleAnchor()` is called by `onAnchorChange` in `start()` each time the bubble
-settles in a new corner.
+Where the character lives. `get bubbleAnchor()` is a _getter_: it's read like a property
+(`settings.bubbleAnchor`, in `start()`), but runs this code. It returns `null` if the character
+has never been moved, and `BubbleController` then uses the bottom-right corner of the main
+display. `setBubbleAnchor()` is called by `onAnchorChange` in `start()` each time the character
+settles near the other bottom corner or on another display.
 
 ### `SettingsService.save()`
 
@@ -3844,8 +3852,8 @@ Writes are queued: each one starts only after the previous one has finished.
 The icon in the Windows notification area (by the clock). Clicking it opens the panel, and its
 right-click menu has Open and Quit. It matters because the app has no taskbar button or window
 frame: this is the one place that always shows the app is running and offers a way to quit. The
-icon is the tenant's logo, the same image as the bubble, or a plain circle in the accent colour
-if the tenant has no `logo.png`.
+icon is the tenant's logo, or a plain circle in the accent colour if the tenant has no
+`logo.png`.
 
 ### `logos`, `logoPath`, `TRAY_SIZE` and `SCALE_FACTORS`
 
@@ -3854,7 +3862,7 @@ if the tenant has no `logo.png`.
 [`src/main/tray.ts`, lines 4–15](../../apps/desktop/src/main/tray.ts#L4-L15)
 
 ```ts
-// The tenant's logo, the same image as the bubble. Only a PNG can be used: Windows can't draw a
+// The tenant's logo. Only a PNG can be used: Windows can't draw a
 // tray icon from SVG. `?asset` makes the build copy the file and gives its path at runtime.
 const logos = import.meta.glob<string>('@tenant/logo.png', {
   query: '?asset',
