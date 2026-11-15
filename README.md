@@ -28,11 +28,16 @@ bubble kept in front, and Check for updates). This is version **1.0.0**, the fir
 
 ## Features
 
-- **The character** (the "bubble"): a small figure standing on the taskbar, always on top,
-  hidden from the taskbar and Alt+Tab. It stands bobbing gently, strolls left and right near its
-  corner now and then, and once it's been left alone a while sometimes hops or waves. Click it to
-  open or close the panel (it stops where it is); Esc or clicking elsewhere also closes it. For now
-  it's a blank placeholder figure, to be replaced by real artwork.
+- **The character** (the "bubble"): a small figure standing on the taskbar, always on top, hidden
+  from the taskbar and Alt+Tab. She stands breathing and blinking, and strolls left and right near
+  her corner now and then. Click her to open or close the panel (she stops where she is); Esc or
+  clicking elsewhere also closes it. She's anime-style pixel art, an original design drawn in code:
+  an elf mage with long pointed ears, silver-white hair in a long braid, amber eyes, a wide-brimmed
+  hat with a gold moon and stars, a long robe in the company's accent colour with silver trim and
+  gold embroidery, and laced boots, seen from the front, diagonally or side on. Once she's been
+  left alone a while she does things of her own now and then: hops, waves, stretches and yawns,
+  sips her tea, reads her spellbook, casts a little spell of sparkles, levitates over a glowing
+  magic circle, sits on the taskbar, or glances about.
 - **Drag it anywhere**, even onto another monitor: it dangles from the pointer. Let go and it drops
   onto that screen's taskbar, and from then on lives near the nearer bottom corner, walking back
   if it was dropped far away. The panel opens toward the middle of the screen. It remembers the

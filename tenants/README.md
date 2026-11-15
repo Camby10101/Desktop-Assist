@@ -73,6 +73,9 @@ Sign-in settings for the built-in chat (none of them secret):
 Until these are filled in, the app says sign-in isn't set up yet. How to get the values:
 [docs/JUMPCLOUD_SETUP.md](../docs/JUMPCLOUD_SETUP.md).
 
+The character on screen wears a robe and hat in shades of the tenant's `accentColor`, so she
+matches the rest of the panel.
+
 ## Changing the logo
 
 `morse-micro/logo.png` is the Morse Micro "Mμ" mark, cut to a circle (512×512, transparent

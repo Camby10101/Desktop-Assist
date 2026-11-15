@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { FIDGET_MS, type Pose } from '@shared/character'
-import type { Corner, Point, Rect } from '@shared/geometry'
+import { UI, type Corner, type Point, type Rect } from '@shared/geometry'
 import type { Mode } from '@shared/types'
 import {
   BLUR_CLICK_GRACE_MS,
@@ -188,16 +188,30 @@ describe('on its own', () => {
       'idle',
       'walk-right', // at 24 s, back to 80
       'idle',
-      'fidget-2', // at 39 s: alone for 30 s now
+      'read', // at 39 s: alone for 30 s now
+      'idle',
+    ])
+  })
+
+  it("doesn't do the same fidget twice in a row", () => {
+    vi.advanceTimersByTime(60_000)
+    expect(poses).toEqual([
+      'walk-left',
+      'idle',
+      'walk-right',
+      'idle',
+      'read',
+      'idle',
+      'spell',
       'idle',
     ])
   })
 
   it('plays a fidget for as long as its animation lasts, standing still', () => {
-    advanceUntil(() => controller.currentPose === 'fidget-2')
+    advanceUntil(() => controller.currentPose === 'read')
     const where = bubble.bounds
-    vi.advanceTimersByTime(FIDGET_MS['fidget-2'] - 100)
-    expect(controller.currentPose).toBe('fidget-2')
+    vi.advanceTimersByTime(FIDGET_MS.read - 100)
+    expect(controller.currentPose).toBe('read')
     expect(bubble.bounds).toEqual(where)
     vi.advanceTimersByTime(200)
     expect(controller.currentPose).toBe('idle')
@@ -229,10 +243,10 @@ describe('on its own', () => {
   })
 
   it('stops a fidget when dragged, and dangles instead', () => {
-    advanceUntil(() => controller.currentPose === 'fidget-2')
+    advanceUntil(() => controller.currentPose === 'read')
     controller.startDrag()
     expect(controller.currentPose).toBe('dragged')
-    vi.advanceTimersByTime(FIDGET_MS['fidget-2'] + 100)
+    vi.advanceTimersByTime(FIDGET_MS.read + 100)
     expect(controller.currentPose).toBe('dragged') // the fidget's end doesn't interrupt
     controller.endDrag()
   })
@@ -392,12 +406,13 @@ describe('dragging', () => {
   })
 
   it('lives near a corner of the other display when dropped there', () => {
-    drag({ x: 2650, y: 300 }) // the right half of the second display, 506 from its corner
+    drag({ x: 2650, y: 300 }) // the right half of the second display, far from its corner
+    const inset = 3200 - 16 - UI.bubbleSize - (2650 - 28)
     vi.advanceTimersByTime(1000)
     expect(anchors).toEqual([{ displayId: 2, corner: 'bottom-right' }])
     expect(bubble.bounds!.y).toBe(home(SECOND.workArea).y) // on that display's taskbar
     expect(controller.currentPose).toBe('walk-right')
-    vi.advanceTimersByTime(walkMs(506 - WANDER.zone))
+    vi.advanceTimersByTime(walkMs(inset - WANDER.zone))
     expect(bubble.bounds).toEqual(home(SECOND.workArea, 'bottom-right', WANDER.zone))
   })
 
@@ -429,7 +444,9 @@ describe('dragging', () => {
     drag({ x: 1800, y: 950 })
     vi.advanceTimersByTime(1000)
     expect(anchors).toEqual([])
-    expect(bubble.bounds).toEqual(home(PRIMARY.workArea, 'bottom-right', 1848 - (1800 - 28)))
+    expect(bubble.bounds).toEqual(
+      home(PRIMARY.workArea, 'bottom-right', 1920 - 16 - UI.bubbleSize - (1800 - 28)),
+    )
   })
 
   it('closes the open panel when a drag starts', () => {
@@ -517,7 +534,7 @@ describe('bounce', () => {
     let visitedAbove = false
     for (let i = 0; i < 20_000 && !visitedAbove; i++) {
       vi.advanceTimersByTime(16)
-      if (bubble.bounds!.y + 64 <= -48) visitedAbove = true // wholly on the monitor above
+      if (bubble.bounds!.y + UI.bubblePad + UI.bubbleSize <= -48) visitedAbove = true // wholly on the monitor above
     }
     expect(visitedAbove).toBe(true)
     controller.clickBubble()
@@ -621,7 +638,7 @@ describe('display changes', () => {
   })
 
   it('stops a fidget too, standing idle again', () => {
-    advanceUntil(() => controller.currentPose === 'fidget-2')
+    advanceUntil(() => controller.currentPose === 'read')
     controller.displayChanged()
     expect(controller.currentPose).toBe('idle')
   })
@@ -647,7 +664,10 @@ describe('display changes', () => {
       const { x, y } = bubble.bounds!
       // Wholly on one display or the other (the shrunken main one no longer reaches the second).
       const on = ({ workArea: a }: DisplayArea) =>
-        x + 8 >= a.x && x + 64 <= a.x + a.width && y + 8 >= a.y && y + 64 <= a.y + a.height
+        x + 8 >= a.x &&
+        x + 8 + UI.bubbleSize <= a.x + a.width &&
+        y + 8 >= a.y &&
+        y + 8 + UI.bubbleSize <= a.y + a.height
       expect(screens.some(on)).toBe(true)
     }
   })

@@ -1,4 +1,4 @@
-import { FIDGET_MS, isFidget, type Pose } from '@shared/character'
+import { FIDGET_MS, isFidget, type Fidget, type Pose } from '@shared/character'
 import { UI, isLeftCorner, isTopCorner, type Corner, type Point, type Rect } from '@shared/geometry'
 import type { Mode } from '@shared/types'
 import { glideDuration, glidePosition, launch, step, type Motion } from './bounce'
@@ -116,6 +116,8 @@ export class BubbleController {
   /** The next thing it does on its own, or the end of a fidget. */
   private idleTimer: ReturnType<typeof setTimeout> | null = null
   private walking = false
+  /** The fidget she did last, so the next one is different. */
+  private lastFidget: Fidget | undefined
   /** When the user last did something with it (a mode change); fidgets wait for a quiet spell. */
   private lastInteraction: number
   private lastBlurCollapse = Number.NEGATIVE_INFINITY
@@ -397,11 +399,12 @@ export class BubbleController {
     this.idleTimer = null
     if (this.mode !== 'collapsed') return
     const idleMs = this.now() - this.lastInteraction
-    const activity = nextActivity(idleMs, this.inset, this.zone(), this.random)
+    const activity = nextActivity(idleMs, this.inset, this.zone(), this.random, this.lastFidget)
     if (activity.kind === 'walk') {
       this.walkTo(activity.to)
       return
     }
+    this.lastFidget = activity.pose
     this.setPose(activity.pose)
     this.idleTimer = setTimeout(() => {
       this.idleTimer = null

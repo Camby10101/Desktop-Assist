@@ -16,8 +16,11 @@ covered in [Your apps](10-apps.md). It can also show the Jira page, the service 
 Jira issue, which are in [The Jira and service desk pages](12-atlassian-pages.md).
 
 One more component belongs to the bubble's page instead: `Character`, with its stylesheet
-`character.css`, the animated figure that stands in for the bubble. `BubbleView` renders it, and
-it's covered at the end of this page.
+`character.css`, the pixel-art character that stands in for the bubble. Her frames are drawn by
+code in `src/renderer/src/character/`: a tiny pixel rasteriser (`raster.ts`), the rig that poses
+and draws her (`rig.ts`), the parts of her drawn by hand (`pictures.ts`) and her animations
+(`sprite.ts`). `BubbleView` renders `Character`, and
+all of these are covered at the end of this page.
 
 ## `src/renderer/src/components/ChatBox.tsx`: the chat card
 
@@ -215,8 +218,8 @@ The parts of `ChatBox` itself:
 - `'motion-reduce:transition-none'`: when Windows is set to show fewer animations (the system's
   reduced-motion setting), the card appears and disappears instantly.
 - `...anchored(props.corner, PANEL_LAYOUT.chatX, PANEL_LAYOUT.chatY)`: `style` takes an object of
-  CSS properties, and plain numbers mean pixels. `chatX` is 76 (the 8 px padding around the
-  bubble, the 56 px bubble and a 12 px gap), so the card starts just past the bubble. `chatY` is
+  CSS properties, and plain numbers mean pixels. `chatX` is 100 (the 8 px padding around the
+  bubble, the 80 px bubble and a 12 px gap), so the card starts just past the bubble. `chatY` is
   8, so the card's near edge is level with the bubble's.
 - `maxHeight: UI.panelMaxHeight`: nothing sets a height. The card is pinned at the bubble's edge
   and grows away from it as content is added, up to 520 px. After that the message list scrolls.
@@ -1363,7 +1366,7 @@ switches the "New conversation" (or "Clear text box") row into its "Click again"
 `confirmingUninstall` does the same for Uninstall.
 
 - `offset: number`: `Panel` passes `actionOffset()` of the gear's place in the icon stack.
-- `...anchored(props.corner, PANEL_LAYOUT.settingsX, props.offset)`: `settingsX` (64 px) puts the
+- `...anchored(props.corner, PANEL_LAYOUT.settingsX, props.offset)`: `settingsX` (76 px) puts the
   menu 8 px past the action icons, on the side facing the middle of the screen. `offset` makes
   its near edge level with the gear's: in a bottom corner its bottom lines up with the gear's
   bottom, so it opens upward; in a top corner it opens downward. It overlaps the chat card and is
@@ -1735,8 +1738,8 @@ Lays the icons out in a column beside the bubble and animates them in and out.
 - `top ? 'flex-col' : 'flex-col-reverse'`: the first action must be nearest the bubble. In a top
   corner the bubble is above the stack, so it's a normal top-to-bottom column. In a bottom corner
   the bubble is below, so the column is reversed and the first action sits at the bottom.
-- `...anchored(props.corner, PANEL_LAYOUT.actionsX, PANEL_LAYOUT.actionsY)`: `actionsX` (16 px)
-  centres the 40 px icons on the 56 px bubble. `actionsY` (76 px) starts the stack 12 px past the
+- `...anchored(props.corner, PANEL_LAYOUT.actionsX, PANEL_LAYOUT.actionsY)`: `actionsX` (28 px)
+  centres the 40 px icons on the 80 px bubble. `actionsY` (100 px) starts the stack 12 px past the
   bubble.
 - `gap: UI.actionGap`: 8 px between icons. The main process sizes the panel window from the same
   numbers (`panelWindowSize` in `src/shared/geometry.ts`), so the stack always fits.
@@ -1853,78 +1856,2946 @@ draft (the file itself stays in the screenshots folder).
 - `onClick={props.onRemove}`: `Panel.removeAttachment` asks the main process to drop it from the
   saved draft and shows the updated list.
 
+## `src/renderer/src/character/raster.ts`: drawing shapes as pixels
+
+The character that stands in for the bubble is original pixel art, but nobody drew her frames by
+hand: code draws them, in three files. This one is a tiny _rasteriser_ (it turns shapes into
+pixels); `rig.ts` is her skeleton and the shapes that hang on it; `sprite.ts` is her animations.
+An earlier version was a 36 × 36 sprite typed out pixel by pixel. Posing a rig instead (shapes
+placed by joint angles, drawn straight onto the pixel grid with no smoothing, then shaded and
+outlined) means an animation can have as many in-between frames as it needs, each drawn the same
+careful way, so she moves smoothly. There are still no image files: every frame is rows of
+letters, one letter a pixel, which `Character` turns into SVG.
+
+The shading and outlining follow how pixel artists work by hand, particularly in anime-style pixel
+art:
+
+- Each material (hair, skin, the robe...) has a _ramp_ of three or four shades: an outline, a
+  shadow, a base and sometimes a light. Nothing is blended or smoothed; every pixel is one of the
+  palette's colours.
+- The light comes from one direction (up and to the left), so each part is lit on that side and
+  shaded on the other, in flat bands: _cel shading_, as in a cartoon.
+- _Selective outlining_: each part is outlined in the darkest shade of its own colour rather than
+  in black, so her silver hair has a dusky violet outline and her skin a rose one. The parts stay
+  distinct without the heavy look of black lines.
+
+As the comment at the top of the file says, each body part is drawn into a `Layer` of materials,
+and `ink()` shades and outlines it and lays it over the frame so far.
+
+### `Point` and `Ramp`
+
+<!-- code: apps/desktop/src/renderer/src/character/raster.ts#Point,Ramp -->
+
+[`src/renderer/src/character/raster.ts`, lines 1–19](../../apps/desktop/src/renderer/src/character/raster.ts#L1-L19)
+
+```ts
+// A tiny pixel-art rasteriser for the character: shapes drawn straight onto a grid of pixels (no
+// smoothing), then cel-shaded and outlined the way pixel artists do it by hand. Each body part is
+// drawn into a Layer of materials (hair, skin, robe...); `ink()` turns a layer into palette
+// letters, shading the side away from the light and outlining it in a dark shade of its own
+// material, and lays it over the frame so far. Coordinates are in pixels; a pixel's centre is at
+// (x + 0.5, y + 0.5).
+
+export interface Point {
+  x: number
+  y: number
+}
+
+/** A material's letters (see PALETTE in sprite.ts): outline, shadow, base, and optionally light. */
+export interface Ramp {
+  line: string
+  shade: string
+  base: string
+  light?: string
+}
+```
+
+<!-- /code -->
+
+- `Point`: a position (or an offset) in pixels. Fractions are allowed: shapes are worked out
+  exactly and only become whole pixels when they're filled. As the file's comment says, a pixel's
+  centre is at `(x + 0.5, y + 0.5)`.
+- `Ramp`: a material's shades, as letters of the palette (`PALETTE` in `sprite.ts`): `line` for its
+  outline, `shade` for the side away from the light, `base` for the rest, and an optional `light`
+  for the edge toward the light. `rig.ts` gives each material its ramp (`RAMPS`).
+
+### `Layer`
+
+<!-- code: apps/desktop/src/renderer/src/character/raster.ts#Layer.class -->
+
+[`src/renderer/src/character/raster.ts`, lines 21–22](../../apps/desktop/src/renderer/src/character/raster.ts#L21-L22)
+
+```ts
+/** A body part's pixels, each the name of its material (or undefined: not part of it). */
+export class Layer {
+  // …
+}
+```
+
+<!-- /code -->
+
+<!-- code: apps/desktop/src/renderer/src/character/raster.ts#Layer.cells,minX,minY,maxX,maxY,constructor,get,set -->
+
+[`src/renderer/src/character/raster.ts`, lines 23–46](../../apps/desktop/src/renderer/src/character/raster.ts#L23-L46)
+
+```ts
+readonly cells: (string | undefined)[]
+
+/** The box round every pixel set so far (empty while minX > maxX). */
+minX = Infinity
+
+minY = Infinity
+
+maxX = -Infinity
+
+maxY = -Infinity
+
+constructor(readonly size: number) {
+  this.cells = new Array<string | undefined>(size * size)
+}
+
+get(x: number, y: number): string | undefined {
+  if (x < 0 || y < 0 || x >= this.size || y >= this.size) return undefined
+  return this.cells[y * this.size + x]
+}
+
+set(x: number, y: number, material: string | undefined): void {
+  if (x < 0 || y < 0 || x >= this.size || y >= this.size) return
+  this.cells[y * this.size + x] = material
+  if (material === undefined) return
+  this.minX = Math.min(this.minX, x)
+  this.minY = Math.min(this.minY, y)
+  this.maxX = Math.max(this.maxX, x)
+  this.maxY = Math.max(this.maxY, y)
+}
+```
+
+<!-- /code -->
+
+A body part being drawn, before it's shaded: a square grid the size of the frame, where each pixel
+holds the name of a material (`'hair'`, `'skin'`), or `undefined` where the part isn't. Keeping
+materials rather than colours lets one part mix several (an arm's layer has her hand, the sleeve
+and its silver cuff) and still be shaded and outlined as one shape.
+
+- `readonly cells: (string | undefined)[]`: the pixels, row after row in one list, so pixel
+  `(x, y)` is at `y * size + x`.
+- `minX`, `minY`, `maxX`, `maxY`: as the comment says, the box round every pixel set so far, so
+  `ink()` only looks at that part of the grid rather than all 9,216 pixels. They start inside out
+  (`Infinity` and `-Infinity`), so the first pixel set becomes the whole box.
+- `constructor(readonly size: number)`: `readonly size` declares a field from the parameter (the
+  same shorthand as `private readonly deps` in `BubbleController`).
+  `new Array<string | undefined>(size * size)` makes a list of that length with nothing in it yet.
+- `get(x, y)`: a pixel's material, or `undefined` off the grid, so code can look at a neighbour
+  without checking for the edge first.
+- `set(x, y, material)`: sets a pixel, ignoring anything off the grid (a raised arm can reach past
+  the top without harm), and grows the box to take it in. Setting `undefined` clears a pixel
+  without growing the box.
+
+### `Layer.fill()`
+
+<!-- code: apps/desktop/src/renderer/src/character/raster.ts#Layer.fill -->
+
+[`src/renderer/src/character/raster.ts`, lines 48–59](../../apps/desktop/src/renderer/src/character/raster.ts#L48-L59)
+
+```ts
+/** Fills every pixel whose centre passes `inside`, within the box from `min` to `max`. */
+fill(min: Point, max: Point, material: string, inside: (x: number, y: number) => boolean): void {
+  const x0 = Math.max(0, Math.floor(min.x))
+  const y0 = Math.max(0, Math.floor(min.y))
+  const x1 = Math.min(this.size - 1, Math.ceil(max.x))
+  const y1 = Math.min(this.size - 1, Math.ceil(max.y))
+  for (let y = y0; y <= y1; y++) {
+    for (let x = x0; x <= x1; x++) {
+      if (inside(x + 0.5, y + 0.5)) this.set(x, y, material)
+    }
+  }
+}
+```
+
+<!-- /code -->
+
+Fills every pixel whose centre passes a test. Every shape below is drawn this way, so each one
+only has to say whether a point is inside it.
+
+- `min` and `max`: a box round the shape, so only pixels that could be inside are tested.
+  `Math.floor()` and `Math.ceil()` widen it to whole pixels, and `Math.max(0, ...)` and
+  `Math.min(this.size - 1, ...)` keep it on the grid.
+- `inside(x + 0.5, y + 0.5)`: the test is made at the pixel's centre, and a pixel is either in or
+  out. There's no partly covered pixel, so no smoothing (anti-aliasing): edges stay as crisp steps,
+  as pixel art should.
+
+### `Layer.polygon()` and `ellipse()`
+
+<!-- code: apps/desktop/src/renderer/src/character/raster.ts#Layer.polygon,ellipse -->
+
+[`src/renderer/src/character/raster.ts`, lines 61–91](../../apps/desktop/src/renderer/src/character/raster.ts#L61-L91)
+
+```ts
+/** A filled polygon (even-odd rule). */
+polygon(points: Point[], material: string): void {
+  const xs = points.map((p) => p.x)
+  const ys = points.map((p) => p.y)
+  this.fill(
+    { x: Math.min(...xs), y: Math.min(...ys) },
+    { x: Math.max(...xs), y: Math.max(...ys) },
+    material,
+    (px, py) => {
+      let inside = false
+      for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+        const a = points[i]!
+        const b = points[j]!
+        if (a.y > py !== b.y > py && px < ((b.x - a.x) * (py - a.y)) / (b.y - a.y) + a.x) {
+          inside = !inside
+        }
+      }
+      return inside
+    },
+  )
+}
+
+/** A filled ellipse. */
+ellipse(centre: Point, rx: number, ry: number, material: string): void {
+  this.fill(
+    { x: centre.x - rx, y: centre.y - ry },
+    { x: centre.x + rx, y: centre.y + ry },
+    material,
+    (px, py) => ((px - centre.x) / rx) ** 2 + ((py - centre.y) / ry) ** 2 <= 1,
+  )
+}
+```
+
+<!-- /code -->
+
+- `polygon(points, material)`: a filled shape with straight sides, the points in order round it.
+  The box is the points' lowest and highest `x` and `y`. The test is the _even-odd rule_ the
+  comment mentions: imagine a line from the pixel's centre off to the right and count how many of
+  the polygon's sides it crosses; an odd number means the centre is inside. The loop goes round the
+  sides from `a` to `b` (`j` trails one behind `i`, starting at the last point, so the shape
+  closes). `a.y > py !== b.y > py` checks the side reaches the centre's height, and the rest works
+  out whether it crosses to the right of the centre. Most of her is polygons: her hair, robe, hat,
+  ears, chin and boots.
+- `ellipse(centre, rx, ry, material)`: a filled ellipse reaching `rx` across and `ry` up and down
+  from its centre. `((px - centre.x) / rx) ** 2 + ((py - centre.y) / ry) ** 2 <= 1` is the equation
+  of an ellipse (`**` is "to the power of"). Her head, hands, hat brim and shadow are ellipses.
+
+### `Layer.capsule()` and `chain()`
+
+<!-- code: apps/desktop/src/renderer/src/character/raster.ts#Layer.capsule,chain -->
+
+[`src/renderer/src/character/raster.ts`, lines 93–119](../../apps/desktop/src/renderer/src/character/raster.ts#L93-L119)
+
+```ts
+/** A thick line from `a` to `b`, `ra` wide at `a` tapering (or swelling) to `rb` at `b`. */
+capsule(a: Point, b: Point, ra: number, rb: number, material: string): void {
+  const r = Math.max(ra, rb)
+  const dx = b.x - a.x
+  const dy = b.y - a.y
+  const length2 = dx * dx + dy * dy || 1
+  this.fill(
+    { x: Math.min(a.x, b.x) - r, y: Math.min(a.y, b.y) - r },
+    { x: Math.max(a.x, b.x) + r, y: Math.max(a.y, b.y) + r },
+    material,
+    (px, py) => {
+      const t = Math.min(1, Math.max(0, ((px - a.x) * dx + (py - a.y) * dy) / length2))
+      const cx = a.x + dx * t
+      const cy = a.y + dy * t
+      return Math.hypot(px - cx, py - cy) <= ra + (rb - ra) * t
+    },
+  )
+}
+
+/** A chain of thick lines through `points`, its width going from `ra` to `rb`. */
+chain(points: Point[], ra: number, rb: number, material: string): void {
+  for (let i = 0; i < points.length - 1; i++) {
+    const t0 = i / (points.length - 1)
+    const t1 = (i + 1) / (points.length - 1)
+    this.capsule(points[i]!, points[i + 1]!, ra + (rb - ra) * t0, ra + (rb - ra) * t1, material)
+  }
+}
+```
+
+<!-- /code -->
+
+- `capsule(a, b, ra, rb, material)`: as the comment says, a thick line from `a` to `b` with rounded
+  ends, its radius `ra` at `a` and `rb` at `b`. Her upper arms, legs and neck are capsules. For
+  each pixel it finds the nearest point on the line: `t` is how far along (0 at `a`, 1 at `b`),
+  worked out by projecting the pixel onto the line (the dot product of its offset with the line,
+  over the line's length squared, `length2`). `Math.min(1, Math.max(0, ...))` keeps it between the
+  ends, which is what rounds them off, and `|| 1` stops a line of no length dividing by zero. The
+  pixel is inside when it's within the radius at that point, `ra + (rb - ra) * t`, so a leg can
+  taper toward the ankle and a lock of hair to a point.
+- `chain(points, ra, rb, material)`: capsules joined end to end through a list of points, the
+  radius going evenly from `ra` at the first point to `rb` at the last (`t0` and `t1` are how far
+  along the chain each piece starts and ends). Her side locks and her braid are chains: curved,
+  and tapering toward the tip.
+
+### `Canvas`
+
+<!-- code: apps/desktop/src/renderer/src/character/raster.ts#Canvas.class -->
+
+[`src/renderer/src/character/raster.ts`, lines 122–123](../../apps/desktop/src/renderer/src/character/raster.ts#L122-L123)
+
+```ts
+/** A frame being drawn: rows of palette letters, `.` where nothing is drawn yet. */
+export class Canvas {
+  // …
+}
+```
+
+<!-- /code -->
+
+<!-- code: apps/desktop/src/renderer/src/character/raster.ts#Canvas.cells,constructor,get,set -->
+
+[`src/renderer/src/character/raster.ts`, lines 124–137](../../apps/desktop/src/renderer/src/character/raster.ts#L124-L137)
+
+```ts
+readonly cells: string[]
+
+constructor(readonly size: number) {
+  this.cells = new Array<string>(size * size).fill('.')
+}
+
+get(x: number, y: number): string {
+  if (x < 0 || y < 0 || x >= this.size || y >= this.size) return '.'
+  return this.cells[y * this.size + x]!
+}
+
+set(x: number, y: number, letter: string): void {
+  if (x < 0 || y < 0 || x >= this.size || y >= this.size) return
+  this.cells[y * this.size + x] = letter
+}
+```
+
+<!-- /code -->
+
+The frame itself, as palette letters. Where a `Layer` holds one part's materials, the `Canvas`
+holds the finished colours of everything drawn so far, `.` where nothing has been drawn
+(see-through). `rig.ts` makes one `Canvas` per frame and inks each part onto it in turn, back to
+front.
+
+- `new Array<string>(size * size).fill('.')`: every pixel starts see-through.
+- `get(x, y)` gives `.` off the grid, and `set(x, y, letter)` ignores pixels off the grid, as in
+  `Layer`.
+
+### `Canvas.ink()`
+
+<!-- code: apps/desktop/src/renderer/src/character/raster.ts#Canvas.ink -->
+
+[`src/renderer/src/character/raster.ts`, lines 139–167](../../apps/desktop/src/renderer/src/character/raster.ts#L139-L167)
+
+```ts
+/**
+ * Lays a layer over the frame: each pixel shaded by where it sits in its shape, then a one-pixel
+ * outline round the shape in its material's darkest shade. `light` is where the light comes
+ * from (a small offset, such as up and to the left): a pixel whose neighbour that way is outside
+ * the shape is lit, and one whose neighbour the other way (twice as far) is outside is in shade.
+ */
+ink(layer: Layer, ramps: Record<string, Ramp>, light: Point, outline = true): void {
+  const inside = (x: number, y: number) => layer.get(x, y) !== undefined
+  for (let y = layer.minY; y <= layer.maxY; y++) {
+    for (let x = layer.minX; x <= layer.maxX; x++) {
+      const material = layer.get(x, y)
+      if (material === undefined) continue
+      const ramp = ramps[material]!
+      const shaded =
+        !inside(x - light.x * 2, y - light.y * 2) || !inside(x - light.x, y - light.y)
+      const lit = !inside(x + light.x, y + light.y)
+      this.set(x, y, shaded ? ramp.shade : lit && ramp.light ? ramp.light : ramp.base)
+    }
+  }
+  if (!outline) return
+  for (let y = layer.minY - 1; y <= layer.maxY + 1; y++) {
+    for (let x = layer.minX - 1; x <= layer.maxX + 1; x++) {
+      if (inside(x, y)) continue
+      const next =
+        layer.get(x - 1, y) ?? layer.get(x + 1, y) ?? layer.get(x, y - 1) ?? layer.get(x, y + 1)
+      if (next !== undefined) this.set(x, y, ramps[next]!.line)
+    }
+  }
+}
+```
+
+<!-- /code -->
+
+The heart of the drawing. As the comment says, it lays a layer over the frame, each pixel shaded by
+where it sits in its shape, then outlines the shape. `ramps` gives each material's letters, and
+`light` is a one-pixel step toward the light, such as `{ x: -1, y: -1 }` for up and to the left.
+
+- `inside(x, y)`: whether a pixel is part of this layer.
+- The first pair of loops colours the layer's pixels, within its box. Each pixel's colour depends
+  only on its neighbours in the layer:
+  - `shaded`: the pixel one step away from the light (`x - light.x, y - light.y`, which with the
+    light up and to the left is down and to the right), or two steps away, is outside the shape.
+    So the edges facing away from the light get a band of shadow two pixels deep.
+  - `lit`: the pixel one step toward the light is outside the shape, so the edges facing the light
+    get a one-pixel highlight, for materials that have a `light` shade.
+  - `shaded ? ramp.shade : lit && ramp.light ? ramp.light : ramp.base`: shadow wins where both
+    apply (on a part only a few pixels wide), and everything else is the base colour.
+- That's cel shading: flat bands of colour following the shape's edges rather than smooth
+  gradients. It needs no 3D model, only the silhouette. Because each part is inked on its own, each
+  is shaded by its own shape: a sleeve in front of the robe gets its own shadow along its lower
+  edge.
+- `if (!outline) return`: her shadow on the taskbar is inked without an outline.
+- The second pair of loops draws the outline: every pixel just outside the shape (the loops reach
+  one pixel beyond the box on every side) that touches it directly to the left, right, above or
+  below gets the `line` letter of the material it touches. `??` takes the first neighbour that's
+  part of the layer. Only those four neighbours count, not the diagonals, so the outline is one
+  pixel thick without heavy corners. It's the darkest shade of the part's own colour (selective
+  outlining), and it's drawn over whatever was there, so a part in front is outlined against the
+  parts behind it. That's what keeps an arm readable against a robe of the same colour.
+
+### `Canvas.stamp()` and `rows()`
+
+<!-- code: apps/desktop/src/renderer/src/character/raster.ts#Canvas.stamp,rows -->
+
+[`src/renderer/src/character/raster.ts`, lines 169–185](../../apps/desktop/src/renderer/src/character/raster.ts#L169-L185)
+
+```ts
+/** Stamps a small hand-drawn picture (rows of letters, `.` see-through) at a place. */
+stamp(rows: readonly string[], x: number, y: number, flip = false): void {
+  rows.forEach((row, dy) => {
+    const letters = flip ? [...row].reverse() : [...row]
+    letters.forEach((letter, dx) => {
+      if (letter !== '.') this.set(Math.round(x) + dx, Math.round(y) + dy, letter)
+    })
+  })
+}
+
+rows(): string[] {
+  const rows: string[] = []
+  for (let y = 0; y < this.size; y++) {
+    rows.push(this.cells.slice(y * this.size, (y + 1) * this.size).join(''))
+  }
+  return rows
+}
+```
+
+<!-- /code -->
+
+- `stamp(rows, x, y, flip)`: as the comment says, stamps a small hand-drawn picture (rows of
+  letters, `.` see-through) with its top-left at `(x, y)`, rounded to whole pixels. Some things are
+  too small to draw well as shapes, so they're drawn by hand: her eyes, mouths, blush and fingers,
+  the gem brooch and the sparkles of a spell (`EYES`, `MOUTHS`, `SPARKLE` and `TWINKLE` in
+  `rig.ts`). `flip` mirrors the picture left to right (`[...row]` splits a
+  row into its letters, and `reverse()` turns them round).
+- `rows()`: the finished frame as `size` strings of `size` letters, one per row, which is what a
+  `Frame` holds. `slice()` takes each row's stretch of the list and `join('')` makes it a string.
+
+### `rotate()`, `add` and `limb()`
+
+<!-- code: apps/desktop/src/renderer/src/character/raster.ts#rotate,add,limb -->
+
+[`src/renderer/src/character/raster.ts`, lines 188–203](../../apps/desktop/src/renderer/src/character/raster.ts#L188-L203)
+
+```ts
+/** `v` turned by `angle` (radians, clockwise on screen). */
+export function rotate(v: Point, angle: number): Point {
+  const c = Math.cos(angle)
+  const s = Math.sin(angle)
+  return { x: v.x * c - v.y * s, y: v.x * s + v.y * c }
+}
+
+export const add = (a: Point, b: Point): Point => ({ x: a.x + b.x, y: a.y + b.y })
+
+/**
+ * The end of a limb `length` long from `origin`, at `angle` from straight down: positive swings
+ * it toward the way she faces (+x), negative behind her.
+ */
+export function limb(origin: Point, length: number, angle: number): Point {
+  return { x: origin.x + Math.sin(angle) * length, y: origin.y + Math.cos(angle) * length }
+}
+```
+
+<!-- /code -->
+
+The bits of geometry the rig is built from. Angles are in radians: a full turn is `2π` (about
+6.28), so a right angle is about 1.57.
+
+- `rotate(v, angle)`: as the comment says, an offset turned by an angle, clockwise on screen
+  (because a screen's `y` grows downward). It's the standard rotation formula, with the angle's
+  cosine and sine. The rig uses it to place points on a part that leans or tilts.
+- `add(a, b)`: two points added together, such as a joint and an offset from it.
+- `limb(origin, length, angle)`: as the comment says, the far end of a limb `length` long from
+  `origin` (a shoulder, elbow, hip or knee), at `angle` from hanging straight down. `Math.sin()`
+  gives how far it reaches sideways and `Math.cos()` how far down: at 0 it hangs straight down, at
+  about 1.57 it points straight ahead, and at about 3.14 straight up. Positive angles swing toward
+  the way she faces (`+x`: the rig always draws her facing right), negative ones behind her.
+
+## `src/renderer/src/character/rig.ts`: her skeleton and shapes
+
+As the comment at the top says, the _rig_ is her skeleton and the shapes that hang on it, and
+`draw()` turns one pose into one frame of pixel art. A pose (`Pose` below, not the same thing as
+the `Pose` in `src/shared/character.ts`, which names a whole animation) is a handful of numbers:
+which way she's seen from, where her hips are, how she leans, the angles of her arms and legs, her
+face, what she's holding, and how the wind pushes her hair and robe. `sprite.ts` makes her
+animations by giving `draw()` a pose for every frame.
+
+As the comment also says, she's an original design: an elf mage with long pointed ears,
+silver-white hair in one long braid (with a fringe and locks beside her face), amber eyes, a
+wide-brimmed crooked hat, and a long flared robe in the tenant's accent colour, with bell sleeves,
+silver trim, a darker sash and a gem brooch, over dark stockings and boots. Her clothes are
+patterned: a gold buckle, a gold crescent moon and stars and silver stitching on her hat; a border
+of gold diamonds above the robe's hem, silver stars over its skirt, gold buttons, a gold buckle on
+the sash and a gold line above each cuff; turned-down cuffs, laces and buckled straps on her boots.
+How she's drawn follows common practice in anime-style pixel art:
+
+- Big eyes with a thick upper lid and an iris that's darker at the top, with a white glint in the
+  same corner of both eyes, as if from the same light. A small mouth, only a couple of pixels.
+- Hair drawn as clumps rather than strands: a fringe with a jagged edge, locks hanging beside her
+  face, a braid with its plaits picked out in a darker shade, and a band of shine across the crown.
+- Every frame on the same baseline: her feet are on the grid's bottom rows (unless she's in the
+  air), which are the window's bottom edge, so she doesn't jitter up and down as the frames change.
+- Patterns small enough to read at this size: a pixel or a few per motif (a three-by-three
+  diamond, a four-pixel moon, single-pixel stars), set only on the part they belong to, in a
+  colour that stands out from it (gold or silver on the deep robe and hat, pale leather on the
+  boots), and repeated evenly so they read as a pattern rather than noise.
+
+### `GRID`
+
+<!-- code: apps/desktop/src/renderer/src/character/rig.ts#GRID -->
+
+[`src/renderer/src/character/rig.ts`, lines 4–17](../../apps/desktop/src/renderer/src/character/rig.ts#L4-L17)
+
+```ts
+// The character's rig: her skeleton and the shapes that hang on it, drawn as pixel art for one
+// pose. She's an original design: an elf mage with long pointed ears, silver-white hair in one
+// long braid, amber eyes, a wide-brimmed crooked hat (a gold buckle on its band, a gold moon and
+// stars on its crown, silver stitching round its brim), and a long robe in the tenant's accent
+// colour with bell sleeves, silver trim, gold embroidery (a border of diamonds above the hem, a
+// line above each cuff), silver stars, gold buttons, a sash with a gold buckle and a gem brooch,
+// over dark stockings and laced boots with turned-down cuffs and buckled straps.
+//
+// A pose says which way she's seen from (front, diagonal or side, always facing right; frames
+// facing left are mirrored), where her hips are, how she leans, her arms' and legs' angles, her
+// face, and how the wind or a fall pushes her hair and robe. `draw()` turns a pose into a frame.
+// She's about 88 pixels tall with her hat on a 96-pixel grid, her feet on the bottom row.
+
+export const GRID = 96
+```
+
+<!-- /code -->
+
+`GRID = 96`: a frame is 96 pixels square, the size of the bubble's window (`BUBBLE_BOX`, 96 DIPs),
+so one pixel is one DIP. As the comment above it says, she's about 88 pixels tall with her hat on,
+her feet on the bottom row. That leaves only a few rows above the tip of her hat, which is why her
+hop is a small one.
+
+### `RAMPS` and `LIGHT`
+
+<!-- code: apps/desktop/src/renderer/src/character/rig.ts#RAMPS,LIGHT -->
+
+[`src/renderer/src/character/rig.ts`, lines 19–34](../../apps/desktop/src/renderer/src/character/rig.ts#L19-L34)
+
+```ts
+/** Each material's shades, as palette letters (see PALETTE in sprite.ts). */
+const RAMPS: Record<string, Ramp> = {
+  hair: { line: 'O', shade: 'D', base: 'h', light: 'l' },
+  skin: { line: 'K', shade: 'S', base: 's', light: 'z' },
+  robe: { line: 'q', shade: 'A', base: 'a', light: 'v' },
+  trim: { line: 'q', shade: 'F', base: 'f' },
+  hat: { line: 'q', shade: 'N', base: 'n', light: 'g' },
+  stocking: { line: 'u', shade: 'Q', base: 'o' },
+  boot: { line: 'u', shade: 'B', base: 'b', light: 'y' },
+  cup: { line: 'u', shade: 'F', base: 'f', light: 'w' },
+  book: { line: 'u', shade: 'N', base: 'n', light: 'g' },
+  shadow: { line: 'x', shade: 'x', base: 'x' },
+}
+
+/** The light comes from up and to the left (of a figure facing right). */
+const LIGHT: Point = { x: -1, y: -1 }
+```
+
+<!-- /code -->
+
+- `RAMPS`: each material's ramp (`Ramp` in `raster.ts`): which letters of `PALETTE` (in
+  `sprite.ts`) are its outline, shadow, base and light. Most have all four; the trim, stockings
+  and shadow make do with fewer.
+  - `robe`, `trim` and `hat` share the robe's outline (`q`). The trim is the silver along the
+    robe's edges; it's mostly set pixel by pixel on top of the robe, and only inked as a shape of
+    its own at the cuff of each sleeve.
+  - The stockings, boots, cup and book share one dark outline (`u`).
+  - The teacup borrows the trim's silver, with a white light (`w`), and the spellbook's cover the
+    hat's letters.
+  - `shadow`: her shadow on the taskbar, one see-through dark colour (`x`) throughout.
+- `LIGHT`: as the comment says, the light comes from up and to the left of a figure facing right.
+  It's the step `ink()` takes toward the light. Frames facing left are mirrored, so for them the
+  light comes from the upper right, which is hard to notice.
+
+### `View`, `Face`, `Arm`, `Leg`, `Pose`, `DOWN`, `STAND` and `LEG_LENGTH`
+
+<!-- code: apps/desktop/src/renderer/src/character/rig.ts#View,Face,Arm,Leg,Pose,DOWN,STAND,LEG_LENGTH -->
+
+[`src/renderer/src/character/rig.ts`, lines 36–86](../../apps/desktop/src/renderer/src/character/rig.ts#L36-L86)
+
+```ts
+export type View = 'front' | 'diagonal' | 'side'
+
+export type Face = 'neutral' | 'blink' | 'happy' | 'surprised' | 'yawn' | 'sip' | 'down'
+
+/** Angles in radians from hanging straight down. */
+export interface Arm {
+  shoulder: number
+  elbow: number
+}
+
+export interface Leg {
+  hip: number
+  knee: number
+}
+
+export interface Pose {
+  view: View
+  /** Her hips' offset from where they are standing still (pixels; negative y is up). */
+  x?: number
+  y?: number
+  /** Her body tipped toward the way she faces (radians), and her head tilted. */
+  lean?: number
+  tilt?: number
+  /**
+   * Her arms and legs: [near, far] seen diagonally or side on (positive angles swing forward), or
+   * [right of the picture, left] from the front (positive angles swing outward).
+   */
+  arms?: [Arm, Arm]
+  legs?: [Leg, Leg]
+  face?: Face
+  /** Where her eyes look from the front: -1 left, 1 right. */
+  look?: number
+  /** Her hair and robe pushed sideways (pixels at the tips; negative is behind her). */
+  wind?: number
+  /** Her hair lifted (pixels at the tips), as when she's falling or carried up. */
+  lift?: number
+  /** Something in her hands: a teacup or her spellbook. */
+  prop?: 'cup' | 'book'
+  /** Sparkles round her near hand, 0 to 1 (a little spell). */
+  sparkle?: number
+  /** Sitting on the taskbar with her knees up under her robe. */
+  sitting?: boolean
+  /** A magic circle on the ground under her, 0 (none) to 1 (full size), as she levitates. */
+  rune?: number
+  /** How far its runes have turned (whole turns), and how far its sparks have risen. */
+  spin?: number
+}
+
+const DOWN: Arm = { shoulder: 0.08, elbow: 0 }
+
+const STAND: Leg = { hip: 0, knee: 0 }
+
+/** Thigh and shin, each (pixels); standing, her hips are this high above her ankles twice over. */
+export const LEG_LENGTH = 16.5
+```
+
+<!-- /code -->
+
+What a pose is made of.
+
+- `View`: which way she's seen from. `front` faces you, `side` is side on (walking), and
+  `diagonal` is in between, turned partly toward the way she faces: for the wave, the sip, reading
+  and the spell, where her hands are busy in front of her.
+- `Face`: her expression: `neutral`, `blink` (eyes shut), `happy` (smiling eyes and mouth),
+  `surprised` (mouth open, while she's carried), `yawn`, `sip` (eyes closed contentedly, lips on
+  the cup) and `down` (looking down at her book).
+- `Arm` and `Leg`: as the comment says, angles in radians from hanging straight down. The shoulder
+  (or hip) is the upper limb's angle, and the elbow (or knee) bends the lower limb from there. A
+  knee bends the other way to an elbow: a positive `knee` swings the shin back
+  (`(leg.hip - leg.knee) * sign` in `draw()`).
+- `Pose`: everything but `view` is optional, so a pose only says what's different from standing
+  still.
+  - `x`, `y`: her hips moved from where they are standing still, in pixels; negative `y` is up (the
+    hop), positive down (a crouch, or breathing out).
+  - `lean` tips her whole body toward the way she faces, and `tilt` tips her head on top of that.
+  - `arms` and `legs`: as the comment says, near then far when seen diagonally or side on, with
+    positive angles swinging forward; from the front, the arm on the right of the picture then the
+    left, with positive angles swinging outward, so the same numbers raise both arms evenly.
+  - `look`: where her eyes look from the front, a pixel left or right.
+  - `wind` pushes her hair and robe sideways (negative is behind her, as when she walks), and
+    `lift` raises her hair (falling, or carried up).
+  - `prop`: a teacup or her spellbook in her near hand.
+  - `sparkle`: sparkles circling her near hand, for a little spell: how far round they've gone,
+    from 0 to 1. Left out (or 0), there are none.
+  - `sitting`: sitting on the taskbar with her knees up under her robe.
+  - `rune` and `spin`: the magic circle under her as she levitates: `rune` its size, from 0 (none)
+    to 1, and `spin` how far its runes have turned, in whole turns, which also says how far its
+    sparks have risen.
+- `DOWN` and `STAND`: the arms (hanging, very slightly away from her body) and legs (straight) of a
+  pose that doesn't give them.
+- `LEG_LENGTH`: as its comment says, her thigh and her shin are 16.5 pixels each, so standing
+  straight her hips are 33 pixels above her ankles. It's exported because `crouch()` in `sprite.ts`
+  works out bent legs from it.
+
+### `EYES`, `MOUTHS`, `SPARKLE`, `TWINKLE` and `eyesFor()`
+
+<!-- code: apps/desktop/src/renderer/src/character/rig.ts#EYES,MOUTHS,SPARKLE,TWINKLE,eyesFor -->
+
+[`src/renderer/src/character/rig.ts`, lines 88–155](../../apps/desktop/src/renderer/src/character/rig.ts#L88-L155)
+
+```ts
+// Face pictures, facing right; `.` is see-through. Eyes have a thick upper lid, a dark-to-light
+// iris and a glint top right, calm and a little heavy-lidded; mouths are tiny.
+const EYES = {
+  front: {
+    open: [
+      ['eeeee', '.eiiw', '.iIIi', '.IjjI', '..jj.'],
+      ['eeeee', 'iiwe.', 'iIIi.', 'IjjI.', '.jj..'],
+    ],
+    blink: [
+      ['.....', '.....', 'eeeee', '.eee.'],
+      ['.....', '.....', 'eeeee', '.eee.'],
+    ],
+    happy: [
+      ['.....', '.eee.', 'e...e', '.....'],
+      ['.....', '.eee.', 'e...e', '.....'],
+    ],
+    down: [
+      ['.....', '.....', 'eeeee', '.iIi.'],
+      ['.....', '.....', 'eeeee', '.iIi.'],
+    ],
+  },
+  diagonal: {
+    open: [
+      ['eeeee', '.eiiw', '.iIIi', '.IjjI', '..jj.'],
+      ['eeee', 'iiw.', 'iIi.', 'Ijj.', 'jj..'],
+    ],
+    blink: [
+      ['.....', '.....', 'eeeee', '.eee.'],
+      ['....', '....', 'eeee', 'eee.'],
+    ],
+    happy: [
+      ['.....', '.eee.', 'e...e', '.....'],
+      ['....', '.ee.', 'e..e', '....'],
+    ],
+    down: [
+      ['.....', '.....', 'eeeee', '.iIi.'],
+      ['....', '....', 'eeee', 'iIi.'],
+    ],
+  },
+  side: {
+    open: [['ee...', '.eeee', '..iw.', '..II.', '..jj.']],
+    blink: [['.....', '.....', 'eeee.', '.ee..']],
+    happy: [['.....', '..ee.', '.e..e', '.....']],
+    down: [['.....', '.....', '.eeee', '..iI.']],
+  },
+} as const
+
+const MOUTHS: Record<Face, readonly string[]> = {
+  neutral: ['mm'],
+  blink: ['mm'],
+  down: ['mm'],
+  happy: ['m..m', '.mm.'],
+  surprised: ['mm', 'mm'],
+  yawn: ['.mm.', 'mmmm', 'mmmm', '.mm.'],
+  sip: ['m'],
+}
+
+/** A four-pointed sparkle, and a smaller one. */
+const SPARKLE = ['..j..', '..l..', 'jlwlj', '..l..', '..j..']
+
+const TWINKLE = ['.l.', 'lwl', '.l.']
+
+/** Which eyes a face uses. */
+function eyesFor(face: Face): 'open' | 'blink' | 'happy' | 'down' {
+  if (face === 'blink' || face === 'yawn') return 'blink'
+  if (face === 'happy' || face === 'sip') return 'happy'
+  if (face === 'down') return 'down'
+  return 'open'
+}
+```
+
+<!-- /code -->
+
+Her eyes, mouths and sparkles are too small to draw well as shapes, so they're drawn by hand as
+tiny pictures and stamped on (`Canvas.stamp()`), written as rows of letters with `.` see-through.
+As the comment says, they face right; frames facing left are mirrored with everything else.
+
+- `EYES`: for each view, each kind of eye, and for each of those the eye on the right of the
+  picture, then the one on the left (side on, only one shows).
+  - `open`: five pixels wide and five tall: a thick upper lid (`eeeee`, the lash colour) that comes
+    down a pixel at the inner corner (`.eiiw`, `iiwe.`), which gives the calm, slightly
+    heavy-lidded look the comment mentions; then the iris, dark (`i`) at the top, mid (`I`) and
+    light (`j`) at the bottom (amber, in `character.css`), with a white glint (`w`) at the top
+    right of both irises. That's a big anime eye in a few pixels: the heavy lid frames it, the
+    gradient gives it depth, and the matching glints say both catch the same light.
+  - `blink`: shut, a line curving down. `happy`: an upside-down U, the smiling closed eye of anime.
+    `down`: the lid lowered over a sliver of iris, looking down.
+  - Seen diagonally, the far eye is a pixel narrower, because it's turned away.
+  - Side on, the open eye is a wedge, as anime profiles draw it: lashes flicking back at the outer
+    corner (`ee...`), the upper lid (`.eeee`), and a narrow iris toward the front: glint, pupil
+    and light bottom (`..iw.`, `..II.`, `..jj.`).
+  - `as const` keeps the object's exact shape, so TypeScript knows every view has every kind of
+    eye.
+- `MOUTHS`: small on purpose: two pixels (`mm`) for most faces, a little U for `happy`, two by two
+  for `surprised`, a rounded four by four for `yawn`, and one pixel for `sip`. `Record<Face, ...>`
+  makes TypeScript insist on a mouth for every face.
+- `SPARKLE` and `TWINKLE`: as the comment says, a four-pointed sparkle, five pixels across, white
+  at its heart (`w`) and paler then golden toward its points (`l`, `j`), and a smaller one, three
+  pixels across. A spell circles one of the first and two of the second round her hand.
+- `eyesFor(face)`: which eyes go with a face. A yawn shuts them like a blink, and a sip closes them
+  happily.
+
+### `draw()`
+
+<!-- code: apps/desktop/src/renderer/src/character/rig.ts#draw -->
+
+[`src/renderer/src/character/rig.ts`, lines 157–868](../../apps/desktop/src/renderer/src/character/rig.ts#L157-L868)
+
+```ts
+/** Draws one pose as rows of palette letters. */
+export function draw(pose: Pose): string[] {
+  const view = pose.view
+  const frontView = view === 'front'
+  const sitting = pose.sitting ?? false
+  const hips: Point = { x: 48 + (pose.x ?? 0), y: (sitting ? 85 : 59) + (pose.y ?? 0) }
+  const lean = pose.lean ?? 0
+  const neck = add(hips, rotate({ x: 0, y: -21 }, lean))
+  const head = add(neck, rotate({ x: 0, y: -11 }, lean + (pose.tilt ?? 0)))
+  const headAngle = lean + (pose.tilt ?? 0)
+  const wind = pose.wind ?? 0
+  const lift = pose.lift ?? 0
+  const [nearArm, farArm] = pose.arms ?? [DOWN, DOWN]
+  const [nearLeg, farLeg] = pose.legs ?? [STAND, STAND]
+  const canvas = new Canvas(GRID)
+  const ink = (layer: Layer, outline = true) => canvas.ink(layer, RAMPS, LIGHT, outline)
+  // A point in a body part's own frame (its origin, turned with it).
+  const at = (origin: Point, angle: number) => (p: Point) => add(origin, rotate(p, angle))
+  const onHead = at(head, headAngle)
+  const onBody = at(neck, lean)
+  const onHips = at(hips, lean * 0.5)
+  const shape = (points: number[][], frame: (p: Point) => Point) =>
+    points.map(([x, y]) => frame({ x: x!, y: y! }))
+  /** Hair below the top of the head is blown by the wind and lifted by a fall. */
+  const blown = (p: Point): Point => {
+    const t = Math.max(0, (p.y + 2) / 20)
+    return { x: p.x + wind * t, y: p.y - lift * t }
+  }
+  const set = (p: Point, letter: string, only?: string) => {
+    const x = Math.floor(p.x)
+    const y = Math.floor(p.y)
+    if (!only || only.includes(canvas.get(x, y))) canvas.set(x, y, letter)
+  }
+  /** A small pattern (rows of letters, `.` see-through) centred on `p`, only over `only`. */
+  const motif = (p: Point, rows: readonly string[], only: string) => {
+    const x0 = Math.round(p.x) - Math.floor(rows[0]!.length / 2)
+    const y0 = Math.round(p.y) - Math.floor(rows.length / 2)
+    rows.forEach((row, dy) =>
+      [...row].forEach((letter, dx) => {
+        if (letter !== '.' && only.includes(canvas.get(x0 + dx, y0 + dy))) {
+          canvas.set(x0 + dx, y0 + dy, letter)
+        }
+      }),
+    )
+  }
+
+  // Arms: a bell sleeve with silver trim at its cuff, her hand peeking out.
+  const shoulderAt = (side: 1 | -1): Point =>
+    onBody(
+      frontView
+        ? { x: 6.5 * side, y: 2.5 }
+        : view === 'diagonal'
+          ? { x: side === 1 ? -4.5 : 4.5, y: 2.5 }
+          : { x: 0.5, y: 2.5 },
+    )
+  const drawArm = (arm: Arm, side: 1 | -1) => {
+    const layer = new Layer(GRID)
+    // From the front, positive angles swing each arm outward; otherwise forward.
+    const sign = frontView ? side : 1
+    const shoulder = shoulderAt(side)
+    const upper = (arm.shoulder + lean) * sign
+    const lower = (arm.shoulder + arm.elbow + lean) * sign
+    const elbow = limb(shoulder, 11.5, upper)
+    const wrist = limb(elbow, 10, lower)
+    const cuff = limb(elbow, 8.8, lower)
+    const hand = limb(wrist, 1, lower)
+    // Across the forearm, for the sleeve's flat, widening opening.
+    const across = { x: Math.cos(lower), y: -Math.sin(lower) }
+    const edge = (p: Point, r: number, way: 1 | -1) => ({
+      x: p.x + across.x * r * way,
+      y: p.y + across.y * r * way,
+    })
+    const band = (from: Point, to: Point, r0: number, r1: number, material: string) =>
+      layer.polygon(
+        [edge(from, r0, 1), edge(to, r1, 1), edge(to, r1, -1), edge(from, r0, -1)],
+        material,
+      )
+    layer.ellipse(hand, 1.9, 1.9, 'skin')
+    layer.capsule(shoulder, elbow, 2.6, 2.9, 'robe')
+    band(elbow, cuff, 2.9, 3.9, 'robe')
+    band(cuff, wrist, 3.9, 4.2, 'trim')
+    ink(layer)
+    const above = limb(elbow, 7.9, lower)
+    for (let r = -3.6; r <= 3.6; r += 0.5) set(edge(above, r, 1), 'Y', 'aAv')
+    return hand
+  }
+
+  // Legs: dark stockings, then boots below the robe's hem.
+  const hipAt = (side: 1 | -1): Point =>
+    onHips(view === 'side' ? { x: 0, y: 0 } : { x: (frontView ? 3.2 : -2.6) * side, y: 0 })
+  const drawLeg = (leg: Leg, side: 1 | -1) => {
+    const layer = new Layer(GRID)
+    const sign = frontView ? side : 1
+    const hip = hipAt(side)
+    let knee: Point
+    let ankle: Point
+    if (sitting) {
+      knee = { x: hip.x + side * (4 + leg.hip * 3), y: hip.y - 8 }
+      ankle = { x: hip.x + side * (3.5 + leg.knee * 4), y: 92.5 }
+    } else {
+      knee = limb(hip, LEG_LENGTH, leg.hip * sign)
+      ankle = limb(knee, LEG_LENGTH, (leg.hip - leg.knee) * sign)
+    }
+    const bootTop = add(ankle, { x: (knee.x - ankle.x) * 0.38, y: (knee.y - ankle.y) * 0.38 })
+    layer.capsule(hip, knee, 3.2, 2.6, 'stocking')
+    layer.capsule(knee, bootTop, 2.6, 2.4, 'stocking')
+    layer.capsule(bootTop, ankle, 2.7, 2.5, 'boot')
+    layer.polygon(
+      (frontView
+        ? [
+            [-2.7, -0.5],
+            [2.7, -0.5],
+            [3.1, 3.2],
+            [-3.1, 3.2],
+          ]
+        : [
+            [-2.6, -0.5],
+            [2.6, -0.5],
+            [5.6, 1.6],
+            [5.6, 3.2],
+            [-2.6, 3.2],
+          ]
+      ).map(([x, y]) => ({ x: ankle.x + x!, y: ankle.y + y! })),
+      'boot',
+    )
+    ink(layer)
+    // Down the shaft (`along`) and across it (`across`, toward her front side on).
+    const shaft = Math.hypot(ankle.x - bootTop.x, ankle.y - bootTop.y)
+    const along = { x: (ankle.x - bootTop.x) / shaft, y: (ankle.y - bootTop.y) / shaft }
+    const across = frontView ? { x: -along.y, y: along.x } : { x: 1, y: 0 }
+    const onBoot = (d: number, r: number) => ({
+      x: bootTop.x + along.x * d + across.x * r,
+      y: bootTop.y + along.y * d + across.y * r,
+    })
+    for (let r = -2.6; r <= 2.6; r += 0.5) {
+      set(onBoot(-1.6, r), 'y', 'bB')
+      set(onBoot(-0.6, r), 'y', 'bB')
+      set(onBoot(0.4, r), 'B', 'bBy')
+    }
+    // The laces down the front of the shaft (side on, its front edge): little crosses, a row of
+    // plain leather between each.
+    const lace = frontView ? 0 : 1.4
+    for (let i = 0; 1.5 + i < shaft - 0.5; i++) {
+      if (i % 3 === 0) {
+        set(onBoot(1.5 + i, lace - 1), 'y', 'bB')
+        set(onBoot(1.5 + i, lace + 1), 'y', 'bB')
+      } else if (i % 3 === 1) {
+        set(onBoot(1.5 + i, lace), 'y', 'bB')
+      }
+    }
+    // A strap over her instep, buckled in gold on the outside.
+    for (let r = -2.8; r <= 2.8; r += 0.5) set(onBoot(shaft + 0.6, r), 'B', 'by')
+    set(onBoot(shaft + 0.6, frontView ? 1.8 * side : -1.2), 'Y', 'bBy')
+  }
+
+  if (view === 'diagonal') {
+    // Hand-drawn: one flat picture of her (pictures.ts), then her expression on its face.
+    const dy = Math.round(pose.y ?? 0)
+    canvas.stamp(DIAGONAL.rows, DIAGONAL.x + Math.round(pose.x ?? 0), DIAGONAL.y + dy)
+    const expression = pose.face ?? 'neutral'
+    if (expression !== 'neutral') {
+      const eyes = EYES.diagonal[eyesFor(expression)]
+      const { near, far } = DIAGONAL_EYES
+      canvas.stamp(['sssss', 'sssss', 'sssss', 'sssss', 'sssss'], near.x, near.y + dy)
+      canvas.stamp(['ssss', 'ssss', 'ssss', 'ssss', 'ssss'], far.x, far.y + dy)
+      canvas.stamp(eyes[0]!, near.x, near.y + dy)
+      canvas.stamp(eyes[1]!, far.x, far.y + dy)
+      const mouth = MOUTHS[expression]
+      canvas.stamp(['ss'], DIAGONAL_MOUTH.x, DIAGONAL_MOUTH.y + dy)
+      canvas.stamp(mouth, DIAGONAL_MOUTH.x + 1 - mouth[0]!.length / 2, DIAGONAL_MOUTH.y + dy)
+    }
+  } else {
+    // Her shadow on the taskbar, smaller the higher she is.
+    const height = Math.max(0, -(pose.y ?? 0))
+    const shadow = new Layer(GRID)
+    shadow.ellipse({ x: hips.x, y: 95.5 }, Math.max(6, 15 - height / 2), 1.6, 'shadow')
+    ink(shadow, false)
+
+    // A magic circle on the ground under her: a teal ring, a dashed silver ring inside it turning,
+    // bright runes going round, and sparks rising from it.
+    const rune = pose.rune ?? 0
+    if (rune > 0) {
+      const turned = pose.spin ?? 0
+      const spin = turned * Math.PI * 2
+      const ring = (a: number, scale: number) => ({
+        x: hips.x + Math.cos(a) * 15 * rune * scale,
+        y: 92.8 + Math.sin(a) * 2.8 * rune * scale,
+      })
+      for (let a = 0; a < Math.PI * 2; a += 0.02) {
+        set(ring(a, 1), 'G')
+        if (Math.floor(((a + spin) * 6) / Math.PI) % 2 === 0) set(ring(a, 0.62), 'f')
+      }
+      for (let k = 0; k < 6; k++) set(ring(spin + (k * Math.PI) / 3, 1), 'w')
+      for (let k = 0; k < 5; k++) {
+        const rise = (turned * 1.5 + k / 5) % 1
+        const from = ring((k * Math.PI * 2) / 5 + 0.6, 0.85)
+        const spark = { x: from.x, y: from.y - rise * 24 * rune }
+        set(spark, 'w')
+        set({ x: spark.x, y: spark.y + 1 }, 'G')
+      }
+    }
+
+    // Her long hair behind her, down past her shoulders.
+    const back = new Layer(GRID)
+    const backHair =
+      view === 'side'
+        ? [
+            [-6, -4],
+            [-4.5, -9],
+            [-1, -11.5],
+            [3, -11.5],
+            [6.5, -9],
+            [7.5, -5],
+            [6, -2],
+            [-1, 2],
+            [-2, 14],
+            [-4, 24],
+            [-6.5, 28],
+            [-8.5, 24],
+            [-10.5, 27],
+            [-11, 16],
+            [-10, 6],
+            [-8, 0],
+          ]
+        : [
+            [-9.5, -2],
+            [-8.5, -7.5],
+            [-5, -10.8],
+            [0, -11.8],
+            [5, -10.8],
+            [8.5, -7.5],
+            [9.5, -2],
+            [10, 8],
+            [10, 18],
+            [9, 27],
+            [6, 24],
+            [3, 26],
+            [-3, 26],
+            [-6, 24],
+            [-9, 27],
+            [-10, 18],
+            [-10, 8],
+          ]
+    back.polygon(
+      shape(backHair, (p) => onHead(blown(p))),
+      'hair',
+    )
+    ink(back)
+
+    // Her braid, tied with a ribbon: from the front, hanging down behind her left shoulder, drawn
+    // before her body so it peeks out beside her arm and never covers her face or front; side on,
+    // hanging behind her ear.
+    const drawBraid = () => {
+      const braid = new Layer(GRID)
+      const braidPath =
+        view === 'side'
+          ? [
+              [-2, 4],
+              [-2.6, 10],
+              [-3.2, 16],
+              [-3.8, 22],
+              [-4.2, 28],
+            ]
+          : [
+              [8.6, 1],
+              [10, 6],
+              [10.8, 11],
+              [11, 17],
+              [10.8, 23],
+              [10.5, 28],
+            ]
+      const braidPoints = braidPath.map(([x, y]) =>
+        onHead(blown({ x: x! + (y! / 28) * wind * 0.8, y: y! })),
+      )
+      braid.chain(braidPoints, 2.1, 1.6, 'hair')
+      ink(braid)
+      // The plaits: a darker stroke across it every few pixels.
+      for (let i = 0; i < braidPoints.length - 1; i++) {
+        const a = braidPoints[i]!
+        const b = braidPoints[i + 1]!
+        for (let t = 0.25; t < 1; t += 0.5) {
+          const p = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }
+          set({ x: p.x - 1, y: p.y }, 'D', 'hl')
+          set({ x: p.x, y: p.y + 1 }, 'D', 'hl')
+        }
+      }
+      const tie = braidPoints[4]!
+      set(tie, 'v')
+      set({ x: tie.x + 1, y: tie.y }, 'v')
+      set({ x: tie.x - 1, y: tie.y }, 'a')
+    }
+    if (frontView) drawBraid()
+
+    if (!frontView) drawArm(farArm, -1)
+    // The far leg first, so the near one is in front of it.
+    drawLeg(farLeg, -1)
+    drawLeg(nearLeg, 1)
+
+    // The robe's skirt: long and flared, swaying, silver trim along its hem.
+    const robe = new Layer(GRID)
+    const swing = wind * 0.4
+    const hem = sitting ? 11 : 22
+    const flare = sitting ? 15 : 0
+    const skirt = frontView
+      ? [
+          [-8.5, -2],
+          [8.5, -2],
+          [13 + flare + swing, hem],
+          [-13 - flare + swing, hem],
+        ]
+      : [
+          [-5, -2],
+          [5.5, -2],
+          [9.5 + flare + swing, hem],
+          [-9 - flare + swing, hem],
+        ]
+    robe.polygon(shape(skirt, onHips), 'robe')
+    // Its top: the bodice, narrower, up to her collar.
+    const bodice = frontView
+      ? [
+          [-3.5, -1],
+          [3.5, -1],
+          [7.5, 1.5],
+          [8.5, 5],
+          [8, 12],
+          [8.5, 21],
+          [-8.5, 21],
+          [-8, 12],
+          [-8.5, 5],
+          [-7.5, 1.5],
+        ]
+      : [
+          [-3, -1],
+          [2.5, -1],
+          [5, 2],
+          [6, 8],
+          [5.5, 14],
+          [6, 21],
+          [-5.5, 21],
+          [-5.5, 14],
+          [-5, 6],
+          [-4.5, 2],
+        ]
+    robe.polygon(shape(bodice, onBody), 'robe')
+    ink(robe)
+    // The trim along the hem.
+    const hemLeft = skirt[3]!
+    const hemRight = skirt[2]!
+    for (let t = 0; t <= 1; t += 0.02) {
+      const p = onHips({
+        x: hemLeft[0]! + (hemRight[0]! - hemLeft[0]!) * t,
+        y: hem - 1,
+      })
+      set(p, 'f', 'aAv')
+    }
+    if (view !== 'side' && !sitting) {
+      for (let t = -1; t < hem - 1; t += 0.5) {
+        set(onHips({ x: (swing * t) / hem, y: t }), 'f', 'aAv')
+      }
+    }
+    // The collar: a V of trim, the gem brooch at its point; a darker sash at her waist.
+    const off = view === 'side' ? 3 : 0
+    if (view !== 'side') {
+      for (let t = 0; t <= 5; t += 0.5) {
+        set(onBody({ x: -3 + t * 0.6 + off, y: t - 0.5 }), 'f', 'aAv')
+        set(onBody({ x: 3 - t * 0.6 + off, y: t - 0.5 }), 'f', 'aAv')
+      }
+    }
+    canvas.stamp(['.G.', 'GGG', '.G.'], onBody({ x: off - 1, y: 4 }).x, onBody({ x: off, y: 4 }).y)
+    for (let t = -9; t <= 9; t += 0.5) {
+      set(onBody({ x: t, y: 18 }), 'A', 'av')
+      set(onBody({ x: t, y: 19 }), 'q', 'av')
+    }
+    // Where the skirt's edges are at height y (in the hips' frame), from its corners.
+    const skirtAt = (y: number) => {
+      const t = (y + 2) / (hem + 2)
+      return {
+        left: skirt[0]![0]! + (skirt[3]![0]! - skirt[0]![0]!) * t,
+        right: skirt[1]![0]! + (skirt[2]![0]! - skirt[1]![0]!) * t,
+      }
+    }
+    // The border: a gold line, and below it gold diamonds with gold dots between, just above the
+    // silver trim of the hem; centred on the trim down her front, so it sways with it.
+    const centre = (y: number) => (swing * y) / hem
+    const borderY = hem - 4.5
+    const edges = skirtAt(borderY)
+    for (let x = edges.left + 1; x <= edges.right - 1; x += 0.5) {
+      set(onHips({ x, y: borderY - 3 }), 'k', 'aAv')
+    }
+    for (let k = -3; k <= 3; k++) {
+      const x = centre(borderY) + (view === 'side' ? 6 * k : 6 * k + 3)
+      if (x < edges.left + 2 || x > edges.right - 2) continue
+      motif(onHips({ x, y: borderY }), ['.Y.', 'YaY', '.Y.'], 'aAv')
+      const dot = x + 3
+      if (dot < edges.right - 1.5 && Math.abs(dot - centre(borderY)) > 1) {
+        motif(onHips({ x: dot, y: borderY }), ['k'], 'aAv')
+      }
+    }
+    // Stars: a scattering of silver points over the skirt, in staggered rows.
+    if (!sitting) {
+      for (let row = 0; row < 3; row++) {
+        const y = 2 + row * 4.5
+        const span = skirtAt(y)
+        for (let x = (row % 2) * 3 - 12; x <= 12; x += 6) {
+          const nearTrim = frontView && Math.abs(x - centre(y)) < 1.5
+          if (x > span.left + 2 && x < span.right - 2 && !nearTrim) {
+            motif(onHips({ x, y }), ['f'], 'a')
+          }
+        }
+      }
+    }
+    // Gold buttons down the bodice from the brooch (from the front), and the sash's gold buckle.
+    if (frontView) {
+      for (const y of [7.5, 10.5, 13.5]) motif(onBody({ x: 0, y }), ['Y'], 'aAv')
+    }
+    motif(onBody({ x: off, y: 18.5 }), ['YYY', 'YkY'], 'Aqav')
+
+    // Her head: neck, face and chin.
+    const face = new Layer(GRID)
+    face.capsule(
+      onBody({ x: view === 'side' ? 0.5 : 0, y: -3.5 }),
+      onBody({ x: 0, y: 0 }),
+      2.1,
+      2.1,
+      'skin',
+    )
+    if (view === 'side') {
+      // The back of her head; her face is drawn by hand on top of it, below.
+      face.ellipse(head, 7, 8.5, 'skin')
+    } else {
+      const shift = 0
+      face.ellipse(head, 7.5, 8.3, 'skin')
+      face.polygon(
+        shape(
+          [
+            [-7, 1],
+            [7, 1],
+            [5 + shift, 7],
+            [shift, 9.8],
+            [-5 + shift * 0.5, 7],
+          ],
+          onHead,
+        ),
+        'skin',
+      )
+    }
+    ink(face)
+    if (view === 'side') {
+      canvas.stamp(
+        SIDE_FACE.rows,
+        Math.round(head.x) + SIDE_FACE.x,
+        Math.round(head.y) + SIDE_FACE.y,
+      )
+    }
+
+    // Her face: eyes, blush and mouth.
+    const expression = pose.face ?? 'neutral'
+    const eyes = EYES[view][eyesFor(expression)]
+    const look = Math.round(pose.look ?? 0)
+    const eyeY = head.y - 0.5
+    const mouth = MOUTHS[expression]
+    if (frontView) {
+      canvas.stamp(eyes[0]!, head.x + 1 + look, eyeY)
+      canvas.stamp(eyes[1]!, head.x - 6 + look, eyeY)
+      canvas.stamp(['cc'], head.x + 3 + look, head.y + 5)
+      canvas.stamp(['cc'], head.x - 5 + look, head.y + 5)
+      canvas.stamp(mouth, head.x - mouth[0]!.length / 2 + look * 0.5, head.y + 6)
+    } else {
+      canvas.stamp(eyes[0]!, head.x + 1.5, eyeY)
+      canvas.stamp(['cc'], head.x + 1.5, head.y + 4.5)
+      // Her mouth: a short line just inside her lips, between nose and chin.
+      canvas.stamp(
+        mouth.map((r) => r.slice(0, 1)),
+        head.x + 5.5,
+        head.y + 5.5,
+      )
+    }
+
+    // Her fringe and the locks beside her face.
+    const hair = new Layer(GRID)
+    const fringe =
+      view === 'side'
+        ? [
+            [-3, -6.5],
+            [-1, -10.5],
+            [3, -11.5],
+            [6.5, -9],
+            [8, -4.5],
+            [7.8, -1],
+            [6.5, -3],
+            [5.5, 0],
+            [4, -2.5],
+            [2.5, -1],
+            [1.5, -4],
+            [-1, -4.5],
+          ]
+        : [
+            [-9.2, -1.5],
+            [-8.7, -7],
+            [-5, -10.3],
+            [0, -11.3],
+            [5, -10.3],
+            [8.7, -7],
+            [9.2, -1.5],
+            [7.5, -3.6],
+            [6.5, -0.4],
+            [4.5, -3.4],
+            [3, 0],
+            [1, -3.4],
+            [-1, -0.2],
+            [-3, -3.4],
+            [-4.6, -0.6],
+            [-6.5, -3.6],
+            [-7.6, -1],
+          ]
+    const shiftHair = 0
+    hair.polygon(
+      shape(fringe, (p) => onHead(blown({ x: p.x + shiftHair, y: p.y }))),
+      'hair',
+    )
+    if (view === 'side') {
+      const crown = [
+        [1.5, -11.6],
+        [-3, -11],
+        [-6.5, -8],
+        [-7.8, -3],
+        [-7.5, 3],
+        [-5.5, 7.5],
+        [-2, 8.5],
+        [-0.8, 3],
+        [0.2, -2.5],
+        [1.5, -5],
+      ]
+      hair.polygon(
+        shape(crown, (p) => onHead(blown(p))),
+        'hair',
+      )
+    }
+    const lock = (x: number, length: number) =>
+      hair.chain(
+        [
+          { x, y: -3 },
+          { x: x * 1.03, y: 3 },
+          { x: x * 1.03, y: length * 0.6 },
+          { x: x * 0.98, y: length },
+        ].map((p) => onHead(blown(p))),
+        1.9,
+        0.6,
+        'hair',
+      )
+    if (view === 'side') {
+      lock(-1.5, 12)
+    } else {
+      lock(8.2 + shiftHair, 13)
+      lock(-8.2 + shiftHair * 0.5, 13)
+    }
+    ink(hair)
+    // The shine on her hair: a band across the crown.
+    for (let dx = -6; dx <= 6; dx++) {
+      const curve = Math.abs(dx) * 0.18
+      set(onHead({ x: dx + shiftHair, y: -7.5 + curve }), 'L', 'hl')
+    }
+
+    // Her long elf ears, through her hair: both from the front, one side on.
+    const ears = new Layer(GRID)
+    const ear = (side: 1 | -1) =>
+      ears.polygon(
+        shape(
+          [
+            [6.6, -2.4],
+            [13.5, -6.8],
+            [12.2, -4.6],
+            [7.2, 1.6],
+          ],
+          (p) => onHead({ x: p.x * side, y: p.y }),
+        ),
+        'skin',
+      )
+    if (frontView) {
+      ear(1)
+      ear(-1)
+    } else {
+      ears.polygon(
+        shape(
+          [
+            [-0.5, -1.5],
+            [-9.5, -7],
+            [-8, -3.8],
+            [-1, 2],
+          ],
+          onHead,
+        ),
+        'skin',
+      )
+    }
+    ink(ears)
+
+    if (!frontView) drawBraid()
+
+    // Her hat: a wide brim and a tall crooked crown with a silver band.
+    const hat = new Layer(GRID)
+    const tipLean = view === 'side' ? -1 : 1
+    const hatCentre = view === 'side' ? 0.5 : 0
+    hat.ellipse(onHead({ x: hatCentre, y: -9 }), view === 'side' ? 12.5 : 14, 2.7, 'hat')
+    hat.polygon(
+      shape(
+        [
+          [-6.5, -9.5],
+          [-4.8, -14],
+          [-2.5, -18],
+          [0.5 * tipLean, -20.5],
+          [4.5 * tipLean, -22],
+          [3.2 * tipLean, -19.5],
+          [3.4, -16],
+          [5, -12.5],
+          [6.5, -9.5],
+        ],
+        (p) => onHead({ x: p.x + hatCentre, y: p.y - lift * 0.15 }),
+      ),
+      'hat',
+    )
+    ink(hat)
+    for (let dx = -6; dx <= 6; dx += 0.5) {
+      set(onHead({ x: dx + hatCentre, y: -11 }), 'f', 'ngN')
+      set(onHead({ x: dx + hatCentre, y: -12 }), 'F', 'ngN')
+    }
+    for (let dx = 7.5; dx <= 13; dx += 2) {
+      set(onHead({ x: hatCentre + dx, y: -8.6 }), 'F', 'ngN')
+      set(onHead({ x: hatCentre - dx, y: -8.6 }), 'F', 'ngN')
+    }
+    const hatSide = view === 'side' ? 1 : 0
+    motif(onHead({ x: hatCentre + hatSide * 3, y: -11.5 }), ['YYY', 'YGY', 'YYY'], 'ngNfFq')
+    const lifted = (x: number, y: number) =>
+      onHead({ x: x * tipLean + hatCentre, y: y - lift * 0.15 })
+    motif(lifted(-1.5, -15.5), ['.YY', 'Y..', 'Y..', '.YY'], 'ngN')
+    motif(lifted(2, -14.5), ['Y'], 'ngN')
+    motif(lifted(1.2, -18), ['k'], 'ngN')
+    motif(lifted(-3.8, -13), ['k'], 'ngN')
+  }
+
+  // The near arm last, in front of her (from the front, both arms), and anything she's holding.
+  let hand: Point
+  if (frontView) {
+    drawArm(farArm, -1)
+    hand = drawArm(nearArm, 1)
+  } else {
+    hand = drawArm(nearArm, 1)
+  }
+  if (pose.prop) {
+    const prop = new Layer(GRID)
+    if (pose.prop === 'cup') {
+      prop.polygon(
+        shape(
+          [
+            [-2.4, -3],
+            [2.4, -3],
+            [1.8, 1],
+            [-1.8, 1],
+          ],
+          (p) => add(hand, p),
+        ),
+        'cup',
+      )
+      prop.capsule(add(hand, { x: 2.8, y: -2 }), add(hand, { x: 2.6, y: 0 }), 0.9, 0.9, 'cup')
+    } else {
+      // An open book: two pages, the cover showing round them.
+      prop.polygon(
+        shape(
+          [
+            [-6, -4],
+            [5, -4.5],
+            [5.5, 1.5],
+            [-5.5, 2],
+          ],
+          (p) => add(hand, p),
+        ),
+        'book',
+      )
+    }
+    ink(prop)
+    if (pose.prop === 'book') {
+      for (let dy = -3; dy <= 0; dy++) {
+        for (let dx = -4; dx <= 4; dx++) if (dx !== 0) set(add(hand, { x: dx, y: dy }), 'f', 'ngN')
+      }
+      for (let dy = -3; dy <= 0; dy++) set(add(hand, { x: 0, y: dy }), 'F')
+    } else {
+      // A wisp of steam.
+      set(add(hand, { x: -0.5, y: -5 }), 'w')
+      set(add(hand, { x: 0.5, y: -6.5 }), 'w')
+    }
+    canvas.stamp(['ss'], hand.x - 1, hand.y)
+  }
+
+  // A little spell: sparkles round her raised hand.
+  const sparkle = pose.sparkle ?? 0
+  if (sparkle > 0) {
+    const spin = sparkle * Math.PI * 2
+    canvas.stamp(SPARKLE, hand.x - 2 + Math.cos(spin) * 6, hand.y - 2 - 4 + Math.sin(spin) * 4)
+    canvas.stamp(
+      TWINKLE,
+      hand.x - 1 + Math.cos(spin + 2.1) * 7,
+      hand.y - 1 - 5 + Math.sin(spin + 2.1) * 5,
+    )
+    canvas.stamp(
+      TWINKLE,
+      hand.x - 1 + Math.cos(spin + 4.2) * 5,
+      hand.y - 1 - 3 + Math.sin(spin + 4.2) * 3,
+    )
+  }
+
+  return canvas.rows()
+}
+```
+
+<!-- /code -->
+
+Draws one pose as rows of palette letters. Seen diagonally, she's one hand-drawn picture
+(`DIAGONAL` in `pictures.ts`), stamped where the pose puts her; any expression but the neutral one
+is stamped onto its face (the eyes and mouth painted over with skin first, then the new ones at
+`DIAGONAL_EYES` and `DIAGONAL_MOUTH`), and only her near arm, props and sparkles are drawn on top.
+From the front and side on, each part is a `Layer`, inked onto the frame (`Canvas.ink()`) from the
+back to the front, so later parts cover earlier ones; smaller details are set pixel by pixel on
+top. In order:
+
+**Setting up**
+
+- `frontView`: whether she's seen from the front, which a lot of what follows depends on.
+- `hips`: the root of the skeleton, in the middle of the grid across (`48`) and 59 pixels down when
+  standing (her legs, two `LEG_LENGTH`s, reach down to 92), or 85 when sitting, moved by the pose's
+  `x` and `y`.
+- `neck` is 21 pixels above the hips and `head` (the middle of her head) 11 above the neck, each
+  turned with `rotate()`: by `lean` for the neck, and by `lean` plus `tilt` for the head.
+- `ink`: a short way to ink a layer with her ramps and light.
+- `at(origin, angle)`: returns a function that places a point given in a part's own frame: an
+  offset from the part's origin, as if she stood straight, turned with the part. `onHead`, `onBody`
+  and `onHips` are the three frames the shapes below are written in. The hips turn half as much as
+  the body (`lean * 0.5`), so she bends at the waist.
+- `shape(points, frame)`: turns a list of `[x, y]` pairs, the way the shapes below are written,
+  into points placed in one of those frames.
+- `blown(p)`: a hair point pushed sideways by `wind` and raised by `lift`, more the further down
+  her hair it is (`t` is 0 near the top of her head and 1 twenty pixels lower), so the roots stay
+  put and the ends swing.
+- `set(p, letter, only)`: sets one pixel, but only where it's currently one of the letters in
+  `only`, so a detail (the trim, the plaits, the hat's band) is only drawn on the part it belongs
+  to.
+- `motif(p, rows, only)`: the same for a small pattern, written as rows of letters (`.`
+  see-through): centred on `p`, rounded to whole pixels first so the pattern keeps its shape
+  however the part is turned, and only over the letters in `only`. The clothes' patterns use it.
+
+**Her shadow, the magic circle and her long hair**
+
+- The shadow: a flat ellipse on the bottom row, reaching 15 pixels either side of her and narrower
+  the higher she is (`15 - height / 2`, never under 6). `ink(shadow, false)` draws it without an
+  outline.
+- The magic circle, when `pose.rune` is above 0 (as she levitates): as the comment says, on the
+  ground under her. `ring(a, scale)` is the point at angle `a` round an ellipse 15 pixels either
+  side of her and 2.8 up and down, times `rune` (so it grows and shrinks) and `scale`. Stepping
+  round in small steps (`0.02` radians), it sets a teal ring (`G`) and, inside it at `0.62` of
+  the size, a silver ring (`f`) in dashes, twelve to a turn (`Math.floor(((a + spin) * 6) /
+Math.PI) % 2`), which turn with `spin`. Six white runes (`w`) go round the outer ring, a sixth
+  of a turn apart. Five sparks (a white pixel over a teal one) rise from points round the circle,
+  each a fifth of the way behind the last, starting again at the bottom when they reach the top
+  (`% 1`), 24 pixels up at full size. It's drawn before anything of her, so she stands (or
+  floats) in front of it.
+- The back hair: as the comment says, her long hair behind her, down past her shoulders, as one
+  polygon in the head's frame. From the front, its lower edge is jagged, clumps of hair ending at
+  different lengths; side on, it flows back behind her. It's inked first, so everything else is in
+  front of it.
+- `drawBraid()`: as the comment says, her braid, tied with a ribbon. From the front it's drawn
+  here, straight after the back hair, so her body, arms, face and side locks all cover it: it
+  hangs down behind her left shoulder (the right of the picture) and only peeks out beside her
+  arm, never over her face or the front of her robe. Side on it's drawn later, with the rest of
+  her hair, hanging behind her ear. See the braid, below, for how it's drawn.
+
+**Arms and legs**
+
+- `shoulderAt(side)`: where a shoulder is: 6.5 pixels either side of her middle from the front,
+  closer together diagonally and side on.
+- `drawArm(arm, side)`: as the comment says, a bell sleeve with silver trim at its cuff, her hand
+  peeking out. The upper arm is 11.5 pixels long and the forearm 10, placed with `limb()` from the
+  shoulder, adding `lean` so her arms lean with her. The upper sleeve is a capsule. The forearm is
+  where the sleeve widens, so it's drawn differently:
+  - `across`: the direction straight across the forearm, at right angles to it.
+  - `edge(p, r, way)`: the point `r` pixels to one side of `p` (`way` is 1 or -1 for the side).
+  - `band(from, to, r0, r1, material)`: a four-sided shape along the forearm, `r0` either side of
+    `from`, widening to `r1` either side of `to`. Its ends are straight, not rounded like a
+    capsule's, so the sleeve ends in a flat opening.
+  - The sleeve widens from 2.9 at the elbow to 3.9 at `cuff`, and from there to the wrist is a band
+    of silver trim, 3.9 to 4.2: the bell sleeve and its cuff. Her hand, a small ellipse just past
+    the wrist, is drawn first, so only its tip shows below the sleeve.
+  - `above`: a point just above the cuff (7.9 pixels down the forearm); a line of gold (`Y`)
+    across the sleeve there, over the robe's pixels only, is embroidery edging the cuff.
+  - It returns where the hand is, for a prop or a spell.
+- `hipAt(side)` and `drawLeg(leg, side)`: as the comment says, dark stockings, then boots below the
+  robe's hem. Thigh and shin are `LEG_LENGTH` each. Standing, they're placed with `limb()` like the
+  arms. Sitting, her knees are up in front of her (8 pixels above her hips) and her feet on the
+  taskbar (`y: 92.5`), each spread by its leg's angles. `bootTop` is 38% of the way from the ankle
+  to the knee: the stocking runs from the hip to the knee (3.2 tapering to 2.6) and on to there,
+  then the boot's shaft (a little wider) and its foot, a plain shape from the front and pointing
+  forward otherwise. Her robe covers most of this; below its hem it's mostly boot.
+  - The boot's patterns, placed with `onBoot(d, r)`: `d` pixels down the shaft from `bootTop`
+    (`along`) and `r` across it (`across`: at right angles to the shin from the front, and toward
+    her front side on). A turned-down cuff at the top: two rows of the boot's light (`y`) over a
+    row of its shade (`B`). The laces, down the front of the shaft (side on, its front edge,
+    `lace`): every three rows, a little cross (two pixels, then one between them below) and a row
+    of plain leather, so they read as laces rather than a checkerboard. A strap across her instep
+    in the boot's shade, with a gold buckle (`Y`) on the outside of the foot.
+- Then the far arm, behind her body (from the front, both arms wait until the end), and the legs,
+  the far one first so the near one is in front. The legs always come before the robe, which
+  covers them.
+
+**The robe**
+
+- The skirt: as the comment says, long and flared, swaying: a trapezoid from just above her hips
+  down to the hem, 22 pixels below them, 13 pixels either side at the hem from the front. `swing`
+  moves the hem with the wind. Sitting, the hem is only 11 below her hips (which are near the
+  taskbar), and `flare` adds 15 pixels on each side, so the robe spreads round her.
+- The bodice: as the comment says, the robe's top, narrower, a polygon in the body's frame from her
+  collar down to her hips. Skirt and bodice are one layer, so they're shaded and outlined as one
+  garment.
+- The trim along the hem: `hemLeft` and `hemRight` are the skirt's bottom corners, and the loop
+  steps between them (`t` from 0 to 1 in fiftieths), setting silver (`f`) on the row just inside
+  the hem, over the robe's pixels only (`'aAv'`). Then, unless she's side on or sitting, a line of
+  trim from her waist down the front to the hem, leaning with the swing.
+- The collar: as the comment says, a V of trim, the gem brooch at its point, and a darker sash.
+  `off` moves these 3 pixels toward the way she faces side on. Except side on,
+  two lines of trim run from either side of her neck to meet 4.5 pixels down. The brooch is a
+  small plus of teal (`G`) stamped at the V's point (side on too).
+- The sash: two rows right across her waist, 18 and 19 pixels below her neck: the robe's shadow
+  colour (`A`) over its outline colour (`q`), only on the robe's lighter pixels (`'av'`).
+- `skirtAt(y)`: where the skirt's left and right edges are at height `y` in the hips' frame,
+  worked out from its corners, so the patterns below stay inside it as it flares and sways.
+- The border, as the comment says: a gold line (`k`, the gold's shade) across the skirt 7.5 pixels
+  above the hem, and below it gold diamonds (`.Y.`, `YaY`, `.Y.`: a diamond of gold round a pixel
+  of robe) every 6 pixels, with a gold dot between each pair, just above the hem's silver trim.
+  `centre(y)` is where the trim down her front is, swaying with `swing`, and from the front the
+  diamonds sit 3 pixels either side of it, so the trim runs between them; side on (no trim) one
+  is in the middle. Any that would reach the skirt's edge are left out.
+- The stars: three staggered rows of single silver pixels (`f`) over the skirt, 6 pixels apart,
+  each row shifted 3 from the last, only over the robe's base colour (`'a'`) so they stay off its
+  outline and shading, and kept off the trim down her front. Not while sitting, when the skirt is
+  spread out flat.
+- From the front, three gold buttons down the bodice below the brooch; and on the sash, a gold
+  buckle (`YYY` over `YkY`), at her front (`off` moves it toward the way she faces side on).
+
+**Head, face, hair and ears**
+
+- The head: her neck (a capsule), then her head, an ellipse, with a chin below it from the front
+  (a polygon). Inked as skin, it gets a shaded side and a rose outline. Side on, the ellipse is only
+  the back of her head: her face is `SIDE_FACE` (in `pictures.ts`), a profile drawn by hand and
+  stamped over it, placed by the middle of her head.
+- The face is stamped on. From the front: two eyes, moved by `look`, blush (`cc`, pink) under each,
+  and the mouth in the middle. Side on: one eye, blush on her cheek below it, and one pixel of
+  mouth at the notch of her lips.
+- The hair in front, as one layer. The fringe is a polygon whose lower edge zigzags
+  (`[7.5, -3.6], [6.5, -0.4], [4.5, -3.4], ...`), so it falls over her forehead in clumps; side on,
+  a `crown` covers the back of her head too. The side locks (`lock(x, length)`) are chains from her
+  temples down past her chin, 13 pixels long (12 side on), tapering from 1.9 to 0.6 so they end in
+  points: two of them, or one side on, in front of her ear and behind her eye (`-1.5`).
+- The shine: as the comment says, a band across her crown: one curved row of the hair's shine
+  (`L`), set only over hair pixels (`'hl'`) so it never spills onto the outline. A band like this
+  is how anime art shows glossy hair.
+- The ears: as the comment says, her long elf ears, through her hair. They're their own `ears`
+  layer, drawn after the hair so they show in front of it. Each is a narrow four-sided shape from
+  beside her head out and up to a point (`[13.5, -6.8]`: about 13 pixels out and 7 up from the
+  middle of her head), and `p.x * side` mirrors it for the other side. Both show from the front;
+  side on, one pointing back. They're inked as skin.
+- The braid, side on: `drawBraid()` (defined with the back hair, above) is called here, so it
+  hangs behind her ear in front of her back hair. `braidPath` is its line, 28 pixels long, in the
+  head's frame: side on it starts behind her jaw and hangs back and down; from the front it starts
+  behind her head (8.6 pixels out from the middle of it, past her cheek at 7.5) and hangs straight
+  down behind her shoulder, about 11 out. `braidPoints` turns each point into a place on the grid,
+  swinging further with the wind toward the tip (`(y / 28) * wind * 0.8`) and blown like the rest
+  of her hair. `chain()` draws it in its own `braid` layer, 2.1 thick tapering to 1.6, so it's
+  outlined against whatever is behind it.
+- The plaits: as the comment says, a darker stroke across the braid every few pixels. Twice along
+  each section (`t` at 0.25 and 0.75), two pixels in the hair's shadow (`D`), one to the left and
+  one below, make a short slanted stroke, only over the braid's lighter pixels (`'hl'`). A row of
+  slanted strokes is how a plait reads in pixel art.
+- The ribbon: near the braid's end (`braidPoints[4]`, 24 pixels down), three pixels in the robe's
+  colours (`v`, `v` and `a`), drawn over whatever is there.
+
+**The hat**
+
+- As the comment says, a wide brim and a tall crooked crown with a silver band, in its own `hat`
+  layer, drawn after her head and hair so it sits on top. The brim is a flat ellipse 14 pixels
+  either side (12.5 side on), 9 pixels above the middle of her head. The crown is a polygon rising
+  from the brim to a tip 22 pixels above the middle of her head, which flops over to one side
+  (`tipLean`: to the right, or back side on): that's what makes it crooked. `hatCentre` shifts it
+  a little side on, and `lift * 0.15` raises it a touch when she's carried or
+  falling.
+- The band: two rows across the crown just above the brim, silver (`f`) over its shade (`F`),
+  only on the hat's own pixels (`'ngN'`).
+- The stitching: silver dots (`F`) every 2 pixels along the middle of the brim, either side of the
+  crown.
+- The buckle: a square of gold with a teal gem in it (`YYY`, `YGY`, `YYY`) on the band, at the
+  front (side on, 3 pixels toward the way she faces).
+- The moon and stars: a gold crescent moon (four pixels, curved like a C) and a few stars, one in
+  gold and two in its shade, on the crown. `lifted(x, y)` places them with the crown: mirrored
+  with `tipLean` side on, where the tip flops back, and raised with the hat by `lift`.
+
+**The near arm, props and sparkles**
+
+- As the comment says, the near arm is drawn last, in front of her (seen diagonally, on top of
+  her picture); from the front, both arms are drawn here, in front of the robe. `hand` is where it ends.
+- `if (pose.prop)`: a teacup (a small cup narrowing toward its base, with a handle) or her
+  spellbook, held open (a wide shape, 11 pixels across, in the hat's deep colours), placed on her
+  hand and inked. Then, for the book, its pages are filled in pale silver (`f`) either side of a
+  middle line in the trim's shade (`F`), the spine, only over the cover's pixels for the pages, so
+  the cover still shows round them. For the cup, two white pixels above it are a wisp of steam.
+  Two skin pixels (`ss`) stamped over the prop are her fingers round it.
+- The sparkles: as the comment says, a little spell, sparkles round her raised hand, when
+  `pose.sparkle` is above 0. `spin` turns it into an angle, a whole turn from 0 to 1. The
+  `SPARKLE` goes round an ellipse 6 pixels either side and 4 up and down, centred a little above
+  her hand (`Math.cos(spin) * 6`, `Math.sin(spin) * 4`), and the two `TWINKLE`s go round on
+  slightly different paths a third and two-thirds of a turn behind (`spin + 2.1`, `spin + 4.2`;
+  a whole turn is about 6.28). The `- 2` and `- 1` centre each stamp on its point. As `sparkle`
+  goes from 0 to 1 over the spell's frames, they circle her hand once.
+- `return canvas.rows()`: the finished frame.
+
+## `src/renderer/src/character/pictures.ts`: the parts drawn by hand
+
+Some of her doesn't come out well built from shapes, so it's drawn by hand, pixel by pixel, as
+rows of palette letters (`PALETTE` in `sprite.ts`; `.` is see-through), facing right like the rig.
+
+### `Picture`, `DIAGONAL_EYES`, `DIAGONAL_MOUTH` and `SIDE_FACE`
+
+<!-- code: apps/desktop/src/renderer/src/character/pictures.ts#Picture,DIAGONAL_EYES,DIAGONAL_MOUTH,SIDE_FACE -->
+
+[`src/renderer/src/character/pictures.ts`, lines 1–152](../../apps/desktop/src/renderer/src/character/pictures.ts#L1-L152)
+
+```ts
+// Hand-drawn pictures of the character, as rows of palette letters (see PALETTE in sprite.ts;
+// `.` is see-through), placed on the 96-pixel grid at (x, y).
+
+/** A picture and where its top-left pixel goes on the grid. */
+export interface Picture {
+  x: number
+  y: number
+  rows: readonly string[]
+}
+
+/** Where the eyes are in DIAGONAL (grid pixels): near eye 5 × 5, far eye 4 × 5. */
+export const DIAGONAL_EYES = { near: { x: 44, y: 27 }, far: { x: 51, y: 27 } }
+
+/** Where the mouth is in DIAGONAL: two pixels wide, below the far eye. */
+export const DIAGONAL_MOUTH = { x: 50, y: 33 }
+
+/**
+ * Her face side on, facing right, drawn by hand in the usual anime profile: a forehead under her
+ * fringe, a dip at the eye, a small pointed nose, a little notch at her lips, a soft chin, then
+ * her jaw running back under her side lock, her neck in its shadow. It is placed relative to the
+ * middle of her head (x and y here are offsets from it); her hair, ear and hat are drawn over it,
+ * and her eyes, blush and mouth on it.
+ */
+export const SIDE_FACE: Picture = {
+  x: -2,
+  y: -3,
+  rows: [
+    'ssssssssssK..',
+    'ssssssssssK..',
+    'ssssssssssK..',
+    'ssssssssssK..',
+    'ssssssssssK..',
+    'sssssssssssK.',
+    'ssssssssssssK',
+    'sssssssssSKK.',
+    'ssssssssssK..',
+    'sssssssssK...',
+    'SSKssssssK...',
+    'SSSKKsssSK...',
+    'SSSSSKKKK....',
+  ],
+}
+```
+
+<!-- /code -->
+
+- `Picture`: a picture and where its top-left pixel goes.
+- `DIAGONAL` (not shown here, as it's 92 rows of pixels; it's
+  [in the file](../../apps/desktop/src/renderer/src/character/pictures.ts)): her whole body seen
+  diagonally, standing, one flat drawing with no layers, so her hat, ears, hair, face, braid, robe
+  and boots each sit exactly in front of or behind the others. Turned to face right, her right
+  side is toward us: her ear and the back of her head on the left, her near eye larger, her far
+  cheek (with a small upturned nose) the right-hand edge of her face, her braid over her near
+  shoulder and her near leg in front. Her near arm isn't in it, because it moves; `draw()` adds
+  it. It was made by drawing the rig's diagonal pose once, then retouching it by hand.
+- `DIAGONAL_EYES` and `DIAGONAL_MOUTH`: where her eyes and mouth are in `DIAGONAL`, so `draw()`
+  can paint over them with another expression.
+- `SIDE_FACE`: her face side on, in the usual anime profile, read from the top: her forehead under
+  her fringe (`K`, the outline, at the right-hand end of each row); a dip at the eye; a small
+  pointed nose (the outline steps out two pixels and back, with a pixel of shade, `S`, beside the
+  nostril); a notch at her lips; a soft chin; then her jaw running back under her side lock, with
+  her neck in its shadow. Its `x` and `y` are offsets from the middle of her head rather than grid
+  positions, since her head moves; her hair, ear and hat are drawn over it, and her eyes, blush
+  and mouth on it. Shading is kept light (mostly the base skin, `s`), since a face in profile in
+  anime art is mostly flat colour.
+
+## `src/renderer/src/character/sprite.ts`: her animations
+
+Her animations: for each pose the main process can ask for (`Pose` in `src/shared/character.ts`,
+imported here as `Name` to keep it apart from the rig's `Pose`), a list of frames and how long each
+shows. As the comment at the top says, each animation is drawn by the rig from a few _key poses_
+and the _in-betweens_ eased between them, the way an animator draws the key drawings and then
+fills in the frames between. The in-betweens come about every 40 ms (`FRAME_MS`), 25 a second,
+which is what makes her movements smooth. Frames are drawn the first time a pose is needed, then
+kept, and `Character` (below) plays them.
+
+### `SPRITE_SIZE` and `PALETTE`
+
+<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#SPRITE_SIZE,PALETTE -->
+
+[`src/renderer/src/character/sprite.ts`, lines 4–58](../../apps/desktop/src/renderer/src/character/sprite.ts#L4-L58)
+
+```ts
+// The character's animations: for each pose, a list of frames drawn by the rig (rig.ts) from key
+// poses and the in-betweens eased between them. She's an original design: an elf mage with long
+// pointed ears, silver-white hair in one long braid, amber eyes, a wide-brimmed crooked hat and a
+// long robe in the tenant's accent colour. Frames are drawn the first time a pose is needed, then
+// kept.
+
+/** The grid's size in pixels (square): 96, one pixel a DIP, filling the bubble's window. */
+export const SPRITE_SIZE = GRID
+
+/** Each letter's colour, as a CSS class (character.css): robe and hat follow the accent colour. */
+export const PALETTE: Record<string, string> = {
+  // Hair, silver-white: outline, shadow, base, light, shine.
+  O: 'px-hair-line',
+  D: 'px-hair-shade',
+  h: 'px-hair',
+  l: 'px-hair-light',
+  L: 'px-hair-shine',
+  // Skin: outline, shadow, base, light, blush.
+  K: 'px-skin-line',
+  S: 'px-skin-shade',
+  s: 'px-skin',
+  z: 'px-skin-light',
+  c: 'px-blush',
+  // Eyes: lashes and lids, the iris dark to light (amber), a white glint; the mouth.
+  e: 'px-lash',
+  i: 'px-iris-dark',
+  I: 'px-iris',
+  j: 'px-iris-light',
+  w: 'px-white',
+  m: 'px-mouth',
+  // The robe: outline, shadow, base, light (all mixed from the accent colour).
+  q: 'px-robe-line',
+  A: 'px-robe-shade',
+  a: 'px-robe',
+  v: 'px-robe-light',
+  // The robe's silver trim, and the gem of its brooch.
+  f: 'px-trim',
+  F: 'px-trim-shade',
+  G: 'px-gem',
+  // Gold embroidery and buckles, and its shade.
+  Y: 'px-gold',
+  k: 'px-gold-shade',
+  // Her hat (and her spellbook's cover): a deep shade of the accent colour.
+  n: 'px-hat',
+  N: 'px-hat-shade',
+  g: 'px-hat-light',
+  // Stockings and boots, with one dark outline.
+  u: 'px-clothes-line',
+  o: 'px-stocking',
+  Q: 'px-stocking-shade',
+  b: 'px-boot',
+  B: 'px-boot-shade',
+  y: 'px-boot-light',
+  x: 'px-shadow',
+}
+```
+
+<!-- /code -->
+
+- `SPRITE_SIZE = GRID`: as its comment says, 96 pixels square, one pixel a DIP, filling the bubble's
+  window (`BUBBLE_BOX`). `Character` uses it for the `<svg>`'s `viewBox`.
+- `PALETTE`: each letter's colour, as a CSS class in `character.css` rather than a colour itself.
+  That's what lets her robe and hat follow the tenant's accent colour, which `useAccentColor()`
+  sets at runtime, as the comment says.
+  The comments group the letters by material, each a ramp of outline, shadow, base and light
+  (`RAMPS` in `rig.ts` says which letters each material uses), plus the details: blush (`c`), the
+  eyes' lashes and lids (`e`), three shades of amber iris (`i`, `I`, `j`), a white glint (`w`),
+  the mouth (`m`), the silver trim (`f`, `F`), the brooch's gem (`G`), gold embroidery and
+  buckles (`Y`, and `k` for its shade) and her shadow (`x`). Some letters do double duty: her
+  spellbook's cover is in the hat's letters, the teacup in the trim's, the sparkles are made of
+  the iris's gold, the hair's light and the glint's white, and the magic circle of the gem's teal,
+  the trim's silver and the glint's white. Upper and
+  lower case are different letters. A `.` (not in the palette) is see-through.
+
+### `Frame` and `Key`
+
+<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#Frame,Key -->
+
+[`src/renderer/src/character/sprite.ts`, lines 60–70](../../apps/desktop/src/renderer/src/character/sprite.ts#L60-L70)
+
+```ts
+/** A frame as rows of letters (SPRITE_SIZE × SPRITE_SIZE), and how long it shows. */
+export interface Frame {
+  rows: string[]
+  ms: number
+}
+
+/** A key pose and how long it shows. */
+interface Key {
+  pose: Pose
+  ms: number
+}
+```
+
+<!-- /code -->
+
+- `Frame`: a finished frame, `SPRITE_SIZE` rows of `SPRITE_SIZE` letters, and how long it shows
+  (`ms`).
+- `Key`: the same with the rig's pose in place of the drawing. The animations below are written as
+  lists of these, and `drawn()` turns them into frames.
+
+### `smooth`, `lerp`, `mixArm`, `mixLeg`, `ARM_DOWN`, `LEG_STAND` and `mix()`
+
+<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#smooth,lerp,mixArm,mixLeg,ARM_DOWN,LEG_STAND,mix -->
+
+[`src/renderer/src/character/sprite.ts`, lines 72–111](../../apps/desktop/src/renderer/src/character/sprite.ts#L72-L111)
+
+```ts
+// ------------------------------------------------------------------------------------- tweening
+
+/** Slow in, slow out. */
+const smooth = (t: number) => t * t * (3 - 2 * t)
+
+const lerp = (a = 0, b = 0, t: number) => a + (b - a) * t
+
+const mixArm = (a: Arm, b: Arm, t: number): Arm => ({
+  shoulder: lerp(a.shoulder, b.shoulder, t),
+  elbow: lerp(a.elbow, b.elbow, t),
+})
+
+const mixLeg = (a: Leg, b: Leg, t: number): Leg => ({
+  hip: lerp(a.hip, b.hip, t),
+  knee: lerp(a.knee, b.knee, t),
+})
+
+const ARM_DOWN: Arm = { shoulder: 0.08, elbow: 0.04 }
+
+const LEG_STAND: Leg = { hip: 0, knee: 0 }
+
+/** Part of the way from pose `a` to pose `b`: numbers in between, the rest from the nearer one. */
+function mix(a: Pose, b: Pose, t: number): Pose {
+  const [an = ARM_DOWN, af = ARM_DOWN] = a.arms ?? []
+  const [bn = ARM_DOWN, bf = ARM_DOWN] = b.arms ?? []
+  const [ln = LEG_STAND, lf = LEG_STAND] = a.legs ?? []
+  const [mn = LEG_STAND, mf = LEG_STAND] = b.legs ?? []
+  const near = t < 0.5 ? a : b
+  return {
+    ...near,
+    view: a.view,
+    x: lerp(a.x, b.x, t),
+    y: lerp(a.y, b.y, t),
+    lean: lerp(a.lean, b.lean, t),
+    tilt: lerp(a.tilt, b.tilt, t),
+    look: lerp(a.look, b.look, t),
+    wind: lerp(a.wind, b.wind, t),
+    lift: lerp(a.lift, b.lift, t),
+    rune: lerp(a.rune, b.rune, t),
+    spin: lerp(a.spin, b.spin, t),
+    arms: [mixArm(an, bn, t), mixArm(af, bf, t)],
+    legs: [mixLeg(ln, mn, t), mixLeg(lf, mf, t)],
+  }
+}
+```
+
+<!-- /code -->
+
+_Tweening_: working out the poses between two key poses.
+
+- `smooth(t)`: as the comment says, slow in, slow out. Given how far through a move it is (`t`,
+  from 0 to 1), it gives how far the pose should have got: `t * t * (3 - 2 * t)` (the _smoothstep_
+  curve) starts and ends gently and is fastest in the middle. Animators call this easing in and
+  out: real movements speed up and slow down rather than starting and stopping dead.
+- `lerp(a, b, t)`: _linear interpolation_, the number `t` of the way from `a` to `b`. Both default
+  to 0, so a value a pose leaves out counts as 0.
+- `mixArm` and `mixLeg`: an arm or a leg part of the way between two, each angle mixed.
+- `ARM_DOWN` and `LEG_STAND`: the arm and leg to mix with when a pose doesn't give them.
+- `mix(a, b, t)`: as the comment says, part of the way from pose `a` to pose `b`. The numbers are
+  mixed: where she is, how she leans and tilts, where she looks, the wind and lift, the magic
+  circle (`rune`, `spin`), and her arms and legs. The rest (her face, a prop, sparkles, sitting) comes from whichever pose is nearer
+  (`t < 0.5 ? a : b`), since a face can't be half way between two. The view always comes from `a`,
+  so the view never changes in the middle of a move. `...near` copies the nearer pose's fields
+  first, and the mixed ones replace them.
+- `const [an = ARM_DOWN, af = ARM_DOWN] = a.arms ?? []`: destructuring with default values: the
+  near and far arms, or `ARM_DOWN` for any that's missing.
+
+### `FRAME_MS`, `tween()`, `hold` and `crouch()`
+
+<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#FRAME_MS,tween,hold,crouch -->
+
+[`src/renderer/src/character/sprite.ts`, lines 113–139](../../apps/desktop/src/renderer/src/character/sprite.ts#L113-L139)
+
+```ts
+/** In-betweens come about this often (ms): 25 frames a second. */
+const FRAME_MS = 40
+
+/**
+ * Frames easing from `a` to `b` (ending on `b`) over `ms`: one every FRAME_MS or so, their times
+ * adding up to exactly `ms`.
+ */
+function tween(a: Pose, b: Pose, ms: number): Key[] {
+  const steps = Math.max(1, Math.round(ms / FRAME_MS))
+  return Array.from({ length: steps }, (_, i) => ({
+    pose: mix(a, b, smooth((i + 1) / steps)),
+    ms: Math.round(((i + 1) * ms) / steps) - Math.round((i * ms) / steps),
+  }))
+}
+
+const hold = (pose: Pose, ms: number): Key[] => [{ pose, ms }]
+
+/**
+ * Legs bent so her feet stay on the ground with her hips `depth` pixels lower: the thigh and shin
+ * at equal and opposite angles (outward from the front, forward side on).
+ */
+function crouch(depth: number): [Leg, Leg] {
+  const legs = LEG_LENGTH * 2
+  const angle = Math.acos(Math.min(1, (legs - depth) / legs))
+  const leg = { hip: angle, knee: angle * 2 }
+  return [leg, leg]
+}
+```
+
+<!-- /code -->
+
+- `FRAME_MS`: as its comment says, in-betweens come about this often, every 40 ms, 25 frames a
+  second. That's smooth to the eye without drawing (and keeping) more frames than it needs.
+- `tween(a, b, ms)`: as the comment says, frames easing from `a` to `b` over `ms`, one about every
+  `FRAME_MS`, their times adding up to exactly `ms`. Giving the time a move takes, rather than a
+  number of frames, keeps the animations below easy to read and to time.
+  - `steps`: how many frames fit, `ms / FRAME_MS` rounded, and at least 1.
+  - Each frame's `ms` is where it ends less where the frame before it ended, each rounded to a
+    whole millisecond: `Math.round(((i + 1) * ms) / steps) - Math.round((i * ms) / steps)`.
+    Rounding the running total, rather than each frame's own share, means the rounding never adds
+    up: 110 ms in three steps is 37, 36 and 37, exactly 110. That matters, because a fidget's
+    frames must add up to exactly its `FIDGET_MS`.
+  - It ends exactly on `b` (`(i + 1) / steps` is 1 for the last frame) but doesn't repeat `a`,
+    which is usually the frame before. `smooth()` bunches the frames up near both ends, so the
+    move eases in and out. `Array.from({ length: steps }, (_, i) => ...)` makes a list of `steps`
+    items from their positions (`_` is the unused first argument).
+- `hold(pose, ms)`: one key pose, held for a time.
+- `crouch(depth)`: as the comment says, legs bent so her feet stay on the ground with her hips
+  `depth` pixels lower. `legs` is the thigh and shin together, two `LEG_LENGTH`s (33 pixels). With
+  the thigh swung forward by an angle and the shin back by the same angle, her hips are
+  `legs` × cos(angle) above her feet, and her feet stay under her hips.
+  `Math.acos((legs - depth) / legs)` is the angle that makes that `legs - depth`, and
+  `knee: angle * 2` bends the shin back past straight by the same amount. `Math.min(1, ...)` keeps
+  `acos` from being given more than 1, which has no answer.
+
+### `FRONT`, `DIAGONAL` and `idle()`
+
+<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#FRONT,DIAGONAL,idle -->
+
+[`src/renderer/src/character/sprite.ts`, lines 141–163](../../apps/desktop/src/renderer/src/character/sprite.ts#L141-L163)
+
+```ts
+// ----------------------------------------------------------------------------------- the poses
+
+const FRONT: Pose = { view: 'front' }
+
+const DIAGONAL: Pose = { view: 'diagonal' }
+
+/** Standing, breathing (a pixel lower on the out-breath), her hair stirring; a blink. */
+function idle(): Key[] {
+  return Array.from({ length: 32 }, (_, i) => {
+    const phase = (i / 32) * Math.PI * 2
+    const breath = (1 - Math.cos(phase)) / 2
+    const arm = { shoulder: 0.07 + breath * 0.04, elbow: 0.05 }
+    return {
+      pose: {
+        view: 'front',
+        y: Math.round(breath),
+        wind: Math.sin(phase + 1) * 0.8,
+        arms: [arm, arm],
+        face: i === 21 || i === 22 ? 'blink' : 'neutral',
+      },
+      ms: 75,
+    }
+  })
+}
+```
+
+<!-- /code -->
+
+- `FRONT` and `DIAGONAL`: standing still, from the front and diagonally: the poses most animations
+  start and end on.
+- `idle()`: as the comment says, standing and breathing: 32 frames of 75 ms, one breath every 2.4
+  seconds. `phase` goes once round a circle over the 32 frames, and `breath` rises smoothly from 0
+  to 1 and falls back (`(1 - cos) / 2`).
+  - `y: Math.round(breath)`: a pixel lower on the out-breath. Only a pixel, and only whole pixels,
+    so she breathes rather than bobs, and the drawing never shimmers between pixels.
+  - `arm`: her arms ease out a hair with each breath.
+  - `wind: Math.sin(phase + 1) * 0.8`: her hair stirs, by less than a pixel at the tips, a little
+    out of step with her breathing. With 32 frames, the stirring is smooth.
+  - `face: i === 21 || i === 22 ? 'blink' : 'neutral'`: a blink, two frames (150 ms), once a cycle.
+
+### `walk()`
+
+<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#walk -->
+
+[`src/renderer/src/character/sprite.ts`, lines 165–193](../../apps/desktop/src/renderer/src/character/sprite.ts#L165-L193)
+
+```ts
+/**
+ * Walking, side on, facing right: twelve frames, two steps. Each leg swings forward with its knee
+ * bent, plants and pushes back; the arms swing against the legs; her body rises as her legs pass;
+ * her hair trails behind her.
+ */
+function walk(): Key[] {
+  return Array.from({ length: 12 }, (_, i) => {
+    const phase = (i / 12) * Math.PI * 2
+    const swing = Math.sin(phase)
+    const forward = Math.cos(phase)
+    return {
+      pose: {
+        view: 'side',
+        y: Math.round(-1.5 * forward ** 2),
+        lean: 0.07,
+        wind: -2 + Math.sin(phase - 0.8) * 0.8,
+        legs: [
+          { hip: 0.45 * swing, knee: 0.12 + 0.65 * Math.max(0, forward) ** 1.5 },
+          { hip: -0.45 * swing, knee: 0.12 + 0.65 * Math.max(0, -forward) ** 1.5 },
+        ],
+        arms: [
+          { shoulder: -0.4 * swing, elbow: 0.25 + 0.2 * Math.max(0, -swing) },
+          { shoulder: 0.4 * swing, elbow: 0.25 + 0.2 * Math.max(0, swing) },
+        ],
+      },
+      ms: 55,
+    }
+  })
+}
+```
+
+<!-- /code -->
+
+As the comment says, walking side on, facing right: twelve frames of 55 ms, two steps (one with
+each leg) in 0.66 seconds. `phase` goes once round a circle. `swing` (its sine) says how far
+forward the near leg is, from -1 (back) to 1 (forward), and `forward` (its cosine) is a quarter of
+a cycle ahead: positive while that leg swings forward, negative while it pushes back.
+
+- `legs`: each hip swings 0.45 radians (about 26°) each way, the far leg opposite the near one
+  (`-0.45 * swing`). A knee bends while its leg swings forward (`Math.max(0, forward)`, raised to
+  the power 1.5 so it bends most mid-swing) and is nearly straight (`0.12`) while the foot is
+  planted and pushing back.
+- `arms`: the arms swing the opposite way to the legs (`-0.4 * swing` for the near arm, against the
+  near leg's `0.45 * swing`), as people's do, each elbow bending a little more as its arm swings
+  forward.
+- `y: Math.round(-1.5 * forward ** 2)`: as the comment says, her body rises as her legs pass: a
+  pixel up while her legs are together under her (`swing` near 0, so `forward` near 1 or -1), and
+  back down as they spread.
+- `lean: 0.07`: leaning a little into the walk.
+- `wind: -2 + ...`: her hair and robe trailing two pixels behind her, swaying a little with each
+  step.
+- At walking speed (80 DIPs a second, `WANDER.walkSpeed` in `src/main/bubble/wander.ts`), 0.66
+  seconds covers about 53 DIPs, two steps, so her feet roughly keep pace with the window moving
+  under them.
+
+### `hop()`
+
+<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#hop -->
+
+[`src/renderer/src/character/sprite.ts`, lines 195–253](../../apps/desktop/src/renderer/src/character/sprite.ts#L195-L253)
+
+```ts
+/** A hop: crouch, spring up with her arms flung up, float, fall, land with a bounce. */
+function hop(): Key[] {
+  const up: [Arm, Arm] = [
+    { shoulder: 2.4, elbow: 0.2 },
+    { shoulder: 2.4, elbow: 0.2 },
+  ]
+  const tuck: [Leg, Leg] = [
+    { hip: 0.2, knee: 0.55 },
+    { hip: 0.2, knee: 0.55 },
+  ]
+  const low: Pose = {
+    view: 'front',
+    y: 3,
+    legs: crouch(3),
+    arms: [
+      { shoulder: -0.2, elbow: 0.3 },
+      { shoulder: -0.2, elbow: 0.3 },
+    ],
+  }
+  const launch: Pose = { view: 'front', y: -3, arms: up, face: 'happy', lift: -2 }
+  const rise: Pose = { view: 'front', y: -5, arms: up, legs: tuck, face: 'happy', lift: -1 }
+  const apex: Pose = { view: 'front', y: -6, arms: up, legs: tuck, face: 'happy', lift: 1 }
+  const float: Pose = { ...apex, lift: 2 }
+  const fall: Pose = { view: 'front', y: -4, arms: up, face: 'happy', lift: 3 }
+  const touch: Pose = { view: 'front', y: -1, arms: up, face: 'happy', lift: 3 }
+  const land: Pose = {
+    view: 'front',
+    y: 3,
+    legs: crouch(3),
+    arms: [
+      { shoulder: 0.9, elbow: 0.2 },
+      { shoulder: 0.9, elbow: 0.2 },
+    ],
+    face: 'happy',
+  }
+  const recover: Pose = {
+    view: 'front',
+    y: 1,
+    legs: crouch(1),
+    arms: [
+      { shoulder: 0.4, elbow: 0.1 },
+      { shoulder: 0.4, elbow: 0.1 },
+    ],
+  }
+  return [
+    ...hold(FRONT, 60),
+    ...tween(FRONT, low, 140),
+    ...tween(low, launch, 80),
+    ...tween(launch, rise, 90),
+    ...tween(rise, apex, 120),
+    ...tween(apex, float, 100),
+    ...tween(float, fall, 80),
+    ...tween(fall, touch, 70),
+    ...tween(touch, land, 130),
+    ...tween(land, recover, 110),
+    ...tween(recover, FRONT, 140),
+    ...hold(FRONT, 80),
+  ]
+}
+```
+
+<!-- /code -->
+
+As the comment says, a hop: crouch, spring up, float, fall, land with a bounce. The key poses are
+named, and `tween()` eases from each to the next, about 30 frames altogether.
+
+- `low`: the crouch before the jump, her hips 3 pixels down (`crouch(3)` keeps her feet on the
+  ground) and her arms swung back (`shoulder: -0.2`), ready to fling them up.
+- `launch`, `rise` and `apex`: 3, 5 and 6 pixels off the ground; `float` stays at the top while
+  her hair settles; then `fall` and `touch`, 4 and 1 pixels up. Only 6 pixels, because her tall hat
+  only just fits in the grid: at the top of the hop its tip reaches the top row. The moves take
+  longest at the top (120 and 100 ms) and least leaving and reaching the ground (80 and 70 ms),
+  which is how a jump looks: quick off the ground, a hang at the top.
+- `up`: her arms flung up (`shoulder: 2.4`, about 140° from hanging), and in the air her knees
+  `tuck` up. She smiles (`happy`) from take-off to landing.
+- `lift`: her hair is pressed down as she rises (`-2`) and lifts as she falls (up to `3`), lagging
+  behind her as real hair does.
+- `land` and `recover`: a crouch to take the landing, her arms out to the sides (`0.9`), then half
+  up, then standing. The times add up to 1200 ms, `FIDGET_MS.hop` (a test checks every fidget's
+  total).
+
+### `wave()`
+
+<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#wave -->
+
+[`src/renderer/src/character/sprite.ts`, lines 255–275](../../apps/desktop/src/renderer/src/character/sprite.ts#L255-L275)
+
+```ts
+/** A wave, seen diagonally: her hand up, waving to and fro, head tilted, smiling. */
+function wave(): Key[] {
+  const hand = (elbow: number): Pose => ({
+    view: 'diagonal',
+    tilt: 0.08,
+    face: 'happy',
+    arms: [{ shoulder: 3.2, elbow }, ARM_DOWN],
+  })
+  // The upper arm raised out in front, the forearm upright, swinging to and fro: four waves.
+  const waving: Key[] = Array.from({ length: 24 }, (_, i) => ({
+    pose: hand(0.1 + 0.3 * Math.sin((i / 6) * Math.PI * 2)),
+    ms: 50,
+  }))
+  return [
+    ...hold(DIAGONAL, 100),
+    ...tween(DIAGONAL, hand(0.1), 180),
+    ...waving,
+    ...tween(hand(0.1), DIAGONAL, 180),
+    ...hold(DIAGONAL, 340),
+  ]
+}
+```
+
+<!-- /code -->
+
+As the comment says, a wave, seen diagonally, smiling, with her head tilted.
+
+- `hand(elbow)`: her near arm raised, as the comment inside says, with the upper arm out in front
+  (`shoulder: 2.05`, about 117° from hanging) and the forearm upright, bent by `elbow`; her other
+  arm hangs down.
+- `waving`: 24 frames of 50 ms. The forearm's angle follows a sine wave,
+  `0.75 + 0.3 * Math.sin((i / 6) * Math.PI * 2)`, so it swings smoothly between 0.45 and 1.05,
+  once every six frames: four waves to and fro.
+- Around it, `tween()` raises the arm (180 ms) and lowers it again. 2000 ms altogether,
+  `FIDGET_MS.wave`.
+
+### `stretch()`
+
+<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#stretch -->
+
+[`src/renderer/src/character/sprite.ts`, lines 277–300](../../apps/desktop/src/renderer/src/character/sprite.ts#L277-L300)
+
+```ts
+/** A stretch: arms up, a yawn, a lean one way and the other, arms down. */
+function stretch(): Key[] {
+  const up = (lean: number, face: Pose['face']): Pose => ({
+    view: 'front',
+    y: -1,
+    lean,
+    face,
+    arms: [
+      { shoulder: 2.85, elbow: 0.12 },
+      { shoulder: 2.85, elbow: 0.12 },
+    ],
+  })
+  return [
+    ...tween(FRONT, up(0, 'blink'), 320),
+    ...hold(up(0, 'yawn'), 400),
+    ...tween(up(0, 'yawn'), up(0.14, 'blink'), 300),
+    ...hold(up(0.14, 'blink'), 200),
+    ...tween(up(0.14, 'blink'), up(-0.14, 'blink'), 300),
+    ...hold(up(-0.14, 'blink'), 200),
+    ...tween(up(-0.14, 'blink'), up(0, 'neutral'), 240),
+    ...tween(up(0, 'neutral'), FRONT, 320),
+    ...hold(FRONT, 120),
+  ]
+}
+```
+
+<!-- /code -->
+
+As the comment says, a stretch, from the front.
+
+- `up(lean, face)`: both arms raised high (`shoulder: 2.85`, nearly straight up), standing a pixel
+  taller (`y: -1`), leaning by `lean`, with a face.
+- Her arms go up as her eyes close, she yawns (held 0.4 s), leans one way (`0.14`) and the other,
+  holding each a moment, then straightens and brings her arms down. 2400 ms, `FIDGET_MS.stretch`.
+
+### `sip()`
+
+<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#sip -->
+
+[`src/renderer/src/character/sprite.ts`, lines 302–334](../../apps/desktop/src/renderer/src/character/sprite.ts#L302-L334)
+
+```ts
+/** A sip of tea, seen diagonally: the cup up to her mouth, a sip, down, a contented smile. */
+function sip(): Key[] {
+  const low = (face: Pose['face'] = 'neutral'): Pose => ({
+    view: 'diagonal',
+    prop: 'cup',
+    face,
+    arms: [
+      { shoulder: 0.35, elbow: 1.75 },
+      { shoulder: 0.15, elbow: 0.3 },
+    ],
+  })
+  const drinking = (tilt: number): Pose => ({
+    view: 'diagonal',
+    prop: 'cup',
+    face: 'sip',
+    tilt,
+    arms: [
+      { shoulder: 0.65, elbow: 2.65 },
+      { shoulder: 0.15, elbow: 0.3 },
+    ],
+  })
+  return [
+    ...hold(low(), 300),
+    ...tween(low(), drinking(-0.1), 280),
+    ...tween(drinking(-0.1), drinking(-0.16), 800),
+    ...tween(drinking(-0.16), low('happy'), 280),
+    ...hold(low('happy'), 700),
+    ...hold(low('blink'), 120),
+    ...hold(low(), 300),
+    ...tween(low(), { ...DIAGONAL, prop: undefined }, 240),
+    ...hold(DIAGONAL, 180),
+  ]
+}
+```
+
+<!-- /code -->
+
+As the comment says, a sip of tea, seen diagonally.
+
+- `low(face)`: holding the teacup in front of her (`prop: 'cup'`), her forearm bent up
+  (`elbow: 1.75`), her other hand resting.
+- `drinking(tilt)`: the cup raised to her lips (`elbow: 2.65`), her eyes closed (`sip`) and her
+  head tipped back a little (a negative `tilt` leans it away from the way she faces). She tips it
+  back a little further as she drinks, from `-0.1` to `-0.16` over 0.8 s.
+- Then the cup comes down, she smiles (held 0.7 s) and blinks, and the last tween lowers her arm.
+  The cup goes with it: `prop: undefined` comes from the nearer pose, so it's gone from halfway
+  through. 3200 ms, `FIDGET_MS.sip`.
+
+### `read()`
+
+<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#read -->
+
+[`src/renderer/src/character/sprite.ts`, lines 336–366](../../apps/desktop/src/renderer/src/character/sprite.ts#L336-L366)
+
+```ts
+/** Reading her spellbook, seen diagonally: head down, turning a page, a smile at something. */
+function read(): Key[] {
+  const reading = (turn: number, face: Pose['face'] = 'down'): Pose => ({
+    view: 'diagonal',
+    prop: 'book',
+    face,
+    tilt: 0.12,
+    arms: [
+      { shoulder: 0.35, elbow: 1.7 },
+      { shoulder: 0.45, elbow: 1.5 + turn },
+    ],
+  })
+  // Turning a page: her far hand sweeps across and back.
+  const turning = [
+    ...tween(reading(0), reading(0.35), 240),
+    ...tween(reading(0.35), reading(0), 240),
+  ]
+  return [
+    ...tween({ ...DIAGONAL, prop: 'book' }, reading(0), 240),
+    ...hold(reading(0), 600),
+    ...turning,
+    ...hold(reading(0), 500),
+    ...hold(reading(0, 'happy'), 600),
+    ...hold(reading(0, 'blink'), 120),
+    ...hold(reading(0), 300),
+    ...turning,
+    ...hold(reading(0), 200),
+    ...tween(reading(0), { ...DIAGONAL, prop: undefined }, 240),
+    ...hold(DIAGONAL, 240),
+  ]
+}
+```
+
+<!-- /code -->
+
+As the comment says, reading her spellbook, seen diagonally.
+
+- `reading(turn, face)`: the book open in her near hand (`prop: 'book'`, `elbow: 1.7`), her head
+  bowed (`tilt: 0.12`), her eyes down (`face: 'down'`), and her other forearm raised to it, moved
+  by `turn`.
+- `turning`: as the comment inside says, turning a page: her far hand sweeps across (`turn` up to
+  0.35) and back, 240 ms each way.
+- The book comes up, she reads, turns a page, reads on, smiles at something (`happy`, 0.6 s),
+  blinks, turns another page, and lowers the book; like the cup in `sip()`, it's gone from halfway
+  through the last tween. 4000 ms, `FIDGET_MS.read`.
+
+### `spell()`
+
+<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#spell -->
+
+[`src/renderer/src/character/sprite.ts`, lines 368–391](../../apps/desktop/src/renderer/src/character/sprite.ts#L368-L391)
+
+```ts
+/** A little spell: her hand up, sparkles circling it, then gone with a smile. */
+function spell(): Key[] {
+  const casting = (sparkle: number, face: Pose['face'] = 'neutral'): Pose => ({
+    view: 'diagonal',
+    face,
+    tilt: -0.05,
+    sparkle,
+    arms: [
+      { shoulder: 1.6, elbow: 0.6 },
+      { shoulder: 0.15, elbow: 0.2 },
+    ],
+  })
+  const circling: Key[] = Array.from({ length: 24 }, (_, i) => ({
+    pose: casting(0.05 + i / 24, i > 16 ? 'happy' : 'neutral'),
+    ms: 55,
+  }))
+  return [
+    ...tween(DIAGONAL, casting(0), 240),
+    ...circling,
+    ...hold(casting(0, 'happy'), 400),
+    ...tween(casting(0, 'happy'), DIAGONAL, 240),
+    ...hold(DIAGONAL, 200),
+  ]
+}
+```
+
+<!-- /code -->
+
+As the comment says, a little spell, seen diagonally.
+
+- `casting(sparkle, face)`: her near hand raised in front of her (`shoulder: 1.6`, about level,
+  with the forearm bent up a little), her head tipped back a touch to watch it (`tilt: -0.05`),
+  and `sparkle` for the rig.
+- `circling`: 24 frames of 55 ms with `sparkle` going from 0.05 to just over 1, so the sparkles
+  circle her hand once (see `draw()`). She smiles from frame 17.
+- Then `casting(0, 'happy')`: the sparkles are gone and she smiles for 0.4 s before her hand comes
+  down. 2400 ms, `FIDGET_MS.spell`.
+
+### `levitate()`
+
+<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#levitate -->
+
+[`src/renderer/src/character/sprite.ts`, lines 393–443](../../apps/desktop/src/renderer/src/character/sprite.ts#L393-L443)
+
+```ts
+/**
+ * Levitating: eyes shut, her arms drift out, a magic circle opens on the ground and she floats up
+ * over it, her hair and robe lifting; she hovers, bobbing, smiling, the runes turning and sparks
+ * rising; then she sinks, lands with a little bend of the knees, and the circle fades.
+ */
+function levitate(): Key[] {
+  const floating = (
+    y: number,
+    rune: number,
+    out: number,
+    face: Pose['face'],
+    spin: number,
+    lift = 0,
+    wind = 0,
+  ): Pose => {
+    const arm = { shoulder: 0.1 + out * 0.45, elbow: out * 0.35 }
+    return { view: 'front', y, rune, spin, lift, wind, face, arms: [arm, arm] }
+  }
+  const gather = floating(0, 0.5, 0.5, 'blink', 0)
+  const risen = floating(-7, 1, 1, 'blink', 0.15, 2.5)
+  // Hovering: a pixel up and down, the robe fluttering, a smile in the middle; one turn of runes.
+  const hovering: Key[] = Array.from({ length: 40 }, (_, i) => {
+    const phase = (i / 40) * Math.PI * 2
+    const face = i >= 14 && i < 30 ? 'happy' : 'blink'
+    return {
+      pose: floating(
+        -7 - Math.round(Math.sin(phase)),
+        1,
+        1,
+        face,
+        0.15 + i / 40,
+        2.5 + Math.sin(phase) * 0.5,
+        Math.sin(phase * 2) * 1.2,
+      ),
+      ms: 40,
+    }
+  })
+  const last = hovering.at(-1)!.pose
+  const sunk = floating(0, 0.4, 0.5, 'blink', 1.3, 0.5)
+  const land: Pose = { ...floating(2, 0, 0.3, 'neutral', 1.4), legs: crouch(2) }
+  return [
+    ...hold(FRONT, 120),
+    ...tween(FRONT, gather, 320),
+    ...tween(gather, risen, 600),
+    ...hovering,
+    ...tween(last, sunk, 480),
+    ...tween(sunk, land, 160),
+    ...tween(land, FRONT, 200),
+    ...hold(FRONT, 120),
+  ]
+}
+```
+
+<!-- /code -->
+
+As the comment says, she levitates, from the front.
+
+- `floating(y, rune, out, face, spin, lift, wind)`: a pose for each moment: how high she is (`y`,
+  negative is up), the magic circle's size and turn, how far her arms have drifted out (`out`, 0
+  to 1: up to 0.55 at the shoulder and 0.35 at the elbow, both arms alike, so from the front they
+  open evenly), her face, and how much her hair lifts and her robe flutters.
+- `gather`: eyes shut, her arms a little out, the circle half open on the ground. `risen`: 7
+  pixels up, arms out, the circle at full size, her hair lifted.
+- `hovering`: 40 frames of 40 ms. She bobs a pixel up and down (`Math.round`, so she moves by
+  whole pixels and stays crisp), her hair lifts a little more and less with the bob, her robe
+  flutters (`wind`, twice as fast), and the runes turn once (`spin`). She smiles, eyes still shut,
+  through the middle of it (frames 14 to 29).
+- Then she sinks to the ground as the circle shrinks (`sunk`), lands with her knees bent
+  (`crouch(2)`) as it vanishes, and straightens up. 3600 ms, `FIDGET_MS.levitate`.
+
+### `sit()`
+
+<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#sit -->
+
+[`src/renderer/src/character/sprite.ts`, lines 445–485](../../apps/desktop/src/renderer/src/character/sprite.ts#L445-L485)
+
+```ts
+/** Sitting on the taskbar, her robe spread round her, swaying gently, looking about, then up again. */
+function sit(): Key[] {
+  const hug: [Arm, Arm] = [
+    { shoulder: 0.55, elbow: -1.15 },
+    { shoulder: 0.55, elbow: -1.15 },
+  ]
+  const sitting = (i: number): Pose => {
+    const phase = (i / 46) * Math.PI * 4
+    return {
+      view: 'front',
+      sitting: true,
+      x: Math.round(Math.sin(phase)),
+      tilt: Math.sin(phase) * 0.06,
+      wind: Math.sin(phase) * 1.2,
+      arms: hug,
+      legs: [
+        { hip: 0.3 + 0.3 * Math.sin(phase), knee: 0.3 },
+        { hip: 0.3 + 0.3 * Math.sin(phase), knee: 0.3 },
+      ],
+      look: i >= 16 && i < 22 ? -1 : i >= 30 && i < 36 ? 1 : 0,
+      face: i === 12 || i === 40 ? 'blink' : i >= 24 && i < 28 ? 'happy' : 'neutral',
+    }
+  }
+  const squat: Pose = {
+    view: 'front',
+    y: 5,
+    legs: crouch(5),
+    arms: [
+      { shoulder: 0.3, elbow: 0.2 },
+      { shoulder: 0.3, elbow: 0.2 },
+    ],
+  }
+  return [
+    ...tween(FRONT, squat, 240),
+    ...hold(sitting(0), 120),
+    ...Array.from({ length: 46 }, (_, i) => ({ pose: sitting(i), ms: 110 })),
+    ...hold(squat, 160),
+    ...tween(squat, FRONT, 240),
+    ...hold(FRONT, 180),
+  ]
+}
+```
+
+<!-- /code -->
+
+As the comment says, sitting on the taskbar with her robe spread round her, the longest fidget.
+
+- `hug`: from the front, both upper arms out a little and the forearms folded back in
+  (`elbow: -1.15`), round her knees.
+- `sitting(i)`: frame `i` of 46, with `sitting: true` (the rig puts her hips low, her knees up and
+  her robe spread). `phase` goes round twice over the 46 frames: she sways a pixel side to side
+  (`x`), her head, hair and robe going with her, and her knees part and close a little (`legs`).
+- `look`: she glances left (frames 16 to 21) and right (30 to 35), blinks at 12 and 40, and smiles
+  from 24 to 27.
+- `squat`: a crouch (`crouch(5)`) on the way down and on the way up again.
+- Down, 46 frames of 110 ms sitting, then up. 6000 ms, `FIDGET_MS.sit`.
+
+### `look()`
+
+<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#look -->
+
+[`src/renderer/src/character/sprite.ts`, lines 487–509](../../apps/desktop/src/renderer/src/character/sprite.ts#L487-L509)
+
+```ts
+/**
+ * A glance one way, then the other (the second a mirror image), her eyes leading her head, then a
+ * blink.
+ */
+function look(): Frame[] {
+  const front = draw(FRONT)
+  const eyesRight = draw({ view: 'front', look: 1 })
+  const eyesLeft = draw({ view: 'front', look: -1 })
+  const glance = draw({ view: 'diagonal', tilt: 0.04 })
+  return [
+    { rows: front, ms: 260 },
+    { rows: eyesRight, ms: 80 },
+    { rows: glance, ms: 520 },
+    { rows: eyesRight, ms: 80 },
+    { rows: front, ms: 120 },
+    { rows: eyesLeft, ms: 80 },
+    { rows: mirror(glance), ms: 520 },
+    { rows: eyesLeft, ms: 80 },
+    { rows: front, ms: 120 },
+    { rows: draw({ view: 'front', face: 'blink' }), ms: 120 },
+    { rows: front, ms: 420 },
+  ]
+}
+```
+
+<!-- /code -->
+
+As the comment says, a glance one way, then the other, her eyes leading her head. Unlike the others
+it returns frames rather than key poses: it only needs a few drawings, so each is drawn once and
+used again.
+
+- `front` (standing), `eyesRight` and `eyesLeft` (standing, her eyes a pixel to one side), `glance`
+  (turned diagonally toward the way she faces, her head tilted a touch) and `mirror(glance)`, the
+  same glance the other way.
+- Each glance starts with her eyes moving first (80 ms) and her head following, which is how
+  people look round: front, eyes right, the glance (0.52 s), eyes right, front; the same to the
+  left; then a blink, and front. Eleven frames, 2400 ms, `FIDGET_MS.look`.
+
+### `dragged()`
+
+<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#dragged -->
+
+[`src/renderer/src/character/sprite.ts`, lines 511–537](../../apps/desktop/src/renderer/src/character/sprite.ts#L511-L537)
+
+```ts
+/** Carried by her collar: off the ground, arms up, legs kicking, swaying, hair lifted. */
+function dragged(): Key[] {
+  return Array.from({ length: 12 }, (_, i) => {
+    const phase = (i / 12) * Math.PI * 2
+    const kick = Math.sin(phase * 2)
+    return {
+      pose: {
+        view: 'front',
+        face: 'surprised',
+        x: Math.round(Math.sin(phase)),
+        y: -4,
+        tilt: Math.sin(phase) * 0.05,
+        lift: 3,
+        wind: Math.sin(phase) * 1.5,
+        arms: [
+          { shoulder: 2.4 + 0.25 * kick, elbow: 0.3 },
+          { shoulder: 2.55 - 0.25 * kick, elbow: 0.3 },
+        ],
+        legs: [
+          { hip: 0.12 + 0.12 * kick, knee: 0.25 + 0.35 * Math.max(0, kick) },
+          { hip: 0.12 - 0.12 * kick, knee: 0.25 + 0.35 * Math.max(0, -kick) },
+        ],
+      },
+      ms: 55,
+    }
+  })
+}
+```
+
+<!-- /code -->
+
+As the comment says, carried by her collar: the pose while she's dragged, thrown about by Bounce,
+or falling after a drop. Twelve frames of 55 ms, round and round.
+
+- `y: -4`: off the ground, so her feet leave the bottom rows (a test checks), and her shadow is
+  smaller.
+- `face: 'surprised'` and `lift: 3`: her mouth open and her hair lifted.
+- `kick` goes round twice as fast as the sway (`phase * 2`): her legs kick in turn, each knee
+  bending as its leg kicks, and her raised arms wave with them.
+- `x`, `tilt` and `wind`: swaying a pixel side to side, her head, hair and robe with her.
+
+### `drawn`, `MAKERS` and `LOOPS`
+
+<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#drawn,MAKERS,LOOPS -->
+
+[`src/renderer/src/character/sprite.ts`, lines 539–575](../../apps/desktop/src/renderer/src/character/sprite.ts#L539-L575)
+
+```ts
+// ------------------------------------------------------------------------------------- frames
+
+const drawn = (keys: Key[]): Frame[] => keys.map(({ pose, ms }) => ({ rows: draw(pose), ms }))
+
+/** How each pose's frames are made, facing right. */
+const MAKERS: Record<Name, () => Frame[]> = {
+  idle: () => drawn(idle()),
+  'walk-right': () => drawn(walk()),
+  'walk-left': () => drawn(walk()),
+  hop: () => drawn(hop()),
+  wave: () => drawn(wave()),
+  stretch: () => drawn(stretch()),
+  sip: () => drawn(sip()),
+  read: () => drawn(read()),
+  spell: () => drawn(spell()),
+  levitate: () => drawn(levitate()),
+  sit: () => drawn(sit()),
+  look,
+  dragged: () => drawn(dragged()),
+}
+
+/** Whether a pose's animation repeats (the fidgets play once, for FIDGET_MS). */
+export const LOOPS: Record<Name, boolean> = {
+  idle: true,
+  'walk-left': true,
+  'walk-right': true,
+  dragged: true,
+  hop: false,
+  wave: false,
+  stretch: false,
+  sip: false,
+  read: false,
+  spell: false,
+  levitate: false,
+  sit: false,
+  look: false,
+}
+```
+
+<!-- /code -->
+
+- `drawn(keys)`: key poses into frames: the rig draws each pose (`draw()`), and each keeps its time.
+- `MAKERS`: as the comment says, how each pose's frames are made, facing right. They're functions,
+  not the frames themselves, so nothing is drawn until it's needed. `Record<Name, ...>` makes
+  TypeScript insist on every pose. Both walks make the same right-facing frames; `framesOf()`
+  mirrors them for `walk-left`. `look` makes its frames itself. Every fidget, `levitate`
+  included, has its maker here.
+- `LOOPS`: as the comment says, which poses go round and round (idle, the walks and dangling) and
+  which play once (the fidgets: their last frame stays until the main process changes the pose,
+  which it does just as `FIDGET_MS` runs out).
+
+### `Facing`, `made` and `framesOf()`
+
+<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#Facing,made,framesOf -->
+
+[`src/renderer/src/character/sprite.ts`, lines 577–596](../../apps/desktop/src/renderer/src/character/sprite.ts#L577-L596)
+
+```ts
+export type Facing = 'left' | 'right'
+
+const made = new Map<string, Frame[]>()
+
+/**
+ * A pose's frames, facing `facing` (walking faces the way she walks, whatever `facing` says).
+ * Drawn the first time they're asked for, then kept.
+ */
+export function framesOf(pose: Name, facing: Facing): Frame[] {
+  const way = pose === 'walk-left' ? 'left' : pose === 'walk-right' ? 'right' : facing
+  const key = `${pose}:${way}`
+  let frames = made.get(key)
+  if (!frames) {
+    const right = made.get(`${pose}:right`) ?? MAKERS[pose]()
+    made.set(`${pose}:right`, right)
+    frames = way === 'right' ? right : right.map((f) => ({ rows: mirror(f.rows), ms: f.ms }))
+    made.set(key, frames)
+  }
+  return frames
+}
+```
+
+<!-- /code -->
+
+- `Facing`: which way she faces. `Character` chooses it: toward the middle of the screen.
+- `made`: the frames drawn so far, by pose and facing (such as `'idle:left'`), so each is drawn
+  only once.
+- `framesOf(pose, facing)`: as the comment says, a pose's frames. A walk faces the way she walks
+  (`way`), whatever `facing` says. Frames not made yet are made from the right-facing ones (drawn
+  now if they haven't been already), and facing left they're those mirrored, with the same times.
+  The rig only ever draws her facing right, so every animation works both ways.
+
+### `animationLength()` and `mirror()`
+
+<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#animationLength,mirror -->
+
+[`src/renderer/src/character/sprite.ts`, lines 598–605](../../apps/desktop/src/renderer/src/character/sprite.ts#L598-L605)
+
+```ts
+/** How long a pose's frames last altogether (a fidget's must match FIDGET_MS). */
+export const animationLength = (pose: Name): number =>
+  framesOf(pose, 'right').reduce((total, f) => total + f.ms, 0)
+
+/** The frame mirrored left to right. */
+export function mirror(rows: string[]): string[] {
+  return rows.map((row) => [...row].reverse().join(''))
+}
+```
+
+<!-- /code -->
+
+- `animationLength(pose)`: as the comment says, how long a pose's frames last altogether.
+  `reduce()` adds up each frame's `ms`, starting from 0. The tests use it to check every fidget
+  matches `FIDGET_MS`.
+- `mirror(rows)`: a whole frame mirrored left to right: each row's letters reversed (`[...row]`
+  splits it into letters, and `join('')` puts them back together). Facing left, and the second
+  glance in `look()`, are mirror images.
+
+### `framePaths()`
+
+<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#framePaths -->
+
+[`src/renderer/src/character/sprite.ts`, lines 607–631](../../apps/desktop/src/renderer/src/character/sprite.ts#L607-L631)
+
+```ts
+/**
+ * A frame as one SVG path per colour: each run of same-coloured pixels along a row is one
+ * rectangle, so a frame is a few dozen elements rather than thousands.
+ */
+export function framePaths(rows: string[]): { className: string; d: string }[] {
+  const byColour = new Map<string, string[]>()
+  rows.forEach((row, y) => {
+    let x = 0
+    while (x < row.length) {
+      const pixel = row[x]!
+      let end = x + 1
+      while (end < row.length && row[end] === pixel) end++
+      if (pixel !== '.') {
+        const runs = byColour.get(pixel) ?? []
+        runs.push(`M${x} ${y}h${end - x}v1h-${end - x}z`)
+        byColour.set(pixel, runs)
+      }
+      x = end
+    }
+  })
+  return [...byColour].map(([pixel, runs]) => ({
+    className: PALETTE[pixel] ?? 'px-hair-line',
+    d: runs.join(''),
+  }))
+}
+```
+
+<!-- /code -->
+
+Turns a frame into what the page draws: one SVG `<path>` per colour, rather than an element per
+pixel (a frame has a few thousand).
+
+- Each row is scanned for _runs_, stretches of the same letter. `while (end < row.length && row[end]
+=== pixel) end++` finds where a run ends.
+- A run becomes `M{x} {y}h{n}v1h-{n}z`: move to its top-left corner, a line `n` pixels across, one
+  down, back, and close the shape. That's a rectangle `n` pixels wide and one tall, in grid units,
+  which the `<svg>`'s `viewBox` makes one DIP each.
+- The runs are collected by letter in a `Map` (which keeps the order letters were first seen), and
+  each letter's runs, joined, become one path with that letter's class.
+- See-through runs (`.`) are skipped. A letter that isn't in the palette, which the tests rule out,
+  would fall back to the darkest colour, the hair's outline (`px-hair-line`).
+
 ## `src/renderer/src/components/Character.tsx` and `character.css`: the character
 
-The figure that stands in for the bubble, the one component used by the bubble's page rather than
-the panel's. For now it's a blank placeholder: a head, a body, two arms and two legs, plain white
-with a dark outline. It decides nothing itself: the main process chooses the pose (`Pose` in
-`src/shared/character.ts`) and moves the window while the character walks, `BubbleView` passes the
-pose in, and `character.css` animates it. When there's real artwork, it replaces the shapes here
-and the animations in the stylesheet, keyed by the same poses, and nothing in the main process has
-to change.
+The component that draws the character, the one used by the bubble's page rather than the panel's.
+It decides nothing itself: the main process chooses the pose (`Pose` in `src/shared/character.ts`)
+and moves the window while she walks, `BubbleView` passes in the pose and the bubble's corner, and
+this plays the pose's frames from `character/sprite.ts`, facing the middle of the screen.
 
-### `Character`
+### `paths`, `pathsOf()`, `ALL_POSES` and `Character`
 
-<!-- code: apps/desktop/src/renderer/src/components/Character.tsx#Character -->
+<!-- code: apps/desktop/src/renderer/src/components/Character.tsx#paths,pathsOf,ALL_POSES,Character -->
 
-[`src/renderer/src/components/Character.tsx`, lines 6–63](../../apps/desktop/src/renderer/src/components/Character.tsx#L6-L63)
+[`src/renderer/src/components/Character.tsx`, lines 14–66](../../apps/desktop/src/renderer/src/components/Character.tsx#L14-L66)
 
 ```tsx
+/** Each frame's SVG paths, worked out the first time it shows. */
+const paths = new WeakMap<Frame, ReturnType<typeof framePaths>>()
+
+function pathsOf(frame: Frame): ReturnType<typeof framePaths> {
+  let found = paths.get(frame)
+  if (!found) {
+    found = framePaths(frame.rows)
+    paths.set(frame, found)
+  }
+  return found
+}
+
+/** Every pose, for drawing ahead of time. */
+const ALL_POSES: Pose[] = ['idle', 'walk-left', 'walk-right', 'dragged', ...FIDGETS]
+
 /**
- * The character that stands in for the bubble: a blank placeholder figure (head, body, arms and
- * legs), drawn to fill the bubble's window with its feet on the window's bottom edge, which the
- * main process keeps on the taskbar. Each pose is a CSS animation in character.css; the main
- * process decides the pose (and moves the window while it walks). When there's real artwork, it
- * replaces the shapes here and the animations, keyed by the same poses.
- *
- * The drawing's units are DIPs of a 72 × 72 window (BUBBLE_BOX); a different BUBBLE_BOX scales it.
+ * The character that stands in for the bubble: pixel art (character/sprite.ts) filling the
+ * bubble's window, one pixel a DIP, her feet on its bottom edge, which the main process keeps on
+ * the taskbar. The main process decides the pose (and moves the window while she walks); this
+ * plays the pose's frames. She faces the middle of the screen: left from the right-hand corner
+ * (walking, she faces the way she walks). `expanded` tints her shadow while the panel is open.
  */
-export function Character(props: { pose: Pose; expanded: boolean }) {
-  const { pose } = props
-  // Fidgets play once, for as long as the main process waits before going back to idle.
-  const style = isFidget(pose)
-    ? ({ '--ch-fidget': `${FIDGET_MS[pose]}ms` } as CSSProperties)
-    : undefined
+export function Character(props: { pose: Pose; corner: Corner; expanded: boolean }) {
+  const facing: Facing = isLeftCorner(props.corner) ? 'right' : 'left'
+
+  // Draws every pose's frames in the background, one pose at a time, so starting one never
+  // stutters.
+  useEffect(() => {
+    const waiting = [...ALL_POSES]
+    let timer = setTimeout(function next() {
+      const pose = waiting.shift()
+      if (!pose) return
+      framesOf(pose, facing).forEach(pathsOf)
+      timer = setTimeout(next, 50)
+    }, 500)
+    return () => clearTimeout(timer)
+  }, [facing])
+
   return (
     <svg
-      viewBox="0 0 72 72"
+      viewBox={`0 0 ${SPRITE_SIZE} ${SPRITE_SIZE}`}
       width={BUBBLE_BOX}
       height={BUBBLE_BOX}
+      shapeRendering="crispEdges"
       className="character"
-      data-pose={pose}
+      data-pose={props.pose}
       data-expanded={props.expanded || undefined}
-      style={style}
       aria-hidden
     >
-      <ellipse className="ch-shadow" cx="36" cy="70" rx="12" ry="2" />
-      <g className="ch-hover">
-        <g className="ch-lean">
-          <g className="ch-move ch-figure">
-            <g className="ch-arm-a-pos">
-              <g className="ch-arm-a">
-                <rect className="ch-part" x="22.5" y="29" width="5" height="18" rx="2.5" />
-              </g>
-            </g>
-            <g className="ch-leg-a-pos">
-              <g className="ch-leg-a">
-                <rect className="ch-part" x="30" y="47" width="6" height="22" rx="3" />
-              </g>
-            </g>
-            <g className="ch-leg-b-pos">
-              <g className="ch-leg-b">
-                <rect className="ch-part" x="36" y="47" width="6" height="22" rx="3" />
-              </g>
-            </g>
-            <rect className="ch-part" x="27" y="27" width="18" height="25" rx="8" />
-            <circle className="ch-part" cx="36" cy="19" r="9" />
-            <g className="ch-arm-b-pos">
-              <g className="ch-arm-b">
-                <rect className="ch-part" x="44.5" y="29" width="5" height="18" rx="2.5" />
-              </g>
-            </g>
-          </g>
-        </g>
-      </g>
+      {/* A new pose (or way of facing) starts from its first frame. */}
+      <Frames key={`${props.pose}:${facing}`} pose={props.pose} facing={facing} />
     </svg>
   )
 }
@@ -1932,410 +4803,270 @@ export function Character(props: { pose: Pose; expanded: boolean }) {
 
 <!-- /code -->
 
-An SVG drawing of the figure. Its props are the `pose` and whether the panel is open (`expanded`).
+- `paths` and `pathsOf(frame)`: as the comment says, each frame's SVG paths (`framePaths()`),
+  worked out the first time the frame shows and then kept, so showing it again is only swapping
+  which paths are drawn. A `WeakMap` is keyed by the frame object itself, and doesn't keep a frame
+  in memory on its own account (`sprite.ts` keeps the frames anyway).
+  `ReturnType<typeof framePaths>` means "whatever `framePaths()` returns", so the type isn't
+  written out twice.
+- `ALL_POSES`: every pose, for drawing ahead of time: the four that aren't fidgets, then
+  `...FIDGETS`.
+- `Character({ pose, corner, expanded })`: the component itself.
+  - `facing`: as the comment says, she faces the middle of the screen: right from the left-hand
+    corner, left from the right-hand one. (Walking, `framesOf()` faces her the way she walks.)
+  - The effect: as its comment says, it draws every pose's frames in the background, one pose at a
+    time, so starting one never stutters. Drawing a pose means the rig drawing every frame and
+    `framePaths()` turning each into paths, which, done on the spot, could make the pose's first
+    frame late. It starts half a second after she first appears, then does one pose every 50 ms, so
+    the page stays free to respond in between. `function next()` is named so it can schedule
+    itself again, and `waiting.shift()` takes the next pose off the front of the list. The effect
+    runs again when `facing` changes (she's moved to the other corner), and the cleanup cancels
+    whatever was scheduled.
+  - `<svg>`: the size of the bubble's window (`BUBBLE_BOX`, 96 DIPs), with a `viewBox` of the
+    sprite's grid (96 pixels), so each pixel is one DIP.
+  - `shapeRendering="crispEdges"`: tells the browser not to smooth the rectangles' edges, so the
+    pixels stay sharp, as pixel art should. At 125% display scaling a sprite pixel is 1.25 screen
+    pixels, so some come out a screen pixel wider than others; crisp is still better than blurred.
+  - `data-pose` (nothing reads it, but it shows the pose when inspecting the page in development)
+    and `data-expanded` (which `character.css` uses to tint her shadow while the panel is open;
+    `|| undefined` leaves the attribute off when it's false). `aria-hidden` because the button
+    around it has the name screen readers need.
+  - ``<Frames key={`${props.pose}:${facing}`} ... />``: as the comment says, a new pose (or way of
+    facing) starts from its first frame. A different `key` makes React throw the old `Frames` away
+    and make a new one, with its own state starting afresh, rather than carrying on from whatever
+    frame the last pose was on.
 
-- `// Fidgets play once`: as the comment says. For a fidget, the component sets the CSS variable
-  `--ch-fidget` to the fidget's length from `FIDGET_MS` (`1200ms` for the hop, `2000ms` for the
-  wave), and the fidget's animations in `character.css` use `var(--ch-fidget)` as their duration.
-  The main process's timer (`BubbleController.doActivity()`) uses the same number, so the figure
-  finishes its hop or wave just as the pose goes back to `idle`. `isFidget(pose)` also tells
-  TypeScript that `pose` is a `Fidget` there, so `FIDGET_MS[pose]` type-checks.
-- `as CSSProperties`: React's type for `style` doesn't list custom properties such as
-  `--ch-fidget`, so the object is cast to it. Other poses get no `style` at all (`undefined`).
-- `viewBox="0 0 72 72"` with `width={BUBBLE_BOX}` and `height={BUBBLE_BOX}`: as the comment says,
-  the drawing's units are DIPs of the 72 × 72 window. The `viewBox` sets the drawing's own
-  coordinates and `width` and `height` its size on the page; they match, so one unit is one DIP. A
-  different `BUBBLE_BOX` would scale the same drawing.
-- The feet: the legs run from `y="47"` down to 69, and the shadow under them is centred at 70,
-  just above the window's bottom edge (72). The main process keeps that edge on the taskbar
-  (`restPosition()` in [The bubble](5-bubble.md)), so the figure stands on it.
-- `data-pose={pose}`: the stylesheet picks each pose's animations with selectors such as
-  `.character[data-pose='idle']`, so changing the pose is just changing this attribute.
-- `data-expanded={props.expanded || undefined}`: there only while the panel is open (React leaves
-  out an attribute whose value is `undefined`). It turns the shadow the accent colour.
-- `aria-hidden`: the drawing is decoration; the button around it carries the `aria-label`.
-- The shapes are drawn in order, back to front: the shadow, the far arm (`ch-arm-a`), both legs,
-  the body, the head, and last the near arm (`ch-arm-b`), in front of the body.
+### `Frames`
 
-**The nested groups.** Each limb sits in two groups. The outer one, ending `-pos`
-(`ch-arm-a-pos` and so on), moves the limb's joint: when the character walks, it slides the arms
-and legs toward the middle, so the figure is seen side on. The inner one (`ch-arm-a`) turns the
-limb about its joint (the shoulder or the hip) to swing, wave or kick. An element has only one
-`transform`, so a slide and a turn on the same element would replace each other; on two nested
-groups they add up. The whole figure is nested the same way: `ch-move` moves the figure itself
-(bobbing, stepping, hopping, dangling; `ch-figure` on the same group gives it its drop shadow),
-`ch-lean` around it tilts it into a walk, and `ch-hover`, the outermost, makes it a little bigger
-while the pointer is over the button. The shadow is outside all of them, so it stays on the
-taskbar.
+<!-- code: apps/desktop/src/renderer/src/components/Character.tsx#Frames -->
+
+[`src/renderer/src/components/Character.tsx`, lines 68–87](../../apps/desktop/src/renderer/src/components/Character.tsx#L68-L87)
+
+```tsx
+/**
+ * Plays a pose's frames, each for its time: round and round, or once for a fidget (stopping on
+ * its last frame until the main process changes the pose). With Windows' reduced-motion setting,
+ * just the first frame.
+ */
+function Frames({ pose, facing }: { pose: Pose; facing: Facing }) {
+  const [index, setIndex] = useState(0)
+  const [still] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches)
+  const frames = framesOf(pose, facing)
+
+  useEffect(() => {
+    if (still || (!LOOPS[pose] && index === frames.length - 1)) return
+    const timer = setTimeout(() => setIndex((i) => (i + 1) % frames.length), frames[index]!.ms)
+    return () => clearTimeout(timer)
+  }, [pose, index, frames, still])
+
+  return pathsOf(frames[index]!).map(({ className, d }) => (
+    <path key={className} className={className} d={d} />
+  ))
+}
+```
+
+<!-- /code -->
+
+Plays a pose's frames, as the comment says.
+
+- `index`: which frame shows. `still` is read once, when the component is made: whether Windows'
+  reduced-motion setting is on (`matchMedia` asks the same question as the CSS
+  `prefers-reduced-motion`). `useState(() => ...)` runs the question only the first time.
+- `framesOf(pose, facing)`: the pose's frames, already drawn by the background work above, or
+  drawn now if it hasn't got that far.
+- The effect waits the current frame's time, then moves on to the next (`% frames.length` wraps
+  round to the first). It runs again whenever `index` changes, so each frame schedules the next;
+  the cleanup cancels the wait if the pose changes first (or the component goes).
+- It stops when motion is reduced (the first frame stays) or at the last frame of a pose that
+  doesn't loop (a fidget), where the main process takes over: it changes the pose just as the
+  fidget ends.
+- The return draws the frame: one `<path>` per colour, keyed by its class (a frame has one path per
+  class), from `pathsOf()`.
 
 ### `character.css`
 
 <!-- code: apps/desktop/src/renderer/src/components/character.css -->
 
-[`src/renderer/src/components/character.css`, lines 1–308](../../apps/desktop/src/renderer/src/components/character.css#L1-L308)
+[`src/renderer/src/components/character.css`, lines 1–145](../../apps/desktop/src/renderer/src/components/character.css#L1-L145)
 
 ```css
 /*
- * The character's animations, one set per pose (Character.tsx sets data-pose on the <svg>).
- * Lengths are in the drawing's units (DIPs of the 72 × 72 window); rotations turn each part
- * about its joint: shoulders for the arms, hips for the legs, the feet for the whole figure.
+ * The character's colours: one class per letter of character/sprite.ts's PALETTE. Each material
+ * is a ramp of shades, cooler (bluer) in shadow and warmer in the light, and each part's outline
+ * is a dark shade of its own colour. Her robe and hat are mixed from the tenant's accent colour,
+ * so they match the panel.
  */
 
 .character {
   display: block;
   overflow: visible;
 }
-.character g,
-.character ellipse {
-  transform-box: view-box;
+
+/* Hair: silver-white, cool violet in the shadows, a warm shine. */
+.px-hair-line {
+  fill: #55507a;
+}
+.px-hair-shade {
+  fill: #aba8cc;
+}
+.px-hair {
+  fill: #dedcef;
+}
+.px-hair-light {
+  fill: #f4f3fb;
+}
+.px-hair-shine {
+  fill: #fffaf0;
 }
 
-/* A plain white figure with a dark outline shows up on light and dark desktops alike. */
-.ch-part {
+/* Skin: pale, shadow toward rose. */
+.px-skin-line {
+  fill: #b9746c;
+}
+.px-skin-shade {
+  fill: #efb9aa;
+}
+.px-skin {
+  fill: #fde3d4;
+}
+.px-skin-light {
+  fill: #fff2ea;
+}
+.px-blush {
+  fill: #f6a5b0;
+}
+
+/* Eyes: a deep lash line, amber irises lighter toward the bottom, a white glint. */
+.px-lash {
+  fill: #2b1830;
+}
+.px-iris-dark {
+  fill: #7a3f16;
+}
+.px-iris {
+  fill: #d58a2c;
+}
+.px-iris-light {
+  fill: #ffcf6b;
+}
+.px-white {
   fill: #fff;
-  stroke: #334155;
-  stroke-width: 1.6;
 }
-.ch-figure {
-  filter: drop-shadow(0 1px 1.2px rgb(0 0 0 / 0.35));
+.px-mouth {
+  fill: #c2525e;
 }
 
-/* Its shadow on the taskbar, in the accent colour while the panel is open. */
-.ch-shadow {
-  fill: rgb(0 0 0 / 0.28);
-  transform-origin: 36px 70px;
-  transition:
-    opacity 0.2s,
-    fill 0.2s;
+/* The robe, from the accent colour: deep indigo in the shadows, a little cream in the light. */
+.px-robe-line {
+  fill: color-mix(in oklab, var(--color-accent) 45%, #140a24);
 }
-.character[data-expanded] .ch-shadow {
+.px-robe-shade {
+  fill: color-mix(in oklab, var(--color-accent) 72%, #1e1b4b);
+}
+.px-robe {
   fill: var(--color-accent);
-  opacity: 0.8;
+}
+.px-robe-light {
+  fill: color-mix(in oklab, var(--color-accent) 70%, #fff4d6);
 }
 
-.ch-hover,
-.ch-lean,
-.ch-move {
-  transform-origin: 36px 69px;
+/* Silver trim, and a teal gem. */
+.px-trim {
+  fill: #e6e4f2;
 }
-.ch-hover,
-.ch-lean {
-  transition: transform 0.2s ease-out;
+.px-trim-shade {
+  fill: #a6a2c4;
 }
-button:hover .ch-hover {
-  transform: scale(1.05);
+.px-gem {
+  fill: #3fd0c0;
 }
 
-/* The joints, and the arms' resting angle: hanging a little away from the body. */
-.ch-arm-a {
-  transform-origin: 25px 31px;
-  transform: rotate(10deg);
+/* Gold embroidery on her robe and hat, and the buckles on her boots. */
+.px-gold {
+  fill: #f2c650;
 }
-.ch-arm-b {
-  transform-origin: 47px 31px;
-  transform: rotate(-10deg);
-}
-.ch-leg-a {
-  transform-origin: 33px 49px;
-}
-.ch-leg-b {
-  transform-origin: 39px 49px;
-}
-/* Where each limb joins the body; walking moves them to the middle (seen from the side). */
-.ch-arm-a-pos,
-.ch-arm-b-pos,
-.ch-leg-a-pos,
-.ch-leg-b-pos {
-  transition: transform 0.15s ease-out;
+.px-gold-shade {
+  fill: #b3832c;
 }
 
-/* idle: standing, bobbing gently as if breathing. */
-.character[data-pose='idle'] .ch-move {
-  animation: ch-bob 2.4s ease-in-out infinite;
+/* Her hat and her spellbook's cover: a deep shade of the accent colour. */
+.px-hat {
+  fill: color-mix(in oklab, var(--color-accent) 55%, #1a1433);
 }
-.character[data-pose='idle'] .ch-shadow {
-  animation: ch-shadow-bob 2.4s ease-in-out infinite;
+.px-hat-shade {
+  fill: color-mix(in oklab, var(--color-accent) 38%, #120d26);
 }
-@keyframes ch-bob {
-  50% {
-    transform: translateY(-2.5px);
-  }
-}
-@keyframes ch-shadow-bob {
-  50% {
-    transform: scaleX(0.85);
-  }
+.px-hat-light {
+  fill: color-mix(in oklab, var(--color-accent) 80%, #1a1433);
 }
 
-/* walk-left, walk-right: side on, legs striding and arms swinging, leaning into the walk. */
-.character[data-pose^='walk'] .ch-arm-a-pos {
-  transform: translateX(11px);
+/* Stockings and boots. */
+.px-clothes-line {
+  fill: #19162a;
 }
-.character[data-pose^='walk'] .ch-arm-b-pos {
-  transform: translateX(-11px);
+.px-stocking {
+  fill: #34304d;
 }
-.character[data-pose^='walk'] .ch-leg-a-pos {
-  transform: translateX(3px);
+.px-stocking-shade {
+  fill: #24213a;
 }
-.character[data-pose^='walk'] .ch-leg-b-pos {
-  transform: translateX(-3px);
+.px-boot {
+  fill: #7a4a35;
 }
-.character[data-pose^='walk'] .ch-leg-a {
-  animation: ch-stride 0.6s ease-in-out infinite;
+.px-boot-shade {
+  fill: #4a2a20;
 }
-.character[data-pose^='walk'] .ch-leg-b {
-  animation: ch-stride 0.6s ease-in-out infinite reverse;
-}
-.character[data-pose^='walk'] .ch-arm-a {
-  animation: ch-swing 0.6s ease-in-out infinite reverse;
-}
-.character[data-pose^='walk'] .ch-arm-b {
-  animation: ch-swing 0.6s ease-in-out infinite;
-}
-.character[data-pose^='walk'] .ch-move {
-  animation: ch-step 0.3s ease-in-out infinite;
-}
-.character[data-pose='walk-left'] .ch-lean {
-  transform: rotate(-7deg);
-}
-.character[data-pose='walk-right'] .ch-lean {
-  transform: rotate(7deg);
-}
-@keyframes ch-stride {
-  0%,
-  100% {
-    transform: rotate(0deg);
-  }
-  25% {
-    transform: rotate(24deg);
-  }
-  75% {
-    transform: rotate(-24deg);
-  }
-}
-@keyframes ch-swing {
-  0%,
-  100% {
-    transform: rotate(0deg);
-  }
-  25% {
-    transform: rotate(20deg);
-  }
-  75% {
-    transform: rotate(-20deg);
-  }
-}
-@keyframes ch-step {
-  50% {
-    transform: translateY(-1.5px);
-  }
+.px-boot-light {
+  fill: #a8704f;
 }
 
-/* fidget-1: a hop, crouching first and landing with a squash, arms flung up. */
-.character[data-pose='fidget-1'] .ch-move {
-  animation: ch-hop var(--ch-fidget) ease-in-out;
+/* Her shadow on the taskbar, in the accent colour while the panel is open. */
+.px-shadow {
+  fill: rgb(0 0 0 / 0.22);
 }
-.character[data-pose='fidget-1'] .ch-arm-a {
-  animation: ch-hop-arm-a var(--ch-fidget) ease-in-out;
-}
-.character[data-pose='fidget-1'] .ch-arm-b {
-  animation: ch-hop-arm-b var(--ch-fidget) ease-in-out;
-}
-.character[data-pose='fidget-1'] .ch-shadow {
-  animation: ch-hop-shadow var(--ch-fidget) ease-in-out;
-}
-@keyframes ch-hop {
-  0%,
-  80%,
-  100% {
-    transform: none;
-  }
-  20% {
-    transform: scale(1.08, 0.88);
-  }
-  45% {
-    transform: translateY(-8px) scale(0.95, 1.06);
-  }
-  65% {
-    transform: scale(1.06, 0.92);
-  }
-}
-@keyframes ch-hop-arm-a {
-  0%,
-  75%,
-  100% {
-    transform: rotate(10deg);
-  }
-  45% {
-    transform: rotate(70deg);
-  }
-}
-@keyframes ch-hop-arm-b {
-  0%,
-  75%,
-  100% {
-    transform: rotate(-10deg);
-  }
-  45% {
-    transform: rotate(-70deg);
-  }
-}
-@keyframes ch-hop-shadow {
-  45% {
-    transform: scaleX(0.6);
-    opacity: 0.5;
-  }
+.character[data-expanded] .px-shadow {
+  fill: color-mix(in srgb, var(--color-accent) 70%, transparent);
 }
 
-/* fidget-2: a wave, one arm raised and waving, the head tilted. */
-.character[data-pose='fidget-2'] .ch-arm-b {
-  animation: ch-wave var(--ch-fidget) ease-in-out;
+/* A soft glow round her when the pointer is over her. */
+.character {
+  transition: filter 0.15s ease-out;
 }
-.character[data-pose='fidget-2'] .ch-move {
-  animation: ch-tilt var(--ch-fidget) ease-in-out;
-}
-@keyframes ch-wave {
-  0%,
-  100% {
-    transform: rotate(-10deg);
-  }
-  15%,
-  75% {
-    transform: rotate(-150deg);
-  }
-  30%,
-  60% {
-    transform: rotate(-125deg);
-  }
-  45% {
-    transform: rotate(-158deg);
-  }
-  90% {
-    transform: rotate(-10deg);
-  }
-}
-@keyframes ch-tilt {
-  15%,
-  75% {
-    transform: rotate(-3deg);
-  }
-}
-
-/* dragged: hanging from the pointer by its head, swaying, arms up and legs kicking. */
-.character[data-pose='dragged'] .ch-move {
-  transform-origin: 36px 10px;
-  animation: ch-dangle 1.2s ease-in-out infinite;
-}
-.character[data-pose='dragged'] .ch-arm-a {
-  animation: ch-flail-a 0.5s ease-in-out infinite alternate;
-}
-.character[data-pose='dragged'] .ch-arm-b {
-  animation: ch-flail-b 0.5s ease-in-out infinite alternate;
-}
-.character[data-pose='dragged'] .ch-leg-a {
-  animation: ch-kick 0.4s ease-in-out infinite alternate;
-}
-.character[data-pose='dragged'] .ch-leg-b {
-  animation: ch-kick 0.4s ease-in-out infinite alternate-reverse;
-}
-.character[data-pose='dragged'] .ch-shadow {
-  opacity: 0;
-}
-@keyframes ch-dangle {
-  0%,
-  100% {
-    transform: rotate(-8deg);
-  }
-  50% {
-    transform: rotate(8deg);
-  }
-}
-@keyframes ch-flail-a {
-  from {
-    transform: rotate(140deg);
-  }
-  to {
-    transform: rotate(165deg);
-  }
-}
-@keyframes ch-flail-b {
-  from {
-    transform: rotate(-140deg);
-  }
-  to {
-    transform: rotate(-165deg);
-  }
-}
-@keyframes ch-kick {
-  from {
-    transform: rotate(-14deg);
-  }
-  to {
-    transform: rotate(14deg);
-  }
-}
-
-/* Reduced motion (a Windows setting): it still walks, but holds still otherwise. */
-@media (prefers-reduced-motion: reduce) {
-  .character,
-  .character * {
-    animation: none !important;
-    transition: none !important;
-  }
+button:hover .character {
+  filter: drop-shadow(0 0 2px rgb(255 255 255 / 0.9));
 }
 ```
 
 <!-- /code -->
 
-The character's look, and one set of animations per pose. `Character.tsx` imports it
-(`import './character.css'`), and Vite bundles it with the page's other styles. As the comment at
-the top says, lengths are in the drawing's units, and rotations turn each part about its joint.
+The character's colours: a rule per palette class, as the comment says.
 
-- `overflow: visible`: parts of the figure that reach past the drawing's edge (a raised arm, a
-  hop) aren't cut off at the edge of the `<svg>`.
-- `transform-box: view-box`: every `transform-origin` below is then a point in the drawing itself,
-  measured from its top-left, so `25px 31px` is the left shoulder.
-- `.ch-part`: white with a slate outline (`#334155`). As the comment says, that shows up on light
-  and dark desktops alike, so it doesn't change with the app's light or dark mode.
-- `.ch-figure`: a soft drop shadow around the whole figure.
-- `.ch-shadow`: the shadow on the taskbar, shrinking about its own centre (`36px 70px`). As the
-  comment says, it takes the accent colour while the panel is open (`data-expanded`), where the
-  logo used to get an accent ring; the `transition` fades between the two.
-- `.ch-hover, .ch-lean, .ch-move`: their origin is the point between the feet (`36px 69px`), so
-  the figure grows and leans from where it stands. `button:hover .ch-hover` makes it 5% bigger
-  with the pointer over it.
-- `.ch-arm-a`, `.ch-arm-b`: the shoulders as origins, and, as the comment says, the arms' resting
-  angle, 10° out from the body. `.ch-leg-a` and `.ch-leg-b` turn about the hips.
-- `.ch-arm-a-pos` and the other `-pos` groups: a 0.15 s transition, so the limbs slide to the middle
-  when a walk starts and back when it stops, rather than jumping.
-
-Pose by pose:
-
-- **`idle`**: `ch-bob` lifts the figure 2.5 units and lets it down again over 2.4 seconds, round
-  and round, as if breathing, and `ch-shadow-bob` narrows the shadow to 85% at the top. A
-  keyframes rule with only `50%` animates from the element's usual state to that and back.
-- **`walk-left`, `walk-right`**: `[data-pose^='walk']` matches both (`^=` means "starts with"). The
-  `-pos` groups slide the arms 11 units and the legs 3 units to the middle, turning the figure side
-  on. The legs stride (`ch-stride`, 24° each way) and the arms swing (`ch-swing`, 20°) over 0.6
-  seconds; `reverse` runs one of each pair backwards, so the legs go opposite ways, and each arm
-  swings against the leg on its side, as people walk. `ch-step` bobs the body 1.5 units every 0.3
-  seconds, once a step. `ch-lean` tilts the figure 7° the way it's going: `rotate(-7deg)` (the top
-  toward the left) for `walk-left`. The window itself is moved by the main process.
-- **`fidget-1`**, the hop: `ch-hop` crouches with a squash (wider and shorter) at 20%, jumps 8 units
-  up, slightly stretched, at 45%, lands with a smaller squash at 65% and stands from 80%. The arms
-  fling up to 70° at the top of the jump (`ch-hop-arm-a`, `ch-hop-arm-b`), and the shadow shrinks
-  and fades while the figure is in the air (`ch-hop-shadow`). Each plays once, for
-  `var(--ch-fidget)`.
-- **`fidget-2`**, the wave: `ch-wave` raises the near arm to about 150°, waves it back and forth
-  between 125° and 158°, and lowers it, while `ch-tilt` tips the figure 3° as if tilting its head.
-  Also once, for `var(--ch-fidget)`.
-- **`dragged`**: `ch-move` gets a new origin, the top of the head (`36px 10px`), and `ch-dangle`
-  sways it 8° each way from there, like something held up by its head. The arms flail overhead
-  (between 140° and 165°; `alternate` plays the animation forwards then backwards, so they wave to
-  and fro) and the legs kick 14° each way, out of step with each other (`alternate-reverse`). The
-  shadow is hidden, since the figure is off the ground. This is the pose for dragging, Bounce and
-  the fall after a drop.
-- **Reduced motion**: `@media (prefers-reduced-motion: reduce)` applies when animations are turned
-  off in Windows. Every animation and transition on the character stops (`!important` overrides
-  the rules above). As the comment says, it still walks, because the walk's movement along the
-  taskbar is the main process moving the window; the figure just goes along standing still.
+- Each material is a ramp of shades, and the shades aren't just the base colour made darker and
+  lighter: as the comment says, they shift in hue, cooler (bluer) in shadow and warmer in the
+  light. Her silver-white hair is lavender and violet in its shadows and a warm ivory in its shine;
+  the skin's shadow leans toward rose. This _hue shifting_ is a staple of pixel art: shadows that
+  are only darker look grey and dirty, while real shadows pick up the cool of the sky and lit parts
+  the warmth of the light.
+- Each outline (`-line`) is the darkest shade of its own material (a dusky violet for the hair, a
+  rose for the skin), not black, for the selective outlining `ink()` does.
+- The eyes: a near-black lash line with a touch of purple, amber irises from brown to gold
+  (`.px-iris-dark`, `.px-iris`, `.px-iris-light`), and white for the glint.
+- The robe is mixed from `var(--color-accent)`, the tenant's colour: `.px-robe` is the accent
+  itself, its shadow 72% accent and 28% deep indigo (`#1e1b4b`), its outline darker still (45%
+  accent with a near-black purple), and its light 70% accent with a little cream (`#fff4d6`). So
+  another tenant's character wears their colour, with the same cool shadows and warm light as the
+  rest of her. `color-mix(in oklab, ...)` mixes in _Oklab_, a colour space built so that equal
+  steps look equally different to the eye. Mixing there keeps the shades clean, where mixing plain
+  RGB values tends to pass through dull, greyish colours.
+- The trim is silver, a pale lavender-white with a greyer shade, and the brooch's gem is teal.
+- The gold of her embroidery and buckles is a warm yellow with a deeper ochre shade, which stands
+  out on the deep robe and hat in any accent colour.
+- The hat (and the spellbook's cover, which uses the same classes) is a deep shade of the accent
+  colour, mixed with a near-black indigo: 55% accent for its base, 38% for its shadow and 80% for
+  its light, so it reads as darker than the robe but the same family.
+- The stockings are a dark slate violet, the boots brown in three shades, and they share one dark
+  outline (`.px-clothes-line`).
+- `.px-shadow`: black at 22%, so the taskbar shows through. While the panel is open
+  (`data-expanded`), it's the accent colour at 70%, a hint that she's the one that's open.
+- `button:hover .character`: when the pointer is over the bubble's button, a soft white glow round
+  her (`drop-shadow` follows the shape of the drawing, not its box), fading in over 0.15 s.

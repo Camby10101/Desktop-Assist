@@ -567,22 +567,62 @@ Integrity Violation".
 
 ## 7i. On trial: the bubble as an animated character (branch `character`)
 
-The logo bubble becomes a small character standing on the taskbar. For now it's a **blank
-placeholder figure** (a white head, body, arms and legs with a dark outline, so it shows on light
-and dark desktops), drawn in SVG; real artwork replaces the shapes later, keyed by the same poses.
+The logo bubble becomes a small character standing on the taskbar: **anime-style pixel art**, an
+original design drawn in code (no image files): an elf mage about five heads tall, with long
+pointed ears, silver-white hair in one long braid over her shoulder (a fringe in clumps, side locks
+and a shine band), amber eyes, a wide-brimmed crooked hat with a silver band, and a long flared
+robe in the tenant's accent colour with bell sleeves, silver trim, a sash and a teal gem brooch,
+over dark stockings and boots. She's about 88 pixels tall with her hat on a 96 × 96 grid, one pixel
+a DIP, in a 96-DIP window (the bubble's box is now 80 DIP, so the panel's layout moved out a little
+to match).
 
-- **Poses** (decided by the main process, animated in CSS by the bubble's page):
-  - **Idle**: standing, bobbing gently.
-  - **Walk left / walk right**: side on, legs striding and arms swinging, leaning into the walk,
-    while the window moves along the taskbar (80 DIP a second).
-  - **Two fidgets**, only once it's been left alone for 30 s: a **hop** (crouch, jump with arms
-    flung up, land with a squash) and a **wave**.
-  - **Dragged**: hanging from the pointer by its head, swaying, arms up and legs kicking. Also
-    while Bounce throws it about, and while it falls after a drop.
+She's drawn by a small **pixel rig** (`src/renderer/src/character/`): her body parts are shapes
+(polygons, ellipses and tapered lines) posed by joint angles, drawn straight onto the pixel grid
+with no smoothing, then cel-shaded (the side away from the light in shade, the edge toward it lit)
+and outlined, each part in a dark shade of its own colour. Her face (eyes, blush, mouth) is
+hand-placed pixels. Seen diagonally she's one hand-drawn picture, and side on her face is a
+hand-drawn anime profile (both in `pictures.ts`), so nothing overlaps wrongly. Her clothes are
+patterned, the same from every side: a gold buckle, moon and stars and silver stitching on her
+hat; gold diamonds above the robe's hem, silver stars, gold buttons, a gold sash buckle and gold
+lines above the cuffs; cuffs, laces and buckled straps on her boots. From the front her braid
+hangs behind her left shoulder, so no hair covers her face or the front of her robe. Animations are key poses with eased in-between frames, one about every 40 ms
+(25 a second), so movement is smooth.
+The style follows research into anime pixel art and anime-style game sprites: big eyes with a
+thick upper lid and a glint in the same corner of both; hair as clumps with a shine; colour ramps
+of three or four shades per material, cooler in shadow and warmer in the light; selective
+outlining; taller proportions, a three-quarter view, and hair and robe that trail and settle.
+Other artwork can replace the rig, keyed by the same poses. (Earlier versions, a blank SVG stick
+figure animated in CSS, a hand-typed 36-pixel sprite and a girl in a hoodie, were replaced before
+this was merged.)
+
+- **Poses** (decided by the main process, played frame by frame by the bubble's page):
+  - **Idle**, from the front: 32 frames of breathing (a pixel lower on the out-breath), her hair
+    stirring, a blink every couple of seconds.
+  - **Walk left / walk right**, side on: twelve frames, two steps; each leg swings forward with its
+    knee bent and pushes back, the arms swing against the legs, her body rises as her legs pass and
+    her hair trails behind, while the window moves along the taskbar (80 DIP a second).
+  - **Nine habits** (fidgets), only once she's been left alone for 30 s, chosen at random, never
+    the same twice in a row: **hop** (crouch, spring, float with her legs tucked, land with a
+    bounce; 1.2 s), **wave** (diagonal, forearm upright swinging to and fro, smiling; 2 s),
+    **stretch** (arms up, a yawn, a lean each way; 2.4 s), **sip** (diagonal, her teacup up to
+    her mouth and a contented smile; 3.2 s), **read** (diagonal, her spellbook open, head down,
+    turning pages, a smile at something; 4 s), **spell** (diagonal, her hand raised, sparkles
+    circling it; 2.4 s), **levitate** (eyes shut, she floats up over a glowing magic circle,
+    hovers, bobbing and smiling, as its runes turn and sparks rise, then settles; 3.6 s), **sit**
+    (down on the taskbar, her robe spread round her, swaying, looking
+    about, then up; 6 s) and **look** (her eyes, then her head, turning one way, then the other;
+    2.4 s). Desktop mascots and games'
+    idle animations were the model: breathing as the base, varied fidgets at random intervals.
+    Each habit's frames add up to exactly the time the main process waits.
+  - **Dragged**, from the front: held up by her collar, off the ground, mouth open, arms up, legs
+    kicking, swaying, hair lifted. Also while Bounce throws her about, and while she falls after a
+    drop.
+- **Which way she faces**: the middle of the screen (left from the right-hand corner); walking,
+  the way she walks. Facing left is the mirror image of facing right.
 - **Where it lives**: no longer stuck in a corner, but near one of the bottom corners. It stands on
   the taskbar (its window's bottom edge on the work area's) and strolls within 240 DIP of its
   corner: every 8 to 20 s (5 to 12 s after settling) it walks somewhere else in that stretch, or,
-  once it's been alone 30 s, sometimes fidgets instead.
+  once it's been alone 30 s, more often than not does one of her habits instead.
 - **Dragging**: dropped, it falls onto the taskbar of that display with gravity, and from then on
   lives near that display's nearer bottom corner (the half of the screen it's in). Dropped further
   than 240 DIP from that corner, it walks back. The corner is remembered as before; a top corner
@@ -591,15 +631,20 @@ and dark desktops), drawn in SVG; real artwork replaces the shapes later, keyed 
   stands (the panel still opens toward the middle of the screen); dragging or Bounce interrupt a
   walk or a fidget. Nothing happens on its own while the panel is open.
 - Bounce still roams every monitor; a click brings it back to where it stood.
-- With Windows' reduced-motion setting it still walks, but holds still otherwise.
+- With Windows' reduced-motion setting it still walks, but holds still otherwise (the first frame
+  of each pose).
+- Her shadow on the taskbar turns the accent colour while the panel is open, and she glows softly
+  when the pointer is over her.
 
 Tested with unit tests (where it stands and which corner it belongs to; choosing walks and
 fidgets, walking, falling; the controller with fake timers: standing, strolling both ways,
 fidgeting only after a quiet spell, stopping when clicked with the panel where it stands, nothing
 while open, dangling while dragged, falling where dropped, walking back from far away, another
-display, Bounce, display changes) and the real app: it stood on the taskbar, walked left about
-190 DIP at walking speed, and hopped once it had been left alone 30 s; a contact sheet of every
-pose drawn with the real CSS.
+display, Bounce, display changes, habits never repeated back to back; the animations: every pose's
+frames, feet on the ground except at the top of the hop and while carried, each habit's length
+matching the main process, mirroring, the rig's three views and face, the rasteriser's shading
+and outlines) and the real app: she stood on the taskbar, walked, sat down and later glanced
+about on her own, with no errors; contact sheets of every frame drawn with the real CSS.
 
 ## 8. Milestones
 

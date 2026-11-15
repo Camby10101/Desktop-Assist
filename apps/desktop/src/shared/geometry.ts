@@ -26,7 +26,7 @@ export const UI = {
   /** Gap between the character and the side of the work area when it's right in its corner. */
   edgeMargin: 16,
   /** The bubble's box, which its position is measured from (its top-left corner). */
-  bubbleSize: 56,
+  bubbleSize: 80,
   /**
    * The bubble's window is this much bigger than the box on every side. The character is drawn
    * across the whole window, its feet on the window's bottom edge.

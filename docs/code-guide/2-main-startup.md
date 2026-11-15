@@ -274,7 +274,8 @@ here.
 - `onDiagnostic: (message) => log(message)`: the controller notes bubble clicks it ignored, and a
   blur it ignored just after opening, in the problem log (see [The bubble](5-bubble.md)).
 - `onAnchorChange`: when the character settles near the other bottom corner or on another display,
-  the panel is told (it lays itself out to open away from that corner) and the new anchor is saved. `void` in front of a promise means
+  both pages are told (the panel lays itself out to open away from that corner, and the character
+  turns to face the middle of the screen) and the new anchor is saved. `void` in front of a promise means
   "start this and don't wait for it"; it also tells the linter the missing `await` is deliberate.
 - `controller = bubble` (the next line): makes the controller reachable from the module-level
   `second-instance` handler.

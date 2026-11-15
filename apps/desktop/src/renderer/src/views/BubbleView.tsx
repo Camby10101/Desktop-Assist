@@ -81,7 +81,11 @@ export function BubbleView() {
       style={{ width: BUBBLE_BOX, height: BUBBLE_BOX }}
       className="block cursor-grab outline-offset-[-2px] active:cursor-grabbing"
     >
-      <Character pose={state?.pose ?? 'idle'} expanded={mode === 'expanded'} />
+      <Character
+        pose={state?.pose ?? 'idle'}
+        corner={state?.corner ?? 'bottom-right'}
+        expanded={mode === 'expanded'}
+      />
     </button>
   )
 }

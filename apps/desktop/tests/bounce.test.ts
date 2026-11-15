@@ -96,14 +96,16 @@ describe('step', () => {
   })
 
   it("bounces off the part of the edge the other display doesn't reach", () => {
-    const next = step({ x: 1860, y: 800, vx: 280, vy: 0 }, 100, twoScreens)
-    expect(next.x).toBeCloseTo(1864 - 24) // wall at 1920 - 56 = 1864: 28 forward, 24 past it, back
+    const wall = 1920 - UI.bubbleSize
+    const next = step({ x: wall - 4, y: 800, vx: 280, vy: 0 }, 100, twoScreens)
+    expect(next.x).toBeCloseTo(wall - 24) // 28 forward, 24 past the wall, so 24 back
     expect(next.vx).toBe(-280)
   })
 
   it('bounces off the bottom of the shorter display', () => {
-    const next = step({ x: 2500, y: 540, vx: 0, vy: 100 }, 100, twoScreens)
-    expect(next.y).toBeCloseTo(544 - 6) // wall at 600 - 56
+    const wall = 600 - UI.bubbleSize
+    const next = step({ x: 2500, y: wall - 4, vx: 0, vy: 100 }, 100, twoScreens)
+    expect(next.y).toBeCloseTo(wall - 6) // 10 down, 6 past the wall, so 6 back
     expect(next.vy).toBe(-100)
   })
 

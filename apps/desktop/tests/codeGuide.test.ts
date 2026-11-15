@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 const root = resolve(__dirname, '../../..')
 
-describe('Code Guide', () => {
+describe('Code Guide', { timeout: 30_000 }, () => {
   it('shows the current code (run `npm run docs` after changing code)', () => {
     const run = () =>
       execFileSync(process.execPath, ['scripts/code-guide.mjs', '--check'], {

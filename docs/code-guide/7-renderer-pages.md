@@ -958,7 +958,7 @@ const DRAG_THRESHOLD = 5
 
 <!-- code: apps/desktop/src/renderer/src/views/BubbleView.tsx#BubbleView -->
 
-[`src/renderer/src/views/BubbleView.tsx`, lines 19–87](../../apps/desktop/src/renderer/src/views/BubbleView.tsx#L19-L87)
+[`src/renderer/src/views/BubbleView.tsx`, lines 19–91](../../apps/desktop/src/renderer/src/views/BubbleView.tsx#L19-L91)
 
 ```tsx
 /**
@@ -1026,7 +1026,11 @@ export function BubbleView() {
       style={{ width: BUBBLE_BOX, height: BUBBLE_BOX }}
       className="block cursor-grab outline-offset-[-2px] active:cursor-grabbing"
     >
-      <Character pose={state?.pose ?? 'idle'} expanded={mode === 'expanded'} />
+      <Character
+        pose={state?.pose ?? 'idle'}
+        corner={state?.corner ?? 'bottom-right'}
+        expanded={mode === 'expanded'}
+      />
     </button>
   )
 }
@@ -1041,8 +1045,9 @@ attributes and event handlers (`onClick`, `onPointerDown`); on our own component
 the function's argument (see `Panel` below).
 
 - `const state = useAssistState()`: the bubble needs only the mode (for its label and the
-  character's shadow), the pose and the branding. Until the state arrives, it falls back to
-  `'collapsed'`, `'idle'` and `'Desktop Assist'`.
+  character's shadow), the pose, the corner (which way the character faces) and the branding.
+  Until the state arrives, it falls back to `'collapsed'`, `'idle'`, `'bottom-right'` and
+  `'Desktop Assist'`.
 - `useAccentColor(state?.branding.accentColor)`: `?.` because `state` is `null` at first.
 - `const press = useRef<{ x: number; y: number; dragging: boolean } | null>(null)`: `useRef` gives
   a box (`.current`) that keeps its contents between renders, but unlike state, changing it doesn't
@@ -1057,7 +1062,7 @@ the function's argument (see `Panel` below).
 - `pressedAt.current = Date.now()`: the press time, on the wall clock the main process uses too.
 - `event.currentTarget.setPointerCapture(event.pointerId)`: sends all further events from this
   pointer to the button, even when the pointer is outside it, until it's released. The window is
-  only 72 pixels square and gets moved during a drag, so without this the release could be lost.
+  only 96 pixels square and gets moved during a drag, so without this the release could be lost.
 - `if (!current || current.dragging) return`: only needed until the drag starts. From then on the
   main process moves the window with the mouse itself (`BubbleController.startDrag`), so the page
   just waits for the release.
@@ -1084,7 +1089,7 @@ the function's argument (see `Panel` below).
   so here it has no effect.
 - `ACTION_LABEL[mode]`: the `aria-label` reads, for example, "Close Desktop Assist" while the panel
   is open.
-- `style={{ width: BUBBLE_BOX, height: BUBBLE_BOX }}`: 72 pixels square, the whole window
+- `style={{ width: BUBBLE_BOX, height: BUBBLE_BOX }}`: 96 pixels square, the whole window
   (`BUBBLE_BOX` in `src/shared/geometry.ts`, the same number the main process sizes the window
   with). The character is drawn across the whole window, so the button covers all of it and a
   press anywhere on the window reaches it.
@@ -1095,10 +1100,12 @@ the function's argument (see `Panel` below).
 - `outline-offset-[-2px]`: the keyboard focus outline (`:focus-visible` in `styles.css`) is drawn
   2 pixels inside the button instead of outside it, where the window's edge would cut it off.
   Square brackets give a Tailwind class a custom value.
-- `<Character pose={state?.pose ?? 'idle'} expanded={mode === 'expanded'} />`: the figure, in the
-  pose the main process chose (standing until the state arrives). `expanded` turns its shadow the
-  accent colour while the panel is open, as the logo's accent ring used to. All the animation is
-  in `Character` and its stylesheet; this page only passes the pose on.
+- `<Character`: the figure, in the `pose` the main process chose (standing until the state
+  arrives). `corner` is the bottom corner she lives near, so she can face away from it, toward the
+  middle of the screen (until the state arrives, `bottom-right`, the default corner). `expanded`
+  turns her shadow the accent colour while the panel is open, as the logo's accent ring used to.
+  All the drawing and animation is in `Character` and the code it draws her with
+  (`src/renderer/src/character/`); this page only passes the pose and the corner on.
 
 ## `src/renderer/src/views/PanelView.tsx`: everything around the bubble
 

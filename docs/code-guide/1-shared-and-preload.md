@@ -94,9 +94,10 @@ itself.
   `src/main/bubble/layout.ts`; `bottomOf()` and `walkTo()` in `BubbleController.ts` (turning a
   saved top corner into the bottom one, and choosing which way the character faces as it walks);
   `launch()` in
-  `src/main/bubble/bounce.ts` (a bounce sets off away from the corner); and `anchored()` in
+  `src/main/bubble/bounce.ts` (a bounce sets off away from the corner); `anchored()` in
   `src/renderer/src/lib/anchor.ts`, which turns an offset into CSS `left`/`right` and
-  `top`/`bottom`.
+  `top`/`bottom`; and `Character` in `src/renderer/src/components` (which way the character faces
+  while she stands).
 
 ### `UI`
 
@@ -109,7 +110,7 @@ export const UI = {
   /** Gap between the character and the side of the work area when it's right in its corner. */
   edgeMargin: 16,
   /** The bubble's box, which its position is measured from (its top-left corner). */
-  bubbleSize: 56,
+  bubbleSize: 80,
   /**
    * The bubble's window is this much bigger than the box on every side. The character is drawn
    * across the whole window, its feet on the window's bottom edge.
@@ -134,12 +135,13 @@ export const UI = {
 
 Every fixed measurement of the UI in one object, in DIPs.
 
-- `as const`: makes the object read-only and keeps each value's exact type (`56` rather than
+- `as const`: makes the object read-only and keeps each value's exact type (`80` rather than
   `number`). Nothing can change these numbers at runtime by accident.
 - `edgeMargin: 16`: as the comment says, how far the character stands from the side of the work
   area when it's right in its corner (`restPosition()` in `src/main/bubble/layout.ts`).
-- `bubbleSize: 56`: the bubble's box, which positions are measured from. It was the size of the
-  round logo.
+- `bubbleSize: 80`: the bubble's box, which positions are measured from. It started as the size of
+  the round logo (56); at 80, the box and its padding make a window 96 DIPs square, the size of the
+  character's pixel grid, so each of her pixels is one DIP.
 - `bubblePad: 8`: the bubble's window is this much bigger than the box on every side. As the
   comment says, the character is drawn across the whole window, and `restPosition()` uses
   `bubblePad` to put the window's bottom edge, where the character's feet are, on the taskbar.
@@ -166,10 +168,11 @@ export const BUBBLE_BOX = UI.bubbleSize + UI.bubblePad * 2
 
 <!-- /code -->
 
-The bubble window's width and height: 56 + 8 + 8 = 72. `start()` in `src/main/index.ts` creates
+The bubble window's width and height: 80 + 8 + 8 = 96. `start()` in `src/main/index.ts` creates
 the bubble window at this size, and `bubbleWindowBounds()` in `src/main/bubble/layout.ts` places
 it. The bubble window only ever moves; it never changes size. In the renderer, `BubbleView`'s
-button and the `Character` drawing are this size too, filling the window.
+button and the `Character` drawing are this size too, filling the window: the character's 96 × 96
+grid of pixels (`SPRITE_SIZE` in `character/sprite.ts`), one pixel a DIP.
 
 ### `PANEL_LAYOUT`
 
@@ -219,14 +222,14 @@ images):
 +-----------------------------------------------------+
 ```
 
-- `actionsX: UI.bubblePad + (UI.bubbleSize - UI.actionSize) / 2`: 8 + 8 = 16, which centres the
-  40-DIP icons on the 56-DIP bubble.
-- `actionsY: UI.bubblePad + UI.bubbleSize + UI.gap`: 76. The first icon starts one gap beyond the
+- `actionsX: UI.bubblePad + (UI.bubbleSize - UI.actionSize) / 2`: 8 + 20 = 28, which centres the
+  40-DIP icons on the 80-DIP bubble.
+- `actionsY: UI.bubblePad + UI.bubbleSize + UI.gap`: 100. The first icon starts one gap beyond the
   bubble.
-- `chatX: UI.bubblePad + UI.bubbleSize + UI.gap`: also 76. The chat card starts one gap to the
+- `chatX: UI.bubblePad + UI.bubbleSize + UI.gap`: also 100. The chat card starts one gap to the
   side of the bubble, toward the middle of the screen.
 - `chatY: UI.bubblePad`: 8, so the card's near edge is level with the bubble's near edge.
-- `settingsX`: 8 + 48 + 8 = 64. The first two terms reach the far side of the icon column; one
+- `settingsX`: 8 + 60 + 8 = 76. The first two terms reach the far side of the icon column; one
   more `actionGap` puts the menu just beside the gear icon. Its other coordinate depends on where
   the gear is in the stack, so it comes from `actionOffset()` instead.
 
@@ -282,67 +285,109 @@ this size (`start()` in `src/main/index.ts`) and never resizes when the chat car
 is no flicker. The unused parts are transparent and let clicks through to whatever is underneath
 (the _click-through_ handled by `useClickThrough()` in the renderer).
 
-- `PANEL_LAYOUT.chatX + UI.panelWidth + UI.shadowPad`: 76 + 400 + 16 = 492 wide.
+- `PANEL_LAYOUT.chatX + UI.panelWidth + UI.shadowPad`: 100 + 400 + 16 = 516 wide.
 - `Math.max(`: the height is whichever reaches further from the screen edge: the chat card at
   full height plus room for a toast (8 + 520 + 40 = 568), or the icon stack. With the usual four
-  icons the stack ends at 76 + 184 = 260, so the card decides and the window is 584 tall. The
-  stack only matters with 11 or more icons.
+  icons the stack ends at 100 + 184 = 284, so the card decides and the window is 584 tall. The
+  stack only matters with 10 or more icons.
 
 ## `src/shared/character.ts`: the character's poses
 
-The bubble is drawn as a small character standing on the taskbar, and this file names what it can
-be doing: its _pose_. As the comment at the top says, the main process decides the pose
+The bubble is drawn as a small character standing on the taskbar, and this file names what she
+can be doing: her _pose_. As the comment at the top says, the main process decides the pose
 (`BubbleController` in `src/main/bubble/BubbleController.ts`) and the bubble's page animates it
 (`Character.tsx` in `src/renderer/src/components`), so both import the names from here. The pose
 travels to the page on `assist:pose-changed` and in `AppState.pose`.
 
-### `Pose`, `Fidget`, `FIDGET_MS` and `isFidget`
+### `FIDGETS`, `Fidget`, `Pose`, `FIDGET_MS` and `isFidget`
 
-<!-- code: apps/desktop/src/shared/character.ts#Pose,Fidget,FIDGET_MS,isFidget -->
+<!-- code: apps/desktop/src/shared/character.ts#FIDGETS,Fidget,Pose,FIDGET_MS,isFidget -->
 
-[`src/shared/character.ts`, lines 1–21](../../apps/desktop/src/shared/character.ts#L1-L21)
+[`src/shared/character.ts`, lines 1–51](../../apps/desktop/src/shared/character.ts#L1-L51)
 
 ```ts
-// The character that stands in for the bubble: what it's doing (its pose), shared by the main
+// The character that stands in for the bubble: what she's doing (her pose), shared by the main
 // process (which decides) and the bubble's page (which animates it).
 
 /**
- * - `idle`: standing, bobbing gently.
- * - `fidget-1`, `fidget-2`: a short animation (a hop, a wave) now and then, once it's been left
- *   alone for a while.
- * - `walk-left`, `walk-right`: walking along the taskbar (the window moves with it).
- * - `dragged`: dangling while it's dragged, thrown about by Bounce, or falling after a drop.
+ * Things she does now and then, once she's been left alone for a while (each plays once):
+ * - `hop`: a little jump.
+ * - `wave`: waves at you.
+ * - `stretch`: stretches her arms up and side to side, yawning.
+ * - `sip`: a sip of tea.
+ * - `read`: reads her spellbook (and smiles at something in it).
+ * - `spell`: a little spell, sparkles circling her hand.
+ * - `levitate`: floats up over a glowing magic circle, hovers with her eyes shut, and settles.
+ * - `sit`: sits on the taskbar, her robe spread round her, swaying, then gets up.
+ * - `look`: glances one way and the other.
  */
-export type Pose = 'idle' | 'fidget-1' | 'fidget-2' | 'walk-left' | 'walk-right' | 'dragged'
+export const FIDGETS = [
+  'hop',
+  'wave',
+  'stretch',
+  'sip',
+  'read',
+  'spell',
+  'levitate',
+  'sit',
+  'look',
+] as const
 
-export type Fidget = 'fidget-1' | 'fidget-2'
+export type Fidget = (typeof FIDGETS)[number]
+
+/**
+ * - `idle`: standing, breathing, blinking now and then.
+ * - `walk-left`, `walk-right`: walking along the taskbar (the window moves with her).
+ * - `dragged`: dangling while she's dragged, thrown about by Bounce, or falling after a drop.
+ * - one of the FIDGETS.
+ */
+export type Pose = 'idle' | 'walk-left' | 'walk-right' | 'dragged' | Fidget
 
 /** How long each fidget plays (ms): the main process goes back to idle after it. */
 export const FIDGET_MS: Record<Fidget, number> = {
-  'fidget-1': 1200,
-  'fidget-2': 2000,
+  hop: 1200,
+  wave: 2000,
+  stretch: 2400,
+  sip: 3200,
+  read: 4000,
+  spell: 2400,
+  levitate: 3600,
+  sit: 6000,
+  look: 2400,
 }
 
-export const isFidget = (pose: Pose): pose is Fidget => pose === 'fidget-1' || pose === 'fidget-2'
+export const isFidget = (pose: Pose): pose is Fidget =>
+  (FIDGETS as readonly string[]).includes(pose)
 ```
 
 <!-- /code -->
 
-- `Pose`: the six poses, with what each looks like in the comment above it. The mode
-  (`Mode` in `types.ts`) says what the app is doing; the pose only says how the figure looks.
-  `idle` and the two fidgets happen while it stands; `walk-left` and `walk-right` while the main
-  process moves its window along the taskbar; `dragged` whenever it's being moved about (dragged,
-  bounced, or falling after a drop).
-- `Fidget`: just the two fidgets, a narrower type for the code that only deals with those
-  (`FIDGET_MS` here, and `Activity` in `src/main/bubble/wander.ts`).
-- `FIDGET_MS`: as the comment says, how long each fidget plays: 1.2 seconds for the hop
-  (`fidget-1`), 2 seconds for the wave (`fidget-2`). Both sides use it. The main process waits
-  this long before setting the pose back to `idle`, and `Character` passes the same number to
-  the CSS animation as its duration, so the two always agree. `Record<Fidget, number>` makes
-  TypeScript insist on a length for each fidget.
-- `isFidget`: whether a pose is one of the fidgets. Its return type, `pose is Fidget`, is a _type
-  guard_: where it returns true, TypeScript treats `pose` as a `Fidget`, so `FIDGET_MS[pose]`
-  type-checks without a cast.
+- `FIDGETS`: the eight things she does now and then once she's been left alone a while, each
+  described in the comment above it. `as const` makes it a fixed list of those exact strings,
+  rather than any list of strings, which is what lets the next line make a type from it. It's a
+  real list, not only a type, because code goes through it: `nextActivity()` in
+  `src/main/bubble/wander.ts` picks one at random, and `Character` draws each one's frames ahead of
+  time.
+- `Fidget`: `(typeof FIDGETS)[number]` means "the type of any item of `FIDGETS`", so it's
+  `'hop' | 'wave' | ... | 'look'`, and adding a fidget to the list adds it to the type too. It's
+  the narrower type for code that only deals with fidgets (`FIDGET_MS` here, and `Activity` and
+  `nextActivity()` in `wander.ts`).
+- `Pose`: the four poses that aren't fidgets, with what each looks like in the comment above it,
+  or any `Fidget`. The mode (`Mode` in `types.ts`) says what the app is doing; the pose only says
+  how the figure looks. `idle` and the fidgets happen while she stands; `walk-left` and
+  `walk-right` while the main process moves her window along the taskbar; `dragged` whenever she's
+  being moved about (dragged, bounced, or falling after a drop).
+- `FIDGET_MS`: as the comment says, how long each fidget plays, from 1.2 seconds for the hop to 6
+  for sitting down. Both sides use it. The main process waits this long before setting the pose
+  back to `idle`, and the frames of each fidget's animation (`character/sprite.ts` in the
+  renderer) add up to exactly the same time, which a test checks, so the pose changes back just as
+  the last frame ends. `Record<Fidget, number>` makes TypeScript insist on a length for each
+  fidget.
+- `isFidget`: whether a pose is one of the fidgets, that is, whether `FIDGETS` includes it.
+  `FIDGETS as readonly string[]` lets `includes()` take any pose (on the list's own type it would
+  only take a `Fidget`, which is the very thing being checked). The return type, `pose is Fidget`,
+  is a _type guard_: where it returns true, TypeScript treats `pose` as a `Fidget`, so
+  `FIDGET_MS[pose]` type-checks without a cast.
 
 ## `src/shared/actions.ts`: the action registry
 
@@ -887,7 +932,7 @@ together by the `getState` function that `start()` in `src/main/index.ts` passes
 through the page's own requests, so the panel takes their new values from the replies.
 
 - `corner: Corner`: as the comment says, the bottom corner the character lives near. The panel
-  lays itself out from it.
+  lays itself out from it, and the character faces away from it, toward the middle of the screen.
 - `pose: Pose`: as the comment says, what the character is doing, so the bubble's page can animate
   it from the moment it loads.
 - `version: string`: `app.getVersion()`, shown in the settings menu.

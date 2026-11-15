@@ -1,4 +1,4 @@
-import type { Fidget } from '@shared/character'
+import { FIDGETS, type Fidget } from '@shared/character'
 import type { Point } from '@shared/geometry'
 
 // What the character does on its own while nobody is using it, and how it falls when dropped.
@@ -31,20 +31,21 @@ export function activityDelay(random: () => number, first: boolean): number {
 }
 
 /**
- * What to do next, after being left alone for `idleMs`, standing `inset` from its corner with
- * room to wander up to `zone` (WANDER.zone, or less on a narrow screen). Until it's been alone a
- * while it only strolls about; after that it sometimes does one of its two fidgets instead.
+ * What to do next, after being left alone for `idleMs`, standing `inset` from her corner with
+ * room to wander up to `zone` (WANDER.zone, or less on a narrow screen). Until she's been alone a
+ * while she only strolls about; after that, more often than not she does one of her fidgets
+ * instead, any but the one she did last (`last`), so she doesn't repeat herself.
  */
 export function nextActivity(
   idleMs: number,
   inset: number,
   zone: number,
   random: () => number,
+  last?: Fidget,
 ): Activity {
-  if (idleMs >= WANDER.fidgetAfter) {
-    const roll = random()
-    if (roll < 0.3) return { kind: 'fidget', pose: 'fidget-1' }
-    if (roll < 0.6) return { kind: 'fidget', pose: 'fidget-2' }
+  if (idleMs >= WANDER.fidgetAfter && random() < 0.6) {
+    const choices = FIDGETS.filter((fidget) => fidget !== last)
+    return { kind: 'fidget', pose: choices[Math.floor(random() * choices.length)]! }
   }
   return { kind: 'walk', to: walkTarget(inset, zone, random()) }
 }

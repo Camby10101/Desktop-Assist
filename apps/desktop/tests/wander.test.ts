@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { FIDGETS } from '@shared/character'
 import {
   WANDER,
   activityDelay,
@@ -30,11 +31,22 @@ describe('nextActivity', () => {
     }
   })
 
-  it('after that, sometimes does one of its two fidgets instead', () => {
+  it('after that, more often than not does one of her fidgets instead', () => {
     const alone = WANDER.fidgetAfter
-    expect(nextActivity(alone, 0, 240, rolls(0.1))).toEqual({ kind: 'fidget', pose: 'fidget-1' })
-    expect(nextActivity(alone, 0, 240, rolls(0.4))).toEqual({ kind: 'fidget', pose: 'fidget-2' })
+    expect(nextActivity(alone, 0, 240, rolls(0.1, 0))).toEqual({ kind: 'fidget', pose: 'hop' })
+    expect(nextActivity(alone, 0, 240, rolls(0.1, 0.99))).toEqual({ kind: 'fidget', pose: 'look' })
     expect(nextActivity(alone, 0, 240, rolls(0.8, 0.5)).kind).toBe('walk')
+  })
+
+  it('never does the same fidget twice in a row', () => {
+    const alone = WANDER.fidgetAfter
+    for (const last of FIDGETS) {
+      for (let roll = 0; roll < 1; roll += 0.05) {
+        const next = nextActivity(alone, 0, 240, rolls(0.1, roll), last)
+        expect(next.kind === 'fidget' && next.pose).not.toBe(last)
+        expect(next.kind).toBe('fidget')
+      }
+    }
   })
 })
 
