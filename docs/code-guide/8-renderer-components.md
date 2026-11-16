@@ -3436,11 +3436,11 @@ export function draw(pose: Pose): string[] {
       const braidPath =
         view === 'side'
           ? [
-              [-10.5, 3],
-              [-12.3, 9],
-              [-13, 15],
-              [-13.3, 21],
-              [-13.3, 28],
+              [-9, 3],
+              [-10.6, 9],
+              [-11.4, 15],
+              [-11.7, 21],
+              [-11.7, 28],
             ]
           : [
               [8.6, 1],
@@ -3475,8 +3475,8 @@ export function draw(pose: Pose): string[] {
     const backHair =
       view === 'side'
         ? [
-            [-10.5, -5],
-            [-7.5, -9.5],
+            [-6, -4],
+            [-4.5, -9],
             [-1, -11.5],
             [3, -11.5],
             [6.5, -9],
@@ -3488,9 +3488,9 @@ export function draw(pose: Pose): string[] {
             [-6.5, 28],
             [-8.5, 24],
             [-10.5, 27],
-            [-11.3, 16],
-            [-11.5, 6],
-            [-11.5, 0],
+            [-11, 16],
+            [-10, 6],
+            [-8, 0],
           ]
         : [
             [-9.5, -2],
@@ -3727,10 +3727,14 @@ export function draw(pose: Pose): string[] {
             [-3, -6.5],
             [-1, -10.5],
             [3, -11.5],
-            [6.5, -9],
-            [8, -4.5],
-            // Its jagged lower edge, clear of her eye.
-            [7.8, -2],
+            // Its front curving out past her forehead (which is 8 out), so it stands off her face
+            // rather than lying on it, its tip hanging a pixel in front of her brow...
+            [7, -9.8],
+            [9, -6.5],
+            [9.5, -3.5],
+            [9.2, -1.5],
+            // ...then its jagged lower edge, clear of her eye.
+            [7.6, -3.2],
             [6.5, -4],
             [5.5, -1.5],
             [4, -3.5],
@@ -3763,18 +3767,14 @@ export function draw(pose: Pose): string[] {
       'hair',
     )
     if (view === 'side') {
-      // Full and round at the back, bulging out behind and above her ear up under her hat (so it
-      // reads as hair, not the shape of her head), its front edge behind her ear, so her cheek and
-      // jaw show.
+      // The back of her head, its front edge behind her ear, so her cheek and jaw show.
       const crown = [
         [1.5, -11.6],
-        [-3, -11.2],
-        [-7, -10],
-        [-10, -7.5],
-        [-11.3, -3.5],
-        [-11.2, 1],
-        [-10, 5.5],
-        [-7.5, 7.5],
+        [-3, -11],
+        [-6.5, -8],
+        [-7.8, -3],
+        [-7.5, 3],
+        [-6.5, 7],
         [-4.5, 7.5],
         [-3, 2],
         [-1.5, -2.5],
@@ -4081,8 +4081,7 @@ Math.PI) % 2`), which turn with `spin`. Six white runes (`w`) go round the outer
     one clump, with no slivers of hair showing between outlines.
 - The back hair: as the comment says, her long hair behind her, down past her shoulders, as one
   polygon in the head's frame. From the front, its lower edge is jagged, clumps of hair ending at
-  different lengths; side on, it flows back behind her, full at the back of her head (out to 11.5
-  pixels behind the middle of it) to meet the crown's outline. Apart from the braid side on, it's inked
+  different lengths; side on, it flows back behind her. Apart from the braid side on, it's inked
   first, so everything else is in front of it.
 
 **Arms and legs**
@@ -4183,12 +4182,13 @@ Math.PI) % 2`), which turn with `spin`. Six white runes (`w`) go round the outer
   expression's mouth (`r.slice(0, 2)`), 4.5 pixels in front of the middle of her head.
 - The hair in front, as one layer. The fringe is a polygon whose lower edge zigzags
   (`[7.5, -3.6], [6.5, -0.4], [4.5, -3.4], ...`), so it falls over her forehead in clumps. Side on,
-  its jagged lower edge sits higher, as its comment says, clear of her eye (`[7.8, -2], [6.5, -4],
-[5.5, -1.5], ...`), and a `crown` covers the back of her head too. As its comment says, it's full
-  and round at the back, bulging out behind and above her ear up under her hat (11.3 pixels behind
-  the middle of her head at its fullest), so it reads as a head of hair rather than the shape of her
-  skull, with her ear poking out of it; and its front edge runs behind her ear, so her cheek and jaw
-  (from `SIDE_FACE`) show. The side locks (`lock(x, length)`)
+  as its comment says, its front curves out past her forehead (8 pixels in front of the middle of
+  her head) to 9.5, so it stands off her face rather than lying on it, its tip hanging a pixel in
+  front of her brow (`[7, -9.8], [9, -6.5], [9.5, -3.5], [9.2, -1.5]`): anime profiles draw the
+  fringe in curved clumps that stand proud of the forehead. Then its jagged lower edge sits higher,
+  clear of her eye (`[7.6, -3.2], [6.5, -4], [5.5, -1.5], ...`), and a `crown` covers the back of
+  her head too. As its comment says, the crown's front edge runs
+  behind her ear, so her cheek and jaw (from `SIDE_FACE`) show. The side locks (`lock(x, length)`)
   are chains from her temples down past her chin, 13 pixels long, tapering from 1.9 to 0.6 so they
   end in points, two of them, 8.2 pixels either side of the middle of her head. They're only drawn
   from the front: as the comment says, side on there's no lock, since her hair behind her ear is
@@ -4203,8 +4203,8 @@ Math.PI) % 2`), which turn with `spin`. Six white runes (`w`) go round the outer
   side on, one pointing back. They're inked as skin.
 - The braid (`drawBraid()`, defined before the back hair, above): `braidPath` is its line, in the
   head's frame, down to 28 pixels below the middle of her head. Side on, it starts at the back of
-  her head (10.5 pixels behind the middle of it and 3 below) and hangs back and down her back, to
-  13.3 behind, just beyond the back hair's edge, so it peeks out behind it; from the front it starts behind her head (8.6 pixels out from the middle of it, past
+  her head (9 pixels behind the middle of it and 3 below) and hangs back and down her back, to
+  11.7 behind; from the front it starts behind her head (8.6 pixels out from the middle of it, past
   her cheek at 7.5) and hangs straight down behind her shoulder, about 11 out. `braidPoints` turns each point into a
   place on the grid, swinging further with the wind toward the tip (`(y / 28) * wind * 0.8`) and
   blown like the rest of her hair. `chain()` draws it in its own `braid` layer, 2.1 thick tapering to 1.6, so it's

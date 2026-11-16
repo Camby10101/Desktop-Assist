@@ -401,11 +401,11 @@ export function draw(pose: Pose): string[] {
       const braidPath =
         view === 'side'
           ? [
-              [-10.5, 3],
-              [-12.3, 9],
-              [-13, 15],
-              [-13.3, 21],
-              [-13.3, 28],
+              [-9, 3],
+              [-10.6, 9],
+              [-11.4, 15],
+              [-11.7, 21],
+              [-11.7, 28],
             ]
           : [
               [8.6, 1],
@@ -440,8 +440,8 @@ export function draw(pose: Pose): string[] {
     const backHair =
       view === 'side'
         ? [
-            [-10.5, -5],
-            [-7.5, -9.5],
+            [-6, -4],
+            [-4.5, -9],
             [-1, -11.5],
             [3, -11.5],
             [6.5, -9],
@@ -453,9 +453,9 @@ export function draw(pose: Pose): string[] {
             [-6.5, 28],
             [-8.5, 24],
             [-10.5, 27],
-            [-11.3, 16],
-            [-11.5, 6],
-            [-11.5, 0],
+            [-11, 16],
+            [-10, 6],
+            [-8, 0],
           ]
         : [
             [-9.5, -2],
@@ -692,10 +692,14 @@ export function draw(pose: Pose): string[] {
             [-3, -6.5],
             [-1, -10.5],
             [3, -11.5],
-            [6.5, -9],
-            [8, -4.5],
-            // Its jagged lower edge, clear of her eye.
-            [7.8, -2],
+            // Its front curving out past her forehead (which is 8 out), so it stands off her face
+            // rather than lying on it, its tip hanging a pixel in front of her brow...
+            [7, -9.8],
+            [9, -6.5],
+            [9.5, -3.5],
+            [9.2, -1.5],
+            // ...then its jagged lower edge, clear of her eye.
+            [7.6, -3.2],
             [6.5, -4],
             [5.5, -1.5],
             [4, -3.5],
@@ -728,18 +732,14 @@ export function draw(pose: Pose): string[] {
       'hair',
     )
     if (view === 'side') {
-      // Full and round at the back, bulging out behind and above her ear up under her hat (so it
-      // reads as hair, not the shape of her head), its front edge behind her ear, so her cheek and
-      // jaw show.
+      // The back of her head, its front edge behind her ear, so her cheek and jaw show.
       const crown = [
         [1.5, -11.6],
-        [-3, -11.2],
-        [-7, -10],
-        [-10, -7.5],
-        [-11.3, -3.5],
-        [-11.2, 1],
-        [-10, 5.5],
-        [-7.5, 7.5],
+        [-3, -11],
+        [-6.5, -8],
+        [-7.8, -3],
+        [-7.5, 3],
+        [-6.5, 7],
         [-4.5, 7.5],
         [-3, 2],
         [-1.5, -2.5],
