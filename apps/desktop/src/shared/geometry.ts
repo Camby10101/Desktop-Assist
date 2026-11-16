@@ -32,6 +32,11 @@ export const UI = {
    * across the whole window, its feet on the window's bottom edge.
    */
   bubblePad: 8,
+  /**
+   * And this much taller again, above that: room for her hat when she rises off the taskbar (a
+   * hop, levitating, being carried), which would otherwise go out of the top of her window.
+   */
+  bubbleHeadroom: 8,
   /** Space between the bubble and the chat card / action stack. */
   gap: 12,
   /** The chat card. It starts as just the text box and grows away from the bubble to this height. */
@@ -46,7 +51,10 @@ export const UI = {
   settingsMenuWidth: 248,
 } as const
 
-/** The bubble window is the bubble plus its padding on every side. */
+/**
+ * The bubble window is the bubble plus its padding on every side (and its headroom above, see
+ * bubbleMetrics).
+ */
 export const BUBBLE_BOX = UI.bubbleSize + UI.bubblePad * 2
 
 /**
@@ -70,13 +78,23 @@ export function snapSize(scale: number): number {
   )
 }
 
-/** The bubble at a size: its box, the padding round it, and its window (box plus padding). */
+/**
+ * The bubble at a size: its box, the padding round it, its window's width (box plus padding,
+ * `box`) and the room above that for her hat (`headroom`, so the window is `box` + `headroom`
+ * tall).
+ */
 export function bubbleMetrics(scale: number = DEFAULT_SIZE): {
   size: number
   pad: number
   box: number
+  headroom: number
 } {
-  return { size: UI.bubbleSize * scale, pad: UI.bubblePad * scale, box: BUBBLE_BOX * scale }
+  return {
+    size: UI.bubbleSize * scale,
+    pad: UI.bubblePad * scale,
+    box: BUBBLE_BOX * scale,
+    headroom: UI.bubbleHeadroom * scale,
+  }
 }
 
 /**

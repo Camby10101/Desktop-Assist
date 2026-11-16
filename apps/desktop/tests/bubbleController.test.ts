@@ -14,6 +14,12 @@ import {
 import { bubbleWindowBounds, panelWindowBounds, restPosition } from '../src/main/bubble/layout'
 import { WANDER } from '../src/main/bubble/wander'
 
+/** Her box's position, from her window's bounds: in by its padding, below its headroom. */
+const boxOf = (window: Rect): Point => ({
+  x: window.x + UI.bubblePad,
+  y: window.y + UI.bubblePad + UI.bubbleHeadroom,
+})
+
 class FakeSurface {
   visible = false
   focused = false
@@ -228,9 +234,7 @@ describe('on its own', () => {
     expect(controller.currentPose).toBe('idle')
     const where = bubble.bounds!
     expect(where.x).toBeLessThan(home().x)
-    expect(panel.bounds).toEqual(
-      panelWindowBounds({ x: where.x + 8, y: where.y + 8 }, 4, 'bottom-right'),
-    )
+    expect(panel.bounds).toEqual(panelWindowBounds(boxOf(where), 4, 'bottom-right'))
     vi.advanceTimersByTime(5000)
     expect(bubble.bounds).toEqual(where) // the walk doesn't carry on
   })
@@ -435,9 +439,7 @@ describe('dragging', () => {
     controller.clickBubble()
     const where = bubble.bounds!
     expect(controller.currentMode).toBe('expanded')
-    expect(panel.bounds).toEqual(
-      panelWindowBounds({ x: where.x + 8, y: where.y + 8 }, 4, 'bottom-left'),
-    )
+    expect(panel.bounds).toEqual(panelWindowBounds(boxOf(where), 4, 'bottom-left'))
     vi.advanceTimersByTime(5000)
     expect(bubble.bounds).toEqual(where)
   })

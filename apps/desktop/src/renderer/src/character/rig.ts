@@ -1,3 +1,4 @@
+import { UI } from '@shared/geometry'
 import { Canvas, Layer, add, limb, rotate, type Point, type Ramp } from './raster'
 import { DIAGONAL, DIAGONAL_EYES, DIAGONAL_MOUTH, SIDE_FACE } from './pictures'
 
@@ -12,9 +13,15 @@ import { DIAGONAL, DIAGONAL_EYES, DIAGONAL_MOUTH, SIDE_FACE } from './pictures'
 // A pose says which way she's seen from (front, diagonal or side, always facing right; frames
 // facing left are mirrored), where her hips are, how she leans, her arms' and legs' angles, her
 // face, and how the wind or a fall pushes her hair and robe. `draw()` turns a pose into a frame.
-// She's about 88 pixels tall with her hat on a 96-pixel grid, her feet on the bottom row.
+// She's about 88 pixels tall with her hat on a 96-pixel grid, her feet on the bottom row, and
+// there are HEADROOM rows more above the grid for her hat when she rises off the ground.
 
 export const GRID = 96
+/**
+ * Rows above the grid (y from -HEADROOM to -1) for her hat when she's off the ground: a hop,
+ * levitating, being carried. Her window has the same room above her (UI.bubbleHeadroom).
+ */
+export const HEADROOM = UI.bubbleHeadroom
 
 /** Each material's shades, as palette letters (see PALETTE in sprite.ts). */
 const RAMPS: Record<string, Ramp> = {
@@ -201,8 +208,23 @@ export function draw(pose: Pose): string[] {
   const lift = pose.lift ?? 0
   const [nearArm, farArm] = pose.arms ?? [DOWN, DOWN]
   const [nearLeg, farLeg] = pose.legs ?? [STAND, STAND]
-  const canvas = new Canvas(GRID)
+  const canvas = new Canvas(GRID, HEADROOM)
   const ink = (layer: Layer, outline = true) => canvas.ink(layer, RAMPS, LIGHT, outline)
+  /**
+   * Inks a layer of hair that lies over hair already drawn, its outline where it crosses that
+   * hair a soft line in the hair's shade rather than a hard one, so they read as one head of hair.
+   */
+  const inkOverHair = (layer: Layer) => {
+    const before = canvas.rows()
+    ink(layer)
+    for (let y = layer.minY - 1; y <= layer.maxY + 1; y++) {
+      for (let x = layer.minX - 1; x <= layer.maxX + 1; x++) {
+        const was = before[y + canvas.top]?.[x]
+        const outline = layer.get(x, y) === undefined && canvas.get(x, y) === 'O'
+        if (outline && was !== undefined && 'hlLD'.includes(was)) canvas.set(x, y, 'D')
+      }
+    }
+  }
   // A point in a body part's own frame (its origin, turned with it).
   const at = (origin: Point, angle: number) => (p: Point) => add(origin, rotate(p, angle))
   const onHead = at(head, headAngle)
@@ -243,7 +265,7 @@ export function draw(pose: Pose): string[] {
           : { x: 0.5, y: 2.5 },
     )
   const drawArm = (arm: Arm, side: 1 | -1) => {
-    const layer = new Layer(GRID)
+    const layer = new Layer(GRID, HEADROOM)
     // From the front, positive angles swing each arm outward; otherwise forward.
     const sign = frontView ? side : 1
     const shoulder = shoulderAt(side)
@@ -278,7 +300,7 @@ export function draw(pose: Pose): string[] {
   const hipAt = (side: 1 | -1): Point =>
     onHips(view === 'side' ? { x: 0, y: 0 } : { x: (frontView ? 3.2 : -2.6) * side, y: 0 })
   const drawLeg = (leg: Leg, side: 1 | -1) => {
-    const layer = new Layer(GRID)
+    const layer = new Layer(GRID, HEADROOM)
     const sign = frontView ? side : 1
     const hip = hipAt(side)
     let knee: Point
@@ -363,7 +385,7 @@ export function draw(pose: Pose): string[] {
     // nowhere near the taskbar.
     if (pose.shadow !== false) {
       const height = Math.max(0, -(pose.y ?? 0))
-      const shadow = new Layer(GRID)
+      const shadow = new Layer(GRID, HEADROOM)
       shadow.ellipse({ x: hips.x, y: 95.5 }, Math.max(6, 15 - height / 2), 1.6, 'shadow')
       ink(shadow, false)
     }
@@ -392,51 +414,12 @@ export function draw(pose: Pose): string[] {
       }
     }
 
-    // Her braid, tied with a ribbon: from the front, hanging down behind her left shoulder, drawn
-    // before her body so it peeks out beside her arm and never covers her face or front; side on,
-    // hanging down her back behind the rest of her hair, drawn before it so it only peeks out
-    // behind, and her hair stays one clump with no slivers between outlines.
-    const drawBraid = () => {
-      const braid = new Layer(GRID)
-      const braidPath =
-        view === 'side'
-          ? [
-              [-9, 3],
-              [-10.6, 9],
-              [-11.4, 15],
-              [-11.7, 21],
-              [-11.7, 28],
-            ]
-          : [
-              [8.6, 1],
-              [10, 6],
-              [10.8, 11],
-              [11, 17],
-              [10.8, 23],
-              [10.5, 28],
-            ]
-      const braidPoints = braidPath.map(([x, y]) =>
-        onHead(blown({ x: x! + (y! / 28) * wind * 0.8, y: y! })),
-      )
-      braid.chain(braidPoints, 2.1, 1.6, 'hair')
-      ink(braid)
-      // The plaits: a darker stroke across it every few pixels.
-      for (let i = 0; i < braidPoints.length - 1; i++) {
-        const a = braidPoints[i]!
-        const b = braidPoints[i + 1]!
-        for (let t = 0.25; t < 1; t += 0.5) {
-          const p = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }
-          set({ x: p.x - 1, y: p.y }, 'D', 'hl')
-          set({ x: p.x, y: p.y + 1 }, 'D', 'hl')
-        }
-      }
-      const tie = braidPoints[4]!
-      set(tie, 'v')
-      set({ x: tie.x + 1, y: tie.y }, 'v')
-      set({ x: tie.x - 1, y: tie.y }, 'a')
-    }
-    // Her long hair behind her, down past her shoulders.
-    const back = new Layer(GRID)
+    // Her long hair behind her. From the front it hangs down past her shoulders, no wider than
+    // them below her locks, so none of it peeks out beside her sleeves (her braid hangs down her
+    // back, out of sight). Side on it's one clump from the back of her head that narrows down her
+    // back into her braid: its back edge straight from under her hat to the ribbon, a short tail
+    // below that.
+    const back = new Layer(GRID, HEADROOM)
     const backHair =
       view === 'side'
         ? [
@@ -448,14 +431,20 @@ export function draw(pose: Pose): string[] {
             [7.5, -5],
             [6, -2],
             [-1, 2],
-            [-2, 14],
-            [-4, 24],
-            [-6.5, 28],
-            [-8.5, 24],
-            [-10.5, 27],
-            [-11, 16],
-            [-10, 6],
-            [-8, 0],
+            // Down her back, behind her neck and robe, narrowing to the ribbon...
+            [-3, 9],
+            [-5.5, 17],
+            [-7.4, 24],
+            [-9.2, 26.6],
+            // ...the tail below it, flaring a little...
+            [-9.4, 28],
+            [-9, 30.2],
+            [-10.8, 29.4],
+            [-12.2, 30.4],
+            [-12.5, 28],
+            // ...and back up, straight from the ribbon to the back of her head.
+            [-12.4, 26.6],
+            [-8, -3],
           ]
         : [
             [-9.5, -2],
@@ -465,25 +454,36 @@ export function draw(pose: Pose): string[] {
             [5, -10.8],
             [8.5, -7.5],
             [9.5, -2],
-            [10, 8],
-            [10, 18],
-            [9, 27],
+            [9, 8],
+            [9, 18],
+            [8.5, 27],
             [6, 24],
             [3, 26],
             [-3, 26],
             [-6, 24],
-            [-9, 27],
-            [-10, 18],
-            [-10, 8],
+            [-8.5, 27],
+            [-9, 18],
+            [-9, 8],
           ]
     back.polygon(
       shape(backHair, (p) => onHead(blown(p))),
       'hair',
     )
-    if (view === 'side') drawBraid()
     ink(back)
-
-    if (frontView) drawBraid()
+    if (view === 'side') {
+      // The braid's plaits, a darker stroke every few pixels down it, and its ribbon.
+      const braid = (y: number) => onHead(blown({ x: -7.6 - (y - 10) * 0.16, y }))
+      for (let y = 10.5; y <= 24; y += 3) {
+        const p = braid(y)
+        set({ x: p.x - 1, y: p.y }, 'D', 'hl')
+        set({ x: p.x, y: p.y }, 'D', 'hl')
+        set({ x: p.x + 1, y: p.y + 1 }, 'D', 'hl')
+      }
+      const tie = braid(26.6)
+      set(tie, 'v')
+      set({ x: tie.x + 1, y: tie.y }, 'v')
+      set({ x: tie.x - 1, y: tie.y }, 'a')
+    }
 
     if (!frontView) drawArm(farArm, -1)
     // The far leg first, so the near one is in front of it.
@@ -491,7 +491,7 @@ export function draw(pose: Pose): string[] {
     drawLeg(nearLeg, 1)
 
     // The robe's skirt: long and flared, swaying, silver trim along its hem.
-    const robe = new Layer(GRID)
+    const robe = new Layer(GRID, HEADROOM)
     const swing = wind * 0.4
     const hem = sitting ? 11 : 22
     const flare = sitting ? 15 : (pose.spread ?? 0)
@@ -621,7 +621,7 @@ export function draw(pose: Pose): string[] {
     motif(onBody({ x: off, y: 18.5 }), ['YYY', 'YkY'], 'Aqav')
 
     // Her head: neck, face and chin.
-    const face = new Layer(GRID)
+    const face = new Layer(GRID, HEADROOM)
     face.capsule(
       onBody({ x: view === 'side' ? 0.5 : 0, y: -3.5 }),
       onBody({ x: 0, y: 0 }),
@@ -685,7 +685,7 @@ export function draw(pose: Pose): string[] {
     }
 
     // Her fringe and the locks beside her face.
-    const hair = new Layer(GRID)
+    const hair = new Layer(GRID, HEADROOM)
     const fringe =
       view === 'side'
         ? [
@@ -732,15 +732,16 @@ export function draw(pose: Pose): string[] {
       'hair',
     )
     if (view === 'side') {
-      // The back of her head, its front edge behind her ear, so her cheek and jaw show.
+      // The back of her head: its back edge in line with her hair behind it, so they read as one,
+      // and its front edge behind her ear, so her cheek shows.
       const crown = [
         [1.5, -11.6],
         [-3, -11],
         [-6.5, -8],
-        [-7.8, -3],
-        [-7.5, 3],
-        [-6.5, 7],
-        [-4.5, 7.5],
+        [-8.1, -3],
+        [-8.9, 2.5],
+        [-9.6, 7],
+        [-5.5, 7.4],
         [-3, 2],
         [-1.5, -2.5],
         [1, -5],
@@ -767,7 +768,33 @@ export function draw(pose: Pose): string[] {
       lock(8.2 + shiftHair, 13)
       lock(-8.2 + shiftHair * 0.5, 13)
     }
-    ink(hair)
+    if (view === 'side') {
+      inkOverHair(hair)
+      // Under her ear, a tuft of hair over the back of her jaw: jagged along the bottom, curling
+      // forward to a point. A shape of its own, so it's lit and shaded as a lock of its own.
+      const tuft = new Layer(GRID, HEADROOM)
+      tuft.polygon(
+        shape(
+          [
+            [-2.8, -0.5],
+            [-1.3, 2.6],
+            [-0.3, 5],
+            [0.7, 7.3],
+            [-1.6, 6.5],
+            [-2.9, 8.2],
+            [-4.2, 6.8],
+            [-5.8, 7.4],
+            [-5.6, 4],
+            [-4.4, 1],
+          ],
+          (p) => onHead(blown(p)),
+        ),
+        'hair',
+      )
+      inkOverHair(tuft)
+    } else {
+      ink(hair)
+    }
     // The shine on her hair: a band across the crown.
     for (let dx = -6; dx <= 6; dx++) {
       const curve = Math.abs(dx) * 0.18
@@ -775,7 +802,7 @@ export function draw(pose: Pose): string[] {
     }
 
     // Her long elf ears, through her hair: both from the front, one side on.
-    const ears = new Layer(GRID)
+    const ears = new Layer(GRID, HEADROOM)
     const ear = (side: 1 | -1) =>
       ears.polygon(
         shape(
@@ -809,7 +836,7 @@ export function draw(pose: Pose): string[] {
     ink(ears)
 
     // Her hat: a wide brim and a tall crooked crown with a silver band.
-    const hat = new Layer(GRID)
+    const hat = new Layer(GRID, HEADROOM)
     const tipLean = view === 'side' ? -1 : 1
     const hatCentre = view === 'side' ? 0.5 : 0
     hat.ellipse(onHead({ x: hatCentre, y: -9 }), view === 'side' ? 12.5 : 14, 2.7, 'hat')
@@ -859,7 +886,7 @@ export function draw(pose: Pose): string[] {
   }
   let orbAt: Point | null = null
   if (pose.prop) {
-    const prop = new Layer(GRID)
+    const prop = new Layer(GRID, HEADROOM)
     if (pose.prop === 'orb') {
       // A crystal ball in both hands: from the front, between them in front of her; otherwise on
       // her near hand.
@@ -997,11 +1024,13 @@ const ROBE = 'aAvfFYkG'
  */
 function castShadows(canvas: Canvas): void {
   const rows = canvas.rows()
-  for (let y = 1; y < rows.length; y++) {
-    for (let x = 0; x < rows[y]!.length; x++) {
-      const here = rows[y]![x]!
-      const above = rows[y - 1]![x]!
-      const twoAbove = y > 1 ? rows[y - 2]![x]! : '.'
+  for (let row = 1; row < rows.length; row++) {
+    // Rows from the top of the frame, its headroom first; y is the canvas's own.
+    const y = row - canvas.top
+    for (let x = 0; x < rows[row]!.length; x++) {
+      const here = rows[row]![x]!
+      const above = rows[row - 1]![x]!
+      const twoAbove = row > 1 ? rows[row - 2]![x]! : '.'
       let shade: string | null = null
       if ('hlL'.includes(here) && HAT.includes(above)) shade = 'D'
       else if ('sz'.includes(here) && HAIR.includes(above)) shade = 'S'

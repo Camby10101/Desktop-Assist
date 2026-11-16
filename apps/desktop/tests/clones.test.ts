@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CLONES, FIDGET_MS } from '@shared/character'
-import { BUBBLE_BOX, type Rect } from '@shared/geometry'
+import { BUBBLE_BOX, UI, type Rect } from '@shared/geometry'
 import { Clones } from '../src/main/bubble/clones'
 import {
   CLONE_WALK,
@@ -41,9 +41,9 @@ describe('Clones (the main process)', () => {
     workArea: WORK_AREA,
     bounds: {
       x,
-      y: 1040 - BUBBLE_BOX * scale,
+      y: 1040 - (BUBBLE_BOX + UI.bubbleHeadroom) * scale,
       width: BUBBLE_BOX * scale,
-      height: BUBBLE_BOX * scale,
+      height: (BUBBLE_BOX + UI.bubbleHeadroom) * scale,
     },
     scale,
   })
@@ -53,9 +53,9 @@ describe('Clones (the main process)', () => {
     expect(opened).toHaveLength(1)
     expect(opened[0]!.bounds).toEqual({
       x: 0,
-      y: 1040 - BUBBLE_BOX * 2,
+      y: 1040 - (BUBBLE_BOX + UI.bubbleHeadroom) * 2,
       width: 1920,
-      height: BUBBLE_BOX * 2,
+      height: (BUBBLE_BOX + UI.bubbleHeadroom) * 2,
     })
     expect(opened[0]!.query).toEqual({
       from: '1808',

@@ -628,7 +628,7 @@ the left edge of a clone's box.
   is when it sets off again, in milliseconds on the same clock as the `now` passed to the functions
   below (`ClonesView` uses the page's `performance.now()`).
 - `Room`: as its comment says, the room they have: the window's `width`, a clone's `box` (her
-  window's size at her size, from `bubbleMetrics()` in `src/shared/geometry.ts`) and her size
+  window's width at her size, from `bubbleMetrics()` in `src/shared/geometry.ts`) and her size
   (`scale`, one of `CHARACTER_SIZES`). A clone's `x` can go from 0 to `width - box`, so it stays
   wholly in the window.
 - `CLONE_WALK`: the numbers, as their comments say:
@@ -1324,7 +1324,7 @@ const DRAG_THRESHOLD = 5
 
 <!-- code: apps/desktop/src/renderer/src/views/BubbleView.tsx#BubbleView -->
 
-[`src/renderer/src/views/BubbleView.tsx`, lines 18–94](../../apps/desktop/src/renderer/src/views/BubbleView.tsx#L18-L94)
+[`src/renderer/src/views/BubbleView.tsx`, lines 18–95](../../apps/desktop/src/renderer/src/views/BubbleView.tsx#L18-L95)
 
 ```tsx
 /**
@@ -1339,8 +1339,9 @@ export function BubbleView() {
   useAccentColor(state?.branding.accentColor)
   const mode = state?.mode ?? 'collapsed'
   const appName = state?.branding.appName ?? 'Desktop Assist'
-  // Her window, as big as she is; she faces the middle of the screen, away from her corner.
-  const { box } = bubbleMetrics(state?.size.scale ?? DEFAULT_SIZE)
+  // Her window, as big as she is (with room above her hat); she faces the middle of the screen,
+  // away from her corner.
+  const { box, headroom } = bubbleMetrics(state?.size.scale ?? DEFAULT_SIZE)
   const corner = state?.corner ?? 'bottom-right'
 
   const press = useRef<{ x: number; y: number; dragging: boolean } | null>(null)
@@ -1392,7 +1393,7 @@ export function BubbleView() {
         else window.assist.bubbleClick(pressedAt.current ?? Date.now())
         pressedAt.current = undefined
       }}
-      style={{ width: box, height: box }}
+      style={{ width: box, height: box + headroom }}
       className="block cursor-grab outline-offset-[-2px] active:cursor-grabbing"
     >
       <Character
@@ -1419,11 +1420,13 @@ the function's argument (see `Panel` below).
   branding. Until the state arrives, it falls back to `'collapsed'`, `'idle'`, `'bottom-right'`,
   her usual size and `'Desktop Assist'`.
 - `useAccentColor(state?.branding.accentColor)`: `?.` because `state` is `null` at first.
-- `const { box } = bubbleMetrics(state?.size.scale ?? DEFAULT_SIZE)`: as the comment says, her
-  window, as big as she is. `bubbleMetrics()` (src/shared/geometry.ts) gives the bubble's
-  measurements at a size; `box` is its window's width and height: 96 DIPs at her usual size
-  (`DEFAULT_SIZE`, 1), twice that at size 2, and so on. The main process sizes the window with the
-  same function, so the page and the window agree.
+- `const { box, headroom } = bubbleMetrics(state?.size.scale ?? DEFAULT_SIZE)`: as the comment
+  says, her window, as big as she is, with room above her hat. `bubbleMetrics()`
+  (src/shared/geometry.ts) gives the bubble's measurements at a size; `box` is its window's width,
+  96 DIPs at her usual size (`DEFAULT_SIZE`, 1), twice that at size 2, and so on, and `headroom`
+  the room above for her hat when she rises off the taskbar (8 DIPs at her usual size), so the
+  window is `box + headroom` tall. The main process sizes the window with the same function, so
+  the page and the window agree.
 - `const corner = state?.corner ?? 'bottom-right'`: the bottom corner she lives near, used below to
   face her away from it.
 - `const press = useRef<{ x: number; y: number; dragging: boolean } | null>(null)`: `useRef` gives
@@ -1439,7 +1442,7 @@ the function's argument (see `Panel` below).
 - `pressedAt.current = Date.now()`: the press time, on the wall clock the main process uses too.
 - `event.currentTarget.setPointerCapture(event.pointerId)`: sends all further events from this
   pointer to the button, even when the pointer is outside it, until it's released. The window is
-  small (96 DIPs square at her usual size) and gets moved during a drag, so without this the
+  small (96 by 104 DIPs at her usual size) and gets moved during a drag, so without this the
   release could be lost.
 - `if (!current || current.dragging) return`: only needed until the drag starts. From then on the
   main process moves the window with the mouse itself (`BubbleController.startDrag`), so the page
@@ -1468,9 +1471,9 @@ the function's argument (see `Panel` below).
   so here it has no effect.
 - `ACTION_LABEL[mode]`: the `aria-label` reads, for example, "Close Desktop Assist" while the panel
   is open.
-- `style={{ width: box, height: box }}`: the whole window, `box` square (see above). The character
-  is drawn across the whole window, so the button covers all of it and a press anywhere on the
-  window reaches it.
+- `style={{ width: box, height: box + headroom }}`: the whole window, `box` wide and
+  `box + headroom` tall (see above). The character is drawn across the whole window, headroom and
+  all, so the button covers all of it and a press anywhere on the window reaches it.
 - `block`: lays the button out as a box of its own rather than inline like a word of text, so
   nothing adds space around it in the small window.
 - `cursor-grab`, `active:cursor-grabbing`: an open hand over the character, and a closed one while
@@ -1484,7 +1487,8 @@ the function's argument (see `Panel` below).
     middle of the screen, away from her corner: right from the bottom-left corner, left from the
     bottom-right one (until the state arrives, left, from the default corner). Walking, she faces
     the way she walks instead (`framesOf()` in `character/sprite.ts` sees to that).
-  - `box={box}`: how big to draw her, the size of the window.
+  - `box={box}`: how big to draw her: the window's width. `Character` works out her height from
+    it, headroom and all, so she fills the window.
   - `expanded` turns her shadow the accent colour while the panel is open, as the logo's accent
     ring used to.
   - All the drawing and animation is in `Character` and the code it draws her with
@@ -1620,8 +1624,9 @@ Reading the query string:
 - `const scale = snapSize(Number(params.get('scale')) || DEFAULT_SIZE)`: her size, as the main
   process sent it (her usual size if it's missing), snapped to one of `CHARACTER_SIZES`
   (src/shared/geometry.ts), so the page draws only sizes she really comes in.
-- `const { box } = bubbleMetrics(scale)`: a clone's box: the size of her window at that size (96
-  DIPs at her usual size), the same as `BubbleView` uses.
+- `const { box } = bubbleMetrics(scale)`: a clone's box: the width of her window at that size (96
+  DIPs at her usual size), the same as `BubbleView` uses. `Character` adds the headroom above it,
+  and the strip is as tall as her window, so a clone's hat has the same room as hers.
 - `useAccentColor(params.get('accent') ?? undefined)`: the tenant's accent colour, for the clones'
   robes and hats, from the query string rather than the app state. `params.get()` gives `null`
   when there's none, and `?? undefined` turns that into what `useAccentColor` expects.
@@ -1766,7 +1771,7 @@ Two small helpers for the animation, both working in fractions from 0 to 1.
 
 <!-- code: apps/desktop/src/renderer/src/views/VisionView.tsx#VisionView -->
 
-[`src/renderer/src/views/VisionView.tsx`, lines 20–108](../../apps/desktop/src/renderer/src/views/VisionView.tsx#L20-L108)
+[`src/renderer/src/views/VisionView.tsx`, lines 20–109](../../apps/desktop/src/renderer/src/views/VisionView.tsx#L20-L109)
 
 ```tsx
 /**
@@ -1801,7 +1806,8 @@ export function VisionView() {
     ? 1
     : smooth(through(now, VISION.lightIn)) * (1 - smooth(through(now, VISION.lightOut)))
   // The logo: about half her width, hovering just above her hat (4 sprite pixels below the top of
-  // her window), bobbing gently while it's there.
+  // her box, `box` up from her feet; her window's headroom is above that), bobbing gently while
+  // it's there.
   const size = Math.round(44 * scale)
   const hover = height - box + 4 * scale - 10 * scale - size
   const down = still ? 1 : smooth(through(now, VISION.descend))
@@ -1891,15 +1897,17 @@ The effect:
 
 Working out the frame:
 
-- `const { box } = bubbleMetrics(scale)`: her window's size, 96 DIPs at her usual size. The vision's
-  window ends where hers does, at her feet, so her window's top is `box` above its bottom.
+- `const { box } = bubbleMetrics(scale)`: her window's width, 96 DIPs at her usual size. The
+  vision's window ends where hers does, at her feet, so the top of her box and its padding is `box`
+  above its bottom. Her window is taller than that by its headroom, but the vision doesn't need it.
 - `light`: how bright the light is: fading in over `VISION.lightIn` and out over
   `VISION.lightOut`, eased both ways.
 - `size = Math.round(44 * scale)`: the logo's width and height, as the comment says about half her
   width.
-- `hover`: where the logo's top is while it hovers. `height - box` is the top of her window, and,
-  as the comment says, her hat reaches 4 sprite pixels below that (4 DIPs at her usual size). The
-  logo's bottom edge hovers 10 sprite pixels above her hat, so its top is `size` higher still.
+- `hover`: where the logo's top is while it hovers. `height - box` is the top of her box, `box` up
+  from her feet (her window's headroom is above that, as the comment says), and her hat reaches 4
+  sprite pixels below it (4 DIPs at her usual size). The logo's bottom edge hovers 10 sprite pixels
+  above her hat, so its top is `size` higher still.
 - `down`, `up`: how far it has come down (over `VISION.descend`) and gone back up (over
   `VISION.ascend`), eased.
 - `bob`: a gentle bob, up and down by 3 DIPs (times her size), once every 0.9 seconds.

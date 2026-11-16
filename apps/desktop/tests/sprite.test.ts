@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { FIDGET_MS, FIDGETS, type Pose as PoseName } from '@shared/character'
 import { Canvas, Layer, limb, rotate } from '../src/renderer/src/character/raster'
-import { draw, GRID, type Pose } from '../src/renderer/src/character/rig'
+import { draw, GRID, HEADROOM, type Pose } from '../src/renderer/src/character/rig'
 import {
   LOOPS,
   PALETTE,
+  SPRITE_HEADROOM,
   SPRITE_SIZE,
   animationLength,
   framePaths,
@@ -16,11 +17,15 @@ const POSES: PoseName[] = ['idle', 'walk-left', 'walk-right', 'dragged', ...FIDG
 const DOWN_ARM = { shoulder: 0.08, elbow: 0 }
 /** Her shoes and their outline: what's on the ground when she stands on it. */
 const FEET = /[bBy]/
-const lowRows = (rows: string[]) => rows.slice(SPRITE_SIZE - 4).join('')
+const lowRows = (rows: string[]) => rows.slice(-4).join('')
+/** Her grid without the headroom above it, so a row's number is the rig's y. */
+const drawn = (pose: Pose) => draw(pose).slice(HEADROOM)
 
 /** A frame back from its paths: which pixels each colour covers. */
 function decode(paths: { className: string; d: string }[]): string[] {
-  const grid = Array.from({ length: SPRITE_SIZE }, () => Array<string>(SPRITE_SIZE).fill('.'))
+  const grid = Array.from({ length: SPRITE_SIZE + SPRITE_HEADROOM }, () =>
+    Array<string>(SPRITE_SIZE).fill('.'),
+  )
   const letterOf = Object.fromEntries(Object.entries(PALETTE).map(([k, v]) => [v, k]))
   for (const { className, d } of paths) {
     for (const [, x, y, n] of d.matchAll(/M(\d+) (\d+)h(\d+)v1h-\d+z/g)) {
@@ -32,13 +37,13 @@ function decode(paths: { className: string; d: string }[]): string[] {
 
 // Drawing every pose's frames takes a few seconds, more when the other test files run alongside.
 describe('the animations', { timeout: 30_000 }, () => {
-  it('have frames for every pose, each a full grid of known colours', () => {
+  it('have frames for every pose, each a full grid (and the headroom above it) of known colours', () => {
     expect(SPRITE_SIZE).toBe(96)
     for (const pose of POSES) {
       const frames = framesOf(pose, 'right')
       expect(frames.length).toBeGreaterThan(1)
       for (const { rows, ms } of frames) {
-        expect(rows).toHaveLength(SPRITE_SIZE)
+        expect(rows).toHaveLength(SPRITE_SIZE + SPRITE_HEADROOM)
         for (const row of rows) {
           expect(row).toHaveLength(SPRITE_SIZE)
           expect([...row].every((pixel) => pixel === '.' || pixel in PALETTE)).toBe(true)
@@ -122,6 +127,16 @@ describe('the animations', { timeout: 30_000 }, () => {
     expect(framesOf('doze', 'left')[0]!.rows).toEqual(mirror(framesOf('doze', 'right')[0]!.rows))
   })
 
+  it('have room above her hat when she rises, so it never goes out of the top', () => {
+    for (const pose of ['hop', 'levitate'] as const) {
+      const frames = framesOf(pose, 'right')
+      for (const { rows } of frames) expect(rows[0]).toBe('.'.repeat(SPRITE_SIZE))
+      // At the top of the jump, or floating, her hat is up in the headroom.
+      const above = (rows: string[]) => /[^.]/.test(rows.slice(0, SPRITE_HEADROOM).join(''))
+      expect(frames.some(({ rows }) => above(rows))).toBe(true)
+    }
+  })
+
   it('are drawn once, then kept', () => {
     expect(framesOf('wave', 'right')).toBe(framesOf('wave', 'right'))
   })
@@ -131,7 +146,7 @@ describe('the rig', () => {
   it('draws her from the front, diagonally and side on, each different', () => {
     const views = (['front', 'diagonal', 'side'] as const).map((view) => draw({ view }).join('\n'))
     expect(new Set(views).size).toBe(3)
-    for (const view of views) expect(view.split('\n')).toHaveLength(GRID)
+    for (const view of views) expect(view.split('\n')).toHaveLength(GRID + HEADROOM)
   })
 
   it('draws a teacup, a spellbook and sparkles only when asked', () => {
@@ -161,7 +176,7 @@ describe('the rig', () => {
 
   it('patterns her clothes the same way from every side', () => {
     for (const view of ['front', 'diagonal', 'side'] as const) {
-      const rows = draw({ view })
+      const rows = drawn({ view })
       const top = rows.findIndex((row) => /[^.x]/.test(row))
       const hat = rows.slice(top, top + 18).join('')
       const robe = rows.slice(56, 82).join('')
@@ -178,20 +193,39 @@ describe('the rig', () => {
     }
   })
 
-  it('hangs her braid behind her from the front, clear of her face and robe', () => {
-    const rows = draw({ view: 'front' })
+  it('keeps her hair behind her from the front, the same either side and none past her sleeves', () => {
+    const rows = drawn({ view: 'front' })
     const hair = /[ODhlL]/
     // Her face below her fringe, and the middle of her robe: no hair over them.
     for (const row of rows.slice(27, 60)) expect(row.slice(45, 52)).not.toMatch(hair)
-    // Her left arm (the right of the picture), where the braid used to hang: no hair over it.
-    for (const row of rows.slice(38, 59)) expect(row.slice(52, 57)).not.toMatch(hair)
-    // The braid still shows, beside that arm.
-    expect(rows.slice(45, 56).some((row) => hair.test(row.slice(57, 62)))).toBe(true)
+    // Her fringe and locks: as far out on her right as on her left.
+    for (const row of rows.slice(22, 39)) {
+      const left = row.search(hair)
+      const right = row.length - 1 - [...row].reverse().join('').search(hair)
+      expect(left + right).toBe(95)
+    }
+    // Below her locks nothing of her hair beside her sleeves (her braid hangs down her back).
+    for (const row of rows.slice(39, 70)) {
+      expect(row.slice(30, 40)).not.toMatch(hair)
+      expect(row.slice(56, 66)).not.toMatch(hair)
+    }
+  })
+
+  it('hangs her hair down her back side on as one clump, narrowing into her braid', () => {
+    const rows = drawn({ view: 'side' })
+    // Behind her shoulders: one outline, at its back edge, and no more than 7 pixels to her robe.
+    for (const row of rows.slice(37, 48)) {
+      const clump = row.match(/[ODhlL]+/)![0]
+      expect(clump.match(/O/g)).toHaveLength(1)
+      expect(clump.length).toBeLessThanOrEqual(7)
+    }
+    // Its ribbon, near the end, behind her robe.
+    expect(rows.slice(50, 57).some((row) => /v/.test(row.slice(30, 41)))).toBe(true)
   })
 
   it('shades her: a broad shadow on the side away from the light, and the shadows things cast', () => {
     for (const view of ['front', 'diagonal', 'side'] as const) {
-      const rows = draw({ view })
+      const rows = drawn({ view })
       // Her skirt, a row above its border: a broad band of shade on the right, light on the left.
       const skirt = rows[70]!.replace(/[^aAv]/g, '')
       expect(skirt.match(/A/g)!.length).toBeGreaterThanOrEqual(4)
@@ -208,10 +242,12 @@ describe('the rig', () => {
     }
   })
 
-  it('shows her face side on, cheek and jaw back to her ear, with no hair over them', () => {
-    const rows = draw({ view: 'side' })
-    for (const row of rows.slice(29, 34)) expect(row.slice(46, 52)).not.toMatch(/[ODhlL]/)
+  it('shows her face side on, her cheek clear of her hair, and a tuft under her ear', () => {
+    const rows = drawn({ view: 'side' })
+    for (const row of rows.slice(29, 35)) expect(row.slice(49, 54)).not.toMatch(/[ODhlL]/)
     for (const letter of ['e', 'I', 'c', 'm']) expect(rows.slice(26, 36).join('')).toContain(letter)
+    // The tuft: hair under her ear, over the back of her jaw.
+    for (const row of rows.slice(30, 34)) expect(row.slice(44, 48)).toMatch(/[hlD]/)
   })
 
   it('looks up, from every side, with her irises right under her lids', () => {
@@ -240,9 +276,9 @@ describe('the rig', () => {
       { shoulder: 0.25, elbow: -1.55 },
       { shoulder: 0.25, elbow: -1.55 },
     ]
-    const withOrb = draw({ view: 'front', prop: 'orb', arms: holding })
+    const withOrb = drawn({ view: 'front', prop: 'orb', arms: holding })
     expect(withOrb.slice(44, 56).join('')).toMatch(/G{5}/)
-    expect(draw({ view: 'front', arms: holding }).slice(44, 56).join('')).not.toMatch(/G{5}/)
+    expect(drawn({ view: 'front', arms: holding }).slice(44, 56).join('')).not.toMatch(/G{5}/)
     // The butterfly on her raised hand, part way through its visit, and not before it comes.
     const raised: Pose['arms'] = [{ shoulder: 1.55, elbow: 0.95 }, DOWN_ARM]
     const resting = draw({ view: 'front', arms: raised, butterfly: 0.5 }).join('')
@@ -252,9 +288,9 @@ describe('the rig', () => {
     )
     // Z's above her head while she dozes.
     const dozing = draw({ view: 'front', zzz: 0.5 })
-    expect(dozing.slice(0, 20).join('')).not.toBe(plain.slice(0, 20).join(''))
+    expect(dozing.slice(0, HEADROOM + 20).join('')).not.toBe(plain.slice(0, HEADROOM + 20).join(''))
     // A flared robe is wider at the hem.
-    const width = (rows: string[]) => rows[80]!.replace(/\./g, '').length
+    const width = (rows: string[]) => rows[HEADROOM + 80]!.replace(/\./g, '').length
     expect(width(draw({ view: 'front', spread: 6 }))).toBeGreaterThan(width(plain) + 8)
   })
 

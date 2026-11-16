@@ -1,5 +1,5 @@
 import { FIDGET_MS, type Pose as Name } from '@shared/character'
-import { draw, GRID, LEG_LENGTH, type Arm, type Leg, type Pose } from './rig'
+import { draw, GRID, HEADROOM, LEG_LENGTH, type Arm, type Leg, type Pose } from './rig'
 
 // The character's animations: for each pose, a list of frames drawn by the rig (rig.ts) from key
 // poses and the in-betweens eased between them. She's an original design: an elf mage with long
@@ -8,10 +8,12 @@ import { draw, GRID, LEG_LENGTH, type Arm, type Leg, type Pose } from './rig'
 // kept.
 
 /**
- * The grid's size in pixels (square): 96, filling the bubble's window, one pixel a DIP at her
- * usual size (more at a bigger size; see CHARACTER_SIZES).
+ * The grid's size in pixels: 96 wide, and 96 tall below the headroom, filling the bubble's window,
+ * one pixel a DIP at her usual size (more at a bigger size; see CHARACTER_SIZES).
  */
 export const SPRITE_SIZE = GRID
+/** Rows above the grid, for her hat when she rises: a frame is this much taller than it's wide. */
+export const SPRITE_HEADROOM = HEADROOM
 
 /** Each letter's colour, as a CSS class (character.css): robe and hat follow the accent colour. */
 export const PALETTE: Record<string, string> = {
@@ -60,7 +62,10 @@ export const PALETTE: Record<string, string> = {
   x: 'px-shadow',
 }
 
-/** A frame as rows of letters (SPRITE_SIZE × SPRITE_SIZE), and how long it shows. */
+/**
+ * A frame as rows of letters (SPRITE_SIZE wide, SPRITE_SIZE + SPRITE_HEADROOM tall, the headroom
+ * rows first), and how long it shows.
+ */
 export interface Frame {
   rows: string[]
   ms: number

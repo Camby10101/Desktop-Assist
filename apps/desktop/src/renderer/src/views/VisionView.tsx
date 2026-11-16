@@ -49,7 +49,8 @@ export function VisionView() {
     ? 1
     : smooth(through(now, VISION.lightIn)) * (1 - smooth(through(now, VISION.lightOut)))
   // The logo: about half her width, hovering just above her hat (4 sprite pixels below the top of
-  // her window), bobbing gently while it's there.
+  // her box, `box` up from her feet; her window's headroom is above that), bobbing gently while
+  // it's there.
   const size = Math.round(44 * scale)
   const hover = height - box + 4 * scale - 10 * scale - size
   const down = still ? 1 : smooth(through(now, VISION.descend))

@@ -27,8 +27,9 @@ export function BubbleView() {
   useAccentColor(state?.branding.accentColor)
   const mode = state?.mode ?? 'collapsed'
   const appName = state?.branding.appName ?? 'Desktop Assist'
-  // Her window, as big as she is; she faces the middle of the screen, away from her corner.
-  const { box } = bubbleMetrics(state?.size.scale ?? DEFAULT_SIZE)
+  // Her window, as big as she is (with room above her hat); she faces the middle of the screen,
+  // away from her corner.
+  const { box, headroom } = bubbleMetrics(state?.size.scale ?? DEFAULT_SIZE)
   const corner = state?.corner ?? 'bottom-right'
 
   const press = useRef<{ x: number; y: number; dragging: boolean } | null>(null)
@@ -80,7 +81,7 @@ export function BubbleView() {
         else window.assist.bubbleClick(pressedAt.current ?? Date.now())
         pressedAt.current = undefined
       }}
-      style={{ width: box, height: box }}
+      style={{ width: box, height: box + headroom }}
       className="block cursor-grab outline-offset-[-2px] active:cursor-grabbing"
     >
       <Character

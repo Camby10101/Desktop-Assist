@@ -17,7 +17,7 @@ import { existsSync } from 'node:fs'
 import { readFile, rm } from 'node:fs/promises'
 import { hostname, release, version as osVersion } from 'node:os'
 import { join } from 'node:path'
-import { BUBBLE_BOX, panelWindowSize, type Rect } from '@shared/geometry'
+import { bubbleMetrics, panelWindowSize, type Rect } from '@shared/geometry'
 import { IPC } from '@shared/ipc'
 import type { AppsState, AtlassianState, AuthStatus } from '@shared/types'
 import tenantConfig from '@tenant/tenant.json'
@@ -127,7 +127,8 @@ async function start(): Promise<void> {
 
   // The windows are created after the last `await`: from here to registerIpc() below nothing
   // waits, so the pages can't ask for the app state before there's anything to answer them.
-  const bubbleWindow = createOverlayWindow('bubble', { width: BUBBLE_BOX, height: BUBBLE_BOX })
+  const { box, headroom } = bubbleMetrics()
+  const bubbleWindow = createOverlayWindow('bubble', { width: box, height: box + headroom })
   const panelWindow = createOverlayWindow('panel', panelWindowSize(actionCount))
   const windows = [bubbleWindow, panelWindow]
   const stopKeepingOnTop = windows.map(keepOnTop)

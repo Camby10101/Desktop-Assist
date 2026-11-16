@@ -23,8 +23,8 @@ The character comes in several sizes, which the user picks from the size menu (t
 icon). A size is a _scale_: a multiple of her usual size, such as 2 for twice as big. The fixed
 numbers in `UI` are her usual size (a scale of 1), and the helpers further down
 (`bubbleMetrics()`, `panelLayout()` and the rest) take a scale and work out the sizes and offsets
-for it. The bubble's box and its padding grow with her; the action icons, the chat card and the
-gaps between things stay the same size.
+for it. The bubble's box, its padding and the headroom above it grow with her; the action icons,
+the chat card and the gaps between things stay the same size.
 
 All values are **DIPs** (device-independent pixels): pixels before Windows display scaling. On a
 display scaled to 150%, one DIP is 1.5 real pixels. Electron's window and screen functions and
@@ -109,7 +109,7 @@ itself.
 
 <!-- code: apps/desktop/src/shared/geometry.ts#UI -->
 
-[`src/shared/geometry.ts`, lines 25–47](../../apps/desktop/src/shared/geometry.ts#L25-L47)
+[`src/shared/geometry.ts`, lines 25–52](../../apps/desktop/src/shared/geometry.ts#L25-L52)
 
 ```ts
 export const UI = {
@@ -122,6 +122,11 @@ export const UI = {
    * across the whole window, its feet on the window's bottom edge.
    */
   bubblePad: 8,
+  /**
+   * And this much taller again, above that: room for her hat when she rises off the taskbar (a
+   * hop, levitating, being carried), which would otherwise go out of the top of her window.
+   */
+  bubbleHeadroom: 8,
   /** Space between the bubble and the chat card / action stack. */
   gap: 12,
   /** The chat card. It starts as just the text box and grows away from the bubble to this height. */
@@ -140,18 +145,25 @@ export const UI = {
 <!-- /code -->
 
 Every fixed measurement of the UI in one object, in DIPs. The character's measurements
-(`bubbleSize` and `bubblePad`) are for her usual size; `bubbleMetrics()` below scales them.
+(`bubbleSize`, `bubblePad` and `bubbleHeadroom`) are for her usual size; `bubbleMetrics()` below
+scales them.
 
 - `as const`: makes the object read-only and keeps each value's exact type (`80` rather than
   `number`). Nothing can change these numbers at runtime by accident.
 - `edgeMargin: 16`: as the comment says, how far the character stands from the side of the work
   area when it's right in its corner (`restPosition()` in `src/main/bubble/layout.ts`).
 - `bubbleSize: 80`: the bubble's box, which positions are measured from. It started as the size of
-  the round logo (56); at 80, the box and its padding make a window 96 DIPs square, the size of the
+  the round logo (56); at 80, the box and its padding make a window 96 DIPs wide, the width of the
   character's pixel grid, so at her usual size each of her pixels is one DIP.
 - `bubblePad: 8`: the bubble's window is this much bigger than the box on every side. As the
   comment says, the character is drawn across the whole window, and `restPosition()` uses
   `bubblePad` to put the window's bottom edge, where the character's feet are, on the taskbar.
+- `bubbleHeadroom: 8`: as the comment says, the window is this much taller again, above the
+  padding over her box: room for her hat when she rises off the taskbar (at the top of a hop,
+  levitating, or carried by the mouse). Without it, the tip of her hat went out of the top of the
+  window and was cut off. Her feet stay on the window's bottom edge, so the extra room is all at
+  the top: at her usual size the window is 96 wide and 104 tall. The rig draws 8 rows more above
+  her grid to match (`HEADROOM` in `character/rig.ts`).
 - `panelWidth: 400` and `panelMaxHeight: 520`: the chat card's width and its tallest height.
   `ChatBox.tsx` sets them as the card's CSS `width` and `maxHeight`; the card starts as just the
   text box and grows as the conversation fills it.
@@ -166,28 +178,33 @@ Every fixed measurement of the UI in one object, in DIPs. The character's measur
 
 <!-- code: apps/desktop/src/shared/geometry.ts#BUBBLE_BOX -->
 
-[`src/shared/geometry.ts`, lines 49–50](../../apps/desktop/src/shared/geometry.ts#L49-L50)
+[`src/shared/geometry.ts`, lines 54–58](../../apps/desktop/src/shared/geometry.ts#L54-L58)
 
 ```ts
-/** The bubble window is the bubble plus its padding on every side. */
+/**
+ * The bubble window is the bubble plus its padding on every side (and its headroom above, see
+ * bubbleMetrics).
+ */
 export const BUBBLE_BOX = UI.bubbleSize + UI.bubblePad * 2
 ```
 
 <!-- /code -->
 
-The bubble window's width and height at her usual size: 80 + 8 + 8 = 96. `start()` in
-`src/main/index.ts` creates the bubble window at this size, and `bubbleWindowBounds()` in
-`src/main/bubble/layout.ts` places it and sizes it for her scale (`bubbleMetrics()` below
-multiplies this number by the scale). So the window moves as she walks, and changes size only
-when she does. At her usual size, `BubbleView`'s button and the `Character` drawing are 96 DIPs
-square too, filling the window: the character's 96 × 96 grid of pixels (`SPRITE_SIZE` in
-`character/sprite.ts`), one pixel a DIP.
+The bubble window's width at her usual size: 80 + 8 + 8 = 96. As the comment says, the window is
+also taller than that by her headroom, so it's 96 + 8 = 104 tall; `bubbleMetrics()` below gives
+both numbers for her scale (it multiplies this one by the scale as `box`, and adds `headroom`).
+`start()` in `src/main/index.ts` creates the bubble window from them, and `bubbleWindowBounds()` in
+`src/main/bubble/layout.ts` places it and sizes it for her scale. So the window moves as she
+walks, and changes size only when she does. At her usual size, `BubbleView`'s button and the
+`Character` drawing are 96 DIPs wide and 104 tall too, filling the window: the character's grid of
+pixels, 96 wide (`SPRITE_SIZE` in `character/sprite.ts`) and 104 tall with the 8 rows of headroom
+above it (`SPRITE_HEADROOM`), one pixel a DIP.
 
 ### `CHARACTER_SIZES` and `DEFAULT_SIZE`
 
 <!-- code: apps/desktop/src/shared/geometry.ts#CHARACTER_SIZES,DEFAULT_SIZE -->
 
-[`src/shared/geometry.ts`, lines 52–57](../../apps/desktop/src/shared/geometry.ts#L52-L57)
+[`src/shared/geometry.ts`, lines 60–65](../../apps/desktop/src/shared/geometry.ts#L60-L65)
 
 ```ts
 /**
@@ -217,7 +234,7 @@ The sizes she comes in, and the one she starts at.
 
 <!-- code: apps/desktop/src/shared/geometry.ts#CharacterSize -->
 
-[`src/shared/geometry.ts`, lines 59–63](../../apps/desktop/src/shared/geometry.ts#L59-L63)
+[`src/shared/geometry.ts`, lines 67–71](../../apps/desktop/src/shared/geometry.ts#L67-L71)
 
 ```ts
 /** How big she is, and the biggest she can be on her screen (see largestSize). */
@@ -239,7 +256,7 @@ menu needs both numbers: `scale` to show, and `max` to know when to grey out Big
 
 <!-- code: apps/desktop/src/shared/geometry.ts#snapSize -->
 
-[`src/shared/geometry.ts`, lines 65–71](../../apps/desktop/src/shared/geometry.ts#L65-L71)
+[`src/shared/geometry.ts`, lines 73–79](../../apps/desktop/src/shared/geometry.ts#L73-L79)
 
 ```ts
 /** The nearest of CHARACTER_SIZES to `scale` (a saved size from an older version, say). */
@@ -268,35 +285,49 @@ an older version with a different list.
 
 <!-- code: apps/desktop/src/shared/geometry.ts#bubbleMetrics -->
 
-[`src/shared/geometry.ts`, lines 73–80](../../apps/desktop/src/shared/geometry.ts#L73-L80)
+[`src/shared/geometry.ts`, lines 81–98](../../apps/desktop/src/shared/geometry.ts#L81-L98)
 
 ```ts
-/** The bubble at a size: its box, the padding round it, and its window (box plus padding). */
+/**
+ * The bubble at a size: its box, the padding round it, its window's width (box plus padding,
+ * `box`) and the room above that for her hat (`headroom`, so the window is `box` + `headroom`
+ * tall).
+ */
 export function bubbleMetrics(scale: number = DEFAULT_SIZE): {
   size: number
   pad: number
   box: number
+  headroom: number
 } {
-  return { size: UI.bubbleSize * scale, pad: UI.bubblePad * scale, box: BUBBLE_BOX * scale }
+  return {
+    size: UI.bubbleSize * scale,
+    pad: UI.bubblePad * scale,
+    box: BUBBLE_BOX * scale,
+    headroom: UI.bubbleHeadroom * scale,
+  }
 }
 ```
 
 <!-- /code -->
 
-As the comment says, the bubble's three measurements at a size: `size`, the box (80 × scale);
-`pad`, the padding round it (8 × scale); and `box`, the whole window (96 × scale). Everything that
-places or draws her at her size starts here: the layout functions in `src/main/bubble/layout.ts`,
+As the comment says, the bubble's four measurements at a size: `size`, the box (80 × scale);
+`pad`, the padding round it (8 × scale); `box`, the whole window's width (96 × scale); and
+`headroom`, the room above for her hat (8 × scale), so the window is `box + headroom` tall (104 ×
+scale). Everything that places or draws her at her size starts here: the layout functions in
+`src/main/bubble/layout.ts`, `start()` in `src/main/index.ts` (the window's first size),
 `BubbleController`, `BubbleView` (the size of its button and drawing) and `ClonesView` (the size
-of each clone). Note the names: `box` here is the window, while elsewhere in the guide "the box"
-is the 80-DIP square that positions are measured from (here, `size`).
+of each clone). Note the names: `box` here is the window's width, while elsewhere in the guide
+"the box" is the 80-DIP square that positions are measured from (here, `size`).
 
 - `scale: number = DEFAULT_SIZE`: a _default parameter_. Called with no argument, `scale` is 1.
+- `headroom: UI.bubbleHeadroom * scale`: like the others, it grows with her, so at twice her size
+  there are 16 DIPs above her padding, and her hat has room in the same proportion at every size.
 
 ### `PanelLayout` and `panelLayout()`
 
 <!-- code: apps/desktop/src/shared/geometry.ts#PanelLayout,panelLayout -->
 
-[`src/shared/geometry.ts`, lines 82–105](../../apps/desktop/src/shared/geometry.ts#L82-L105)
+[`src/shared/geometry.ts`, lines 100–123](../../apps/desktop/src/shared/geometry.ts#L100-L123)
 
 ```ts
 /**
@@ -380,7 +411,7 @@ her box) and 16 + 160 + 12 = 188 up, and the chat card starts 188 across.
 
 <!-- code: apps/desktop/src/shared/geometry.ts#actionStackHeight,actionOffset -->
 
-[`src/shared/geometry.ts`, lines 107–114](../../apps/desktop/src/shared/geometry.ts#L107-L114)
+[`src/shared/geometry.ts`, lines 125–132](../../apps/desktop/src/shared/geometry.ts#L125-L132)
 
 ```ts
 export function actionStackHeight(actionCount: number): number {
@@ -409,7 +440,7 @@ Two small sums over the icon stack.
 
 <!-- code: apps/desktop/src/shared/geometry.ts#panelWindowSize -->
 
-[`src/shared/geometry.ts`, lines 116–124](../../apps/desktop/src/shared/geometry.ts#L116-L124)
+[`src/shared/geometry.ts`, lines 134–142](../../apps/desktop/src/shared/geometry.ts#L134-L142)
 
 ```ts
 export function panelWindowSize(actionCount: number, scale: number = DEFAULT_SIZE): Size {
@@ -448,7 +479,7 @@ The numbers below are at her usual size:
 
 <!-- code: apps/desktop/src/shared/geometry.ts#largestSize -->
 
-[`src/shared/geometry.ts`, lines 126–141](../../apps/desktop/src/shared/geometry.ts#L126-L141)
+[`src/shared/geometry.ts`, lines 144–159](../../apps/desktop/src/shared/geometry.ts#L144-L159)
 
 ```ts
 /**

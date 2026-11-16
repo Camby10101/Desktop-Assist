@@ -184,12 +184,10 @@ const settings = new SettingsService(join(userData, 'preferences.json'), screens
 
 <!-- code: apps/desktop/src/main/index.ts#start.bubbleWindow,panelWindow,windows,stopKeepingOnTop,windowsReady,broadcast -->
 
-[`src/main/index.ts`, lines 128–138](../../apps/desktop/src/main/index.ts#L128-L138)
+[`src/main/index.ts`, lines 131–139](../../apps/desktop/src/main/index.ts#L131-L139)
 
 ```ts
-// The windows are created after the last `await`: from here to registerIpc() below nothing
-// waits, so the pages can't ask for the app state before there's anything to answer them.
-const bubbleWindow = createOverlayWindow('bubble', { width: BUBBLE_BOX, height: BUBBLE_BOX })
+const bubbleWindow = createOverlayWindow('bubble', { width: box, height: box + headroom })
 
 const panelWindow = createOverlayWindow('panel', panelWindowSize(actionCount))
 
@@ -207,11 +205,11 @@ const broadcast = (channel: string, payload?: unknown) => {
 
 <!-- /code -->
 
-The windows are created only now, after the last `await`, and the comment above them says why. A
-page starts loading as soon as its window exists, and its first request is for the app state
-(`getState`). From here down to `registerIpc()`, `start()` never waits, so JavaScript runs it all
-in one go and can't handle anything else in between, a page's request included. By the time a
-page's request is handled, its handler has been registered.
+The windows are created only now, after the last `await`, and a comment just above them in the
+source says why. A page starts loading as soon as its window exists, and its first request is for
+the app state (`getState`). From here down to `registerIpc()`, `start()` never waits, so
+JavaScript runs it all in one go and can't handle anything else in between, a page's request
+included. By the time a page's request is handled, its handler has been registered.
 
 - `createOverlayWindow('bubble', ...)`: creates a hidden, frameless, transparent, always-on-top
   window and starts loading the page into it (`bubble/windows.ts`, see
@@ -219,6 +217,11 @@ page's request is handled, its handler has been registered.
   window's size depends on how many action icons the tenant has (`panelWindowSize()`). Both are
   created at the character's usual size: before it shows them, the controller below sizes and
   places them for the size she really is (which may have been saved bigger or smaller).
+- `{ width: box, height: box + headroom }`: `box` and `headroom` come from the line just before,
+  `const { box, headroom } = bubbleMetrics()` (no scale, so her usual size; see `bubbleMetrics()`
+  in [Shared code and the preload bridge](1-shared-and-preload.md)). The window is 96 DIPs wide
+  and 104 tall: her box and its padding, and 8 DIPs above them for her hat when she rises off the
+  taskbar.
 - `const windows = [bubbleWindow, panelWindow]`: these two are the app's lasting windows. The
   clones' and the vision's windows (see [Overlays that come and go](#overlays-that-come-and-go)
   below) come and go, and aren't among them.
@@ -238,7 +241,7 @@ page's request is handled, its handler has been registered.
 
 <!-- code: apps/desktop/src/main/index.ts#start.openOverlay,vision -->
 
-[`src/main/index.ts`, lines 140–155](../../apps/desktop/src/main/index.ts#L140-L155)
+[`src/main/index.ts`, lines 141–156](../../apps/desktop/src/main/index.ts#L141-L156)
 
 ```ts
 /**
@@ -303,7 +306,7 @@ last a few seconds (the clones thirty), and everything their pages need comes in
 
 <!-- code: apps/desktop/src/main/index.ts#start.bubble -->
 
-[`src/main/index.ts`, lines 157–176](../../apps/desktop/src/main/index.ts#L157-L176)
+[`src/main/index.ts`, lines 158–177](../../apps/desktop/src/main/index.ts#L158-L177)
 
 ```ts
 const bubble = new BubbleController({
@@ -375,7 +378,7 @@ here.
 
 <!-- code: apps/desktop/src/main/index.ts#start.clones -->
 
-[`src/main/index.ts`, lines 180–181](../../apps/desktop/src/main/index.ts#L180-L181)
+[`src/main/index.ts`, lines 181–182](../../apps/desktop/src/main/index.ts#L181-L182)
 
 ```ts
 // Her clones: a window along the taskbar.
@@ -399,7 +402,7 @@ of their own, a strip along the taskbar.
 
 <!-- code: apps/desktop/src/main/index.ts#start.screenshots,notify,copyScreenshots -->
 
-[`src/main/index.ts`, lines 183–204](../../apps/desktop/src/main/index.ts#L183-L204)
+[`src/main/index.ts`, lines 184–205](../../apps/desktop/src/main/index.ts#L184-L205)
 
 ```ts
 const screenshots = new ScreenshotService(screenshotsDir, () =>
@@ -457,7 +460,7 @@ const copyScreenshots = async (paths: string[]) => {
 
 <!-- code: apps/desktop/src/main/index.ts#start.builtIn,claudeDesktop -->
 
-[`src/main/index.ts`, lines 207–236](../../apps/desktop/src/main/index.ts#L207-L236)
+[`src/main/index.ts`, lines 208–237](../../apps/desktop/src/main/index.ts#L208-L237)
 
 ```ts
 const builtIn =
@@ -536,7 +539,7 @@ exists.
 
 <!-- code: apps/desktop/src/main/index.ts#start.netFetch,updater -->
 
-[`src/main/index.ts`, lines 237–267](../../apps/desktop/src/main/index.ts#L237-L267)
+[`src/main/index.ts`, lines 238–268](../../apps/desktop/src/main/index.ts#L238-L268)
 
 ```ts
 // Electron's fetch, so a proxy set in Windows is used.
@@ -615,7 +618,7 @@ const updater = updates
 
 <!-- code: apps/desktop/src/main/index.ts#start.appsStatus,portalApps -->
 
-[`src/main/index.ts`, lines 269–291](../../apps/desktop/src/main/index.ts#L269-L291)
+[`src/main/index.ts`, lines 270–292](../../apps/desktop/src/main/index.ts#L270-L292)
 
 ```ts
 let appsStatus: AppsState['status'] = 'loading'
@@ -680,7 +683,7 @@ icon (see [Your apps](10-apps.md)). It's only set up when the tenant has a `port
 
 <!-- code: apps/desktop/src/main/index.ts#start.requests,memoryPath,atlassianStatus,atlassian,desk -->
 
-[`src/main/index.ts`, lines 296–358](../../apps/desktop/src/main/index.ts#L296-L358)
+[`src/main/index.ts`, lines 297–359](../../apps/desktop/src/main/index.ts#L297-L359)
 
 ```ts
 const requests = serviceDesk?.requests
@@ -804,7 +807,7 @@ Two statements follow:
 
 <!-- code: apps/desktop/src/main/index.ts#start.onDisplayChange -->
 
-[`src/main/index.ts`, line 418](../../apps/desktop/src/main/index.ts#L418)
+[`src/main/index.ts`, line 419](../../apps/desktop/src/main/index.ts#L419)
 
 ```ts
 const onDisplayChange = () => bubble.displayChanged()
@@ -858,7 +861,7 @@ Everything else in this part of `start()` is plain statements:
 
 <!-- code: apps/desktop/src/main/index.ts#start.shuttingDown -->
 
-[`src/main/index.ts`, lines 423–424](../../apps/desktop/src/main/index.ts#L423-L424)
+[`src/main/index.ts`, lines 424–425](../../apps/desktop/src/main/index.ts#L424-L425)
 
 ```ts
 // Save the text box before quitting. before-quit fires again after the second app.quit().
@@ -897,7 +900,7 @@ page has drawn anything.
 
 <!-- code: apps/desktop/src/main/index.ts#start.stopWatchingFront -->
 
-[`src/main/index.ts`, lines 445–455](../../apps/desktop/src/main/index.ts#L445-L455)
+[`src/main/index.ts`, lines 446–456](../../apps/desktop/src/main/index.ts#L446-L456)
 
 ```ts
 // For its first ten minutes, make sure the bubble isn't stuck behind other apps' windows.
@@ -949,7 +952,7 @@ was part of `start()`. It returns a [`BuiltInChat`](#builtinchat): the `AuthMana
 
 <!-- code: apps/desktop/src/main/index.ts#startBuiltInChat.devBaseUrl,lastIdToken,backend,chat -->
 
-[`src/main/index.ts`, lines 475–499](../../apps/desktop/src/main/index.ts#L475-L499)
+[`src/main/index.ts`, lines 476–500](../../apps/desktop/src/main/index.ts#L476-L500)
 
 ```ts
 // Dev runs may point at a local test server; an installed app always talks to Anthropic.
@@ -1022,7 +1025,7 @@ const chat = new ChatSession({
 
 <!-- code: apps/desktop/src/main/index.ts#startBuiltInChat.missing,localIssuer,authState,auth -->
 
-[`src/main/index.ts`, lines 501–525](../../apps/desktop/src/main/index.ts#L501-L525)
+[`src/main/index.ts`, lines 502–526](../../apps/desktop/src/main/index.ts#L502-L526)
 
 ```ts
 const missing = missingSettings(signIn, claudeAccess)
@@ -1099,7 +1102,7 @@ Two statements end the function:
 
 <!-- code: apps/desktop/src/main/index.ts#safeStorageEncryptor -->
 
-[`src/main/index.ts`, lines 531–536](../../apps/desktop/src/main/index.ts#L531-L536)
+[`src/main/index.ts`, lines 532–537](../../apps/desktop/src/main/index.ts#L532-L537)
 
 ```ts
 /** Windows DPAPI through Electron: only this Windows user can decrypt what it encrypts. */
@@ -1127,7 +1130,7 @@ The encryption `SecretStore` uses for the saved sign-in. `SecretStore` only know
 
 <!-- code: apps/desktop/src/main/index.ts#withDevOverrides -->
 
-[`src/main/index.ts`, lines 538–561](../../apps/desktop/src/main/index.ts#L538-L561)
+[`src/main/index.ts`, lines 539–562](../../apps/desktop/src/main/index.ts#L539-L562)
 
 ```ts
 /**
@@ -1183,7 +1186,7 @@ example to try the built-in chat against a test identity provider, without editi
 
 <!-- code: apps/desktop/src/main/index.ts#isLoopback -->
 
-[`src/main/index.ts`, lines 563–565](../../apps/desktop/src/main/index.ts#L563-L565)
+[`src/main/index.ts`, lines 564–566](../../apps/desktop/src/main/index.ts#L564-L566)
 
 ```ts
 function isLoopback(url: URL): boolean {
@@ -1201,7 +1204,7 @@ in `hostname`. Used only to decide whether plain `http` is allowed for a dev ide
 
 <!-- code: apps/desktop/src/main/index.ts#toArea,electronDisplays -->
 
-[`src/main/index.ts`, lines 567–582](../../apps/desktop/src/main/index.ts#L567-L582)
+[`src/main/index.ts`, lines 568–583](../../apps/desktop/src/main/index.ts#L568-L583)
 
 ```ts
 /** Electron's `screen`, in the shape the bubble controller uses. All coordinates are DIPs. */
@@ -1248,7 +1251,7 @@ method is called, which happens after `start()` has begun.
 
 <!-- code: apps/desktop/src/main/index.ts#fail -->
 
-[`src/main/index.ts`, lines 584–588](../../apps/desktop/src/main/index.ts#L584-L588)
+[`src/main/index.ts`, lines 585–589](../../apps/desktop/src/main/index.ts#L585-L589)
 
 ```ts
 function fail(error: unknown): void {

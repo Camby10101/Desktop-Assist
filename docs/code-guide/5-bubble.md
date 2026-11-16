@@ -1665,16 +1665,18 @@ are its only users in the app; `tests/layout.test.ts` checks each function on it
 Key ideas:
 
 - A position always means the top-left corner of the bubble's _box_ (80×80 DIPs at her usual
-  size, `UI.bubbleSize`), not of its window. The bubble window is bigger, `BUBBLE_BOX` = 96×96 at
-  her usual size, with 8 DIPs (`UI.bubblePad`) more on every side. The box dates from the round
-  logo, which filled it (at 56 DIPs); the character is drawn across the whole window, with its feet
-  on the window's bottom edge, but positions and the panel's layout are still measured from the
-  box. Only `bubbleWindowBounds()`, `restPosition()` (which puts the window's bottom edge on the
-  taskbar) and `cloneStrip()` deal with the difference.
+  size, `UI.bubbleSize`), not of its window. The bubble window is bigger, 96 wide and 104 tall at
+  her usual size: 8 DIPs (`UI.bubblePad`) more on every side (`BUBBLE_BOX` = 96), and 8 more
+  (`UI.bubbleHeadroom`) above that, room for her hat when she rises off the taskbar. The box dates
+  from the round logo, which filled it (at 56 DIPs); the character is drawn across the whole
+  window, with its feet on the window's bottom edge, but positions and the panel's layout are still
+  measured from the box. Only `bubbleWindowBounds()`, `restPosition()` (which puts the window's
+  bottom edge on the taskbar), `panelWindowBounds()` (from a top corner) and `cloneStrip()` deal
+  with the difference.
 - Every function takes her size, `scale` (a multiple of her usual size, one of `CHARACTER_SIZES`),
   last, and leaves it at 1 (`DEFAULT_SIZE`) when it's left out. As the comment at the top of the
-  file says, the box and its padding grow with her (`bubbleMetrics()` in `geometry.ts` gives both
-  at a size), but the margin to the screen's side doesn't.
+  file says, the box and its padding grow with her, and so does the headroom (`bubbleMetrics()` in
+  `geometry.ts` gives all three at a size), but the margin to the screen's side doesn't.
 - Along the taskbar, where the character stands is an _inset_: how far it is from its corner,
   growing toward the middle of the screen (see the top of this page). `restPosition()` turns an
   inset into a position, and `insetAt()` turns a position back into an inset.
@@ -1835,41 +1837,50 @@ matter, because it always lives at the bottom.
 
 <!-- code: apps/desktop/src/main/bubble/layout.ts#bubbleWindowBounds -->
 
-[`src/main/bubble/layout.ts`, lines 62–70](../../apps/desktop/src/main/bubble/layout.ts#L62-L70)
+[`src/main/bubble/layout.ts`, lines 62–71](../../apps/desktop/src/main/bubble/layout.ts#L62-L71)
 
 ```ts
+/** Her window: her box and its padding, and her headroom above them (see bubbleMetrics). */
 export function bubbleWindowBounds(bubble: Point, scale: number = DEFAULT_SIZE): Rect {
-  const { pad, box } = bubbleMetrics(scale)
+  const { pad, box, headroom } = bubbleMetrics(scale)
   return {
     x: Math.round(bubble.x) - pad,
-    y: Math.round(bubble.y) - pad,
+    y: Math.round(bubble.y) - pad - headroom,
     width: box,
-    height: box,
+    height: box + headroom,
   }
 }
 ```
 
 <!-- /code -->
 
-The bubble window's rectangle: the padding up and to the left of the box, and the box plus its
-padding square. At her usual size that's 8 DIPs and 96×96; at twice it, 16 DIPs and 192×192.
+As the comment says, the bubble window's rectangle: her box and its padding, and her headroom
+above them. Its left edge is the padding to the left of the box, and its top edge the padding and
+the headroom above it. It's as wide as the box plus its padding, and that much taller again by the
+headroom, so it grows upward and her feet stay on its bottom edge. At her usual size that's 8 DIPs
+to the left, 16 up, and 96×104; at twice it, 16 to the left, 32 up, and 192×208.
 
-- `const { pad, box } = bubbleMetrics(scale)`: the padding, and the window's width (`box`: her box
-  plus the padding on both sides), at her size (`geometry.ts`). Every size in `CHARACTER_SIZES`
-  makes both whole numbers.
+- `const { pad, box, headroom } = bubbleMetrics(scale)`: the padding, the window's width (`box`:
+  her box plus the padding on both sides) and the room above for her hat (`headroom`), at her size
+  (`geometry.ts`). Every size in `CHARACTER_SIZES` makes all three whole numbers.
 - `Math.round(bubble.x)`: the fall and the walk produce fractional positions, but a window can
   only be placed on whole pixels.
+- `y: Math.round(bubble.y) - pad - headroom`: the window starts the padding and the headroom above
+  her box, so the extra height is all at the top.
+- `height: box + headroom`: the padded box, plus the headroom.
 
 ### `panelWindowBounds()`
 
 <!-- code: apps/desktop/src/main/bubble/layout.ts#panelWindowBounds -->
 
-[`src/main/bubble/layout.ts`, lines 72–89](../../apps/desktop/src/main/bubble/layout.ts#L72-L89)
+[`src/main/bubble/layout.ts`, lines 73–94](../../apps/desktop/src/main/bubble/layout.ts#L73-L94)
 
 ```ts
 /**
  * The panel window shares the bubble window's corner that points into the screen's `corner`, so
- * it extends toward the middle of the screen (left and up from bottom-right, and so on).
+ * it extends toward the middle of the screen (left and up from bottom-right, and so on). A top
+ * corner is the top of her padding, below her headroom, so the panel lines up with her box the
+ * same way from either end.
  */
 export function panelWindowBounds(
   bubble: Point,
@@ -1881,7 +1892,9 @@ export function panelWindowBounds(
   const size = panelWindowSize(actionCount, scale)
   return {
     x: isLeftCorner(corner) ? box.x : box.x + box.width - size.width,
-    y: isTopCorner(corner) ? box.y : box.y + box.height - size.height,
+    y: isTopCorner(corner)
+      ? box.y + bubbleMetrics(scale).headroom
+      : box.y + box.height - size.height,
     ...size,
   }
 }
@@ -1901,7 +1914,12 @@ corner.
 
 - `bubbleWindowBounds(bubble, scale)`, `panelWindowSize(actionCount, scale)`: both at her size.
 - `isLeftCorner(corner) ? box.x : box.x + box.width - size.width`: in a left corner the left edges
-  line up; in a right corner the right edges do. The `y` line does the same for top and bottom.
+  line up; in a right corner the right edges do.
+- `isTopCorner(corner) ? box.y + bubbleMetrics(scale).headroom : box.y + box.height - size.height`:
+  the same for top and bottom, but, as the comment says, a top corner is the top of her padding,
+  below the headroom over her hat (8 DIPs at her usual size). So the panel's offsets, which are
+  measured from the shared corner, land on her box the same way from the top as from the bottom,
+  where the two windows' bottom edges simply line up.
 - `...size`: copies `width` and `height` into the result.
 
 The two windows overlap. The panel's page lays out its content from the shared corner, with the
@@ -1912,20 +1930,20 @@ empty. Empty parts of the panel are click-through, so the bubble still gets its 
 
 <!-- code: apps/desktop/src/main/bubble/layout.ts#cloneStrip -->
 
-[`src/main/bubble/layout.ts`, lines 91–103](../../apps/desktop/src/main/bubble/layout.ts#L91-L103)
+[`src/main/bubble/layout.ts`, lines 96–108](../../apps/desktop/src/main/bubble/layout.ts#L96-L108)
 
 ```ts
 /**
- * Where her clones walk: a strip as tall as her window along the bottom of the work area, its
- * bottom edge on the taskbar, so they stand where she does.
+ * Where her clones walk: a strip as tall as her window (headroom and all) along the bottom of the
+ * work area, its bottom edge on the taskbar, so they stand where she does.
  */
 export function cloneStrip(workArea: Rect, scale: number = DEFAULT_SIZE): Rect {
-  const { box } = bubbleMetrics(scale)
+  const { box, headroom } = bubbleMetrics(scale)
   return {
     x: workArea.x,
-    y: workArea.y + workArea.height - box,
+    y: workArea.y + workArea.height - box - headroom,
     width: workArea.width,
-    height: box,
+    height: box + headroom,
   }
 }
 ```
@@ -1933,17 +1951,18 @@ export function cloneStrip(workArea: Rect, scale: number = DEFAULT_SIZE): Rect {
 <!-- /code -->
 
 The rectangle of the clones' window (see `clones.ts` below). As the comment says, it's a strip as
-tall as her window along the bottom of the work area, its bottom edge on the taskbar, so the
-clones stand where she does: their page draws each one in a box her window's size, with its feet
-on the strip's bottom edge, as hers are on her window's.
+tall as her window (headroom and all) along the bottom of the work area, its bottom edge on the
+taskbar, so the clones stand where she does: their page draws each one in a box her window's
+size, with its feet on the strip's bottom edge, as hers are on her window's.
 
-- `const { box } = bubbleMetrics(scale)`: her window's width and height at her size, 96 DIPs at
-  her usual size.
+- `const { box, headroom } = bubbleMetrics(scale)`: her window's width, and the room above for her
+  hat, at her size: 96 and 8 DIPs at her usual size, so the window is 104 tall.
 - `x: workArea.x`, `width: workArea.width`: the whole width of the work area, so the clones can
   walk from one end of the taskbar to the other. Unlike her, they don't keep 16 DIPs from the
   sides.
-- `y: workArea.y + workArea.height - box`: the strip's top, a window's height above the bottom of
-  the work area.
+- `y: workArea.y + workArea.height - box - headroom`, `height: box + headroom`: the strip's top, a
+  window's height above the bottom of the work area, and that height, so each clone has the same
+  room above its hat as she does.
 
 ---
 
@@ -2669,7 +2688,7 @@ Key ideas:
   `?view=bubble`, `?view=panel`, `?view=clones` or `?view=vision` in its address tells `main.tsx`
   which UI to draw.
   The bubble has its own tiny window so it never resizes when the panel opens, and only a window
-  her size (96×96 at her usual size) moves during a drag, a fall or a walk.
+  her size (96×104 at her usual size) moves during a drag, a fall or a walk.
 - **Always on top, and kept there.** Both windows stay in front of other apps' windows. They use
   `ON_TOP_LEVEL` rather than Electron's default level, which lost it when the app started behind a
   full-screen app, and `keepOnTop()` puts them back if anything else takes it away.
@@ -2826,8 +2845,9 @@ Creates one overlay window. `new BrowserWindow({...})` makes a native window wit
 inside; the options say what kind of window. As the comment says, `query` adds to the page's query
 string, and the clones' and the vision's windows never take the mouse or the focus.
 
-- `...size`: the window's `width` and `height`: `BUBBLE_BOX` square for the bubble,
-  `panelWindowSize(actionCount)` for the panel, both at her usual size. The controller sizes them
+- `...size`: the window's `width` and `height`: `box` wide and `box + headroom` tall for the
+  bubble (from `bubbleMetrics()`), `panelWindowSize(actionCount)` for the panel, both at her usual
+  size. The controller sizes them
   for her size when it first places them, and again whenever her size changes. For the clones and
   the vision, `index.ts` passes the size of the area asked for (the strip the clones walk in, from
   `cloneStrip()`, or the column over her, from `visionBounds()`), and sets the window's bounds

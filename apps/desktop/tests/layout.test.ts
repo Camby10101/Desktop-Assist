@@ -32,7 +32,8 @@ describe('restPosition', () => {
   it('stands on the taskbar in the bottom-right corner by default, 16px in from the side', () => {
     expect(restPosition(workArea)).toEqual({ x: RIGHT_X, y: STANDING_Y })
     expect(bubbleWindowBounds(restPosition(workArea))).toMatchObject({
-      y: 1040 - BUBBLE_BOX, // the window's bottom edge is the taskbar's top
+      // The window's bottom edge is the taskbar's top.
+      y: 1040 - BUBBLE_BOX - UI.bubbleHeadroom,
     })
   })
 
@@ -105,19 +106,25 @@ describe('nearestCorner', () => {
 })
 
 describe('bubbleWindowBounds', () => {
-  it('wraps the bubble in its padding', () => {
+  it('wraps the bubble in its padding, with room above for her hat', () => {
     expect(bubbleWindowBounds({ x: 100, y: 200 })).toEqual({
       x: 100 - UI.bubblePad,
-      y: 200 - UI.bubblePad,
+      y: 200 - UI.bubblePad - UI.bubbleHeadroom,
       width: BUBBLE_BOX,
-      height: BUBBLE_BOX,
+      height: BUBBLE_BOX + UI.bubbleHeadroom,
+    })
+    expect(bubbleWindowBounds({ x: 100, y: 200 }, 2)).toEqual({
+      x: 100 - UI.bubblePad * 2,
+      y: 200 - (UI.bubblePad + UI.bubbleHeadroom) * 2,
+      width: BUBBLE_BOX * 2,
+      height: (BUBBLE_BOX + UI.bubbleHeadroom) * 2,
     })
   })
 
   it('rounds fractional positions from a fall or a walk', () => {
     const bounds = bubbleWindowBounds({ x: 100.4, y: 200.6 })
     expect(bounds.x).toBe(92)
-    expect(bounds.y).toBe(193)
+    expect(bounds.y).toBe(193 - UI.bubbleHeadroom)
   })
 })
 
@@ -132,7 +139,10 @@ describe('panelWindowBounds', () => {
       const left = corner.endsWith('left')
       const top = corner.startsWith('top')
       expect(left ? panel.x : panel.x + panel.width).toBe(left ? bubble.x : bubble.x + bubble.width)
-      expect(top ? panel.y : panel.y + panel.height).toBe(top ? bubble.y : bubble.y + bubble.height)
+      // From a top corner, the top of her padding, below the headroom over her hat.
+      expect(top ? panel.y : panel.y + panel.height).toBe(
+        top ? bubble.y + UI.bubbleHeadroom : bubble.y + bubble.height,
+      )
     }
   })
 
@@ -244,9 +254,9 @@ describe('cloneStrip', () => {
     const second = { x: 1920, y: 0, width: 1280, height: 984 }
     expect(cloneStrip(second, 2)).toEqual({
       x: 1920,
-      y: 984 - BUBBLE_BOX * 2,
+      y: 984 - (BUBBLE_BOX + UI.bubbleHeadroom) * 2,
       width: 1280,
-      height: BUBBLE_BOX * 2,
+      height: (BUBBLE_BOX + UI.bubbleHeadroom) * 2,
     })
   })
 })

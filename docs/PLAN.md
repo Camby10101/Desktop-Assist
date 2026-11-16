@@ -574,12 +574,13 @@ Integrity Violation".
 
 The logo bubble becomes a small character standing on the taskbar: **anime-style pixel art**, an
 original design drawn in code (no image files): an elf mage about five heads tall, with long
-pointed ears, silver-white hair in one long braid over her shoulder (a fringe in clumps, side locks
+pointed ears, silver-white hair in one long braid down her back (a fringe in clumps, side locks
 and a shine band), amber eyes, a wide-brimmed crooked hat with a silver band, and a long flared
 robe in the tenant's accent colour with bell sleeves, silver trim, a sash and a teal gem brooch,
-over dark stockings and boots. She's about 88 pixels tall with her hat on a 96 × 96 grid, one pixel
-a DIP at her usual size, in a 96-DIP window (the bubble's box is now 80 DIP, so the panel's layout
-moved out a little to match).
+over dark stockings and boots. She's about 88 pixels tall with her hat on a 96 × 96 grid, with 8
+rows more above it so her hat isn't cut off when she rises off the taskbar, one pixel a DIP at her
+usual size, in a window 96 DIP wide and 104 tall (the bubble's box is now 80 DIP, so the panel's
+layout moved out a little to match).
 
 She's drawn by a small **pixel rig** (`src/renderer/src/character/`): her body parts are shapes
 (polygons, ellipses and tapered lines) posed by joint angles, drawn straight onto the pixel grid
@@ -596,9 +597,11 @@ to her ear, with her fringe clear of her eye and the rest of her hair behind (bo
 the front, a pixel higher, level with the bridge of her nose. Her clothes are
 patterned, the same from every side: a gold buckle, moon and stars and silver stitching on her
 hat; gold diamonds above the robe's hem, silver stars, gold buttons, a gold sash buckle and gold
-lines above the cuffs; cuffs, laces and buckled straps on her boots. From the front her braid
-hangs behind her left shoulder, so no hair covers her face or the front of her robe. Animations are key poses with eased in-between frames, one about every 40 ms
-(25 a second), so movement is smooth.
+lines above the cuffs; cuffs, laces and buckled straps on her boots. Her braid hangs down her back:
+side on, her hair is one clump from the back of her head narrowing into it, plaited and tied with a
+ribbon; from the front it's out of sight, and no hair covers her face or the front of her robe or
+peeks out beside her sleeves. Animations are key poses with eased in-between frames, one about
+every 40 ms (25 a second), so movement is smooth.
 The style follows research into anime pixel art and anime-style game sprites: big eyes with a
 thick upper lid and a glint in the same corner of both; hair as clumps with a shine; colour ramps
 of three or four shades per material, cooler in shadow and warmer in the light; selective

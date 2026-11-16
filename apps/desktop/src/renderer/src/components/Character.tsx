@@ -4,6 +4,7 @@ import {
   framePaths,
   framesOf,
   LOOPS,
+  SPRITE_HEADROOM,
   SPRITE_SIZE,
   type Facing,
   type Frame,
@@ -25,11 +26,12 @@ function pathsOf(frame: Frame): ReturnType<typeof framePaths> {
 const ALL_POSES: Pose[] = ['idle', 'walk-left', 'walk-right', 'dragged', ...FIDGETS]
 
 /**
- * The character: pixel art (character/sprite.ts) drawn `box` DIPs square, her feet on its bottom
- * edge. In the bubble that fills its window, which the main process keeps on the taskbar (one
- * sprite pixel a DIP at her usual size, more when she's bigger); her clones use it too. This plays
- * the pose's frames, facing `facing` (walking, she faces the way she walks). `expanded` tints her
- * shadow while the panel is open.
+ * The character: pixel art (character/sprite.ts) drawn `box` DIPs wide and a little taller, for
+ * the room above her hat (SPRITE_HEADROOM), her feet on its bottom edge. In the bubble that fills
+ * its window, which the main process keeps on the taskbar (one sprite pixel a DIP at her usual
+ * size, more when she's bigger); her clones use it too. This plays the pose's frames, facing
+ * `facing` (walking, she faces the way she walks). `expanded` tints her shadow while the panel is
+ * open.
  */
 export function Character(props: { pose: Pose; facing: Facing; box: number; expanded?: boolean }) {
   const { facing } = props
@@ -49,9 +51,9 @@ export function Character(props: { pose: Pose; facing: Facing; box: number; expa
 
   return (
     <svg
-      viewBox={`0 0 ${SPRITE_SIZE} ${SPRITE_SIZE}`}
+      viewBox={`0 0 ${SPRITE_SIZE} ${SPRITE_SIZE + SPRITE_HEADROOM}`}
       width={props.box}
-      height={props.box}
+      height={(props.box * (SPRITE_SIZE + SPRITE_HEADROOM)) / SPRITE_SIZE}
       shapeRendering="crispEdges"
       className="character"
       data-pose={props.pose}

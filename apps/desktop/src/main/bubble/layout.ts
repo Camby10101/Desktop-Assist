@@ -59,19 +59,22 @@ export function nearestCorner(workArea: Rect, bubble: Point, scale: number = DEF
   return centreX < workArea.x + workArea.width / 2 ? 'bottom-left' : 'bottom-right'
 }
 
+/** Her window: her box and its padding, and her headroom above them (see bubbleMetrics). */
 export function bubbleWindowBounds(bubble: Point, scale: number = DEFAULT_SIZE): Rect {
-  const { pad, box } = bubbleMetrics(scale)
+  const { pad, box, headroom } = bubbleMetrics(scale)
   return {
     x: Math.round(bubble.x) - pad,
-    y: Math.round(bubble.y) - pad,
+    y: Math.round(bubble.y) - pad - headroom,
     width: box,
-    height: box,
+    height: box + headroom,
   }
 }
 
 /**
  * The panel window shares the bubble window's corner that points into the screen's `corner`, so
- * it extends toward the middle of the screen (left and up from bottom-right, and so on).
+ * it extends toward the middle of the screen (left and up from bottom-right, and so on). A top
+ * corner is the top of her padding, below her headroom, so the panel lines up with her box the
+ * same way from either end.
  */
 export function panelWindowBounds(
   bubble: Point,
@@ -83,21 +86,23 @@ export function panelWindowBounds(
   const size = panelWindowSize(actionCount, scale)
   return {
     x: isLeftCorner(corner) ? box.x : box.x + box.width - size.width,
-    y: isTopCorner(corner) ? box.y : box.y + box.height - size.height,
+    y: isTopCorner(corner)
+      ? box.y + bubbleMetrics(scale).headroom
+      : box.y + box.height - size.height,
     ...size,
   }
 }
 
 /**
- * Where her clones walk: a strip as tall as her window along the bottom of the work area, its
- * bottom edge on the taskbar, so they stand where she does.
+ * Where her clones walk: a strip as tall as her window (headroom and all) along the bottom of the
+ * work area, its bottom edge on the taskbar, so they stand where she does.
  */
 export function cloneStrip(workArea: Rect, scale: number = DEFAULT_SIZE): Rect {
-  const { box } = bubbleMetrics(scale)
+  const { box, headroom } = bubbleMetrics(scale)
   return {
     x: workArea.x,
-    y: workArea.y + workArea.height - box,
+    y: workArea.y + workArea.height - box - headroom,
     width: workArea.width,
-    height: box,
+    height: box + headroom,
   }
 }

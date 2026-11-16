@@ -24,7 +24,10 @@ export interface Ramp {
   form?: number
 }
 
-/** A body part's pixels, each the name of its material (or undefined: not part of it). */
+/**
+ * A body part's pixels, each the name of its material (or undefined: not part of it): `size`
+ * pixels square, and `top` rows more above that (y from -top), as the frame it goes on has.
+ */
 export class Layer {
   readonly cells: (string | undefined)[]
   /** The box round every pixel set so far (empty while minX > maxX). */
@@ -32,18 +35,21 @@ export class Layer {
   minY = Infinity
   maxX = -Infinity
   maxY = -Infinity
-  constructor(readonly size: number) {
-    this.cells = new Array<string | undefined>(size * size)
+  constructor(
+    readonly size: number,
+    readonly top = 0,
+  ) {
+    this.cells = new Array<string | undefined>(size * (size + top))
   }
 
   get(x: number, y: number): string | undefined {
-    if (x < 0 || y < 0 || x >= this.size || y >= this.size) return undefined
-    return this.cells[y * this.size + x]
+    if (x < 0 || y < -this.top || x >= this.size || y >= this.size) return undefined
+    return this.cells[(y + this.top) * this.size + x]
   }
 
   set(x: number, y: number, material: string | undefined): void {
-    if (x < 0 || y < 0 || x >= this.size || y >= this.size) return
-    this.cells[y * this.size + x] = material
+    if (x < 0 || y < -this.top || x >= this.size || y >= this.size) return
+    this.cells[(y + this.top) * this.size + x] = material
     if (material === undefined) return
     this.minX = Math.min(this.minX, x)
     this.minY = Math.min(this.minY, y)
@@ -54,7 +60,7 @@ export class Layer {
   /** Fills every pixel whose centre passes `inside`, within the box from `min` to `max`. */
   fill(min: Point, max: Point, material: string, inside: (x: number, y: number) => boolean): void {
     const x0 = Math.max(0, Math.floor(min.x))
-    const y0 = Math.max(0, Math.floor(min.y))
+    const y0 = Math.max(-this.top, Math.floor(min.y))
     const x1 = Math.min(this.size - 1, Math.ceil(max.x))
     const y1 = Math.min(this.size - 1, Math.ceil(max.y))
     for (let y = y0; y <= y1; y++) {
@@ -125,21 +131,28 @@ export class Layer {
   }
 }
 
-/** A frame being drawn: rows of palette letters, `.` where nothing is drawn yet. */
+/**
+ * A frame being drawn: rows of palette letters, `.` where nothing is drawn yet. It's `size`
+ * pixels square, with `top` rows more above the square (y from -top up to -1) for anything that
+ * rises above it, such as her hat when she jumps.
+ */
 export class Canvas {
   readonly cells: string[]
-  constructor(readonly size: number) {
-    this.cells = new Array<string>(size * size).fill('.')
+  constructor(
+    readonly size: number,
+    readonly top = 0,
+  ) {
+    this.cells = new Array<string>(size * (size + top)).fill('.')
   }
 
   get(x: number, y: number): string {
-    if (x < 0 || y < 0 || x >= this.size || y >= this.size) return '.'
-    return this.cells[y * this.size + x]!
+    if (x < 0 || y < -this.top || x >= this.size || y >= this.size) return '.'
+    return this.cells[(y + this.top) * this.size + x]!
   }
 
   set(x: number, y: number, letter: string): void {
-    if (x < 0 || y < 0 || x >= this.size || y >= this.size) return
-    this.cells[y * this.size + x] = letter
+    if (x < 0 || y < -this.top || x >= this.size || y >= this.size) return
+    this.cells[(y + this.top) * this.size + x] = letter
   }
 
   /**
@@ -196,9 +209,10 @@ export class Canvas {
     })
   }
 
+  /** The frame's rows, top to bottom: the `top` rows above the square first. */
   rows(): string[] {
     const rows: string[] = []
-    for (let y = 0; y < this.size; y++) {
+    for (let y = 0; y < this.size + this.top; y++) {
       rows.push(this.cells.slice(y * this.size, (y + 1) * this.size).join(''))
     }
     return rows
