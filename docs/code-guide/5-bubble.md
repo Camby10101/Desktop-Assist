@@ -9,8 +9,9 @@ the modes and the IPC channels all kept the name. The character and the panel ea
 own transparent, frameless _overlay window_, created in `windows.ts`. `BubbleController` decides
 what the character is doing, and how big she is, and moves, sizes, shows and hides the two windows
 to match, using the pure maths in `layout.ts` (where things go) and `wander.ts` (what the
-character does on its own, and how it falls). `clones.ts` opens and closes a third overlay window,
-for her clones (the Clones action). The bubble's page draws the figure and animates it
+character does on its own, and how it falls). Two more overlay windows come and go: `clones.ts`
+opens and closes one for her clones (the Clones action), and `vision.ts` one for the light and the
+logo of her `vision` habit. The bubble's page draws the figure and animates it
 (`Character.tsx`, with pixel art drawn by code in `src/renderer/src/character/`; see
 [The UI components](8-renderer-components.md)).
 
@@ -58,7 +59,7 @@ when she's bigger; see `zone()`), where the character strolls about.
 **Her size.** The character comes in nine sizes, from half her usual size to six times it
 (`CHARACTER_SIZES` in `src/shared/geometry.ts`). A size is a _scale_: a multiple of her usual size,
 so 1 is the size she was drawn at, and 2 is twice as tall and twice as wide. The user picks one in
-the size menu (the Her size action), and the controller keeps two numbers: the size chosen, which
+the size menu (the Size action), and the controller keeps two numbers: the size chosen, which
 is saved in `preferences.json`, and the size she is, which is the size chosen or, if that wouldn't
 fit her display, the biggest that does (`largestSize()` in `geometry.ts`: her panel, with every
 action icon, must still fit on the screen, so the size menu can always be reached to make her
@@ -68,7 +69,7 @@ the panel's offsets from its corner (`bubbleMetrics()` and `panelLayout()` in `g
 and she walks faster. Every change of size, or of the biggest she can be, is broadcast to both
 pages (`IPC.sizeChanged`).
 
-**Her clones.** The Clones action puts ten copies of her on the taskbar of her display for ten
+**Her clones.** The Clones action puts ten copies of her on the taskbar of her display for thirty
 seconds (`CLONES` in `src/shared/character.ts`), each wandering up and down on its own. They're
 only pictures: they live in a window of their own along the bottom of the screen, which never takes
 the mouse or the focus, and they come and go without changing the mode. All `BubbleController` does
@@ -78,11 +79,12 @@ page in it moves them (`ClonesView`, see [The pages](7-renderer-pages.md)).
 **Left alone.** While `collapsed`, the character has a life of its own. Every 8 to 20 seconds it
 walks somewhere else in its zone (the pose `walk-left` or `walk-right`, while the controller moves
 its window along the taskbar a frame at a time). Once nobody has done anything with it for 30
-seconds, more often than not it does one of its eight fidgets instead (a hop, a wave, a stretch, a
-sip of tea, reading its spellbook, a little spell, levitating over a magic circle, a sit on the
-taskbar, or a glance about), never
-the same one twice in a row. None of this changes
-the mode, and every change of mode counts as the user doing something: it stops whatever the
+seconds, more often than not it does one of its ten fidgets instead (a hop, a wave, a stretch, a
+sip of tea, a vision, reading its spellbook, a little spell, levitating over a magic circle, a sit
+on the taskbar, or a glance about), never the same one twice in a row. In the vision, a light
+shines down from the top of the screen and the company's logo comes down it to hover over her head
+while she looks up at it; the light and the logo are drawn in a window of their own above her
+(`vision.ts`, below). None of this changes the mode, and every change of mode counts as the user doing something: it stops whatever the
 character was doing on its own, right where it is, and starts the 30 seconds again (see
 `setMode()`).
 
@@ -102,7 +104,8 @@ Who calls it:
 - `src/main/index.ts` creates the one controller in `start()` and wires Electron events to it: the
   panel window's `blur` event to `panelBlurred()`, screen changes to `displayChanged()`, the tray
   icon, a second launch, a finished sign-in and a click on a notification to `expand()`, and
-  quitting to `dispose()`.
+  quitting to `dispose()`. When the pose becomes `vision`, it reads `standing` to open the
+  vision's window over her (see `vision.ts` below).
 - `src/main/ipc.ts` forwards the pages' requests: the bubble's click and drag (`clickBubble()`,
   `startDrag()`, `endDrag()`), the panel's Esc (`collapse()`) and the size menu's Smaller and
   Bigger (`setScale()`). It also calls `collapse()` after handing a question to Claude Desktop
@@ -278,8 +281,9 @@ Everything the constructor needs, passed as one object (its _dependencies_).
   (and the character turns to face that way), and saves the anchor.
 - `onPoseChange?(pose: Pose): void`: as the comment says, what the character is doing changed.
   `index.ts` broadcasts the new pose to both pages (`IPC.poseChanged`), and the bubble's page
-  animates the character to match (`Character.tsx`). The `?` makes it optional, so it's called
-  with `?.`, like `onDiagnostic`.
+  animates the character to match (`Character.tsx`). It also opens the vision's light and logo
+  when the pose becomes `vision`, and closes them when it changes again (`Vision`, below). The `?`
+  makes it optional, so it's called with `?.`, like `onDiagnostic`.
 - `onSizeChange?(size: CharacterSize): void`: as the comment says, her size changed, or the
   biggest she can be on her screen did (`CharacterSize` from `geometry.ts` holds both). `index.ts`
   broadcasts it to both pages (`IPC.sizeChanged`): the bubble's page draws her at the new size, and
@@ -575,7 +579,7 @@ can't assign to it. `index.ts` reads `currentMode`, `currentPose` and `corner` i
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.size,standing -->
 
-[`src/main/bubble/BubbleController.ts`, lines 177–189](../../apps/desktop/src/main/bubble/BubbleController.ts#L177-L189)
+[`src/main/bubble/BubbleController.ts`, lines 177–192](../../apps/desktop/src/main/bubble/BubbleController.ts#L177-L192)
 
 ```ts
 /** How big she is, and the biggest she can be on her display. */
@@ -583,7 +587,10 @@ get size(): CharacterSize {
   return { scale: this.scale, max: this.largestScale() }
 }
 
-/** Where she stands, for her clones: her display's work area, her window, and her size. */
+/**
+ * Where she stands, for her clones and her vision: her display's work area, her window, and her
+ * size.
+ */
 get standing(): { workArea: Rect; bounds: Rect; scale: number } {
   return {
     workArea: this.display().workArea,
@@ -605,7 +612,9 @@ Two more read-only properties, both about her size.
 - `standing`: as its comment says, where she stands, for her clones: her display's work area, her
   window's rectangle and her size. The Clones handler in `actions.ts` reads it and hands it to
   `Clones.start()`, which opens the clones' window along the bottom of that work area, with them
-  setting off from where her window is, at her size.
+  setting off from where her window is, at her size. `index.ts` reads it too, when she starts her
+  vision, for `Vision.start()`, which opens the window of light above her. (The comment only
+  mentions the clones.)
 - `bubbleWindowBounds(this.position, this.scale)`: her window as it is placed now (see
   `layout.ts`), a new object each time.
 
@@ -613,7 +622,7 @@ Two more read-only properties, both about her size.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.setScale -->
 
-[`src/main/bubble/BubbleController.ts`, lines 191–200](../../apps/desktop/src/main/bubble/BubbleController.ts#L191-L200)
+[`src/main/bubble/BubbleController.ts`, lines 194–203](../../apps/desktop/src/main/bubble/BubbleController.ts#L194-L203)
 
 ```ts
 /**
@@ -646,7 +655,7 @@ sends the result back to the page.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.start -->
 
-[`src/main/bubble/BubbleController.ts`, lines 202–208](../../apps/desktop/src/main/bubble/BubbleController.ts#L202-L208)
+[`src/main/bubble/BubbleController.ts`, lines 205–211](../../apps/desktop/src/main/bubble/BubbleController.ts#L205-L211)
 
 ```ts
 /** Stands the character in its saved corner (or bottom-right of the main display) and shows it. */
@@ -678,7 +687,7 @@ anchor was already chosen in the constructor; this just puts the windows there.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.clickBubble -->
 
-[`src/main/bubble/BubbleController.ts`, lines 210–231](../../apps/desktop/src/main/bubble/BubbleController.ts#L210-L231)
+[`src/main/bubble/BubbleController.ts`, lines 213–234](../../apps/desktop/src/main/bubble/BubbleController.ts#L213-L234)
 
 ```ts
 /** A click on the bubble. `pressedAt` is when its mouse button went down (wall-clock ms). */
@@ -742,7 +751,7 @@ which knows the mode and when the panel last closed.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.expand -->
 
-[`src/main/bubble/BubbleController.ts`, lines 233–254](../../apps/desktop/src/main/bubble/BubbleController.ts#L233-L254)
+[`src/main/bubble/BubbleController.ts`, lines 236–257](../../apps/desktop/src/main/bubble/BubbleController.ts#L236-L257)
 
 ```ts
 /** Opens the panel where the character stands. While she's falling, once she lands. */
@@ -795,7 +804,7 @@ the browser, and clicking one of the app's Windows notifications (all in `index.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.collapse -->
 
-[`src/main/bubble/BubbleController.ts`, lines 256–264](../../apps/desktop/src/main/bubble/BubbleController.ts#L256-L264)
+[`src/main/bubble/BubbleController.ts`, lines 259–267](../../apps/desktop/src/main/bubble/BubbleController.ts#L259-L267)
 
 ```ts
 collapse(): void {
@@ -827,7 +836,7 @@ has been handed to Claude Desktop, by `ipc.ts`.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.panelBlurred -->
 
-[`src/main/bubble/BubbleController.ts`, lines 266–274](../../apps/desktop/src/main/bubble/BubbleController.ts#L266-L274)
+[`src/main/bubble/BubbleController.ts`, lines 269–277](../../apps/desktop/src/main/bubble/BubbleController.ts#L269-L277)
 
 ```ts
 panelBlurred(): void {
@@ -860,7 +869,7 @@ behaves like a popup and closes.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.startDrag -->
 
-[`src/main/bubble/BubbleController.ts`, lines 276–288](../../apps/desktop/src/main/bubble/BubbleController.ts#L276-L288)
+[`src/main/bubble/BubbleController.ts`, lines 279–291](../../apps/desktop/src/main/bubble/BubbleController.ts#L279-L291)
 
 ```ts
 /** The mouse pressed on the character and moved: it dangles from the pointer until released. */
@@ -906,7 +915,7 @@ it.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.endDrag -->
 
-[`src/main/bubble/BubbleController.ts`, lines 290–309](../../apps/desktop/src/main/bubble/BubbleController.ts#L290-L309)
+[`src/main/bubble/BubbleController.ts`, lines 293–312](../../apps/desktop/src/main/bubble/BubbleController.ts#L293-L312)
 
 ```ts
 /**
@@ -966,7 +975,7 @@ walks back once it has landed.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.whileHidden -->
 
-[`src/main/bubble/BubbleController.ts`, lines 311–327](../../apps/desktop/src/main/bubble/BubbleController.ts#L311-L327)
+[`src/main/bubble/BubbleController.ts`, lines 314–330](../../apps/desktop/src/main/bubble/BubbleController.ts#L314-L330)
 
 ```ts
 /** Hides both windows, runs `task` (a screenshot), then reopens the panel. */
@@ -1013,7 +1022,7 @@ hidden first and brought back afterwards.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.displayChanged -->
 
-[`src/main/bubble/BubbleController.ts`, lines 329–346](../../apps/desktop/src/main/bubble/BubbleController.ts#L329-L346)
+[`src/main/bubble/BubbleController.ts`, lines 332–349](../../apps/desktop/src/main/bubble/BubbleController.ts#L332-L349)
 
 ```ts
 /**
@@ -1071,7 +1080,7 @@ taskbar moving or resizing (which changes the work area).
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.dispose -->
 
-[`src/main/bubble/BubbleController.ts`, lines 348–352](../../apps/desktop/src/main/bubble/BubbleController.ts#L348-L352)
+[`src/main/bubble/BubbleController.ts`, lines 351–355](../../apps/desktop/src/main/bubble/BubbleController.ts#L351-L355)
 
 ```ts
 dispose(): void {
@@ -1091,7 +1100,7 @@ fires against a window that is being destroyed. The tests call it after each tes
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.display,rest -->
 
-[`src/main/bubble/BubbleController.ts`, lines 354–362](../../apps/desktop/src/main/bubble/BubbleController.ts#L354-L362)
+[`src/main/bubble/BubbleController.ts`, lines 357–365](../../apps/desktop/src/main/bubble/BubbleController.ts#L357-L365)
 
 ```ts
 /** The anchor's display, or the main display if it's gone. */
@@ -1119,7 +1128,7 @@ private rest(): Point {
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.largestScale,fitScale -->
 
-[`src/main/bubble/BubbleController.ts`, lines 364–385](../../apps/desktop/src/main/bubble/BubbleController.ts#L364-L385)
+[`src/main/bubble/BubbleController.ts`, lines 367–388](../../apps/desktop/src/main/bubble/BubbleController.ts#L367-L388)
 
 ```ts
 /** The biggest she can be on her display (see largestSize). */
@@ -1177,7 +1186,7 @@ call it when her display may have changed.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.fall -->
 
-[`src/main/bubble/BubbleController.ts`, lines 387–403](../../apps/desktop/src/main/bubble/BubbleController.ts#L387-L403)
+[`src/main/bubble/BubbleController.ts`, lines 390–406](../../apps/desktop/src/main/bubble/BubbleController.ts#L390-L406)
 
 ```ts
 /** After a drop: falls onto the taskbar, then walks back toward its corner if it's far off. */
@@ -1226,7 +1235,7 @@ anchor and the inset, so `rest()` is where it lands: straight below where it was
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.settle -->
 
-[`src/main/bubble/BubbleController.ts`, lines 405–415](../../apps/desktop/src/main/bubble/BubbleController.ts#L405-L415)
+[`src/main/bubble/BubbleController.ts`, lines 408–418](../../apps/desktop/src/main/bubble/BubbleController.ts#L408-L418)
 
 ```ts
 /** The end of a fall: standing, collapsed, and opening if that was asked for. */
@@ -1258,7 +1267,7 @@ As its comment says, the end of a fall. `fall()` calls it when the character lan
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.zone -->
 
-[`src/main/bubble/BubbleController.ts`, lines 417–421](../../apps/desktop/src/main/bubble/BubbleController.ts#L417-L421)
+[`src/main/bubble/BubbleController.ts`, lines 420–424](../../apps/desktop/src/main/bubble/BubbleController.ts#L420-L424)
 
 ```ts
 /** How far from its corner it wanders on its display: further when she's bigger. */
@@ -1283,7 +1292,7 @@ choose where to walk.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.scheduleActivity -->
 
-[`src/main/bubble/BubbleController.ts`, lines 423–428](../../apps/desktop/src/main/bubble/BubbleController.ts#L423-L428)
+[`src/main/bubble/BubbleController.ts`, lines 426–431](../../apps/desktop/src/main/bubble/BubbleController.ts#L426-L431)
 
 ```ts
 /** Waits a while, then does something on its own (see doActivity). Collapsed only. */
@@ -1313,7 +1322,7 @@ Starts the wait before the character does something on its own. It's called by `
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.doActivity -->
 
-[`src/main/bubble/BubbleController.ts`, lines 430–446](../../apps/desktop/src/main/bubble/BubbleController.ts#L430-L446)
+[`src/main/bubble/BubbleController.ts`, lines 433–449](../../apps/desktop/src/main/bubble/BubbleController.ts#L433-L449)
 
 ```ts
 private doActivity(): void {
@@ -1366,7 +1375,7 @@ done, waits for the next.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.walkTo -->
 
-[`src/main/bubble/BubbleController.ts`, lines 448–469](../../apps/desktop/src/main/bubble/BubbleController.ts#L448-L469)
+[`src/main/bubble/BubbleController.ts`, lines 451–472](../../apps/desktop/src/main/bubble/BubbleController.ts#L451-L472)
 
 ```ts
 /** Walks along the taskbar to `target` (an inset), then waits for the next thing to do. */
@@ -1427,7 +1436,7 @@ panel, a press and move picks it up.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.stopWalking -->
 
-[`src/main/bubble/BubbleController.ts`, lines 471–479](../../apps/desktop/src/main/bubble/BubbleController.ts#L471-L479)
+[`src/main/bubble/BubbleController.ts`, lines 474–482](../../apps/desktop/src/main/bubble/BubbleController.ts#L474-L482)
 
 ```ts
 /** Stops a walk where it is, standing idle, with the panel moved to open from there. */
@@ -1461,7 +1470,7 @@ Ends a walk cleanly, wherever the character has got to. This is how a walk is in
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.stopIdling,cancelActivity -->
 
-[`src/main/bubble/BubbleController.ts`, lines 481–491](../../apps/desktop/src/main/bubble/BubbleController.ts#L481-L491)
+[`src/main/bubble/BubbleController.ts`, lines 484–494](../../apps/desktop/src/main/bubble/BubbleController.ts#L484-L494)
 
 ```ts
 /** Stops whatever it was doing on its own: the next activity, a fidget, a walk. */
@@ -1490,7 +1499,7 @@ private cancelActivity(): void {
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.runTicker,stopTicker -->
 
-[`src/main/bubble/BubbleController.ts`, lines 493–506](../../apps/desktop/src/main/bubble/BubbleController.ts#L493-L506)
+[`src/main/bubble/BubbleController.ts`, lines 496–509](../../apps/desktop/src/main/bubble/BubbleController.ts#L496-L509)
 
 ```ts
 private runTicker(onFrame: (dtMs: number) => void): void {
@@ -1527,7 +1536,7 @@ The 60 fps ticker. It drives every animation (drag, fall and walk), but only one
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.moveBubble,placeWindows -->
 
-[`src/main/bubble/BubbleController.ts`, lines 508–518](../../apps/desktop/src/main/bubble/BubbleController.ts#L508-L518)
+[`src/main/bubble/BubbleController.ts`, lines 511–521](../../apps/desktop/src/main/bubble/BubbleController.ts#L511-L521)
 
 ```ts
 private moveBubble(position: Point): void {
@@ -1562,7 +1571,7 @@ private placeWindows(): void {
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.setAnchor,cancelHide,setMode,setPose -->
 
-[`src/main/bubble/BubbleController.ts`, lines 520–550](../../apps/desktop/src/main/bubble/BubbleController.ts#L520-L550)
+[`src/main/bubble/BubbleController.ts`, lines 523–553](../../apps/desktop/src/main/bubble/BubbleController.ts#L523-L553)
 
 ```ts
 private setAnchor(anchor: BubbleAnchor): void {
@@ -1626,7 +1635,7 @@ Small helpers, though `setMode()` does more than it used to.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#bottomOf -->
 
-[`src/main/bubble/BubbleController.ts`, lines 553–557](../../apps/desktop/src/main/bubble/BubbleController.ts#L553-L557)
+[`src/main/bubble/BubbleController.ts`, lines 556–560](../../apps/desktop/src/main/bubble/BubbleController.ts#L556-L560)
 
 ```ts
 /** The bottom corner on the same side: the character always stands at the bottom. */
@@ -2076,7 +2085,7 @@ they wait for a quiet spell rather than starting up while someone has just been 
 - `last?: Fidget`: the fidget it did last (`BubbleController.lastFidget`), or `undefined` if it
   hasn't done one yet. The `?` makes the parameter optional.
 - `FIDGETS.filter((fidget) => fidget !== last)`: every fidget but that one, so it never does the
-  same one twice in a row. With no `last`, all eight are choices.
+  same one twice in a row. With no `last`, all ten are choices.
 - `choices[Math.floor(random() * choices.length)]!`: a second roll picks one, each equally likely.
   `random() * choices.length` is somewhere from 0 to just under the number of choices, and
   `Math.floor()` rounds it down to a whole number, an index into the list. The `!` tells
@@ -2223,7 +2232,7 @@ Where the character is at progress `t` of its fall (0 at the start, 1 on the tas
 
 ## `src/main/bubble/clones.ts`: her clones
 
-The Clones action: ten of her walk about the taskbar for ten seconds. This file is the main
+The Clones action: ten of her walk about the taskbar for thirty seconds. This file is the main
 process's half of it, and it's small: it opens one window for all the clones, along the bottom of
 her display, and closes it again when their time is up. The clones themselves, where each one walks
 and when it stops, are worked out by the page in that window (`ClonesView.tsx`, with the maths in
@@ -2241,7 +2250,7 @@ Who uses it:
 
 Like `BubbleController`, it never imports Electron: windows are made by the `open` function it's
 given. `tests/clones.test.ts` passes one that just records what it was asked for, and uses
-Vitest's fake timers to check the window closes after exactly ten seconds.
+Vitest's fake timers to check the window closes after exactly thirty seconds.
 
 ### `CloneWindow`, `ClonesDeps`
 
@@ -2307,7 +2316,7 @@ export class Clones {
 
 <!-- /code -->
 
-As the comment says: `CLONES.count` of her (10), for `CLONES.durationMs` (10 seconds; both in
+As the comment says: `CLONES.count` of her (10), for `CLONES.durationMs` (30 seconds; both in
 `src/shared/character.ts`), walking about the taskbar of her display at her size and stopping now
 and then. They're all in one window along the bottom of the screen, which never takes the mouse or
 the focus, so they have no panel and clicks go to whatever is under them. Asking for clones again
@@ -2366,7 +2375,7 @@ As its comment says, clones of her where she stands, for their time.
 - `standing: { workArea: Rect; bounds: Rect; scale: number }`: `BubbleController.standing`: her
   display's work area, her window's rectangle and her size.
 - `this.stop()`: any clones still out go first, so starting again replaces the old lot rather than
-  adding a second window, and the new lot gets the full ten seconds.
+  adding a second window, and the new lot gets the full thirty seconds.
 - `cloneStrip(standing.workArea, standing.scale)`: the window's rectangle (`layout.ts`): the whole
   width of the work area, as tall as her window, with its bottom edge on the taskbar, so the clones
   stand where she does.
@@ -2410,19 +2419,229 @@ time is up, `start()` calls it before a new lot, and `index.ts` calls it when th
 
 ---
 
+## `src/main/bubble/vision.ts`: the light and the logo of her vision
+
+One of her habits, `vision`, reaches beyond her own window: a light shines down from the top of the
+screen, the company's logo comes down it to hover over her head, she looks up at it, and then it
+rises away again. Her own animation (looking up, her arms opening) is played in the bubble's window
+like any other habit; the light and the logo need a taller window, a column above her. This file
+opens and closes that window. It's built like `clones.ts` above: the page in the window
+(`VisionView.tsx`; see [The pages](7-renderer-pages.md)) does the drawing, in time with her, from
+the timetable in `VISION` (`src/shared/character.ts`).
+
+Who uses it:
+
+- `src/main/index.ts` creates the one `Vision` in `start()`, with an `open` that makes the window
+  (the same `openOverlay` as the clones', with `createOverlayWindow('vision', …)`). Its
+  `onPoseChange` calls `start()` with `BubbleController.standing` when her pose becomes `vision`,
+  and `stop()` on any other pose. It also calls `stop()` when the app quits.
+
+The controller knows nothing about it: it only sets the pose, as for any habit, and `index.ts`
+connects the two. `tests/vision.test.ts` checks `visionBounds()` and `Vision` with a fake `open`
+and fake timers.
+
+### `VisionWindow`, `VisionDeps`
+
+<!-- code: apps/desktop/src/main/bubble/vision.ts#VisionWindow,VisionDeps -->
+
+[`src/main/bubble/vision.ts`, lines 4–17](../../apps/desktop/src/main/bubble/vision.ts#L4-L17)
+
+```ts
+/** The vision's window, as Vision uses it. index.ts makes it (see createOverlayWindow). */
+export interface VisionWindow {
+  close(): void
+}
+
+export interface VisionDeps {
+  /**
+   * Opens the vision's window over `bounds`, its page told (in its query string) her size, where
+   * her middle is across it (DIPs from its left edge) and when the vision started.
+   */
+  open(bounds: Rect, query: Record<string, string>): VisionWindow
+  /** Wall-clock time (ms), shared with the page, which keeps in time with her from it. */
+  now?: () => number
+}
+```
+
+<!-- /code -->
+
+What `Vision` needs, as for `Clones`.
+
+- `VisionWindow`: as its comment says, the vision's window as `Vision` uses it: only to close it.
+- `open(bounds: Rect, query: Record<string, string>): VisionWindow`: as the comment says, opens
+  the window over `bounds`, with its page told her size, where her middle is across the window (in
+  DIPs from its left edge), and when the vision started.
+- `now?: () => number`: as the comment says, the wall-clock time in milliseconds, shared with the
+  page, which keeps in time with her from the moment the vision started, even if the page took a
+  moment to load. Tests pass a fixed clock.
+
+### `visionBounds()`
+
+<!-- code: apps/desktop/src/main/bubble/vision.ts#visionBounds -->
+
+[`src/main/bubble/vision.ts`, lines 19–32](../../apps/desktop/src/main/bubble/vision.ts#L19-L32)
+
+```ts
+/**
+ * Where the vision is drawn: a column above her, from the top of her display's work area down to
+ * her feet, two and a half times as wide as her window and centred on her (kept on the work
+ * area), so the light can fall from the top of the screen and the logo come down over her head.
+ */
+export function visionBounds(workArea: Rect, bounds: Rect): Rect {
+  const width = Math.min(Math.round(bounds.width * 2.5), workArea.width)
+  const centre = bounds.x + bounds.width / 2
+  const x = Math.min(
+    Math.max(Math.round(centre - width / 2), workArea.x),
+    workArea.x + workArea.width - width,
+  )
+  return { x, y: workArea.y, width, height: bounds.y + bounds.height - workArea.y }
+}
+```
+
+<!-- /code -->
+
+Where the vision's window goes, given her display's work area and her window's rectangle. As the
+comment says, it's a column above her: from the top of the work area down to her feet, two and a
+half times as wide as her window, centred on her, so the light can fall from the top of the screen
+and the logo come down over her head. At her usual size it's 240 DIPs wide (96 × 2.5); at twice
+her size, 480.
+
+- `Math.min(Math.round(bounds.width * 2.5), workArea.width)`: the width, never wider than the work
+  area.
+- `const centre = bounds.x + bounds.width / 2`: her middle, across the screen.
+- `Math.min(Math.max(Math.round(centre - width / 2), workArea.x), workArea.x + workArea.width - width)`:
+  the column's left edge, half its width to the left of her middle, but kept on the work area. In a
+  corner she's then off-centre in the column, which is why the page is told where her middle is.
+- `y: workArea.y`, `height: bounds.y + bounds.height - workArea.y`: from the top of the work area
+  to the bottom of her window, where her feet are.
+
+### `Vision`
+
+<!-- code: apps/desktop/src/main/bubble/vision.ts#Vision.class -->
+
+[`src/main/bubble/vision.ts`, lines 34–40](../../apps/desktop/src/main/bubble/vision.ts#L34-L40)
+
+```ts
+/**
+ * Her `vision` habit's light and logo (see VISION): a window that never takes the mouse or the
+ * focus, behind her own, for as long as she's having it. index.ts starts it when her pose becomes
+ * `vision` and stops it when the pose changes (the habit ends, or someone clicks her); it also
+ * closes itself once the habit's time is up, in case nothing does.
+ */
+export class Vision {
+  // …
+}
+```
+
+<!-- /code -->
+
+As the comment says: the light and the logo of her `vision` habit, in a window that never takes
+the mouse or the focus, behind her own window, for as long as she's having it. `index.ts` starts
+it when her pose becomes `vision` and stops it when the pose changes, whether the habit has ended
+or someone has clicked or picked her up. It also closes itself once the habit's time is up, in
+case nothing else does. Its fields and constructor are the same as `Clones`':
+
+<!-- code: apps/desktop/src/main/bubble/vision.ts#Vision.current,constructor,running -->
+
+[`src/main/bubble/vision.ts`, lines 41–47](../../apps/desktop/src/main/bubble/vision.ts#L41-L47)
+
+```ts
+private current: { window: VisionWindow; timer: ReturnType<typeof setTimeout> } | null = null
+
+constructor(private readonly deps: VisionDeps) {}
+
+get running(): boolean {
+  return this.current !== null
+}
+```
+
+<!-- /code -->
+
+- `private current`: the window while it's open, and the timer that closes it; `null` otherwise.
+- `constructor(private readonly deps: VisionDeps) {}`: stores the argument in a field called
+  `deps`.
+- `get running(): boolean`: whether the window is open now. Only the tests read it.
+
+### `Vision.start()`
+
+<!-- code: apps/desktop/src/main/bubble/vision.ts#Vision.start -->
+
+[`src/main/bubble/vision.ts`, lines 49–60](../../apps/desktop/src/main/bubble/vision.ts#L49-L60)
+
+```ts
+/** The light and the logo over where she stands (`standing` from BubbleController). */
+start(standing: { workArea: Rect; bounds: Rect; scale: number }): void {
+  this.stop()
+  const area = visionBounds(standing.workArea, standing.bounds)
+  const window = this.deps.open(area, {
+    scale: String(standing.scale),
+    centre: String(Math.round(standing.bounds.x + standing.bounds.width / 2 - area.x)),
+    starts: String((this.deps.now ?? Date.now)()),
+  })
+  const timer = setTimeout(() => this.stop(), FIDGET_MS.vision)
+  this.current = { window, timer }
+}
+```
+
+<!-- /code -->
+
+As its comment says, the light and the logo over where she stands.
+
+- `standing`: `BubbleController.standing`: her display's work area, her window's rectangle and her
+  size.
+- `this.stop()`: a window still open from before is closed first, so there's only ever one.
+- `visionBounds(standing.workArea, standing.bounds)`: the column above her (see above).
+- `scale: String(standing.scale)`: her size, so the light and the logo are drawn to match her.
+- `centre: String(Math.round(standing.bounds.x + standing.bounds.width / 2 - area.x))`: her middle,
+  measured from the window's left edge, where the light falls and the logo hovers.
+- `starts: String((this.deps.now ?? Date.now)())`: when the vision started, on the wall clock. The
+  page measures its place in `VISION`'s timetable from this, so the logo arrives as she looks up.
+- `setTimeout(() => this.stop(), FIDGET_MS.vision)`: closes the window after the habit's 5.2
+  seconds, in case the pose change that should close it never comes.
+
+### `Vision.stop()`
+
+<!-- code: apps/desktop/src/main/bubble/vision.ts#Vision.stop -->
+
+[`src/main/bubble/vision.ts`, lines 62–68](../../apps/desktop/src/main/bubble/vision.ts#L62-L68)
+
+```ts
+/** Closes the window now, if it's open. */
+stop(): void {
+  if (!this.current) return
+  clearTimeout(this.current.timer)
+  this.current.window.close()
+  this.current = null
+}
+```
+
+<!-- /code -->
+
+As its comment says, closes the window now, if it's open. `index.ts` calls it on every pose
+change but the one to `vision`, so it's usually called with nothing open, which is fine.
+
+- `clearTimeout(this.current.timer)`: an early stop cancels the timer, so it can't close a later
+  vision's window.
+- `this.current.window.close()`: in `index.ts`, this destroys the window, if it hasn't been
+  destroyed already.
+
+---
+
 ## `src/main/bubble/windows.ts`: creating the Electron windows
 
 The only file in this folder that uses Electron. It creates the overlay windows, locks them down,
 and adapts the bubble's and the panel's to the controller's `Surface` interface. `index.ts` calls
 `createOverlayWindow()` twice at startup, once for the bubble and once for the panel, and wraps the
 results with `bubbleSurface()` and `panelSurface()` before handing them to `BubbleController`. It
-calls it again for each lot of clones, for a window that lasts their ten seconds (see `clones.ts`
+calls it again for each lot of clones, for a window that lasts their thirty seconds, and for each
+of her visions, for a window that lasts the habit's 5.2 seconds (see `clones.ts` and `vision.ts`
 above).
 
 Key ideas:
 
-- **Three kinds of window, one page.** Every overlay window loads the same renderer page;
-  `?view=bubble`, `?view=panel` or `?view=clones` in its address tells `main.tsx` which UI to draw.
+- **Four kinds of window, one page.** Every overlay window loads the same renderer page;
+  `?view=bubble`, `?view=panel`, `?view=clones` or `?view=vision` in its address tells `main.tsx`
+  which UI to draw.
   The bubble has its own tiny window so it never resizes when the panel opens, and only a window
   her size (96×96 at her usual size) moves during a drag, a fall or a walk.
 - **Always on top, and kept there.** Both windows stay in front of other apps' windows. They use
@@ -2435,29 +2654,36 @@ Key ideas:
   page's `useClickThrough` hook asks the main process to take mouse input again
   (`IPC.setInteractive`, handled in `ipc.ts`). The bubble window is never click-through: it's barely larger than the
   bubble, and relying on Windows' mouse forwarding there made clicks occasionally fall through the
-  bubble to the window behind it. The clones' window is the opposite: it ignores the mouse
-  altogether, all the time, and can't take the focus.
+  bubble to the window behind it. The clones' and the vision's windows are the opposite: they
+  only show something, so they ignore the mouse altogether, all the time, and can't take the focus
+  (`passive()`).
 
-### `View`
+### `View`, `passive()`
 
-<!-- code: apps/desktop/src/main/bubble/windows.ts#View -->
+<!-- code: apps/desktop/src/main/bubble/windows.ts#View,passive -->
 
-[`src/main/bubble/windows.ts`, line 7](../../apps/desktop/src/main/bubble/windows.ts#L7)
+[`src/main/bubble/windows.ts`, lines 7–10](../../apps/desktop/src/main/bubble/windows.ts#L7-L10)
 
 ```ts
-export type View = 'bubble' | 'panel' | 'clones'
+export type View = 'bubble' | 'panel' | 'clones' | 'vision'
+
+/** Windows that only show something: they never take the mouse or the focus. */
+const passive = (view: View) => view === 'clones' || view === 'vision'
 ```
 
 <!-- /code -->
 
-A _union type_: a `View` can only be the string `'bubble'`, `'panel'` or `'clones'`, and
-TypeScript rejects anything else.
+- `View`: a _union type_: a `View` can only be the string `'bubble'`, `'panel'`, `'clones'` or
+  `'vision'`, and TypeScript rejects anything else.
+- `passive`: as its comment says, the windows that only show something, the clones' and the
+  vision's, which never take the mouse or the focus. `createOverlayWindow()` asks it twice, so
+  the two rules can't drift apart.
 
 ### `ON_TOP_LEVEL`, `ON_TOP_CHECK_MS`
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#ON_TOP_LEVEL,ON_TOP_CHECK_MS -->
 
-[`src/main/bubble/windows.ts`, lines 9–20](../../apps/desktop/src/main/bubble/windows.ts#L9-L20)
+[`src/main/bubble/windows.ts`, lines 12–23](../../apps/desktop/src/main/bubble/windows.ts#L12-L23)
 
 ```ts
 /**
@@ -2497,16 +2723,16 @@ the windows' style: before, neither was on top; now both are.
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#createOverlayWindow -->
 
-[`src/main/bubble/windows.ts`, lines 22–87](../../apps/desktop/src/main/bubble/windows.ts#L22-L87)
+[`src/main/bubble/windows.ts`, lines 25–90](../../apps/desktop/src/main/bubble/windows.ts#L25-L90)
 
 ```ts
 /**
- * Creates an overlay window: the bubble, the panel, or a window of clones. All are frameless,
- * transparent, always on top and hidden from the taskbar and Alt+Tab. `query` adds to the page's
- * query string (`view` says which page it is).
+ * Creates an overlay window: the bubble, the panel, a window of clones, or the light and logo of
+ * her `vision` habit. All are frameless, transparent, always on top and hidden from the taskbar
+ * and Alt+Tab. `query` adds to the page's query string (`view` says which page it is).
  *
- * The clones' window never takes the mouse or the focus: clicks go straight through it, so the
- * clones have no panel and never get in the way.
+ * The clones' and the vision's windows never take the mouse or the focus: clicks go straight
+ * through them, so they never get in the way.
  *
  * The panel window is mostly see-through, so it's click-through: clicks on its empty areas go to
  * whatever is underneath, and the renderer turns mouse input back on while the pointer is over
@@ -2538,8 +2764,8 @@ export function createOverlayWindow(
     // Both can take the focus. A bubble that couldn't had its mouse presses dropped by Windows /
     // Chromium after clicking elsewhere (only the release arrived, so clicks did nothing).
     // Clicking the bubble now takes the focus from an open panel; BubbleController.clickBubble
-    // knows that press closed it. The clones never need it.
-    focusable: view !== 'clones',
+    // knows that press closed it. The clones' and the vision's windows never need it.
+    focusable: !passive(view),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: true,
@@ -2555,7 +2781,7 @@ export function createOverlayWindow(
     win.setIgnoreMouseEvents(true, { forward: true })
     addEditContextMenu(win)
   }
-  if (view === 'clones') win.setIgnoreMouseEvents(true)
+  if (passive(view)) win.setIgnoreMouseEvents(true)
 
   const search = { ...query, view }
   const devServer = process.env['ELECTRON_RENDERER_URL']
@@ -2572,18 +2798,21 @@ export function createOverlayWindow(
 
 Creates one overlay window. `new BrowserWindow({...})` makes a native window with a Chromium page
 inside; the options say what kind of window. As the comment says, `query` adds to the page's query
-string, and the clones' window never takes the mouse or the focus.
+string, and the clones' and the vision's windows never take the mouse or the focus.
 
 - `...size`: the window's `width` and `height`: `BUBBLE_BOX` square for the bubble,
   `panelWindowSize(actionCount)` for the panel, both at her usual size. The controller sizes them
-  for her size when it first places them, and again whenever her size changes. For the clones,
-  `index.ts` passes the strip they walk in (`cloneStrip()`), and sets the window's bounds straight
-  after.
+  for her size when it first places them, and again whenever her size changes. For the clones and
+  the vision, `index.ts` passes the size of the area asked for (the strip the clones walk in, from
+  `cloneStrip()`, or the column over her, from `visionBounds()`), and sets the window's bounds
+  straight after.
 - `query: Record<string, string> = {}`: more for the page's query string, beside `view`. Only the
-  clones' window has any (where she stands, her size, the accent colour and when they end; see
-  `Clones.start()`): it doesn't ask for the app state as the other two pages do.
+  clones' and the vision's windows have any (for the clones, where she stands, her size, the accent
+  colour and when they end; for the vision, her size, where her middle is and when it started; see
+  `Clones.start()` and `Vision.start()`): their pages don't ask for the app state as the other two
+  do.
 - `show: false`: created hidden. The controller decides when the bubble and the panel appear, and
-  `index.ts` shows the clones' window once its page has drawn.
+  `index.ts` shows the clones' and the vision's windows once their pages have drawn.
 - No `alwaysOnTop: true`: the comment explains that would use Electron's default level, which
   loses it while a full-screen app is in front. `win.setAlwaysOnTop(true, ON_TOP_LEVEL)` straight
   after creating the window makes it always on top at a level that keeps it there.
@@ -2595,9 +2824,9 @@ string, and the clones' window never takes the mouse or the focus.
   page draws its own.
 - `type: 'toolbar'`: on Windows, a toolbar window is left out of Alt+Tab. `skipTaskbar: true` keeps
   it off the taskbar too.
-- `focusable: view !== 'clones'`: the bubble and the panel can take the keyboard focus; as the
-  comment says, the clones never need it, so their window can't, and it never takes the focus from
-  the app you're working in. The panel must, since you type in it. The bubble used to be unable to
+- `focusable: !passive(view)`: the bubble and the panel can take the keyboard focus; as the
+  comment says, the clones never need it, and nor does the vision, so their windows can't, and
+  never take the focus from the app you're working in. The panel must, since you type in it. The bubble used to be unable to
   (`focusable: false`), so that clicking it wouldn't take the
   focus from the panel or from the app you were working in. But, as the comment says, in some
   states (after clicking somewhere else) Windows and Chromium dropped the mouse _press_ on that
@@ -2619,19 +2848,22 @@ string, and the clones' window never takes the mouse or the focus.
 - `win.setIgnoreMouseEvents(true, { forward: true })`: the panel starts click-through. The
   `forward` option (Windows and macOS only) keeps sending mouse moves to the page, which is what
   lets `useClickThrough` notice the pointer arriving over real UI.
-- `if (view === 'clones') win.setIgnoreMouseEvents(true)`: the clones' window is click-through
-  for good: clicks go straight through it to whatever is underneath, so the clones never get in
-  the way. Without `forward`, its page isn't told about the mouse at all, which it has no use for.
+- `if (passive(view)) win.setIgnoreMouseEvents(true)`: the clones' and the vision's windows are
+  click-through for good: clicks go straight through them to whatever is underneath, so they never
+  get in the way (a click on her, through the vision's light, still reaches her own window in front
+  of it). Without `forward`, their pages aren't told about the mouse at all, which they have no use
+  for.
 - `const search = { ...query, view }`: the page's query string as an object: whatever the caller
   added, then `view` last, so nothing the caller adds can change which page it is.
 - `process.env['ELECTRON_RENDERER_URL']`: set by `electron-vite` during `npm run dev` to the
   address of its dev server, which serves the page with live reloading. `!app.isPackaged` makes
   sure an installed app always loads the page bundled with it.
 - `new URLSearchParams(search)`: the browser's class for query strings. Put inside a template
-  string, it becomes text like `view=clones&from=1808&scale=1&…`, with each value encoded (the `#`
-  of the accent colour becomes `%23`), so the page reads back exactly what was put in.
+  string, it becomes text like `from=1808&scale=1&accent=%239333EA&…&view=clones`, with each value
+  encoded (the `#` of the accent colour becomes `%23`), so the page reads back exactly what was put
+  in.
 - `{ query: search }`: `loadFile()` adds the same to the built page's address (`?view=bubble`,
-  `?view=panel`, or `?view=clones&…`).
+  `?view=panel`, or the clones' or the vision's values ending in `view=clones` or `view=vision`).
 - `void win.loadURL(`: loading returns a promise that isn't awaited; `void` marks that as
   deliberate.
 
@@ -2639,7 +2871,7 @@ string, and the clones' window never takes the mouse or the focus.
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#keepOnTop -->
 
-[`src/main/bubble/windows.ts`, lines 89–100](../../apps/desktop/src/main/bubble/windows.ts#L89-L100)
+[`src/main/bubble/windows.ts`, lines 92–103](../../apps/desktop/src/main/bubble/windows.ts#L92-L103)
 
 ```ts
 /**
@@ -2673,7 +2905,7 @@ windows and stops it when quitting.
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#bringToFront -->
 
-[`src/main/bubble/windows.ts`, lines 102–114](../../apps/desktop/src/main/bubble/windows.ts#L102-L114)
+[`src/main/bubble/windows.ts`, lines 105–117](../../apps/desktop/src/main/bubble/windows.ts#L105-L117)
 
 ```ts
 /**
@@ -2706,7 +2938,7 @@ calls it for the bubble when Windows says something else is at the bubble's cent
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#bubbleSurface,panelSurface -->
 
-[`src/main/bubble/windows.ts`, lines 116–139](../../apps/desktop/src/main/bubble/windows.ts#L116-L139)
+[`src/main/bubble/windows.ts`, lines 119–142](../../apps/desktop/src/main/bubble/windows.ts#L119-L142)
 
 ```ts
 export function bubbleSurface(win: BrowserWindow): Surface {
@@ -2752,7 +2984,7 @@ forwards each call to the matching Electron method.
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#resetClickThrough -->
 
-[`src/main/bubble/windows.ts`, lines 141–153](../../apps/desktop/src/main/bubble/windows.ts#L141-L153)
+[`src/main/bubble/windows.ts`, lines 144–156](../../apps/desktop/src/main/bubble/windows.ts#L144-L156)
 
 ```ts
 /**
@@ -2790,7 +3022,7 @@ been hidden, for example for a screenshot.
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#lockDown -->
 
-[`src/main/bubble/windows.ts`, lines 155–164](../../apps/desktop/src/main/bubble/windows.ts#L155-L164)
+[`src/main/bubble/windows.ts`, lines 158–167](../../apps/desktop/src/main/bubble/windows.ts#L158-L167)
 
 ```ts
 function lockDown(win: BrowserWindow, view: View): void {
@@ -2825,7 +3057,7 @@ Basic safety and crash recovery for every overlay page.
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#addEditContextMenu -->
 
-[`src/main/bubble/windows.ts`, lines 166–187](../../apps/desktop/src/main/bubble/windows.ts#L166-L187)
+[`src/main/bubble/windows.ts`, lines 169–190](../../apps/desktop/src/main/bubble/windows.ts#L169-L190)
 
 ```ts
 /** Right-click menu for the text box: spelling suggestions plus the usual edit commands. */

@@ -394,6 +394,39 @@ function spell(): Key[] {
 }
 
 /**
+ * A vision, from the front, in time with the light and the logo above her (VISION): as the light
+ * appears she looks up, wide-eyed, her hands lifting a little; as the logo arrives she smiles and
+ * her arms open; she watches it rise away, then settles and blinks.
+ */
+function vision(): Key[] {
+  const looking = (face: Pose['face'], out: number, i = 0): Pose => {
+    // A breath every second or so, so she isn't frozen while she watches.
+    const breath = Math.sin((i / 25) * Math.PI * 2) * 0.03
+    const arm = { shoulder: 0.1 + out * 0.35 + breath, elbow: out * 0.5 }
+    return { view: 'front', face, arms: [arm, arm] }
+  }
+  // Frames about every FRAME_MS, their times adding up to exactly `ms` (as tween's do).
+  const watching = (face: Pose['face'], out: number, ms: number): Key[] => {
+    const steps = Math.round(ms / FRAME_MS)
+    return Array.from({ length: steps }, (_, i) => ({
+      pose: looking(face, out, i),
+      ms: Math.round(((i + 1) * ms) / steps) - Math.round((i * ms) / steps),
+    }))
+  }
+  return [
+    ...hold(FRONT, 400),
+    ...tween(FRONT, looking('awe', 0.4), 320),
+    ...watching('awe', 0.4, 1100),
+    ...tween(looking('awe', 0.4), looking('up', 0.7), 400),
+    ...watching('up', 0.7, 1200),
+    ...tween(looking('up', 0.7), looking('up', 0.3), 1200),
+    ...tween(looking('up', 0.3), FRONT, 400),
+    ...hold({ ...FRONT, face: 'blink' }, 120),
+    ...hold(FRONT, 60),
+  ]
+}
+
+/**
  * Levitating: eyes shut, her arms drift out, a magic circle opens on the ground and she floats up
  * over it, her hair and robe lifting; she hovers, bobbing, smiling, the runes turning and sparks
  * rising; then she sinks, lands with a little bend of the knees, and the circle fades.
@@ -555,6 +588,7 @@ const MAKERS: Record<Name, () => Frame[]> = {
   read: () => drawn(read()),
   spell: () => drawn(spell()),
   levitate: () => drawn(levitate()),
+  vision: () => drawn(vision()),
   sit: () => drawn(sit()),
   look,
   dragged: () => drawn(dragged()),
@@ -573,6 +607,7 @@ export const LOOPS: Record<Name, boolean> = {
   read: false,
   spell: false,
   levitate: false,
+  vision: false,
   sit: false,
   look: false,
 }

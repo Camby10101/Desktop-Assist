@@ -82,14 +82,14 @@ describe('Clones (the main process)', () => {
     expect(opened[0]!.closed).toBe(true)
     expect(opened[1]!.closed).toBe(false)
     vi.advanceTimersByTime(CLONES.durationMs - 1)
-    expect(opened[1]!.closed).toBe(false) // a full ten seconds from the second start
+    expect(opened[1]!.closed).toBe(false) // a full thirty seconds from the second start
     vi.advanceTimersByTime(1)
     expect(opened[1]!.closed).toBe(true)
   })
 
-  it('makes ten of her for ten seconds', () => {
+  it('makes ten of her for thirty seconds', () => {
     expect(CLONES.count).toBe(10)
-    expect(CLONES.durationMs).toBe(10_000)
+    expect(CLONES.durationMs).toBe(30_000)
   })
 })
 

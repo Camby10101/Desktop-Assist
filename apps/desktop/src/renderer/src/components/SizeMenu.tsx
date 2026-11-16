@@ -45,14 +45,14 @@ export function SizeMenu(props: {
       data-hit
       data-size-menu
       role="group"
-      aria-label="Her size"
+      aria-label="Size"
       className={cn(
         'absolute rounded-xl border p-2.5 shadow-xl',
         'border-black/10 bg-white text-zinc-800 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100',
       )}
       style={{ ...anchored(props.corner, props.layout.settingsX, props.offset), width: MENU_WIDTH }}
     >
-      <p className="mb-2 text-sm">Her size</p>
+      <p className="mb-2 text-sm">Size</p>
       <div className="flex items-center justify-between gap-2">
         <SizeButton
           label="Smaller"

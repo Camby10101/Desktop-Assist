@@ -25,29 +25,31 @@ clones; all of these are covered at the end of this page.
 
 ## `src/renderer/src/components/ChatBox.tsx`: the chat card
 
-The card beside the bubble, with the text box at its bottom. `Panel` renders one `ChatBox` and
-passes it everything it shows: the bubble's `corner`, the `layout` for her size, whether the panel
-is `open`, the current
+The card beside the bubble, with the text box at its bottom, drawn as a speech bubble: a tail on
+its side nearest her points at her mouth, as if she were saying it. `Panel` renders one `ChatBox`
+and passes it everything it shows: the bubble's `corner`, the `layout` for her size, her size
+itself (`scale`, for the tail), whether the panel is `open`, the current
 `toast`, the conversation (`messages`), the `draft` and its `attachments`, whether Claude is
 replying (`busy`), whether Send is allowed (`canSend`), whether questions go to Claude Desktop
 (`inClaudeDesktop`) and, if so, whether they're sent there automatically (`autoSend`). `Panel` also
 builds the optional pieces that go inside it: a page to show instead (`page`), the sign-in
 (`signInPrompt`) and a status line (`banner`). The `on…` props are what the buttons and the text box
 call; `issueKeys`, `onOpenIssue` and `onReport` are for Jira and the service desk. The file has
-three components: `ChatBox` (the card), `Composer` (the text box, private to this file) and `Banner`
-(exported, used by `Panel`).
+four components: `ChatBox` (the card), `SpeechTail` (its tail) and `Composer` (the text box), both
+private to this file, and `Banner` (exported, used by `Panel`).
 
 ### `ChatBox`
 
 <!-- code: apps/desktop/src/renderer/src/components/ChatBox.tsx#ChatBox -->
 
-[`src/renderer/src/components/ChatBox.tsx`, lines 19–113](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L19-L113)
+[`src/renderer/src/components/ChatBox.tsx`, lines 27–142](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L27-L142)
 
 ```tsx
 /**
- * The card beside the bubble, on the side facing the middle of the screen. It's anchored at the
- * bubble's edge (bottom in a bottom corner, top in a top corner), so it starts as just the text
- * box and grows away from that edge as the conversation gets longer, then scrolls. When nobody is
+ * The card beside the bubble, on the side facing the middle of the screen: a speech bubble, its
+ * tail pointing at her mouth (see SpeechTail). It's anchored at the bubble's edge (bottom in a
+ * bottom corner, top in a top corner), so it starts as just the text box and grows away from that
+ * edge as the conversation gets longer, then scrolls. When nobody is
  * signed in, `signInPrompt` is shown instead of the chat. With `inClaudeDesktop`, it's only the
  * text box, and sending opens the question in Claude Desktop. While a page's icon is on (Apps,
  * Jira, the service desk), the page shows instead.
@@ -56,6 +58,8 @@ export function ChatBox(props: {
   corner: Corner
   /** Where things sit for her size: the card goes beside her. */
   layout: PanelLayout
+  /** Her size (see CHARACTER_SIZES), for the tail to reach her mouth. */
+  scale: number
   open: boolean
   toast: ToastMessage | null
   /** Sending hands the question to Claude Desktop instead of the chat in the panel. */
@@ -87,8 +91,20 @@ export function ChatBox(props: {
   /** Turns the text (and screenshots) into an IT request; null without a service desk form. */
   onReport: (() => void) | null
 }) {
+  // The card's height, for the tail to stay on it however short it is.
+  const card = useRef<HTMLDivElement>(null)
+  const [cardHeight, setCardHeight] = useState(0)
+  useEffect(() => {
+    const element = card.current
+    if (!element) return
+    const observer = new ResizeObserver(() => setCardHeight(element.offsetHeight))
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [])
+
   return (
     <div
+      ref={card}
       data-hit
       className={cn(
         'absolute flex flex-col rounded-2xl border shadow-xl',
@@ -104,6 +120,12 @@ export function ChatBox(props: {
         maxHeight: UI.panelMaxHeight,
       }}
     >
+      <SpeechTail
+        corner={props.corner}
+        layout={props.layout}
+        scale={props.scale}
+        cardHeight={cardHeight}
+      />
       {props.toast && (
         <div
           key={props.toast.id}
@@ -208,6 +230,8 @@ The parts of `ChatBox` itself:
 
 - `layout: PanelLayout`: as the comment says, where things sit for her size; the card goes beside
   her. `PanelLayout` is the type of what `panelLayout()` returns.
+- `scale: number`: as the comment says, her size, so the tail reaches her mouth however big she
+  is.
 - `inClaudeDesktop: boolean`: `ChatBox` only passes it on to `Composer`, which changes the send
   button. The rest of the card needs no change: with Claude Desktop, `Panel` never passes a
   sign-in prompt or any messages, so the card is just the text box (and sometimes a banner).
@@ -216,6 +240,14 @@ The parts of `ChatBox` itself:
 - `page: ReactNode`: as the comment says, a page that replaces the text box while its icon is on
   (the Apps list, the Jira page, the service desk page, or an issue over one of them), built by
   `Panel` like `signInPrompt`; otherwise `null`.
+- `const card = useRef<HTMLDivElement>(null)`, `cardHeight`: as the comment says, the card's
+  height, so the tail stays on the card however short it is. The card grows and shrinks with what's
+  in it, so it's measured rather than worked out. `ref={card}` on the card's `<div>` puts the
+  element in `card.current` once it's on the page.
+- `new ResizeObserver(() => setCardHeight(element.offsetHeight))`: the browser calls this whenever
+  the card's size changes (and once when it starts watching), and `offsetHeight` is its height in
+  pixels, borders included. Keeping it in state redraws the tail to match. The effect runs once
+  (`[]`), and its cleanup stops the watching (`disconnect()`).
 - `originClass(props.corner)`: sets the CSS `transform-origin` to the bubble's corner (for
   example `origin-bottom-right`), so the zoom-in animation grows out of the bubble.
 - `'scale-95 opacity-0 transition duration-150 ease-out'`: the card is always rendered, even
@@ -234,6 +266,8 @@ The parts of `ChatBox` itself:
   (16 + 160 + 12) and 16.
 - `maxHeight: UI.panelMaxHeight`: nothing sets a height. The card is pinned at the bubble's edge
   and grows away from it as content is added, up to 520 px. After that the message list scrolls.
+- `<SpeechTail ... />`: the tail, drawn first inside the card but placed outside it, on the side
+  towards her (see below). It's given the corner, the layout, her size and the card's height.
 - `{props.toast && (`: the part after `&&` is rendered only when the left side is truthy, so
   with no toast nothing is drawn. Toasts come from `useToast` in `Panel` and vanish after 2.6
   seconds.
@@ -258,11 +292,144 @@ The parts of `ChatBox` itself:
 - `<Composer {...props} />`: `{...props}` passes every one of `ChatBox`'s props on to `Composer`
   unchanged.
 
+### `MOUTH_ROW`, `TAIL_REACH`, `CARD_RADIUS` and `SpeechTail`
+
+<!-- code: apps/desktop/src/renderer/src/components/ChatBox.tsx#MOUTH_ROW,TAIL_REACH,CARD_RADIUS,SpeechTail -->
+
+[`src/renderer/src/components/ChatBox.tsx`, lines 144–201](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L144-L201)
+
+```tsx
+/** Her mouth, in sprite pixels down from the top of her window (rig.ts draws it there). */
+const MOUTH_ROW = 33.5
+
+/** How far from her middle the tail stops (sprite pixels): just short of her face and hair. */
+const TAIL_REACH = 11
+
+/** The card's corner radius (`rounded-2xl`), which the tail's base keeps clear of. */
+const CARD_RADIUS = 16
+
+/**
+ * The speech bubble's tail: a triangle from the card's side nearest her to just short of her
+ * mouth, at her height and size, so it points at her mouth however big she is (her mouth is at
+ * MOUTH_ROW of her 96-pixel grid, scaled with her). Its base slides along the card's edge to stay
+ * level with her mouth, but never past the card's rounded corners, so on a card shorter than her
+ * mouth is high (just the text box, at a big size) it slants up to her instead. It's drawn in
+ * the card's own colours and border, overlapping the card's edge by a pixel so the two read as
+ * one shape, and it ignores the mouse, so it never gets between the pointer and her.
+ */
+function SpeechTail(props: {
+  corner: Corner
+  layout: PanelLayout
+  scale: number
+  cardHeight: number
+}) {
+  const { scale, layout } = props
+  const { box } = bubbleMetrics(scale)
+  // From the card's edge out to the tip, and up from the card's near edge (its bottom, in a
+  // bottom corner) to the tip.
+  const out = Math.max(8, layout.chatX - (box / 2 + TAIL_REACH * scale))
+  const up = (SPRITE_SIZE - MOUTH_ROW) * scale - layout.chatY
+  const half = 9 + 2 * scale
+  const lowest = CARD_RADIUS + half
+  const highest = Math.max(lowest, props.cardHeight - CARD_RADIUS - half)
+  const base = Math.min(Math.max(up, lowest), highest)
+  const width = out + 2
+  const height = Math.max(up, base + half) + 2
+  const y = (fromEdge: number) => height - fromEdge
+  const corners = `M0 ${y(base + half)} L${out} ${y(up)} L0 ${y(base - half)}`
+  const left = isLeftCorner(props.corner)
+  const top = isTopCorner(props.corner)
+  return (
+    <svg
+      aria-hidden
+      width={width}
+      height={height}
+      viewBox={`0 0 ${width} ${height}`}
+      className="pointer-events-none absolute overflow-visible"
+      style={{
+        // On the side towards her, over the card's border by a pixel.
+        [left ? 'right' : 'left']: 'calc(100% - 1px)',
+        [top ? 'top' : 'bottom']: 0,
+        // Drawn going right from a bottom edge; mirrored for the other sides.
+        transform: `scale(${left ? -1 : 1}, ${top ? -1 : 1})`,
+      }}
+    >
+      <path d={`${corners} Z`} className="fill-white dark:fill-zinc-900" />
+      <path d={corners} fill="none" className="stroke-black/10 dark:stroke-white/10" />
+    </svg>
+  )
+}
+```
+
+<!-- /code -->
+
+The speech bubble's tail.
+
+- `MOUTH_ROW = 33.5`: as its comment says, her mouth, in sprite pixels down from the top of her
+  window, which is where the rig draws it (`rig.ts`). Her window is `SPRITE_SIZE` (96) sprite
+  pixels tall, one DIP each at her usual size, so the mouth's height above her feet grows with her.
+- `TAIL_REACH = 11`: as its comment says, how far from her middle the tail stops, in sprite
+  pixels, so its tip comes just short of her face and hair rather than over them.
+- `CARD_RADIUS = 16`: as its comment says, the card's corner radius (`rounded-2xl` is 16 px). The
+  tail's base keeps clear of the rounded corners, where it would leave a gap.
+
+As the comment on `SpeechTail` says, the tail is a triangle from the card's side nearest her to
+just short of her mouth, at her height and size, so it points at her mouth however big she is. Its
+base slides along the card's edge to stay level with her mouth, but never past the card's rounded
+corners: on a card shorter than her mouth is high (just the text box, when she's big), it slants
+up to her instead. It's drawn in the card's own colours and border, a pixel over the card's edge so
+the two read as one shape, and it ignores the mouse.
+
+The measurements, all in DIPs, as for the bottom-right corner (the others are mirror images):
+
+- `const { box } = bubbleMetrics(scale)`: her window's width at her size, 96 at her usual size.
+- `out = Math.max(8, layout.chatX - (box / 2 + TAIL_REACH * scale))`: as the comment says, from the
+  card's edge out to the tip. The card's edge is `chatX` from the corner the panel shares with her
+  window, and her middle is half her window from it; the tip stops `TAIL_REACH` (times her size)
+  short of her middle. At her usual size that's 100 − (48 + 11) = 41; at twice it, 188 − (96 + 22)
+  = 70. It's never less than 8, so there's always a tail.
+- `up = (SPRITE_SIZE - MOUTH_ROW) * scale - layout.chatY`: as the comment says, from the card's
+  near edge (its bottom, in a bottom corner) up to the tip, level with her mouth. Her mouth is
+  96 − 33.5 = 62.5 sprite pixels above her feet, which are on her window's bottom edge, and the
+  card's bottom is `chatY` above that edge. At her usual size, 62.5 − 8 = 54.5.
+- `half = 9 + 2 * scale`: half the width of the tail's base, 11 at her usual size (a base of 22),
+  a little wider when she's bigger.
+- `lowest`, `highest`: how near to the card's bottom and top edges the middle of the base may go
+  while the whole base stays clear of the rounded corners. On a card too short for both, `highest`
+  is no lower than `lowest`.
+- `base = Math.min(Math.max(up, lowest), highest)`: the middle of the base: level with her mouth
+  when that fits on the card, otherwise as near as it can be. Then the tail runs straight across;
+  otherwise it slants up (or down) to her mouth.
+- `width = out + 2`, `height = Math.max(up, base + half) + 2`: the size of the drawing, tall enough
+  for both the tip and the base, with 2 DIPs to spare for the outline.
+- `y = (fromEdge: number) => height - fromEdge`: SVG measures `y` down from the top; this turns a
+  height above the card's bottom edge into that.
+- `corners`: an SVG path: `M` moves to the base's upper end on the card's edge (`x` 0), `L` draws
+  a line to the tip, and another back to the base's lower end.
+
+The JSX:
+
+- `aria-hidden`: it's decoration, so screen readers skip it.
+- `className="pointer-events-none absolute overflow-visible"`: it ignores the mouse (so, as the
+  comment says, it never gets between the pointer and her), it's placed against the card, and the
+  outline can spill over its edges.
+- `[left ? 'right' : 'left']: 'calc(100% - 1px)'`: on the side of the card towards her: in a
+  right-hand corner its left edge is the card's right edge, less a pixel, so it covers the card's
+  border there and the two join up. `[top ? 'top' : 'bottom']: 0`: level with the card's near
+  edge.
+- `transform: scale(...)`: the path is worked out pointing right from a bottom edge, so in a
+  left-hand corner it's flipped across, and in a top corner upside down.
+- `<path d={`${corners} Z`} className="fill-white dark:fill-zinc-900" />`: the triangle filled
+  with the card's colour (`Z` closes the path back to its start).
+- `<path d={corners} fill="none" className="stroke-black/10 dark:stroke-white/10" />`: the outline
+  in the card's border colour, along the two sides that stick out but not the base, which lies
+  over the card.
+
 ### `Composer`
 
 <!-- code: apps/desktop/src/renderer/src/components/ChatBox.tsx#Composer -->
 
-[`src/renderer/src/components/ChatBox.tsx`, lines 115–256](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L115-L256)
+[`src/renderer/src/components/ChatBox.tsx`, lines 203–344](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L203-L344)
 
 ```tsx
 /** The text box: attached screenshots, the text, and the attach / send / stop buttons. */
@@ -500,7 +667,7 @@ first appears. Effects are for work outside drawing the UI, such as moving the k
 
 <!-- code: apps/desktop/src/renderer/src/components/ChatBox.tsx#Banner -->
 
-[`src/renderer/src/components/ChatBox.tsx`, lines 258–267](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L258-L267)
+[`src/renderer/src/components/ChatBox.tsx`, lines 346–355](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L346-L355)
 
 ```tsx
 /** A one-line status above the text box, with an optional action. */
@@ -1615,7 +1782,7 @@ it tells screen readers whether it's on, so the switch itself is `aria-hidden`.
 
 ## `src/renderer/src/components/SizeMenu.tsx`: the size menu
 
-The small menu that opens beside the size icon (Her size), with buttons to make her smaller or
+The small menu that opens beside the size icon (Size), with buttons to make her smaller or
 bigger. `Panel` renders it only while the panel is open, the size icon has toggled it on, and the
 tenant's list of actions includes `size`. Its props are the `corner`, `layout` and `offset` for
 positioning, as for `SettingsMenu`; her `size` (`CharacterSize` in `src/shared/geometry.ts`: her
@@ -1686,14 +1853,14 @@ export function SizeMenu(props: {
       data-hit
       data-size-menu
       role="group"
-      aria-label="Her size"
+      aria-label="Size"
       className={cn(
         'absolute rounded-xl border p-2.5 shadow-xl',
         'border-black/10 bg-white text-zinc-800 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100',
       )}
       style={{ ...anchored(props.corner, props.layout.settingsX, props.offset), width: MENU_WIDTH }}
     >
-      <p className="mb-2 text-sm">Her size</p>
+      <p className="mb-2 text-sm">Size</p>
       <div className="flex items-center justify-between gap-2">
         <SizeButton
           label="Smaller"
@@ -1741,7 +1908,7 @@ really is.
 - `data-hit`: so the menu takes the mouse (see `data-hit` under `ChatBox`).
 - `data-size-menu`: lets `Panel`'s `closeMenusOnOutsideClick` recognise a click inside the menu, so
   it doesn't close it.
-- `role="group"`, `aria-label="Her size"`: screen readers present the buttons together, under that
+- `role="group"`, `aria-label="Size"`: screen readers present the buttons together, under that
   name.
 - `...anchored(props.corner, props.layout.settingsX, props.offset)`: placed just as the settings
   menu is, 8 px past the action icons on the side facing the middle of the screen, but level with
@@ -1810,7 +1977,7 @@ One of the two round buttons, private to this file.
 ## `src/renderer/src/components/ActionStack.tsx`: the action icons
 
 The column of round icon buttons that pops out of the bubble when the panel opens (for Morse
-Micro: Ask Claude, Jira, IT service desk, screenshot, light or dark mode, settings, her size, ten
+Micro: Ask Claude, Jira, IT service desk, screenshot, light or dark mode, settings, size,
 clones and close), in the order the tenant's `tenant.json` lists them, nearest the bubble first.
 `Panel` always renders it; while closed it's simply invisible. Its props are the `corner`, the
 `layout` for her size, the tenant's `actions`, `open`, `activeId` (`settings` while the settings
@@ -1845,7 +2012,7 @@ const ICONS: Record<ActionId, LucideIcon> = {
 
 Which lucide icon each action shows. Ask Claude is `MessageCircle`, a speech bubble; Apps is
 `LayoutGrid`, a grid of four squares, the usual sign for "apps"; Jira is `Bell`, for its
-notifications; and the IT service desk is `Headset`, as for a help desk. Her size is `Scaling`, a
+notifications; and the IT service desk is `Headset`, as for a help desk. The size icon is `Scaling`, a
 box with a diagonal arrow stretching out of its corner, and the clones are `UsersRound`, two
 people, one behind the other. The theme
 icon is `Sun`, but see below: it changes with the mode.
@@ -1971,12 +2138,12 @@ Lays the icons out in a column beside the bubble and animates them in and out.
   `[data-action="size"]`, so clicking the gear or the size icon toggles its menu instead of
   counting as a click outside it.
 - `aria-expanded={ACTIONS[id].kind === 'popover' || props.pages?.includes(id) ? active : undefined}`:
-  for a popover action (Settings, Her size, Ask Claude, Apps and Jira), or an icon that opens a
+  for a popover action (Settings, Size, Ask Claude, Apps and Jira), or an icon that opens a
   page (the service desk, with request types), it tells screen readers whether what it opens is
   showing. `undefined` leaves the attribute off the others, the theme icon included, which opens
   nothing.
-- `onClick={() => props.onAction(id)}`: `Panel.runAction` toggles the menu for Settings and Her
-  size, switches the card's page for Ask Claude, Apps, Jira and (with request types) the service
+- `onClick={() => props.onAction(id)}`: `Panel.runAction` toggles the menu for Settings and
+  Size, switches the card's page for Ask Claude, Apps, Jira and (with request types) the service
   desk, flips light or dark mode for the theme icon, and asks the main process to run any other
   action, such as the clones (see `src/main/actions.ts` in
   [Main process: startup, IPC and app plumbing](2-main-startup.md)).
@@ -2697,12 +2864,13 @@ const LIGHT: Point = { x: -1, y: -1 }
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#View,Face,Arm,Leg,Pose,DOWN,STAND,LEG_LENGTH -->
 
-[`src/renderer/src/character/rig.ts`, lines 37–87](../../apps/desktop/src/renderer/src/character/rig.ts#L37-L87)
+[`src/renderer/src/character/rig.ts`, lines 37–88](../../apps/desktop/src/renderer/src/character/rig.ts#L37-L88)
 
 ```ts
 export type View = 'front' | 'diagonal' | 'side'
 
-export type Face = 'neutral' | 'blink' | 'happy' | 'surprised' | 'yawn' | 'sip' | 'down'
+export type Face =
+  'neutral' | 'blink' | 'happy' | 'surprised' | 'yawn' | 'sip' | 'down' | 'awe' | 'up'
 
 /** Angles in radians from hanging straight down. */
 export interface Arm {
@@ -2765,7 +2933,8 @@ What a pose is made of.
   and the spell, where her hands are busy in front of her.
 - `Face`: her expression: `neutral`, `blink` (eyes shut), `happy` (smiling eyes and mouth),
   `surprised` (mouth open, while she's carried), `yawn`, `sip` (eyes closed contentedly, lips on
-  the cup) and `down` (looking down at her book).
+  the cup), `down` (looking down at her book), and, for her vision, `awe` (looking up, mouth open
+  in wonder) and `up` (looking up, smiling).
 - `Arm` and `Leg`: as the comment says, angles in radians from hanging straight down. The shoulder
   (or hip) is the upper limb's angle, and the elbow (or knee) bends the lower limb from there. A
   knee bends the other way to an elbow: a positive `knee` swings the shin back
@@ -2798,7 +2967,7 @@ What a pose is made of.
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#EYES,MOUTHS,SPARKLE,TWINKLE,eyesFor -->
 
-[`src/renderer/src/character/rig.ts`, lines 89–156](../../apps/desktop/src/renderer/src/character/rig.ts#L89-L156)
+[`src/renderer/src/character/rig.ts`, lines 90–170](../../apps/desktop/src/renderer/src/character/rig.ts#L90-L170)
 
 ```ts
 // Face pictures, facing right; `.` is see-through. Eyes have a thick upper lid, a dark-to-light
@@ -2821,6 +2990,11 @@ const EYES = {
       ['.....', '.....', 'eeeee', '.iIi.'],
       ['.....', '.....', 'eeeee', '.iIi.'],
     ],
+    // Looking up: the iris right under the lid, the row below it bare.
+    up: [
+      ['eeeee', '.iiiw', '.IjjI', '..jj.', '.....'],
+      ['eeeee', 'iiiw.', 'IjjI.', '.jj..', '.....'],
+    ],
   },
   diagonal: {
     open: [
@@ -2839,12 +3013,17 @@ const EYES = {
       ['.....', '.....', 'eeeee', '.iIi.'],
       ['....', '....', 'eeee', 'iIi.'],
     ],
+    up: [
+      ['eeeee', '.iiiw', '.IjjI', '..jj.', '.....'],
+      ['eeee', 'iiw.', 'Ijj.', 'jj..', '....'],
+    ],
   },
   side: {
     open: [['ee...', '.eeee', '..iw.', '..II.', '..jj.']],
     blink: [['.....', '.....', 'eeee.', '.ee..']],
     happy: [['.....', '..ee.', '.e..e', '.....']],
     down: [['.....', '.....', '.eeee', '..iI.']],
+    up: [['ee...', '.eeee', '..iw.', '..jj.', '.....']],
   },
 } as const
 
@@ -2856,6 +3035,8 @@ const MOUTHS: Record<Face, readonly string[]> = {
   surprised: ['mm', 'mm'],
   yawn: ['.mm.', 'mmmm', 'mmmm', '.mm.'],
   sip: ['m'],
+  awe: ['mm', 'mm'],
+  up: ['m..m', '.mm.'],
 }
 
 /** A four-pointed sparkle, and a smaller one. */
@@ -2864,10 +3045,11 @@ const SPARKLE = ['..j..', '..l..', 'jlwlj', '..l..', '..j..']
 const TWINKLE = ['.l.', 'lwl', '.l.']
 
 /** Which eyes a face uses. */
-function eyesFor(face: Face): 'open' | 'blink' | 'happy' | 'down' {
+function eyesFor(face: Face): 'open' | 'blink' | 'happy' | 'down' | 'up' {
   if (face === 'blink' || face === 'yawn') return 'blink'
   if (face === 'happy' || face === 'sip') return 'happy'
   if (face === 'down') return 'down'
+  if (face === 'awe' || face === 'up') return 'up'
   return 'open'
 }
 ```
@@ -2888,6 +3070,8 @@ As the comment says, they face right; frames facing left are mirrored with every
     gradient gives it depth, and the matching glints say both catch the same light.
   - `blink`: shut, a line curving down. `happy`: an upside-down U, the smiling closed eye of anime.
     `down`: the lid lowered over a sliver of iris, looking down.
+  - `up`: as its comment says, looking up: the iris (with its glint) right under the lid, and the
+    bottom row bare, so the eye seems to roll upward. Every view has one, side on included.
   - Seen diagonally, the far eye is a pixel narrower, because it's turned away.
   - Side on, the open eye is a wedge, as anime profiles draw it: lashes flicking back at the outer
     corner (`ee...`), the upper lid (`.eeee`), and a narrow iris toward the front: glint, pupil
@@ -2895,19 +3079,20 @@ As the comment says, they face right; frames facing left are mirrored with every
   - `as const` keeps the object's exact shape, so TypeScript knows every view has every kind of
     eye.
 - `MOUTHS`: small on purpose: two pixels (`mm`) for most faces, a little U for `happy`, two by two
-  for `surprised`, a rounded four by four for `yawn`, and one pixel for `sip`. `Record<Face, ...>`
-  makes TypeScript insist on a mouth for every face.
+  for `surprised`, a rounded four by four for `yawn`, and one pixel for `sip`. `awe` has the same
+  open mouth as `surprised`, and `up` the same smile as `happy`. `Record<Face, ...>` makes
+  TypeScript insist on a mouth for every face.
 - `SPARKLE` and `TWINKLE`: as the comment says, a four-pointed sparkle, five pixels across, white
   at its heart (`w`) and paler then golden toward its points (`l`, `j`), and a smaller one, three
   pixels across. A spell circles one of the first and two of the second round her hand.
-- `eyesFor(face)`: which eyes go with a face. A yawn shuts them like a blink, and a sip closes them
-  happily.
+- `eyesFor(face)`: which eyes go with a face. A yawn shuts them like a blink, a sip closes them
+  happily, and `awe` and `up` both look up (their mouths are what differ).
 
 ### `draw()`
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#draw -->
 
-[`src/renderer/src/character/rig.ts`, lines 158–883](../../apps/desktop/src/renderer/src/character/rig.ts#L158-L883)
+[`src/renderer/src/character/rig.ts`, lines 172–897](../../apps/desktop/src/renderer/src/character/rig.ts#L172-L897)
 
 ```ts
 /** Draws one pose as rows of palette letters. */
@@ -3866,7 +4051,7 @@ Math.PI) % 2`), which turn with `spin`. Six white runes (`w`) go round the outer
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#HAT,HAIR,ROBE,castShadows -->
 
-[`src/renderer/src/character/rig.ts`, lines 885–915](../../apps/desktop/src/renderer/src/character/rig.ts#L885-L915)
+[`src/renderer/src/character/rig.ts`, lines 899–929](../../apps/desktop/src/renderer/src/character/rig.ts#L899-L929)
 
 ```ts
 /** Letters by part, for castShadows. */
@@ -4713,11 +4898,76 @@ As the comment says, a little spell, seen diagonally.
 - Then `casting(0, 'happy')`: the sparkles are gone and she smiles for 0.4 s before her hand comes
   down. 2400 ms, `FIDGET_MS.spell`.
 
+### `vision()`
+
+<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#vision -->
+
+[`src/renderer/src/character/sprite.ts`, lines 396–427](../../apps/desktop/src/renderer/src/character/sprite.ts#L396-L427)
+
+```ts
+/**
+ * A vision, from the front, in time with the light and the logo above her (VISION): as the light
+ * appears she looks up, wide-eyed, her hands lifting a little; as the logo arrives she smiles and
+ * her arms open; she watches it rise away, then settles and blinks.
+ */
+function vision(): Key[] {
+  const looking = (face: Pose['face'], out: number, i = 0): Pose => {
+    // A breath every second or so, so she isn't frozen while she watches.
+    const breath = Math.sin((i / 25) * Math.PI * 2) * 0.03
+    const arm = { shoulder: 0.1 + out * 0.35 + breath, elbow: out * 0.5 }
+    return { view: 'front', face, arms: [arm, arm] }
+  }
+  // Frames about every FRAME_MS, their times adding up to exactly `ms` (as tween's do).
+  const watching = (face: Pose['face'], out: number, ms: number): Key[] => {
+    const steps = Math.round(ms / FRAME_MS)
+    return Array.from({ length: steps }, (_, i) => ({
+      pose: looking(face, out, i),
+      ms: Math.round(((i + 1) * ms) / steps) - Math.round((i * ms) / steps),
+    }))
+  }
+  return [
+    ...hold(FRONT, 400),
+    ...tween(FRONT, looking('awe', 0.4), 320),
+    ...watching('awe', 0.4, 1100),
+    ...tween(looking('awe', 0.4), looking('up', 0.7), 400),
+    ...watching('up', 0.7, 1200),
+    ...tween(looking('up', 0.7), looking('up', 0.3), 1200),
+    ...tween(looking('up', 0.3), FRONT, 400),
+    ...hold({ ...FRONT, face: 'blink' }, 120),
+    ...hold(FRONT, 60),
+  ]
+}
+```
+
+<!-- /code -->
+
+As the comment says, a vision, from the front, in time with the light and the logo that another
+window draws above her (`VISION` in `src/shared/character.ts`, and `VisionView` in
+[The pages](7-renderer-pages.md)): as the light appears she looks up, wide-eyed, her hands lifting a
+little; as the logo arrives she smiles and her arms open; she watches it rise away, then settles
+and blinks.
+
+- `looking(face, out, i)`: a pose for each moment: from the front, her face, and both arms alike,
+  lifted out by `out` (0 to 1: the shoulder from 0.1 up to 0.45, with the elbow bent up to 0.5; from
+  the front, positive angles swing outward, so they open evenly). `i` is the frame number, for the
+  breath: as the comment says, a breath every second or so (25 frames of 40 ms), a slight rise and
+  fall of the shoulders, so she isn't frozen while she watches.
+- `watching(face, out, ms)`: as its comment says, frames about every `FRAME_MS` (40 ms), their times
+  adding up to exactly `ms`, as `tween()`'s do: each frame lasts the difference between two rounded
+  running totals, so the rounding never adds up to more or less than `ms`. Each frame is
+  `looking(face, out, i)`, so she breathes while she holds the pose.
+- The keys, against `VISION`'s timetable: she stands for 0.4 s, then turns her face up in `awe`, her
+  arms a little out (0.4), over 0.32 s, as the light fades in and the logo starts down; she watches
+  it come down for 1.1 s; as it arrives (at 1.8 s) she smiles (`up`) and opens her arms wider (0.7)
+  over 0.4 s, and watches it hover for 1.2 s; as it rises away (from 3.4 s) she lowers her arms
+  slowly (to 0.3) over 1.2 s, still looking up; then she comes back to standing over 0.4 s, blinks
+  and stands. 5200 ms, `FIDGET_MS.vision`.
+
 ### `levitate()`
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#levitate -->
 
-[`src/renderer/src/character/sprite.ts`, lines 396–446](../../apps/desktop/src/renderer/src/character/sprite.ts#L396-L446)
+[`src/renderer/src/character/sprite.ts`, lines 429–479](../../apps/desktop/src/renderer/src/character/sprite.ts#L429-L479)
 
 ```ts
 /**
@@ -4794,7 +5044,7 @@ As the comment says, she levitates, from the front.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#sit -->
 
-[`src/renderer/src/character/sprite.ts`, lines 448–488](../../apps/desktop/src/renderer/src/character/sprite.ts#L448-L488)
+[`src/renderer/src/character/sprite.ts`, lines 481–521](../../apps/desktop/src/renderer/src/character/sprite.ts#L481-L521)
 
 ```ts
 /** Sitting on the taskbar, her robe spread round her, swaying gently, looking about, then up again. */
@@ -4858,7 +5108,7 @@ As the comment says, sitting on the taskbar with her robe spread round her, the 
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#look -->
 
-[`src/renderer/src/character/sprite.ts`, lines 490–512](../../apps/desktop/src/renderer/src/character/sprite.ts#L490-L512)
+[`src/renderer/src/character/sprite.ts`, lines 523–545](../../apps/desktop/src/renderer/src/character/sprite.ts#L523-L545)
 
 ```ts
 /**
@@ -4903,7 +5153,7 @@ used again.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#dragged -->
 
-[`src/renderer/src/character/sprite.ts`, lines 514–540](../../apps/desktop/src/renderer/src/character/sprite.ts#L514-L540)
+[`src/renderer/src/character/sprite.ts`, lines 547–573](../../apps/desktop/src/renderer/src/character/sprite.ts#L547-L573)
 
 ```ts
 /** Carried by her collar: off the ground, arms up, legs kicking, swaying, hair lifted. */
@@ -4951,7 +5201,7 @@ Twelve frames of 55 ms, round and round.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#drawn,MAKERS,LOOPS -->
 
-[`src/renderer/src/character/sprite.ts`, lines 542–578](../../apps/desktop/src/renderer/src/character/sprite.ts#L542-L578)
+[`src/renderer/src/character/sprite.ts`, lines 575–613](../../apps/desktop/src/renderer/src/character/sprite.ts#L575-L613)
 
 ```ts
 // ------------------------------------------------------------------------------------- frames
@@ -4970,6 +5220,7 @@ const MAKERS: Record<Name, () => Frame[]> = {
   read: () => drawn(read()),
   spell: () => drawn(spell()),
   levitate: () => drawn(levitate()),
+  vision: () => drawn(vision()),
   sit: () => drawn(sit()),
   look,
   dragged: () => drawn(dragged()),
@@ -4988,6 +5239,7 @@ export const LOOPS: Record<Name, boolean> = {
   read: false,
   spell: false,
   levitate: false,
+  vision: false,
   sit: false,
   look: false,
 }
@@ -4999,8 +5251,8 @@ export const LOOPS: Record<Name, boolean> = {
 - `MAKERS`: as the comment says, how each pose's frames are made, facing right. They're functions,
   not the frames themselves, so nothing is drawn until it's needed. `Record<Name, ...>` makes
   TypeScript insist on every pose. Both walks make the same right-facing frames; `framesOf()`
-  mirrors them for `walk-left`. `look` makes its frames itself. Every fidget, `levitate`
-  included, has its maker here.
+  mirrors them for `walk-left`. `look` makes its frames itself. Every fidget, `levitate` and
+  `vision` included, has its maker here.
 - `LOOPS`: as the comment says, which poses go round and round (idle, the walks and dangling) and
   which play once (the fidgets: their last frame stays until the main process changes the pose,
   which it does just as `FIDGET_MS` runs out).
@@ -5009,7 +5261,7 @@ export const LOOPS: Record<Name, boolean> = {
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#Facing,made,framesOf -->
 
-[`src/renderer/src/character/sprite.ts`, lines 580–599](../../apps/desktop/src/renderer/src/character/sprite.ts#L580-L599)
+[`src/renderer/src/character/sprite.ts`, lines 615–634](../../apps/desktop/src/renderer/src/character/sprite.ts#L615-L634)
 
 ```ts
 export type Facing = 'left' | 'right'
@@ -5048,7 +5300,7 @@ export function framesOf(pose: Name, facing: Facing): Frame[] {
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#animationLength,mirror -->
 
-[`src/renderer/src/character/sprite.ts`, lines 601–608](../../apps/desktop/src/renderer/src/character/sprite.ts#L601-L608)
+[`src/renderer/src/character/sprite.ts`, lines 636–643](../../apps/desktop/src/renderer/src/character/sprite.ts#L636-L643)
 
 ```ts
 /** How long a pose's frames last altogether (a fidget's must match FIDGET_MS). */
@@ -5074,7 +5326,7 @@ export function mirror(rows: string[]): string[] {
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#framePaths -->
 
-[`src/renderer/src/character/sprite.ts`, lines 610–634](../../apps/desktop/src/renderer/src/character/sprite.ts#L610-L634)
+[`src/renderer/src/character/sprite.ts`, lines 645–669](../../apps/desktop/src/renderer/src/character/sprite.ts#L645-L669)
 
 ```ts
 /**

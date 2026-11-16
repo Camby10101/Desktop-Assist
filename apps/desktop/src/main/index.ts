@@ -17,7 +17,7 @@ import { existsSync } from 'node:fs'
 import { readFile, rm } from 'node:fs/promises'
 import { hostname, release, version as osVersion } from 'node:os'
 import { join } from 'node:path'
-import { BUBBLE_BOX, panelWindowSize } from '@shared/geometry'
+import { BUBBLE_BOX, panelWindowSize, type Rect } from '@shared/geometry'
 import { IPC } from '@shared/ipc'
 import type { AppsState, AtlassianState, AuthStatus } from '@shared/types'
 import tenantConfig from '@tenant/tenant.json'
@@ -31,6 +31,7 @@ import { listenForRedirect } from './auth/loopback'
 import { createOidc } from './auth/oidc'
 import { BubbleController, type DisplayArea, type Displays } from './bubble/BubbleController'
 import { Clones } from './bubble/clones'
+import { Vision } from './bubble/vision'
 import { runFrontCheck, watchBubbleFront } from './bubble/frontCheck'
 import {
   bringToFront,
@@ -136,6 +137,23 @@ async function start(): Promise<void> {
     for (const win of windows) if (!win.isDestroyed()) win.webContents.send(channel, payload)
   }
 
+  /**
+   * A window that only shows something over the screen (her clones, or her vision's light and
+   * logo): it shows once its page is drawn, behind her own window, which is put back in front.
+   */
+  const openOverlay =
+    (view: 'clones' | 'vision') => (bounds: Rect, query: Record<string, string>) => {
+      const win = createOverlayWindow(view, { width: bounds.width, height: bounds.height }, query)
+      win.setBounds(bounds)
+      win.once('ready-to-show', () => {
+        win.showInactive()
+        bringToFront(bubbleWindow, false)
+      })
+      return { close: () => !win.isDestroyed() && win.destroy() }
+    }
+  // Her vision's light and logo, over her for as long as she's having it.
+  const vision = new Vision({ open: openOverlay('vision') })
+
   const bubble = new BubbleController({
     bubble: bubbleSurface(bubbleWindow),
     panel: panelSurface(panelWindow),
@@ -145,7 +163,11 @@ async function start(): Promise<void> {
     initialScale: settings.characterScale,
     onDiagnostic: (message) => log(message),
     onModeChange: (mode) => broadcast(IPC.modeChanged, mode),
-    onPoseChange: (pose) => broadcast(IPC.poseChanged, pose),
+    onPoseChange: (pose) => {
+      broadcast(IPC.poseChanged, pose)
+      if (pose === 'vision') vision.start(bubble.standing)
+      else vision.stop()
+    },
     onSizeChange: (size) => broadcast(IPC.sizeChanged, size),
     onAnchorChange: (anchor) => {
       broadcast(IPC.cornerChanged, anchor.corner)
@@ -155,24 +177,8 @@ async function start(): Promise<void> {
   controller = bubble
   panelWindow.on('blur', () => bubble.panelBlurred())
 
-  // Her clones: a window along the taskbar, which shows once its page is drawn, and then puts her
-  // own window back in front of it.
-  const clones = new Clones({
-    accentColor: tenant.accentColor,
-    open: (bounds, query) => {
-      const win = createOverlayWindow(
-        'clones',
-        { width: bounds.width, height: bounds.height },
-        query,
-      )
-      win.setBounds(bounds)
-      win.once('ready-to-show', () => {
-        win.showInactive()
-        bringToFront(bubbleWindow, false)
-      })
-      return { close: () => !win.isDestroyed() && win.destroy() }
-    },
-  })
+  // Her clones: a window along the taskbar.
+  const clones = new Clones({ accentColor: tenant.accentColor, open: openOverlay('clones') })
 
   const screenshots = new ScreenshotService(screenshotsDir, () =>
     screen.getDisplayMatching(bubbleWindow.getBounds()),
@@ -422,6 +428,7 @@ async function start(): Promise<void> {
     event.preventDefault()
     bubble.dispose()
     clones.stop()
+    vision.stop()
     for (const stop of stopKeepingOnTop) stop()
     builtIn?.chat.stop()
     void portalApps?.dispose()

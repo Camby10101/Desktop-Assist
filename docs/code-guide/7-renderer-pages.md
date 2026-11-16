@@ -4,7 +4,7 @@
 
 This part covers the renderer's own files: the HTML page every overlay window loads, the startup
 script, the stylesheet, two small helpers and the clones' wandering, the hooks that connect React
-to the main process, and the three views (the bubble, her clones and the panel). The building
+to the main process, and the four views (the bubble, her clones, her vision and the panel). The building
 blocks the views use are covered in
 [the components part](8-renderer-components.md). If React is new to you: a React _component_ is a
 function that returns a description of what to show, written in JSX (HTML-like tags inside
@@ -13,7 +13,8 @@ updates only the parts of the page that changed.
 
 ## `src/renderer/index.html`: the page every window loads
 
-The bubble window, the panel window and the clones' window all load this one page. It's almost
+The bubble window, the panel window, and the clones' and the vision's windows all load this one
+page. It's almost
 empty: a `<div>` for React to fill and a script tag that starts the app. The interesting part is
 the security policy.
 
@@ -63,16 +64,16 @@ the security policy.
   `main.tsx` and everything it imports into plain JavaScript and, in the build, rewrites this tag to
   point at the bundled file.
 
-## `src/renderer/src/main.tsx`: choosing bubble, clones or panel
+## `src/renderer/src/main.tsx`: choosing bubble, clones, vision or panel
 
 The first code that runs in each window. It works out which window it's in and renders the
-matching view. `BubbleView`, `ClonesView` and `PanelView` are React components: functions whose
+matching view. `BubbleView`, `ClonesView`, `VisionView` and `PanelView` are React components: functions whose
 names start with a capital letter and return JSX. In JSX, `<BubbleView />` means "render the
 `BubbleView` component here".
 
 <!-- code: apps/desktop/src/renderer/src/main.tsx -->
 
-[`src/renderer/src/main.tsx`, lines 1–15](../../apps/desktop/src/renderer/src/main.tsx#L1-L15)
+[`src/renderer/src/main.tsx`, lines 1–24](../../apps/desktop/src/renderer/src/main.tsx#L1-L24)
 
 ```tsx
 import { StrictMode } from 'react'
@@ -81,13 +82,22 @@ import './styles.css'
 import { BubbleView } from './views/BubbleView'
 import { ClonesView } from './views/ClonesView'
 import { PanelView } from './views/PanelView'
+import { VisionView } from './views/VisionView'
 
 // Every overlay window loads this page; the query string says which one this is.
 const view = new URLSearchParams(window.location.search).get('view')
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {view === 'bubble' ? <BubbleView /> : view === 'clones' ? <ClonesView /> : <PanelView />}
+    {view === 'bubble' ? (
+      <BubbleView />
+    ) : view === 'clones' ? (
+      <ClonesView />
+    ) : view === 'vision' ? (
+      <VisionView />
+    ) : (
+      <PanelView />
+    )}
   </StrictMode>,
 )
 ```
@@ -98,9 +108,9 @@ createRoot(document.getElementById('root')!).render(
   (after Tailwind has processed it) to the page.
 - `// Every overlay window loads this page`: as the comment says, the query string says which one
   this is.
-- `new URLSearchParams(window.location.search).get('view')`: reads the `?view=bubble`,
-  `?view=clones` or `?view=panel` that `createOverlayWindow` (src/main/bubble/windows.ts) adds when
-  it loads the page. Anything other than `bubble` or `clones` gets the panel.
+- `new URLSearchParams(window.location.search).get('view')`: reads the `view` (`bubble`, `panel`,
+  `clones` or `vision`) that `createOverlayWindow` (src/main/bubble/windows.ts) adds to the query
+  string when it loads the page. Anything other than `bubble`, `clones` or `vision` gets the panel.
 - `document.getElementById('root')!`: the `!` tells TypeScript "this is not null"; the div is in
   `index.html`.
 - `createRoot(`: hands that div to React, which from now on owns everything inside it. `render`
@@ -108,10 +118,10 @@ createRoot(document.getElementById('root')!).render(
 - `<StrictMode>`: a development-only checker. In `npm run dev` it calls each component twice and
   runs each effect, cleans it up, then runs it again, to expose code that doesn't clean up after
   itself. That's why every hook below has a careful cleanup. It does nothing in the installed app.
-- `{view === 'bubble' ? <BubbleView /> : view === 'clones' ? <ClonesView /> : <PanelView />}`:
-  curly braces switch from JSX back to ordinary TypeScript, here a choice between the three views.
-  The second `? :` only runs when the first test fails, so it reads "the bubble, otherwise the
-  clones, otherwise the panel".
+- `{view === 'bubble' ? (`: curly braces switch from JSX back to ordinary TypeScript, here a
+  choice between the four views. Each `? :` after the first only runs when the test before it
+  fails, so it reads "the bubble, otherwise the clones, otherwise the vision, otherwise the
+  panel". The round brackets only let each view sit on a line of its own.
 
 ## `src/renderer/src/env.d.ts`: telling TypeScript about `window.assist`
 
@@ -546,8 +556,7 @@ the bubble.
 
 ## `src/renderer/src/lib/clones.ts`: how her clones wander
 
-The Clones action ("Ten clones for ten seconds") fills a window along the taskbar with copies of
-her (see `ClonesView` below, and `Clones` in [The bubble](5-bubble.md)). This file decides where
+The Clones action fills a window along the taskbar with copies of her (see `ClonesView` below, and `Clones` in [The bubble](5-bubble.md)). This file decides where
 each clone goes: plain functions that take a clone and the time and return the clone a moment
 later, without touching the page. Keeping them apart from the page means `tests/clones.test.ts`
 can walk a clone across the window with made-up times and random numbers, in milliseconds. It's
@@ -810,7 +819,7 @@ the top of its body, in the same order on every render.
   the same stateful logic. Each component that calls it gets its own separate copy of the state.
 
 This file's hooks are used by the views: `useAssistState` by the bubble and the panel, and
-`useAccentColor` by those two and the clones. Each window is a separate page, so each keeps its own
+`useAccentColor` by those two and the clones (the vision's page uses neither). Each window is a separate page, so each keeps its own
 copy of the state.
 
 ### `useAssistState`
@@ -964,7 +973,7 @@ to switch mouse input on only while the pointer is over real UI, which is any el
 `data-hit` (the chat card, each action icon, the settings menu and the size menu). See
 [Code Guide section 1](CODE_GUIDE.md#1-background-how-an-electron-app-is-put-together) for the
 background. Only `PanelView` uses it; the bubble window always takes the mouse, and the clones'
-window never does.
+and the vision's windows never do.
 
 ### `useClickThrough`
 
@@ -1395,18 +1404,17 @@ the function's argument (see `Panel` below).
 
 ## `src/renderer/src/views/ClonesView.tsx`: her clones
 
-The page shown in the clones' window, which the main process opens for the Clones action ("Ten
-clones for ten seconds"; see `Clones` in [The bubble](5-bubble.md)). The window is a strip as wide
-as her screen and as tall as her window, its bottom edge on the taskbar, and it never takes the
-mouse or the focus: clicks go straight through it, and the clones have no panel. Unlike the other
-two pages, it never asks the main process for the app state: everything it needs comes in its query
+The page shown in the clones' window, which the main process opens for the Clones action (see
+`Clones` in [The bubble](5-bubble.md)). The window is a strip as wide as her screen and as tall as her window, its bottom edge on the taskbar, and it never takes the
+mouse or the focus: clicks go straight through it, and the clones have no panel. Like the vision's
+page, and unlike the bubble's and the panel's, it never asks the main process for the app state: everything it needs comes in its query
 string, and once the window closes it's gone.
 
 ### `<ClonesView>`
 
 <!-- code: apps/desktop/src/renderer/src/views/ClonesView.tsx#ClonesView -->
 
-[`src/renderer/src/views/ClonesView.tsx`, lines 8–93](../../apps/desktop/src/renderer/src/views/ClonesView.tsx#L8-L93)
+[`src/renderer/src/views/ClonesView.tsx`, lines 8–100](../../apps/desktop/src/renderer/src/views/ClonesView.tsx#L8-L100)
 
 ```tsx
 /**
@@ -1422,21 +1430,28 @@ export function ClonesView() {
   const { box } = bubbleMetrics(scale)
   useAccentColor(params.get('accent') ?? undefined)
 
-  const [clones, setClones] = useState<Clone[]>(() =>
-    spawnClones(
+  // With Windows' reduced-motion setting they stand still, spread along the taskbar.
+  const [still] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches)
+  const [clones, setClones] = useState<Clone[]>(() => {
+    const room = { width: window.innerWidth, box, scale }
+    const spawned = spawnClones(
       CLONES.count,
       Number(params.get('from')) || 0,
       performance.now(),
-      { width: window.innerWidth, box, scale },
+      room,
       Math.random,
-    ),
-  )
+    )
+    if (!still) return spawned
+    const far = Math.max(0, room.width - box)
+    return spawned.map((clone, i) => ({ ...clone, x: (far * (i + 0.5)) / spawned.length }))
+  })
   const [visible, setVisible] = useState(false)
   const boxes = useRef<(HTMLDivElement | null)[]>([])
 
   // Each frame, move them (straight in the page, not through React) and redraw only when one of
   // them starts or stops walking.
   useEffect(() => {
+    if (still) return
     let current = clones
     let last = performance.now()
     let frame = requestAnimationFrame(function tick(now) {
@@ -1501,9 +1516,12 @@ export function ClonesView() {
 
 As the comment says, `CLONES.count` (10) of her, at her size, set off from where she stands and
 wander up and down (with `lib/clones.ts`), each stopping now and then. They fade in, and fade out
-just before the main process closes the window, `CLONES.durationMs` (10 seconds) after it opened
+just before the main process closes the window, `CLONES.durationMs` (30 seconds) after it opened
 it. `CLONES` is in `src/shared/character.ts`, so the main process and the page use the same
-numbers.
+numbers. With Windows' reduced-motion setting (`still`, asked once with `matchMedia`, as
+`Character` does), they don't walk: they stand evenly spread along the taskbar (`far` is as far
+right as a clone can stand, and clone `i` stands `(i + 0.5) / 10` of the way along), and the
+loop that moves them never starts.
 
 Reading the query string:
 
@@ -1561,7 +1579,7 @@ Effects:
     drawn once with them see-through, so the change of opacity is animated (the fade in).
   - `const ends = Number(params.get('ends')) || Date.now() + CLONES.durationMs`: when their time is
     up, on the wall clock (`Date.now()`), which the main process and the page share. If it's
-    missing, ten seconds from now.
+    missing, thirty seconds from now.
   - `setTimeout(() => setVisible(false), ends - CLONES.fadeMs - Date.now())`: starts the fade out
     `CLONES.fadeMs` (400 ms) before the end, so it has finished as the main process closes the
     window.
@@ -1585,6 +1603,237 @@ The JSX it returns:
 - `<Character pose={clonePose(clone)} facing={clone.facing} box={box} />`: each clone is drawn with
   the same component as her, in its own pose, the way it faces, and at her size. There's no
   `expanded`, so its shadow is never tinted.
+
+## `src/renderer/src/views/VisionView.tsx`: her vision
+
+The page shown in the vision's window, which the main process opens while she has her `vision`
+habit (see `Vision` in [The bubble](5-bubble.md)). The window is a column over her, from the top of
+the screen down to her feet, behind her own window, and it never takes the mouse or the focus. In
+it a soft light falls from the top of the screen onto her, and the company's logo comes down the
+light, hovers over her head, and rises away again; meanwhile her own window plays her looking up at
+it (`vision()` in `character/sprite.ts`). Both follow the same timetable, `VISION` in
+`src/shared/character.ts`. Like the clones' page, it never asks the main process for anything:
+what it needs comes in its query string.
+
+### `logos`, `LOGO`
+
+<!-- code: apps/desktop/src/renderer/src/views/VisionView.tsx#logos,LOGO -->
+
+[`src/renderer/src/views/VisionView.tsx`, lines 5–12](../../apps/desktop/src/renderer/src/views/VisionView.tsx#L5-L12)
+
+```tsx
+// The tenant's logo, bundled with the page (a PNG, or an SVG if that's all the tenant has).
+const logos = import.meta.glob<string>('@tenant/logo.{png,svg}', {
+  query: '?url',
+  import: 'default',
+  eager: true,
+})
+
+const LOGO =
+  Object.entries(logos).find(([path]) => path.endsWith('.png'))?.[1] ?? Object.values(logos)[0]
+```
+
+<!-- /code -->
+
+As the comment says, the tenant's logo, bundled with the page: `logo.png`, or `logo.svg` if that's
+all the tenant has (`logo.png` is also the tray icon; see `tenants/README.md`).
+
+- `import.meta.glob<string>('@tenant/logo.{png,svg}', {...})`: a Vite feature. When the page is
+  built, Vite finds the files matching the pattern (`@tenant` is the tenant's folder, as in the
+  main process) and bundles them; the result is an object from each file's path to what was
+  imported from it. `{png,svg}` matches either name.
+- `query: '?url'`, `import: 'default'`: import each file as its address in the built app (a string
+  the page can put in an `<img>`), rather than its contents.
+- `eager: true`: the files are bundled into the page itself, so the object holds the addresses
+  straight away, rather than functions that load them later.
+- `LOGO`: the PNG's address if there is one, otherwise the first (the SVG), or `undefined` if the
+  tenant has neither, in which case the vision has only its light (see `{LOGO && ...}` below).
+
+### `smooth`, `through`
+
+<!-- code: apps/desktop/src/renderer/src/views/VisionView.tsx#smooth,through -->
+
+[`src/renderer/src/views/VisionView.tsx`, lines 14–18](../../apps/desktop/src/renderer/src/views/VisionView.tsx#L14-L18)
+
+```tsx
+/** Slow in, slow out (0 to 1). */
+const smooth = (t: number) => t * t * (3 - 2 * t)
+
+/** How far through `[from, to]` (ms) `now` is, 0 to 1. */
+const through = (now: number, [from, to]: readonly [number, number]) =>
+  Math.min(Math.max((now - from) / (to - from), 0), 1)
+```
+
+<!-- /code -->
+
+Two small helpers for the animation, both working in fractions from 0 to 1.
+
+- `smooth`: as its comment says, slow in, slow out: `t * t * (3 - 2 * t)` goes from 0 to 1 like
+  `t`, but starts and finishes gently (it's often called _smoothstep_).
+- `through`: as its comment says, how far through one of `VISION`'s `[from, to]` stretches `now`
+  is: 0 before it, 1 after it, and in between in proportion.
+
+### `<VisionView>`
+
+<!-- code: apps/desktop/src/renderer/src/views/VisionView.tsx#VisionView -->
+
+[`src/renderer/src/views/VisionView.tsx`, lines 20–108](../../apps/desktop/src/renderer/src/views/VisionView.tsx#L20-L108)
+
+```tsx
+/**
+ * Her `vision` habit, above her: a column of soft light falls from the top of the screen to her,
+ * and the company's logo comes down it to hover over her head, glowing, then rises away and the
+ * light fades (VISION's timetable). The window is a column over her that never takes the mouse;
+ * her own window, in front of it, plays her looking up. Everything comes in the query string: her
+ * size (`scale`), where her middle is across the window (`centre`) and when the vision started
+ * (`starts`, Date.now()), so the page keeps in time with her even if it took a moment to load.
+ */
+export function VisionView() {
+  const [params] = useState(() => new URLSearchParams(window.location.search))
+  const scale = snapSize(Number(params.get('scale')) || DEFAULT_SIZE)
+  const centre = Number(params.get('centre')) || window.innerWidth / 2
+  const starts = Number(params.get('starts')) || Date.now()
+  const [now, setNow] = useState(() => Date.now() - starts)
+  // With Windows' reduced-motion setting the logo just hovers in its light, as she holds still.
+  const [still] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches)
+
+  useEffect(() => {
+    if (still) return
+    let frame = requestAnimationFrame(function tick() {
+      setNow(Date.now() - starts)
+      if (Date.now() - starts < FIDGET_MS.vision) frame = requestAnimationFrame(tick)
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [starts, still])
+
+  const { box } = bubbleMetrics(scale)
+  const height = window.innerHeight
+  const light = still
+    ? 1
+    : smooth(through(now, VISION.lightIn)) * (1 - smooth(through(now, VISION.lightOut)))
+  // The logo: about half her width, hovering just above her hat (4 sprite pixels below the top of
+  // her window), bobbing gently while it's there.
+  const size = Math.round(44 * scale)
+  const hover = height - box + 4 * scale - 10 * scale - size
+  const down = still ? 1 : smooth(through(now, VISION.descend))
+  const up = still ? 0 : smooth(through(now, VISION.ascend))
+  const bob = Math.sin((now / 900) * Math.PI * 2) * 3 * scale
+  const top =
+    -size - 20 + (hover + size + 20) * down - (hover + size + 20) * up + bob * down * (1 - up)
+
+  return (
+    <div aria-hidden className="relative h-full w-full overflow-hidden">
+      {/* The light: narrow at the top of the screen, widening as it falls on her. */}
+      <div
+        className="absolute top-0"
+        style={{
+          left: centre,
+          width: box * 1.8,
+          height: height - 2 * scale,
+          transform: 'translateX(-50%)',
+          opacity: light,
+          clipPath: 'polygon(38% 0, 62% 0, 100% 100%, 0 100%)',
+          background:
+            'linear-gradient(to bottom, rgb(255 248 220 / 0), rgb(255 248 220 / 0.55) 35%, rgb(255 244 210 / 0.35) 85%, rgb(255 244 210 / 0.1))',
+          filter: `blur(${Math.max(2, 3 * scale)}px)`,
+        }}
+      />
+      {/* Where the light lands: a soft glow on the ground under her. */}
+      <div
+        className="absolute rounded-[50%]"
+        style={{
+          left: centre,
+          bottom: 0,
+          width: box * 1.4,
+          height: 10 * scale,
+          transform: 'translate(-50%, 40%)',
+          opacity: light * 0.8,
+          background: 'radial-gradient(rgb(255 248 220 / 0.8), rgb(255 248 220 / 0))',
+        }}
+      />
+      {LOGO && (
+        <img
+          src={LOGO}
+          alt=""
+          className="absolute"
+          style={{
+            left: centre,
+            top,
+            width: size,
+            height: size,
+            transform: 'translateX(-50%)',
+            filter: `drop-shadow(0 0 ${4 * scale}px rgb(255 244 200 / 0.95)) drop-shadow(0 0 ${10 * scale}px rgb(255 240 190 / 0.6))`,
+          }}
+        />
+      )}
+    </div>
+  )
+}
+```
+
+<!-- /code -->
+
+As the comment says: the light falls from the top of the screen to her, and the logo comes down it
+to hover over her head, glowing, then rises away and the light fades, in `VISION`'s time. Her size,
+where her middle is across the window and when the vision started all come in the query string, so
+the page keeps in time with her even if it took a moment to load. With Windows' reduced-motion
+setting (`still`), nothing moves: the light is on and the logo hovers over her head for as long as
+the window is open (`light` 1, `down` 1, `up` 0, and no frames are asked for), as she holds still
+herself.
+
+Reading the query string (once, kept in state as in `ClonesView`):
+
+- `scale`: her size, snapped to one of `CHARACTER_SIZES` (her usual size if it's missing).
+- `centre`: where her middle is, in DIPs from the window's left edge (`Vision.start()` works it
+  out). It's usually the middle of the window, but not when she stands near a corner and the window
+  was kept on the screen. Missing, the middle.
+- `starts`: when the vision started, on the wall clock (`Date.now()`) the main process and the page
+  share. Missing, now.
+- `const [now, setNow] = useState(() => Date.now() - starts)`: how far into the vision it is, in
+  ms. That's the `now` the timetable is read with.
+
+The effect:
+
+- `requestAnimationFrame(function tick() {`: each frame, `now` is updated, so the page redraws with
+  the light and the logo where they should be at that moment.
+- `if (Date.now() - starts < FIDGET_MS.vision) frame = requestAnimationFrame(tick)`: it keeps going
+  until the habit's 5.2 seconds are up, when the main process closes the window anyway.
+- The cleanup cancels the next frame.
+
+Working out the frame:
+
+- `const { box } = bubbleMetrics(scale)`: her window's size, 96 DIPs at her usual size. The vision's
+  window ends where hers does, at her feet, so her window's top is `box` above its bottom.
+- `light`: how bright the light is: fading in over `VISION.lightIn` and out over
+  `VISION.lightOut`, eased both ways.
+- `size = Math.round(44 * scale)`: the logo's width and height, as the comment says about half her
+  width.
+- `hover`: where the logo's top is while it hovers. `height - box` is the top of her window, and,
+  as the comment says, her hat reaches 4 sprite pixels below that (4 DIPs at her usual size). The
+  logo's bottom edge hovers 10 sprite pixels above her hat, so its top is `size` higher still.
+- `down`, `up`: how far it has come down (over `VISION.descend`) and gone back up (over
+  `VISION.ascend`), eased.
+- `bob`: a gentle bob, up and down by 3 DIPs (times her size), once every 0.9 seconds.
+- `top`: the logo's top. It starts out of sight above the window (`-size - 20`), comes down by the
+  whole distance to `hover` as `down` goes from 0 to 1, and goes back up by the same as `up` does.
+  It bobs only while it's there (`down * (1 - up)` is 0 before it arrives and after it has gone).
+
+The JSX:
+
+- `aria-hidden`: only for show, so screen readers skip it. The outer box fills the window and cuts
+  off anything that would stick out (the logo, before it comes down).
+- The light: a box down the middle of the window at her `centre` (`translateX(-50%)` centres it
+  there), 1.8 times as wide as her window and nearly the whole height, with `light` as its opacity.
+  `clipPath: 'polygon(38% 0, 62% 0, 100% 100%, 0 100%)'` cuts it to a narrow beam at the top
+  widening to its full width at the bottom, where it falls on her. The background is a warm white
+  that's clear at the very top, brightest about a third of the way down and fainter near her, and
+  the blur softens its edges.
+- Where the light lands: a soft oval glow on the ground, centred under her, 1.4 times as wide as
+  her window, pushed partly below the window's bottom edge (`translate(-50%, 40%)`), and a little
+  fainter than the light.
+- `{LOGO && (`: the logo, only if the tenant has one: an `<img>` of `size` DIPs, centred on her,
+  at `top`. `alt=""` marks it as decoration. Two `drop-shadow` filters give it a warm glow, sized
+  with her.
 
 ## `src/renderer/src/views/PanelView.tsx`: everything around the bubble
 
@@ -1719,7 +1968,7 @@ returns. The sections after it take its values and functions one at a time.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 66–574](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L66-L574)
+[`src/renderer/src/views/PanelView.tsx`, lines 66–575](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L66-L575)
 
 ```tsx
 function Panel({ state }: { state: AppState }) {
@@ -2153,6 +2402,7 @@ function Panel({ state }: { state: AppState }) {
       <ChatBox
         corner={state.corner}
         layout={layout}
+        scale={scale}
         open={open}
         toast={toast}
         inClaudeDesktop={inClaudeDesktop}
@@ -2339,6 +2589,8 @@ The JSX it returns:
 - `layout={layout}`: where things sit in the window for her size (`panelLayout()`, below).
   `ChatBox`, `ActionStack`, `SettingsMenu` and `SizeMenu` all get it, so the card, the icons and
   the menus move out together when she's bigger.
+- `scale={scale}`: her size too, so the card's speech-bubble tail can reach her mouth however big
+  she is (`SpeechTail` in [the components part](8-renderer-components.md)).
 - `inClaudeDesktop={inClaudeDesktop}`: the card shows an "Ask in Claude" button instead of the
   round Send arrow, and a note about what happens to attached screenshots.
 - `autoSend={settings.autoSend}`: whether "Send in Claude automatically" is on, which changes that
@@ -2502,7 +2754,7 @@ Runs when an action icon is clicked (`ActionStack`'s `onAction`).
 - `if (id === 'theme') {`: the light or dark mode icon, a "switch" action. It asks the main
   process for the other mode (`settings.setTheme()`), which switches every window at once, and
   keeps the settings it returns, so the icon shows the new mode.
-- `if (id === 'size') {`: Her size is a "popover" action: it closes the settings menu and opens the
+- `if (id === 'size') {`: Size is a "popover" action: it closes the settings menu and opens the
   size menu, or closes it if it's open. Like Settings, it never reaches the main process itself;
   the menu's buttons do (see `SizeMenu` in [the components part](8-renderer-components.md)).
 - `if (id === 'settings') {`: Settings is a "popover" action too: it opens UI inside the panel and

@@ -179,7 +179,10 @@ export class BubbleController {
     return { scale: this.scale, max: this.largestScale() }
   }
 
-  /** Where she stands, for her clones: her display's work area, her window, and her size. */
+  /**
+   * Where she stands, for her clones and her vision: her display's work area, her window, and her
+   * size.
+   */
   get standing(): { workArea: Rect; bounds: Rect; scale: number } {
     return {
       workArea: this.display().workArea,

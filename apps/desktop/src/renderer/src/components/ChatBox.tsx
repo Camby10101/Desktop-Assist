@@ -7,19 +7,28 @@ import {
   Square,
   Ticket,
 } from 'lucide-react'
-import { useEffect, useRef, type KeyboardEvent, type ReactNode } from 'react'
-import { UI, isLeftCorner, isTopCorner, type Corner, type PanelLayout } from '@shared/geometry'
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import {
+  UI,
+  bubbleMetrics,
+  isLeftCorner,
+  isTopCorner,
+  type Corner,
+  type PanelLayout,
+} from '@shared/geometry'
 import type { Attachment, ChatMessage } from '@shared/types'
 import type { ToastMessage } from '../hooks/useToast'
 import { anchored, originClass } from '../lib/anchor'
 import { cn } from '../lib/cn'
+import { SPRITE_SIZE } from '../character/sprite'
 import { AttachmentChip } from './AttachmentChip'
 import { MessageList } from './MessageList'
 
 /**
- * The card beside the bubble, on the side facing the middle of the screen. It's anchored at the
- * bubble's edge (bottom in a bottom corner, top in a top corner), so it starts as just the text
- * box and grows away from that edge as the conversation gets longer, then scrolls. When nobody is
+ * The card beside the bubble, on the side facing the middle of the screen: a speech bubble, its
+ * tail pointing at her mouth (see SpeechTail). It's anchored at the bubble's edge (bottom in a
+ * bottom corner, top in a top corner), so it starts as just the text box and grows away from that
+ * edge as the conversation gets longer, then scrolls. When nobody is
  * signed in, `signInPrompt` is shown instead of the chat. With `inClaudeDesktop`, it's only the
  * text box, and sending opens the question in Claude Desktop. While a page's icon is on (Apps,
  * Jira, the service desk), the page shows instead.
@@ -28,6 +37,8 @@ export function ChatBox(props: {
   corner: Corner
   /** Where things sit for her size: the card goes beside her. */
   layout: PanelLayout
+  /** Her size (see CHARACTER_SIZES), for the tail to reach her mouth. */
+  scale: number
   open: boolean
   toast: ToastMessage | null
   /** Sending hands the question to Claude Desktop instead of the chat in the panel. */
@@ -59,8 +70,20 @@ export function ChatBox(props: {
   /** Turns the text (and screenshots) into an IT request; null without a service desk form. */
   onReport: (() => void) | null
 }) {
+  // The card's height, for the tail to stay on it however short it is.
+  const card = useRef<HTMLDivElement>(null)
+  const [cardHeight, setCardHeight] = useState(0)
+  useEffect(() => {
+    const element = card.current
+    if (!element) return
+    const observer = new ResizeObserver(() => setCardHeight(element.offsetHeight))
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [])
+
   return (
     <div
+      ref={card}
       data-hit
       className={cn(
         'absolute flex flex-col rounded-2xl border shadow-xl',
@@ -76,6 +99,12 @@ export function ChatBox(props: {
         maxHeight: UI.panelMaxHeight,
       }}
     >
+      <SpeechTail
+        corner={props.corner}
+        layout={props.layout}
+        scale={props.scale}
+        cardHeight={cardHeight}
+      />
       {props.toast && (
         <div
           key={props.toast.id}
@@ -109,6 +138,65 @@ export function ChatBox(props: {
         </>
       )}
     </div>
+  )
+}
+
+/** Her mouth, in sprite pixels down from the top of her window (rig.ts draws it there). */
+const MOUTH_ROW = 33.5
+/** How far from her middle the tail stops (sprite pixels): just short of her face and hair. */
+const TAIL_REACH = 11
+/** The card's corner radius (`rounded-2xl`), which the tail's base keeps clear of. */
+const CARD_RADIUS = 16
+
+/**
+ * The speech bubble's tail: a triangle from the card's side nearest her to just short of her
+ * mouth, at her height and size, so it points at her mouth however big she is (her mouth is at
+ * MOUTH_ROW of her 96-pixel grid, scaled with her). Its base slides along the card's edge to stay
+ * level with her mouth, but never past the card's rounded corners, so on a card shorter than her
+ * mouth is high (just the text box, at a big size) it slants up to her instead. It's drawn in
+ * the card's own colours and border, overlapping the card's edge by a pixel so the two read as
+ * one shape, and it ignores the mouse, so it never gets between the pointer and her.
+ */
+function SpeechTail(props: {
+  corner: Corner
+  layout: PanelLayout
+  scale: number
+  cardHeight: number
+}) {
+  const { scale, layout } = props
+  const { box } = bubbleMetrics(scale)
+  // From the card's edge out to the tip, and up from the card's near edge (its bottom, in a
+  // bottom corner) to the tip.
+  const out = Math.max(8, layout.chatX - (box / 2 + TAIL_REACH * scale))
+  const up = (SPRITE_SIZE - MOUTH_ROW) * scale - layout.chatY
+  const half = 9 + 2 * scale
+  const lowest = CARD_RADIUS + half
+  const highest = Math.max(lowest, props.cardHeight - CARD_RADIUS - half)
+  const base = Math.min(Math.max(up, lowest), highest)
+  const width = out + 2
+  const height = Math.max(up, base + half) + 2
+  const y = (fromEdge: number) => height - fromEdge
+  const corners = `M0 ${y(base + half)} L${out} ${y(up)} L0 ${y(base - half)}`
+  const left = isLeftCorner(props.corner)
+  const top = isTopCorner(props.corner)
+  return (
+    <svg
+      aria-hidden
+      width={width}
+      height={height}
+      viewBox={`0 0 ${width} ${height}`}
+      className="pointer-events-none absolute overflow-visible"
+      style={{
+        // On the side towards her, over the card's border by a pixel.
+        [left ? 'right' : 'left']: 'calc(100% - 1px)',
+        [top ? 'top' : 'bottom']: 0,
+        // Drawn going right from a bottom edge; mirrored for the other sides.
+        transform: `scale(${left ? -1 : 1}, ${top ? -1 : 1})`,
+      }}
+    >
+      <path d={`${corners} Z`} className="fill-white dark:fill-zinc-900" />
+      <path d={corners} fill="none" className="stroke-black/10 dark:stroke-white/10" />
+    </svg>
   )
 }
 

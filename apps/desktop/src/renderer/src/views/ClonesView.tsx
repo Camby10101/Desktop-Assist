@@ -18,21 +18,28 @@ export function ClonesView() {
   const { box } = bubbleMetrics(scale)
   useAccentColor(params.get('accent') ?? undefined)
 
-  const [clones, setClones] = useState<Clone[]>(() =>
-    spawnClones(
+  // With Windows' reduced-motion setting they stand still, spread along the taskbar.
+  const [still] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches)
+  const [clones, setClones] = useState<Clone[]>(() => {
+    const room = { width: window.innerWidth, box, scale }
+    const spawned = spawnClones(
       CLONES.count,
       Number(params.get('from')) || 0,
       performance.now(),
-      { width: window.innerWidth, box, scale },
+      room,
       Math.random,
-    ),
-  )
+    )
+    if (!still) return spawned
+    const far = Math.max(0, room.width - box)
+    return spawned.map((clone, i) => ({ ...clone, x: (far * (i + 0.5)) / spawned.length }))
+  })
   const [visible, setVisible] = useState(false)
   const boxes = useRef<(HTMLDivElement | null)[]>([])
 
   // Each frame, move them (straight in the page, not through React) and redraw only when one of
   // them starts or stops walking.
   useEffect(() => {
+    if (still) return
     let current = clones
     let last = performance.now()
     let frame = requestAnimationFrame(function tick(now) {

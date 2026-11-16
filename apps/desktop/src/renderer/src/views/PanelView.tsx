@@ -494,6 +494,7 @@ function Panel({ state }: { state: AppState }) {
       <ChatBox
         corner={state.corner}
         layout={layout}
+        scale={scale}
         open={open}
         toast={toast}
         inClaudeDesktop={inClaudeDesktop}

@@ -35,7 +35,8 @@ const RAMPS: Record<string, Ramp> = {
 const LIGHT: Point = { x: -1, y: -1 }
 
 export type View = 'front' | 'diagonal' | 'side'
-export type Face = 'neutral' | 'blink' | 'happy' | 'surprised' | 'yawn' | 'sip' | 'down'
+export type Face =
+  'neutral' | 'blink' | 'happy' | 'surprised' | 'yawn' | 'sip' | 'down' | 'awe' | 'up'
 
 /** Angles in radians from hanging straight down. */
 export interface Arm {
@@ -106,6 +107,11 @@ const EYES = {
       ['.....', '.....', 'eeeee', '.iIi.'],
       ['.....', '.....', 'eeeee', '.iIi.'],
     ],
+    // Looking up: the iris right under the lid, the row below it bare.
+    up: [
+      ['eeeee', '.iiiw', '.IjjI', '..jj.', '.....'],
+      ['eeeee', 'iiiw.', 'IjjI.', '.jj..', '.....'],
+    ],
   },
   diagonal: {
     open: [
@@ -124,12 +130,17 @@ const EYES = {
       ['.....', '.....', 'eeeee', '.iIi.'],
       ['....', '....', 'eeee', 'iIi.'],
     ],
+    up: [
+      ['eeeee', '.iiiw', '.IjjI', '..jj.', '.....'],
+      ['eeee', 'iiw.', 'Ijj.', 'jj..', '....'],
+    ],
   },
   side: {
     open: [['ee...', '.eeee', '..iw.', '..II.', '..jj.']],
     blink: [['.....', '.....', 'eeee.', '.ee..']],
     happy: [['.....', '..ee.', '.e..e', '.....']],
     down: [['.....', '.....', '.eeee', '..iI.']],
+    up: [['ee...', '.eeee', '..iw.', '..jj.', '.....']],
   },
 } as const
 
@@ -141,6 +152,8 @@ const MOUTHS: Record<Face, readonly string[]> = {
   surprised: ['mm', 'mm'],
   yawn: ['.mm.', 'mmmm', 'mmmm', '.mm.'],
   sip: ['m'],
+  awe: ['mm', 'mm'],
+  up: ['m..m', '.mm.'],
 }
 
 /** A four-pointed sparkle, and a smaller one. */
@@ -148,10 +161,11 @@ const SPARKLE = ['..j..', '..l..', 'jlwlj', '..l..', '..j..']
 const TWINKLE = ['.l.', 'lwl', '.l.']
 
 /** Which eyes a face uses. */
-function eyesFor(face: Face): 'open' | 'blink' | 'happy' | 'down' {
+function eyesFor(face: Face): 'open' | 'blink' | 'happy' | 'down' | 'up' {
   if (face === 'blink' || face === 'yawn') return 'blink'
   if (face === 'happy' || face === 'sip') return 'happy'
   if (face === 'down') return 'down'
+  if (face === 'awe' || face === 'up') return 'up'
   return 'open'
 }
 

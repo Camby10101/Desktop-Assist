@@ -19,7 +19,7 @@ process uses these numbers to size and place the two windows (`src/main/index.ts
 windows (`ActionStack.tsx`, `ChatBox.tsx`, `SettingsMenu.tsx`, `SizeMenu.tsx`). Because both read
 one file, a window can never be the wrong size for what is drawn in it.
 
-The character comes in several sizes, which the user picks from the size menu (the "Her size"
+The character comes in several sizes, which the user picks from the size menu (the "Size"
 icon). A size is a _scale_: a multiple of her usual size, such as 2 for twice as big. The fixed
 numbers in `UI` are her usual size (a scale of 1), and the helpers further down
 (`bubbleMetrics()`, `panelLayout()` and the rest) take a scale and work out the sizes and offsets
@@ -497,13 +497,14 @@ can be doing: her _pose_. As the comment at the top says, the main process decid
 (`BubbleController` in `src/main/bubble/BubbleController.ts`) and the bubble's page animates it
 (`Character.tsx` in `src/renderer/src/components`), so both import the names from here. The pose
 travels to the page on `assist:pose-changed` and in `AppState.pose`. At the end of the file,
-`CLONES` holds the numbers for her clones, which both sides need too.
+`VISION` holds the timetable of one of her habits, and `CLONES` the numbers for her clones, which
+both sides need too.
 
 ### `FIDGETS`, `Fidget`, `Pose`, `FIDGET_MS` and `isFidget`
 
 <!-- code: apps/desktop/src/shared/character.ts#FIDGETS,Fidget,Pose,FIDGET_MS,isFidget -->
 
-[`src/shared/character.ts`, lines 1–51](../../apps/desktop/src/shared/character.ts#L1-L51)
+[`src/shared/character.ts`, lines 1–55](../../apps/desktop/src/shared/character.ts#L1-L55)
 
 ```ts
 // The character that stands in for the bubble: what she's doing (her pose), shared by the main
@@ -515,6 +516,8 @@ travels to the page on `assist:pose-changed` and in `AppState.pose`. At the end 
  * - `wave`: waves at you.
  * - `stretch`: stretches her arms up and side to side, yawning.
  * - `sip`: a sip of tea.
+ * - `vision`: a light shines down from above and brings the company's logo down to her; she looks
+ *   up at it in wonder for a moment, then it rises away again (see VISION).
  * - `read`: reads her spellbook (and smiles at something in it).
  * - `spell`: a little spell, sparkles circling her hand.
  * - `levitate`: floats up over a glowing magic circle, hovers with her eyes shut, and settles.
@@ -526,6 +529,7 @@ export const FIDGETS = [
   'wave',
   'stretch',
   'sip',
+  'vision',
   'read',
   'spell',
   'levitate',
@@ -549,6 +553,7 @@ export const FIDGET_MS: Record<Fidget, number> = {
   wave: 2000,
   stretch: 2400,
   sip: 3200,
+  vision: 5200,
   read: 4000,
   spell: 2400,
   levitate: 3600,
@@ -562,8 +567,9 @@ export const isFidget = (pose: Pose): pose is Fidget =>
 
 <!-- /code -->
 
-- `FIDGETS`: the eight things she does now and then once she's been left alone a while, each
-  described in the comment above it. `as const` makes it a fixed list of those exact strings,
+- `FIDGETS`: the ten things she does now and then once she's been left alone a while, each
+  described in the comment above it. One, `vision`, needs more than her own window: the light and
+  the company's logo are drawn in a window of their own above her (see `VISION` below). `as const` makes it a fixed list of those exact strings,
   rather than any list of strings, which is what lets the next line make a type from it. It's a
   real list, not only a type, because code goes through it: `nextActivity()` in
   `src/main/bubble/wander.ts` picks one at random, and `Character` draws each one's frames ahead of
@@ -589,27 +595,66 @@ export const isFidget = (pose: Pose): pose is Fidget =>
   is a _type guard_: where it returns true, TypeScript treats `pose` as a `Fidget`, so
   `FIDGET_MS[pose]` type-checks without a cast.
 
+### `VISION`
+
+<!-- code: apps/desktop/src/shared/character.ts#VISION -->
+
+[`src/shared/character.ts`, lines 57–68](../../apps/desktop/src/shared/character.ts#L57-L68)
+
+```ts
+/**
+ * The `vision` habit's timetable (ms from its start), shared by her animation (sprite.ts) and the
+ * window that draws the light and the logo above her (VisionView), so she looks up as it comes:
+ * the light fades in, the logo comes down and hovers over her head, rises away, and the light
+ * fades out.
+ */
+export const VISION = {
+  lightIn: [0, 600],
+  descend: [300, 1800],
+  ascend: [3400, 4600],
+  lightOut: [4500, 5200],
+} as const
+```
+
+<!-- /code -->
+
+The timetable of her `vision` habit, in milliseconds from its start. As the comment says, two
+things share it: her animation (`vision()` in `character/sprite.ts`, played in her own window) and
+the window above her that draws the light and the logo (`VisionView.tsx`). Keeping the times in one
+place is what makes her look up as the logo comes down, though the two are drawn by different
+pages. Each entry is a `[from, to]` pair:
+
+- `lightIn: [0, 600]`: the light fades in over the first 0.6 seconds.
+- `descend: [300, 1800]`: the logo comes down the light, from 0.3 to 1.8 seconds, and hovers over
+  her head.
+- `ascend: [3400, 4600]`: it rises away again, from 3.4 to 4.6 seconds.
+- `lightOut: [4500, 5200]`: the light fades out, ending at 5.2 seconds, which is the habit's whole
+  length (`FIDGET_MS.vision`). A test checks the logo comes down before it rises, and that the
+  light is gone within the habit's time.
+- `as const`: keeps each pair a fixed pair of numbers, so `VisionView` can take one apart as
+  `[from, to]`.
+
 ### `CLONES`
 
 <!-- code: apps/desktop/src/shared/character.ts#CLONES -->
 
-[`src/shared/character.ts`, lines 53–57](../../apps/desktop/src/shared/character.ts#L53-L57)
+[`src/shared/character.ts`, lines 70–74](../../apps/desktop/src/shared/character.ts#L70-L74)
 
 ```ts
 /**
  * Her clones (the Clones action): how many, how long they last (ms), and how long they take to
  * fade in and out at either end.
  */
-export const CLONES = { count: 10, durationMs: 10_000, fadeMs: 400 } as const
+export const CLONES = { count: 10, durationMs: 30_000, fadeMs: 400 } as const
 ```
 
 <!-- /code -->
 
-The numbers behind the Clones action ("Ten clones for ten seconds"), which fills the taskbar with
-copies of her for a while. As the comment says:
+The numbers behind the Clones action, which fills the taskbar with copies of her for a while. As
+the comment says:
 
 - `count: 10`: how many clones there are.
-- `durationMs: 10_000`: how long they last, 10 seconds. (`_` is just a separator that makes long
+- `durationMs: 30_000`: how long they last, 30 seconds. (`_` is just a separator that makes long
   numbers easier to read.) The main process closes their window after this long (`Clones` in
   `src/main/bubble/clones.ts`).
 - `fadeMs: 400`: how long they take to fade in at the start and out at the end. The clones' page
@@ -630,7 +675,7 @@ and in what order, nearest the bubble first. There are three kinds:
   exception: when the tenant lists request types, `PanelView.runAction()` opens the service desk
   page instead (see [Jira and the service desk](11-atlassian.md)).
 - `popover` actions open some UI inside the panel and never leave the renderer: Settings (the
-  settings menu); Her size (the size menu); Ask Claude and Your apps, which switch the card between
+  settings menu); Size (the size menu); Ask Claude and Your apps, which switch the card between
   the text box and the Apps list; and Jira, which swaps in the Jira page. `PanelView.runAction()`
   handles them. (The size menu's buttons then ask the main process to resize her, through
   `window.assist.character.setSize()`, but opening the menu doesn't.)
@@ -703,8 +748,8 @@ export const ACTIONS = {
   screenshot: { label: 'Take screenshot', kind: 'command' },
   theme: { label: 'Light or dark mode', kind: 'switch' },
   settings: { label: 'Settings', kind: 'popover' },
-  size: { label: 'Her size', kind: 'popover' },
-  clones: { label: 'Ten clones for ten seconds', kind: 'command' },
+  size: { label: 'Size', kind: 'popover' },
+  clones: { label: 'Clones', kind: 'command' },
   close: { label: 'Close Desktop Assist', kind: 'command' },
 } as const satisfies Record<ActionId, { label: string; kind: 'command' | 'popover' | 'switch' }>
 ```
@@ -718,9 +763,9 @@ screen-reader name, and gives `popover` actions (and the service desk, when it o
 - `jira: { label: 'Jira: notifications and search', kind: 'popover' }`: the Jira icon, a bell.
 - The comment above `servicedesk`: it stays a `command`, because without request types it just
   opens the portal in the browser; with them, the panel opens its page instead.
-- `size: { label: 'Her size', kind: 'popover' }`: opens the size menu, with buttons to make the
+- `size: { label: 'Size', kind: 'popover' }`: opens the size menu, with buttons to make the
   character smaller or bigger (`SizeMenu.tsx`).
-- `clones: { label: 'Ten clones for ten seconds', kind: 'command' }`: fills the taskbar with
+- `clones: { label: 'Clones', kind: 'command' }`: fills the taskbar with
   copies of her for a while (`CLONES` in `character.ts` has the numbers). The main process does it,
   because the clones need a window of their own.
 
@@ -2156,7 +2201,7 @@ export function browseUrl(site: string, key: string): string {
 
 ## `src/preload/index.ts`: the bridge to the page
 
-A _preload script_ runs inside each window (the bubble, the panel and the clones' window) just
+A _preload script_ runs inside each window (the bubble, the panel, and the clones' and the vision's windows) just
 before the page's own code. This
 one builds `window.assist` and is the only route from a page to the main process. To see why it
 exists, look at how the windows are created (`webPreferences` in `src/main/bubble/windows.ts`):

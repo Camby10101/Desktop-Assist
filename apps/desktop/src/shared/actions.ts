@@ -29,8 +29,8 @@ export const ACTIONS = {
   screenshot: { label: 'Take screenshot', kind: 'command' },
   theme: { label: 'Light or dark mode', kind: 'switch' },
   settings: { label: 'Settings', kind: 'popover' },
-  size: { label: 'Her size', kind: 'popover' },
-  clones: { label: 'Ten clones for ten seconds', kind: 'command' },
+  size: { label: 'Size', kind: 'popover' },
+  clones: { label: 'Clones', kind: 'command' },
   close: { label: 'Close Desktop Assist', kind: 'command' },
 } as const satisfies Record<ActionId, { label: string; kind: 'command' | 'popover' | 'switch' }>
 

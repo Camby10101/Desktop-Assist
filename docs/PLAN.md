@@ -50,7 +50,7 @@ account and usage limit (§7e); the built-in chat stays available as a tenant se
   and **grows upward** as you type. Action icons stack **above** the bubble.
 - **Collapse** by clicking the bubble again, pressing Esc, or clicking anywhere else.
 - On trial since 6: the bubble is an animated character standing on the taskbar near a bottom
-  corner instead of the logo in a corner, and the Bounce icon has given way to Her size and Clones
+  corner instead of the logo in a corner, and the Bounce icon has given way to Size and Clones
   (§7i).
 - Only one copy runs at a time. Launching it again just opens the panel.
 
@@ -124,7 +124,8 @@ and has rougher transparent-window behaviour on WebView2. **.NET WinUI** is Wind
 ```
 
 - **Two windows, one renderer bundle** (`?view=bubble` / `?view=panel`; on the `character` branch
-  also `?view=clones`, a click-through window for the Clones action, §7i). The bubble window is
+  also `?view=clones` and `?view=vision`, click-through windows for the Clones action and one of
+  the character's habits, §7i). The bubble window is
   tiny, can't take focus and never resizes when the panel opens. That means no flicker on
   open/close and nothing large moving during a drag or a walk. The panel window has a fixed size and its empty areas pass clicks through
   to whatever is underneath (`setIgnoreMouseEvents` with forwarding, toggled whenever the pointer
@@ -610,11 +611,15 @@ this was merged.)
   - **Walk left / walk right**, side on: twelve frames, two steps; each leg swings forward with its
     knee bent and pushes back, the arms swing against the legs, her body rises as her legs pass and
     her hair trails behind, while the window moves along the taskbar (80 DIP a second).
-  - **Nine habits** (fidgets), only once she's been left alone for 30 s, chosen at random, never
+  - **Ten habits** (fidgets), only once she's been left alone for 30 s, chosen at random, never
     the same twice in a row: **hop** (crouch, spring, float with her legs tucked, land with a
     bounce; 1.2 s), **wave** (diagonal, forearm upright swinging to and fro, smiling; 2 s),
     **stretch** (arms up, a yawn, a lean each way; 2.4 s), **sip** (diagonal, her teacup up to
-    her mouth and a contented smile; 3.2 s), **read** (diagonal, her spellbook open, head down,
+    her mouth and a contented smile; 3.2 s), **vision** (from the front, a soft light shines down
+    from the top of the screen and the company's logo comes down it to hover, glowing, over her
+    head; she looks up in wonder, smiles and opens her arms as it arrives, and watches it rise away
+    as the light fades; 5.2 s; the light and the logo are drawn in a click-through window of their
+    own above her, in time with her from a shared timetable), **read** (diagonal, her spellbook open, head down,
     turning pages, a smile at something; 4 s), **spell** (diagonal, her hand raised, sparkles
     circling it; 2.4 s), **levitate** (eyes shut, she floats up over a glowing magic circle,
     hovers, bobbing and smiling, as its runes turn and sparks rise, then settles; 3.6 s), **sit**
@@ -638,7 +643,7 @@ this was merged.)
 - **Anything the user does stops it where it is**: clicking it opens the panel from where it
   stands (the panel still opens toward the middle of the screen); dragging interrupts a walk or a
   fidget. Nothing happens on its own while the panel is open.
-- **Her size**: a size icon opens a menu with Smaller and Bigger, in steps from half her usual size
+- **Size**: a size icon opens a menu with Smaller and Bigger, in steps from half her usual size
   to six times it (½, ¾, 1, 1.5, 2, 3, 4, 5, 6). She grows or shrinks where she stands, her feet on
   the taskbar, with the panel's chat card and icons moving out to suit. The size is remembered
   (`characterScale` in `preferences.json`), but she's never bigger than lets her panel, with all
@@ -646,13 +651,16 @@ this was merged.)
   fit, and grows back once there's room. The bigger she is, the further she strolls and the faster
   she walks.
 - **Clones** (in place of Bounce, which has been removed): ten of her, at her size, walk about the
-  taskbar of her display for ten seconds, each on its own timetable, then fade away. They're in one
+  taskbar of her display for thirty seconds, each on its own timetable, then fade away. They're in one
   window along the bottom of the screen that never takes the mouse or the focus, so clicks go
   straight through them; using it again starts a new lot.
 - With Windows' reduced-motion setting it still walks, but holds still otherwise (the first frame
   of each pose).
 - Her shadow on the taskbar turns the accent colour while the panel is open, and she glows softly
   when the pointer is over her.
+- **The chat card is her speech bubble**: a tail on its side nearest her points at her mouth, at
+  any size, its base kept clear of the card's rounded corners (on a short card at a big size it
+  slants up to her).
 
 Tested with unit tests (where it stands and which corner it belongs to; choosing walks and
 fidgets, walking, falling; the controller with fake timers: standing, strolling both ways,
@@ -660,9 +668,10 @@ fidgeting only after a quiet spell, stopping when clicked with the panel where i
 while open, dangling while dragged, falling where dropped, walking back from far away, another
 display, display changes, habits never repeated back to back; her size: saved and snapped, growing
 where she stands, kept to what fits the screen, walking faster when bigger; the clones' window and
-how they wander; the animations: every pose's frames, feet on the ground except at the top of the
+how they wander; the vision's window and timetable; the animations: every pose's frames, feet on the ground except at the top of the
 hop and while carried, each habit's length matching the main process, mirroring, the rig's three
-views and face, the rasteriser's shading, form shadows and outlines, the shadows things cast) and
+views and face, looking up for the vision, the rasteriser's shading, form shadows and outlines,
+the shadows things cast) and
 the real app: she stood on the taskbar, walked, sat down and later glanced
 about on her own, with no errors; contact sheets of every frame drawn with the real CSS.
 

@@ -200,6 +200,25 @@ describe('the rig', () => {
     for (const letter of ['e', 'I', 'c', 'm']) expect(rows.slice(26, 36).join('')).toContain(letter)
   })
 
+  it('looks up, from every side, with her irises right under her lids', () => {
+    for (const view of ['front', 'diagonal', 'side'] as const) {
+      expect(draw({ view, face: 'up' }).join('')).not.toBe(draw({ view }).join(''))
+    }
+    // From the front, the row under her lids is iris for both eyes, the row below the glint.
+    const rows = draw({ view: 'front', face: 'up' })
+    const lids = rows.findIndex((row) => row.includes('eeeee'))
+    expect(rows[lids + 1]!.match(/i/g)!.length).toBeGreaterThanOrEqual(6)
+    // The vision habit has her looking up for most of it, while the logo is over her.
+    const lookingUp = (frame: string[]) => {
+      const at = frame.findIndex((row) => row.includes('eeeee'))
+      return at >= 0 && (frame[at + 1]!.match(/i/g)?.length ?? 0) >= 6
+    }
+    const frames = framesOf('vision', 'right')
+    expect(frames.filter((f) => lookingUp(f.rows)).length).toBeGreaterThan(frames.length / 2)
+    expect(lookingUp(frames[0]!.rows)).toBe(false)
+    expect(lookingUp(frames.at(-1)!.rows)).toBe(false)
+  })
+
   it('puts her face on: eyes, blush and mouth', () => {
     const rows = draw({ view: 'front' }).join('')
     for (const letter of ['e', 'I', 'w', 'c', 'm']) expect(rows).toContain(letter)

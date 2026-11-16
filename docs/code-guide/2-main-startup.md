@@ -39,7 +39,7 @@ tests can drive them with fakes. `index.ts` is the only file that knows about al
 
 <!-- code: apps/desktop/src/main/index.ts#SHUTDOWN_TIMEOUT_MS,PRODUCT_NAME,controller,tray,refusedSwitches -->
 
-[`src/main/index.ts`, lines 71–92](../../apps/desktop/src/main/index.ts#L71-L92)
+[`src/main/index.ts`, lines 72–93](../../apps/desktop/src/main/index.ts#L72-L93)
 
 ```ts
 const SHUTDOWN_TIMEOUT_MS = 2000
@@ -118,7 +118,7 @@ backend, the conversation and the JumpCloud sign-in) are in a separate function,
 
 <!-- code: apps/desktop/src/main/index.ts#start.tenant -->
 
-[`src/main/index.ts`, line 109](../../apps/desktop/src/main/index.ts#L109)
+[`src/main/index.ts`, line 110](../../apps/desktop/src/main/index.ts#L110)
 
 ```ts
 const tenant = await withDevOverrides(TenantSchema.parse(tenantConfig))
@@ -145,7 +145,7 @@ const tenant = await withDevOverrides(TenantSchema.parse(tenantConfig))
 
 <!-- code: apps/desktop/src/main/index.ts#start.userData,screenshotsDir,actionCount,log,notes,settings -->
 
-[`src/main/index.ts`, lines 113–124](../../apps/desktop/src/main/index.ts#L113-L124)
+[`src/main/index.ts`, lines 114–125](../../apps/desktop/src/main/index.ts#L114-L125)
 
 ```ts
 const userData = app.getPath('userData')
@@ -184,7 +184,7 @@ const settings = new SettingsService(join(userData, 'preferences.json'), screens
 
 <!-- code: apps/desktop/src/main/index.ts#start.bubbleWindow,panelWindow,windows,stopKeepingOnTop,windowsReady,broadcast -->
 
-[`src/main/index.ts`, lines 127–137](../../apps/desktop/src/main/index.ts#L127-L137)
+[`src/main/index.ts`, lines 128–138](../../apps/desktop/src/main/index.ts#L128-L138)
 
 ```ts
 // The windows are created after the last `await`: from here to registerIpc() below nothing
@@ -220,7 +220,8 @@ page's request is handled, its handler has been registered.
   created at the character's usual size: before it shows them, the controller below sizes and
   places them for the size she really is (which may have been saved bigger or smaller).
 - `const windows = [bubbleWindow, panelWindow]`: these two are the app's lasting windows. The
-  clones' window (see [Her clones](#her-clones) below) comes and goes, and isn't one of them.
+  clones' and the vision's windows (see [Overlays that come and go](#overlays-that-come-and-go)
+  below) come and go, and aren't among them.
 - `windows.map(keepOnTop)`: each window checks every few seconds that it's still on top of other
   apps' windows, and puts itself back if not (`bubble/windows.ts`). The functions that stop the
   checks are kept for quitting.
@@ -233,11 +234,76 @@ page's request is handled, its handler has been registered.
   functions, see [Shared code and the preload bridge](1-shared-and-preload.md)). `isDestroyed()`
   skips a window that has already been closed, which happens while quitting.
 
+#### Overlays that come and go
+
+<!-- code: apps/desktop/src/main/index.ts#start.openOverlay,vision -->
+
+[`src/main/index.ts`, lines 140–155](../../apps/desktop/src/main/index.ts#L140-L155)
+
+```ts
+/**
+ * A window that only shows something over the screen (her clones, or her vision's light and
+ * logo): it shows once its page is drawn, behind her own window, which is put back in front.
+ */
+const openOverlay =
+  (view: 'clones' | 'vision') => (bounds: Rect, query: Record<string, string>) => {
+    const win = createOverlayWindow(view, { width: bounds.width, height: bounds.height }, query)
+    win.setBounds(bounds)
+    win.once('ready-to-show', () => {
+      win.showInactive()
+      bringToFront(bubbleWindow, false)
+    })
+    return { close: () => !win.isDestroyed() && win.destroy() }
+  }
+
+// Her vision's light and logo, over her for as long as she's having it.
+const vision = new Vision({ open: openOverlay('vision') })
+```
+
+<!-- /code -->
+
+Besides the bubble and the panel, two kinds of window appear for a while and close again: her
+clones' (the Clones action) and her vision's (the light and the logo of her `vision` habit). Both
+only show something: they never take the mouse or the focus. `Clones` and `Vision` (in
+`bubble/clones.ts` and `bubble/vision.ts`, see [The bubble](5-bubble.md)) decide when they open,
+where, and what their pages are told; like the controller, they never touch Electron, and ask for
+a window through an `open` function. `openOverlay` makes that function, the same for both. As its
+comment says, the window shows once its page is drawn, behind her own window, which is put back in
+front.
+
+- `(view: 'clones' | 'vision') => (bounds: Rect, query: Record<string, string>) => {`: a function
+  that returns a function. `openOverlay('clones')` is the `open` that `Clones` is given: called
+  with where the window goes and what its page needs to know (in its query string), it makes the
+  window and returns something that can close it.
+- `createOverlayWindow(view, { width: bounds.width, height: bounds.height }, query)`: a hidden,
+  frameless, transparent, always-on-top window like the other two, loading the same page with
+  `?view=clones` or `?view=vision` and `query` added to the address (`bubble/windows.ts`). These two
+  can't take the keyboard focus, and the mouse goes straight through them to whatever is
+  underneath, so they never get in the way.
+- `win.setBounds(bounds)`: puts the window exactly where it was asked for, in DIPs, as the
+  controller does for the other two.
+- `win.once('ready-to-show', () => {`: once its page has painted for the first time, so it never
+  shows empty.
+- `win.showInactive()`: shows it without taking the focus from whatever the user is doing.
+- `bringToFront(bubbleWindow, false)`: the new window was shown last, so it would be in front of
+  her; this puts her own window back on top of it (`bubble/windows.ts`). `false` means without
+  hiding and showing it again. For the vision that matters: the light falls behind her, and the
+  logo hovers over her head.
+- `return { close: () => !win.isDestroyed() && win.destroy() }`: `Clones` or `Vision` closes the
+  window when its time is up (or sooner). `destroy()` closes it straight away; `isDestroyed()`
+  skips one that has already gone (while quitting, say).
+- `const vision = new Vision({ open: openOverlay('vision') })`: as the comment says, her vision's
+  light and logo, over her for as long as she's having it. It's made before the controller,
+  because the controller's `onPoseChange` (below) starts and stops it.
+
+Neither window is in `windows`, so they get no `keepOnTop()` check and no broadcasts: they only
+last a few seconds (the clones thirty), and everything their pages need comes in their addresses.
+
 #### The bubble controller
 
 <!-- code: apps/desktop/src/main/index.ts#start.bubble -->
 
-[`src/main/index.ts`, lines 139–154](../../apps/desktop/src/main/index.ts#L139-L154)
+[`src/main/index.ts`, lines 157–176](../../apps/desktop/src/main/index.ts#L157-L176)
 
 ```ts
 const bubble = new BubbleController({
@@ -249,7 +315,11 @@ const bubble = new BubbleController({
   initialScale: settings.characterScale,
   onDiagnostic: (message) => log(message),
   onModeChange: (mode) => broadcast(IPC.modeChanged, mode),
-  onPoseChange: (pose) => broadcast(IPC.poseChanged, pose),
+  onPoseChange: (pose) => {
+    broadcast(IPC.poseChanged, pose)
+    if (pose === 'vision') vision.start(bubble.standing)
+    else vision.stop()
+  },
   onSizeChange: (size) => broadcast(IPC.sizeChanged, size),
   onAnchorChange: (anchor) => {
     broadcast(IPC.cornerChanged, anchor.corner)
@@ -277,9 +347,13 @@ here.
   `CHARACTER_SIZES` and keeps it to what fits her display.
 - `onModeChange`: every mode change (collapsed, expanded, dragging and so on) is broadcast, so the
   pages can animate to match.
-- `onPoseChange: (pose) => broadcast(IPC.poseChanged, pose)`: every change of the character's pose
-  (standing, walking, a fidget, dangling) is broadcast too, and the bubble's page animates the
-  character to match.
+- `onPoseChange: (pose) => {`: every change of the character's pose (standing, walking, a fidget,
+  dangling) is broadcast too (`IPC.poseChanged`), and the bubble's page animates the character to
+  match. When the pose becomes `vision`, `vision.start(bubble.standing)` opens the light and the
+  logo over where she stands, at her size; any other pose closes them (`vision.stop()`, which does
+  nothing if they aren't there). So the vision ends when the habit does, or as soon as anything
+  interrupts it, such as a click or a drag. `bubble` can be used inside its own options because
+  the callback only runs later, once the controller exists.
 - `onSizeChange: (size) => broadcast(IPC.sizeChanged, size)`: her size (a `CharacterSize`: how big
   she is, and the biggest she can be on her display) is broadcast whenever either changes, so the
   bubble's page draws her at that size and the panel lays itself out for it. Saving the size is
@@ -301,68 +375,31 @@ here.
 
 <!-- code: apps/desktop/src/main/index.ts#start.clones -->
 
-[`src/main/index.ts`, lines 158–175](../../apps/desktop/src/main/index.ts#L158-L175)
+[`src/main/index.ts`, lines 180–181](../../apps/desktop/src/main/index.ts#L180-L181)
 
 ```ts
-// Her clones: a window along the taskbar, which shows once its page is drawn, and then puts her
-// own window back in front of it.
-const clones = new Clones({
-  accentColor: tenant.accentColor,
-  open: (bounds, query) => {
-    const win = createOverlayWindow(
-      'clones',
-      { width: bounds.width, height: bounds.height },
-      query,
-    )
-    win.setBounds(bounds)
-    win.once('ready-to-show', () => {
-      win.showInactive()
-      bringToFront(bubbleWindow, false)
-    })
-    return { close: () => !win.isDestroyed() && win.destroy() }
-  },
-})
+// Her clones: a window along the taskbar.
+const clones = new Clones({ accentColor: tenant.accentColor, open: openOverlay('clones') })
 ```
 
 <!-- /code -->
 
 `Clones` (in `bubble/clones.ts`, see [The bubble](5-bubble.md)) runs the Clones action: ten copies
-of the character walking about the taskbar for ten seconds, all drawn by one page in one window of
-their own. Like the controller, it never touches Electron: it asks for a window through `open`,
-and this is where that window is made. As the comment says, the window shows once its page is
-drawn, and then her own window is put back in front of it.
+of the character walking about the taskbar for thirty seconds, all drawn by one page in one window
+of their own, a strip along the taskbar.
 
 - `accentColor: tenant.accentColor`: the tenant's colour, which `Clones` passes on to the page for
   the clones' robes and hats.
-- `open: (bounds, query) => {`: `Clones` calls this with where the window goes (a strip along the
-  bottom of her display's work area, as tall as her window) and what its page needs to know (where
-  she stands, her size, the colour and when the clones' time ends), and gets back something it
-  can close.
-- `createOverlayWindow('clones', { width: bounds.width, height: bounds.height }, query)`: a
-  hidden, frameless, transparent, always-on-top
-  window like the other two, loading the same page with `?view=clones` and `query` added to the
-  address (`bubble/windows.ts`). This one can't take the keyboard focus, and the mouse goes
-  straight through it to whatever is underneath, so the clones never get in the way.
-- `win.setBounds(bounds)`: puts the window exactly over the strip, in DIPs, as the controller does
-  for the other two.
-- `win.once('ready-to-show', () => {`: once its page has painted for the first time, so it never
-  shows empty.
-- `win.showInactive()`: shows it without taking the focus from whatever the user is doing.
-- `bringToFront(bubbleWindow, false)`: the clones' window was shown last, so it would be in front
-  of her; this puts her own window back on top of it (`bubble/windows.ts`). `false` means without
-  hiding and showing it again.
-- `return { close: () => !win.isDestroyed() && win.destroy() }`: `Clones` closes the window when
-  the clones' time is up, or when the action is used again before then. `destroy()` closes it
-  straight away; `isDestroyed()` skips one that has already gone (while quitting, say).
-
-The clones' window isn't in `windows`, so it gets no `keepOnTop()` check and no broadcasts: it
-only lasts ten seconds, and everything its page needs comes in its address.
+- `open: openOverlay('clones')`: how it gets its window (see
+  [Overlays that come and go](#overlays-that-come-and-go) above). `Clones` calls it with the strip
+  along the bottom of her display's work area, as tall as her window, and what its page needs to
+  know (where she stands, her size, the colour and when the clones' time ends).
 
 #### Screenshots, notifications and the clipboard
 
 <!-- code: apps/desktop/src/main/index.ts#start.screenshots,notify,copyScreenshots -->
 
-[`src/main/index.ts`, lines 177–198](../../apps/desktop/src/main/index.ts#L177-L198)
+[`src/main/index.ts`, lines 183–204](../../apps/desktop/src/main/index.ts#L183-L204)
 
 ```ts
 const screenshots = new ScreenshotService(screenshotsDir, () =>
@@ -420,7 +457,7 @@ const copyScreenshots = async (paths: string[]) => {
 
 <!-- code: apps/desktop/src/main/index.ts#start.builtIn,claudeDesktop -->
 
-[`src/main/index.ts`, lines 201–230](../../apps/desktop/src/main/index.ts#L201-L230)
+[`src/main/index.ts`, lines 207–236](../../apps/desktop/src/main/index.ts#L207-L236)
 
 ```ts
 const builtIn =
@@ -499,7 +536,7 @@ exists.
 
 <!-- code: apps/desktop/src/main/index.ts#start.netFetch,updater -->
 
-[`src/main/index.ts`, lines 231–261](../../apps/desktop/src/main/index.ts#L231-L261)
+[`src/main/index.ts`, lines 237–267](../../apps/desktop/src/main/index.ts#L237-L267)
 
 ```ts
 // Electron's fetch, so a proxy set in Windows is used.
@@ -578,7 +615,7 @@ const updater = updates
 
 <!-- code: apps/desktop/src/main/index.ts#start.appsStatus,portalApps -->
 
-[`src/main/index.ts`, lines 263–285](../../apps/desktop/src/main/index.ts#L263-L285)
+[`src/main/index.ts`, lines 269–291](../../apps/desktop/src/main/index.ts#L269-L291)
 
 ```ts
 let appsStatus: AppsState['status'] = 'loading'
@@ -643,7 +680,7 @@ icon (see [Your apps](10-apps.md)). It's only set up when the tenant has a `port
 
 <!-- code: apps/desktop/src/main/index.ts#start.requests,memoryPath,atlassianStatus,atlassian,desk -->
 
-[`src/main/index.ts`, lines 290–352](../../apps/desktop/src/main/index.ts#L290-L352)
+[`src/main/index.ts`, lines 296–358](../../apps/desktop/src/main/index.ts#L296-L358)
 
 ```ts
 const requests = serviceDesk?.requests
@@ -767,7 +804,7 @@ Two statements follow:
 
 <!-- code: apps/desktop/src/main/index.ts#start.onDisplayChange -->
 
-[`src/main/index.ts`, line 412](../../apps/desktop/src/main/index.ts#L412)
+[`src/main/index.ts`, line 418](../../apps/desktop/src/main/index.ts#L418)
 
 ```ts
 const onDisplayChange = () => bubble.displayChanged()
@@ -821,7 +858,7 @@ Everything else in this part of `start()` is plain statements:
 
 <!-- code: apps/desktop/src/main/index.ts#start.shuttingDown -->
 
-[`src/main/index.ts`, lines 417–418](../../apps/desktop/src/main/index.ts#L417-L418)
+[`src/main/index.ts`, lines 423–424](../../apps/desktop/src/main/index.ts#L423-L424)
 
 ```ts
 // Save the text box before quitting. before-quit fires again after the second app.quit().
@@ -838,9 +875,9 @@ Quit or the Close icon. It doesn't fire when Windows shuts down or logs off, whi
 - `if (shuttingDown) return`: the handler ends by calling `app.quit()` again, which fires
   `before-quit` a second time. This flag lets that second one through.
 - `event.preventDefault()`: cancels this first quit, to make time for the steps below.
-- `bubble.dispose()`, `clones.stop()`, `builtIn?.chat.stop()`: stops the bubble's animation
-  timers, closes the clones' window if the clones are about, and, with the built-in chat, aborts a
-  reply that is still streaming. The loop over `stopKeepingOnTop` ends the windows' on-top
+- `bubble.dispose()`, `clones.stop()`, `vision.stop()`, `builtIn?.chat.stop()`: stops the
+  bubble's animation timers, closes the clones' window if the clones are about and the vision's if
+  she's having one, and, with the built-in chat, aborts a reply that is still streaming. The loop over `stopKeepingOnTop` ends the windows' on-top
   checks.
 - `void portalApps?.dispose()`: closes the Apps list's connection to JumpCloud, and stops waiting
   for a browser sign-in if one is under way. `atlassian?.dispose()` does the same for Atlassian,
@@ -860,7 +897,7 @@ page has drawn anything.
 
 <!-- code: apps/desktop/src/main/index.ts#start.stopWatchingFront -->
 
-[`src/main/index.ts`, lines 438–448](../../apps/desktop/src/main/index.ts#L438-L448)
+[`src/main/index.ts`, lines 445–455](../../apps/desktop/src/main/index.ts#L445-L455)
 
 ```ts
 // For its first ten minutes, make sure the bubble isn't stuck behind other apps' windows.
@@ -912,7 +949,7 @@ was part of `start()`. It returns a [`BuiltInChat`](#builtinchat): the `AuthMana
 
 <!-- code: apps/desktop/src/main/index.ts#startBuiltInChat.devBaseUrl,lastIdToken,backend,chat -->
 
-[`src/main/index.ts`, lines 468–492](../../apps/desktop/src/main/index.ts#L468-L492)
+[`src/main/index.ts`, lines 475–499](../../apps/desktop/src/main/index.ts#L475-L499)
 
 ```ts
 // Dev runs may point at a local test server; an installed app always talks to Anthropic.
@@ -985,7 +1022,7 @@ const chat = new ChatSession({
 
 <!-- code: apps/desktop/src/main/index.ts#startBuiltInChat.missing,localIssuer,authState,auth -->
 
-[`src/main/index.ts`, lines 494–518](../../apps/desktop/src/main/index.ts#L494-L518)
+[`src/main/index.ts`, lines 501–525](../../apps/desktop/src/main/index.ts#L501-L525)
 
 ```ts
 const missing = missingSettings(signIn, claudeAccess)
@@ -1062,7 +1099,7 @@ Two statements end the function:
 
 <!-- code: apps/desktop/src/main/index.ts#safeStorageEncryptor -->
 
-[`src/main/index.ts`, lines 524–529](../../apps/desktop/src/main/index.ts#L524-L529)
+[`src/main/index.ts`, lines 531–536](../../apps/desktop/src/main/index.ts#L531-L536)
 
 ```ts
 /** Windows DPAPI through Electron: only this Windows user can decrypt what it encrypts. */
@@ -1090,7 +1127,7 @@ The encryption `SecretStore` uses for the saved sign-in. `SecretStore` only know
 
 <!-- code: apps/desktop/src/main/index.ts#withDevOverrides -->
 
-[`src/main/index.ts`, lines 531–554](../../apps/desktop/src/main/index.ts#L531-L554)
+[`src/main/index.ts`, lines 538–561](../../apps/desktop/src/main/index.ts#L538-L561)
 
 ```ts
 /**
@@ -1146,7 +1183,7 @@ example to try the built-in chat against a test identity provider, without editi
 
 <!-- code: apps/desktop/src/main/index.ts#isLoopback -->
 
-[`src/main/index.ts`, lines 556–558](../../apps/desktop/src/main/index.ts#L556-L558)
+[`src/main/index.ts`, lines 563–565](../../apps/desktop/src/main/index.ts#L563-L565)
 
 ```ts
 function isLoopback(url: URL): boolean {
@@ -1164,7 +1201,7 @@ in `hostname`. Used only to decide whether plain `http` is allowed for a dev ide
 
 <!-- code: apps/desktop/src/main/index.ts#toArea,electronDisplays -->
 
-[`src/main/index.ts`, lines 560–575](../../apps/desktop/src/main/index.ts#L560-L575)
+[`src/main/index.ts`, lines 567–582](../../apps/desktop/src/main/index.ts#L567-L582)
 
 ```ts
 /** Electron's `screen`, in the shape the bubble controller uses. All coordinates are DIPs. */
@@ -1211,7 +1248,7 @@ method is called, which happens after `start()` has begun.
 
 <!-- code: apps/desktop/src/main/index.ts#fail -->
 
-[`src/main/index.ts`, lines 577–581](../../apps/desktop/src/main/index.ts#L577-L581)
+[`src/main/index.ts`, lines 584–588](../../apps/desktop/src/main/index.ts#L584-L588)
 
 ```ts
 function fail(error: unknown): void {
@@ -1474,7 +1511,7 @@ Everything the handlers need, passed in by `start()` in `index.ts`. The main pro
 are created there, so this file only needs their types, not how to build them.
 
 - `windows: BrowserWindow[]`: the bubble and panel windows; requests from any other page are
-  refused (the clones' window included: its page never calls in).
+  refused (the clones' and the vision's windows included: their pages never call in).
 - `builtIn: BuiltInChat | null`, `claudeDesktop: ClaudeDesktop | null`: where questions go.
   Exactly one of the two is set, depending on the tenant's `chatApp` (see
   [The chat: built in, or in Claude Desktop](#the-chat-built-in-or-in-claude-desktop)).
@@ -1854,7 +1891,7 @@ Check for updates have inner functions of their own too.
 
 - `z.enum(COMMAND_ACTION_IDS)`: only the `command` actions (service desk, Screenshot, Clones,
   Close) are accepted. `ctx.actions[id]()` runs the matching handler from `actions.ts` and returns
-  its result, which the panel shows as a toast. The Settings and Her size icons are `popover`
+  its result, which the panel shows as a toast. The Settings and Size icons are `popover`
   actions that never leave the page.
 - `shell.openExternal(url)`: opens a link from a Claude reply (or the Claude Desktop download
   page) in the default browser, after `ExternalUrl` has checked it (an email link opens the email
@@ -2107,7 +2144,7 @@ export function createActionHandlers(deps: {
   way the app isn't in its own screenshot.
 - `catch (error)`: any failure (including `whileHidden()` refusing because the panel isn't open)
   becomes a friendly message; the details go to the log.
-- `async clones()`: the Clones icon ("Ten clones for ten seconds"). As the comment says,
+- `async clones()`: the Clones icon. As the comment says,
   `deps.controller.collapse()` closes the panel first, out of the way, so the clones can be seen:
   they walk along the taskbar, where she stands. `deps.clones.start(deps.controller.standing)`
   then sets them off from where she stands, at her size (`standing` is her display's work area,

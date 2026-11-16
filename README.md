@@ -36,14 +36,16 @@ bubble kept in front, and Check for updates). This is version **1.0.0**, the fir
   hat with a gold moon and stars, a long robe in the company's accent colour with silver trim and
   gold embroidery, and laced boots, seen from the front, diagonally or side on. Once she's been
   left alone a while she does things of her own now and then: hops, waves, stretches and yawns,
-  sips her tea, reads her spellbook, casts a little spell of sparkles, levitates over a glowing
-  magic circle, sits on the taskbar, or glances about.
+  sips her tea, has a vision (a light shines down from the top of the screen and the company's
+  logo comes down it to hover over her head while she gazes up at it), reads her spellbook, casts
+  a little spell of sparkles, levitates over a glowing magic circle, sits on the taskbar, or
+  glances about.
 - **Drag it anywhere**, even onto another monitor: it dangles from the pointer. Let go and it drops
   onto that screen's taskbar, and from then on lives near the nearer bottom corner, walking back
   if it was dropped far away (and shrinking if she's too big for that screen). The panel opens
   toward the middle of the screen. It remembers the corner next time.
-- **Ask Claude**: type a question in the box beside the bubble and press Enter (or **Ask in
-  Claude**). The Claude Desktop app opens a new chat and the question is sent there, with any
+- **Ask Claude**: type a question in the box beside the bubble (a speech bubble pointing at her
+  mouth) and press Enter (or **Ask in Claude**). The Claude Desktop app opens a new chat and the question is sent there, with any
   attached screenshots pasted in, and Claude answers. It's your own Claude account, so it counts
   against your own usage limit. (Turn off **Send in Claude automatically** in Settings to only
   fill the question in and send it yourself.) Shift+Enter adds a line; an unsent question is
@@ -79,9 +81,9 @@ bubble kept in front, and Check for updates). This is version **1.0.0**, the fir
     new version) and **Uninstall Desktop Assist**. (With the
     built-in chat: Response style (Fast / Balanced / Thorough), New conversation, and who you're
     signed in as with **Log out**.)
-  - **Her size** opens a menu to make the character smaller or bigger, from half her usual size to
+  - **Size** opens a menu to make the character smaller or bigger, from half her usual size to
     six times it (or as big as fits your screen). It's remembered.
-  - **Clones** puts ten clones of her on the taskbar for ten seconds, walking about. They're only
+  - **Clones** puts ten clones of her on the taskbar for thirty seconds, walking about. They're only
     pictures: clicks go straight through them.
   - **Close** quits the app.
 - **Attach screenshot** adds the newest screenshot to your next question; click it again to add

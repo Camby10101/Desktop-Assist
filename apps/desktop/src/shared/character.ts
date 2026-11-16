@@ -7,6 +7,8 @@
  * - `wave`: waves at you.
  * - `stretch`: stretches her arms up and side to side, yawning.
  * - `sip`: a sip of tea.
+ * - `vision`: a light shines down from above and brings the company's logo down to her; she looks
+ *   up at it in wonder for a moment, then it rises away again (see VISION).
  * - `read`: reads her spellbook (and smiles at something in it).
  * - `spell`: a little spell, sparkles circling her hand.
  * - `levitate`: floats up over a glowing magic circle, hovers with her eyes shut, and settles.
@@ -18,6 +20,7 @@ export const FIDGETS = [
   'wave',
   'stretch',
   'sip',
+  'vision',
   'read',
   'spell',
   'levitate',
@@ -40,6 +43,7 @@ export const FIDGET_MS: Record<Fidget, number> = {
   wave: 2000,
   stretch: 2400,
   sip: 3200,
+  vision: 5200,
   read: 4000,
   spell: 2400,
   levitate: 3600,
@@ -51,7 +55,20 @@ export const isFidget = (pose: Pose): pose is Fidget =>
   (FIDGETS as readonly string[]).includes(pose)
 
 /**
+ * The `vision` habit's timetable (ms from its start), shared by her animation (sprite.ts) and the
+ * window that draws the light and the logo above her (VisionView), so she looks up as it comes:
+ * the light fades in, the logo comes down and hovers over her head, rises away, and the light
+ * fades out.
+ */
+export const VISION = {
+  lightIn: [0, 600],
+  descend: [300, 1800],
+  ascend: [3400, 4600],
+  lightOut: [4500, 5200],
+} as const
+
+/**
  * Her clones (the Clones action): how many, how long they last (ms), and how long they take to
  * fade in and out at either end.
  */
-export const CLONES = { count: 10, durationMs: 10_000, fadeMs: 400 } as const
+export const CLONES = { count: 10, durationMs: 30_000, fadeMs: 400 } as const
