@@ -1,4 +1,4 @@
-# The bubble: windows, layout, bounce and the state machine
+# The bubble: windows, layout, clones and the state machine
 
 [← Code Guide](CODE_GUIDE.md)
 
@@ -7,10 +7,11 @@ bottom corners of the screen; clicking it opens the panel (the chat card and the
 It started out as a round logo in a corner, and the code still calls it the bubble: the window,
 the modes and the IPC channels all kept the name. The character and the panel each live in their
 own transparent, frameless _overlay window_, created in `windows.ts`. `BubbleController` decides
-what the character is doing and moves, shows and hides the two windows to match, using the pure
-maths in `layout.ts` (where things go), `wander.ts` (what the character does on its own, and how
-it falls) and `bounce.ts` (how it bounces and glides). The bubble's page draws the figure and
-animates it (`Character.tsx`, with pixel art drawn by code in `src/renderer/src/character/`; see
+what the character is doing, and how big she is, and moves, sizes, shows and hides the two windows
+to match, using the pure maths in `layout.ts` (where things go) and `wander.ts` (what the
+character does on its own, and how it falls). `clones.ts` opens and closes a third overlay window,
+for her clones (the Clones action). The bubble's page draws the figure and animates it
+(`Character.tsx`, with pixel art drawn by code in `src/renderer/src/character/`; see
 [The UI components](8-renderer-components.md)).
 
 The controller is always in exactly one _mode_ (the `Mode` type in `src/shared/types.ts`). Every
@@ -20,9 +21,7 @@ change is broadcast to both pages, which draw themselves to match:
   and fidgeting on its own (see below) all happen in this mode.
 - `expanded`: the panel is open beside the character.
 - `dragging`: the character dangles from the mouse pointer.
-- `bouncing`: the character flies around the screens (the Bounce action).
-- `returning`: the character falls onto the taskbar after a drag, or glides back to where it
-  stood after a bounce.
+- `returning`: the character falls onto the taskbar after a drag.
 - `capturing`: both windows are hidden while a screenshot is taken.
 
 What moves the controller from one mode to another:
@@ -31,22 +30,19 @@ What moves the controller from one mode to another:
   launching the app a second time, or finishing sign-in in the browser (all `expand()`).
 - `expanded` → `collapsed`: a click on the character, Esc in the panel (`collapse()`), handing a
   question to Claude Desktop, opening an app from the Apps list, the IT service desk or an IT
-  request's form on the portal (also `collapse()`), or clicking
+  request's form on the portal, the Clones action (also `collapse()`), or clicking
   somewhere else so the panel loses focus (`panelBlurred()`, except in the panel's first 400 ms).
 - `collapsed` or `expanded` → `dragging` → `returning`: pressing and moving the character
   (`startDrag()`), then letting go (`endDrag()`), after which it falls (`fall()`).
-- `collapsed` or `expanded` → `bouncing` → `returning`: the Bounce action (`startBounce()`),
-  then a click on the character or anything that calls `expand()`, after which it glides back
-  (`glideHome()`).
-- `returning` → `collapsed`: the fall or the glide finishes (`settle()`). If something asked to
-  open the panel on the way, it carries straight on to `expanded`. A fall that ends far from the
-  character's corner is followed by a walk back.
+- `returning` → `collapsed`: the fall finishes (`settle()`). If something asked to open the panel
+  on the way, it carries straight on to `expanded`. A fall that ends far from the character's
+  corner is followed by a walk back.
 - `expanded` → `capturing` → `expanded`: the screenshot action (`whileHidden()`).
 
 Beside the mode, the controller keeps the character's _pose_ (the `Pose` type in
 `src/shared/character.ts`): what the figure is doing, for the bubble's page to animate. The mode
 is what the app is doing; the pose is only how the figure looks. While the character is moved
-about (`dragging`, `bouncing`, `returning`) the pose is `dragged`, dangling; otherwise it's
+about (`dragging`, `returning`) the pose is `dragged`, dangling; otherwise it's
 `idle`, unless the character is doing something on its own. Every pose change is broadcast too
 (`IPC.poseChanged`).
 
@@ -56,8 +52,28 @@ An inset of 0 is right in the corner, and insets grow toward the middle of the s
 bottom-right corner a bigger inset is further left, and from the bottom-left corner further right.
 Measuring from the corner, rather than keeping an `x`, means the same numbers work in either
 corner and on any display, and a resized screen only has to shorten the inset if it no longer
-fits. Near its corner is the _zone_, the first 240 DIPs along the taskbar, where the character
-strolls about.
+fits. Near its corner is the _zone_, the first 240 DIPs along the taskbar at her usual size (more
+when she's bigger; see `zone()`), where the character strolls about.
+
+**Her size.** The character comes in nine sizes, from half her usual size to six times it
+(`CHARACTER_SIZES` in `src/shared/geometry.ts`). A size is a _scale_: a multiple of her usual size,
+so 1 is the size she was drawn at, and 2 is twice as tall and twice as wide. The user picks one in
+the size menu (the Her size action), and the controller keeps two numbers: the size chosen, which
+is saved in `preferences.json`, and the size she is, which is the size chosen or, if that wouldn't
+fit her display, the biggest that does (`largestSize()` in `geometry.ts`: her panel, with every
+action icon, must still fit on the screen, so the size menu can always be reached to make her
+smaller again). Everything about her grows with her: her box and its padding, so her window, and
+the panel's offsets from its corner (`bubbleMetrics()` and `panelLayout()` in `geometry.ts`). The
+16 DIPs between her and the side of the screen stay the same. Her zone is wider when she's bigger,
+and she walks faster. Every change of size, or of the biggest she can be, is broadcast to both
+pages (`IPC.sizeChanged`).
+
+**Her clones.** The Clones action puts ten copies of her on the taskbar of her display for ten
+seconds (`CLONES` in `src/shared/character.ts`), each wandering up and down on its own. They're
+only pictures: they live in a window of their own along the bottom of the screen, which never takes
+the mouse or the focus, and they come and go without changing the mode. All `BubbleController` does
+for them is say where she stands (`standing`); `clones.ts` opens and closes their window, and the
+page in it moves them (`ClonesView`, see [The pages](7-renderer-pages.md)).
 
 **Left alone.** While `collapsed`, the character has a life of its own. Every 8 to 20 seconds it
 walks somewhere else in its zone (the pose `walk-left` or `walk-right`, while the controller moves
@@ -88,26 +104,27 @@ Who calls it:
   icon, a second launch, a finished sign-in and a click on a notification to `expand()`, and
   quitting to `dispose()`.
 - `src/main/ipc.ts` forwards the pages' requests: the bubble's click and drag (`clickBubble()`,
-  `startDrag()`, `endDrag()`) and the panel's Esc (`collapse()`). It also calls `collapse()`
-  after handing a question to Claude Desktop (from the text box, or about a Jira issue), opening an
-  app from the Apps list, and opening an IT request's form or the user's requests on the service
-  desk portal.
-- `src/main/actions.ts` calls `startBounce()` for the Bounce icon, `whileHidden()` for the
-  screenshot icon, and `collapse()` once the IT service desk has opened in the browser.
+  `startDrag()`, `endDrag()`), the panel's Esc (`collapse()`) and the size menu's Smaller and
+  Bigger (`setScale()`). It also calls `collapse()` after handing a question to Claude Desktop
+  (from the text box, or about a Jira issue), opening an app from the Apps list, and opening an IT
+  request's form or the user's requests on the service desk portal.
+- `src/main/actions.ts` calls `whileHidden()` for the screenshot icon, `collapse()` once the IT
+  service desk has opened in the browser, and, for the Clones icon, `collapse()` and then
+  `standing`, which it hands to `Clones.start()`.
 
 The controller never imports Electron. It drives windows through the `Surface` interface and asks
 about screens through the `Displays` interface. `index.ts` passes real ones: the adapters from
 `windows.ts`, and `electronDisplays`, a thin wrapper around Electron's `screen` module.
 `tests/bubbleController.test.ts` passes a `FakeSurface` that just records its bounds and whether
-it's visible, a pretend pair of monitors, and Vitest's fake timers. That way a whole drag or
-bounce, or a minute of the character wandering about, can be checked in milliseconds without
-opening a window.
+it's visible, a pretend pair of monitors, and Vitest's fake timers. That way a whole drag and
+fall, or a minute of the character wandering about, can be checked in milliseconds without opening
+a window.
 
 ### `Surface`, `PanelSurface`
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#Surface,PanelSurface -->
 
-[`src/main/bubble/BubbleController.ts`, lines 16–25](../../apps/desktop/src/main/bubble/BubbleController.ts#L16-L25)
+[`src/main/bubble/BubbleController.ts`, lines 25–34](../../apps/desktop/src/main/bubble/BubbleController.ts#L25-L34)
 
 ```ts
 /** The parts of a window the controller drives. Electron windows are adapted in windows.ts. */
@@ -137,7 +154,7 @@ What the controller needs from a window, and nothing more.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#DisplayArea,Displays -->
 
-[`src/main/bubble/BubbleController.ts`, lines 27–44](../../apps/desktop/src/main/bubble/BubbleController.ts#L27-L44)
+[`src/main/bubble/BubbleController.ts`, lines 36–51](../../apps/desktop/src/main/bubble/BubbleController.ts#L36-L51)
 
 ```ts
 /** One display: its id, its whole screen, and its work area (the screen minus the taskbar). */
@@ -150,8 +167,6 @@ export interface DisplayArea {
 /** What the controller needs to know about the screens. Electron's `screen` is adapted in index.ts. */
 export interface Displays {
   primary(): DisplayArea
-  /** Every display (Bounce roams across them all). */
-  all(): DisplayArea[]
   byId(id: number): DisplayArea | undefined
   /** The display containing `point`, or the closest one. */
   nearest(point: Point): DisplayArea
@@ -166,7 +181,7 @@ The controller's view of the monitors. Each display has an id (a number Electron
 `bounds` (the whole screen) and a _work area_: the part of the screen that windows may use, which
 is the screen minus the taskbar. The character's window stays inside the work area, with its
 bottom edge on the work area's, so the character stands on top of the taskbar rather than in front
-of it. The bounds are only needed for Bounce, to find taskbars that lie between two monitors.
+of it. Nothing in the controller reads the bounds at the moment.
 
 All coordinates are DIPs (device-independent pixels). Windows scales the desktop up on high-DPI
 screens: at 150 % scaling, a 1920×1080 monitor is 1280×720 DIPs. Electron's window and screen
@@ -177,7 +192,6 @@ coordinates. That is why a work area has its own `x` and `y`, and why the layout
 measures from them.
 
 - `primary()`: the main display. It's the fallback when the character's display has gone.
-- `all()`: every connected display. Bounce roams across all of them.
 - `byId(id: number): DisplayArea | undefined`: `undefined` when no connected display has that id,
   for example after a monitor was unplugged.
 - `nearest(point: Point)`: the display containing a point, or the closest one if the point is in
@@ -185,15 +199,15 @@ measures from them.
 - `cursor()`: where the mouse pointer is, in the same DIP coordinates. Dragging reads it every
   frame.
 
-In `index.ts`, `electronDisplays` implements these five with Electron's `screen` module
-(`getPrimaryDisplay()`, `getAllDisplays()`, `getDisplayNearestPoint()` and
+In `index.ts`, `electronDisplays` implements these four with Electron's `screen` module
+(`getPrimaryDisplay()`, `getAllDisplays()` to find one by its id, `getDisplayNearestPoint()` and
 `getCursorScreenPoint()`).
 
 ### `BubbleAnchor`
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleAnchor -->
 
-[`src/main/bubble/BubbleController.ts`, lines 46–50](../../apps/desktop/src/main/bubble/BubbleController.ts#L46-L50)
+[`src/main/bubble/BubbleController.ts`, lines 53–57](../../apps/desktop/src/main/bubble/BubbleController.ts#L53-L57)
 
 ```ts
 /** Where the character lives: near a bottom corner of a particular display. */
@@ -219,7 +233,7 @@ not saved, so after a restart it starts right in its corner.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleControllerDeps -->
 
-[`src/main/bubble/BubbleController.ts`, lines 52–68](../../apps/desktop/src/main/bubble/BubbleController.ts#L52-L68)
+[`src/main/bubble/BubbleController.ts`, lines 59–79](../../apps/desktop/src/main/bubble/BubbleController.ts#L59-L79)
 
 ```ts
 export interface BubbleControllerDeps {
@@ -229,11 +243,15 @@ export interface BubbleControllerDeps {
   actionCount: number
   /** Where the bubble was last time, if saved. */
   initialAnchor?: BubbleAnchor | null
+  /** Her size last time (see CHARACTER_SIZES), if saved. */
+  initialScale?: number | null
   onModeChange(mode: Mode): void
   /** The character settled near the other bottom corner or on another display. */
   onAnchorChange(anchor: BubbleAnchor): void
   /** What the character is doing changed (the bubble's page animates it). */
   onPoseChange?(pose: Pose): void
+  /** Her size changed, or the biggest she can be on her screen did. */
+  onSizeChange?(size: CharacterSize): void
   now?: () => number
   random?: () => number
   /** Things worth a line in the log, such as a click on the bubble that didn't open it. */
@@ -249,6 +267,9 @@ Everything the constructor needs, passed as one object (its _dependencies_).
   it (`panelWindowSize()` in `geometry.ts`), and so does its position next to the bubble.
 - `initialAnchor?: BubbleAnchor | null`: the `?` means the field may be left out; `null` means
   "nothing saved yet". The constructor treats both the same.
+- `initialScale?: number | null`: as the comment says, her size last time, if saved
+  (`SettingsService.characterScale` in `index.ts`). Left out or `null`, she starts at her usual
+  size.
 - `onModeChange(mode: Mode): void`: `index.ts` broadcasts the new mode to both pages
   (`IPC.modeChanged`). That's how the panel knows to animate open or closed, and the character's
   shadow knows to take the accent colour while the panel is open.
@@ -259,9 +280,13 @@ Everything the constructor needs, passed as one object (its _dependencies_).
   `index.ts` broadcasts the new pose to both pages (`IPC.poseChanged`), and the bubble's page
   animates the character to match (`Character.tsx`). The `?` makes it optional, so it's called
   with `?.`, like `onDiagnostic`.
+- `onSizeChange?(size: CharacterSize): void`: as the comment says, her size changed, or the
+  biggest she can be on her screen did (`CharacterSize` from `geometry.ts` holds both). `index.ts`
+  broadcasts it to both pages (`IPC.sizeChanged`): the bubble's page draws her at the new size, and
+  the panel moves its pieces out to match and updates the size menu. Optional too.
 - `now?: () => number`: a clock, and `random?: () => number` a random-number source. The app
-  leaves them out and gets the real ones; tests pass their own so timings, bounce angles, and when
-  and where the character wanders are predictable.
+  leaves them out and gets the real ones; tests pass their own so timings, and when and where the
+  character wanders, are predictable.
 - `onDiagnostic?: (message: string) => void`: a line for the problem log when the character does
   something a user could take for a fault: a click that didn't open the panel, or a blur that
   didn't close it. `index.ts` passes the log. Such reports ("I clicked the bubble and nothing
@@ -271,7 +296,7 @@ Everything the constructor needs, passed as one object (its _dependencies_).
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#FRAME_MS,DEFAULT_CORNER,PANEL_FADE_MS,BLUR_CLICK_GRACE_MS,PRESS_SLACK_MS,OPEN_BLUR_GRACE_MS,HIDE_SETTLE_MS -->
 
-[`src/main/bubble/BubbleController.ts`, lines 70–90](../../apps/desktop/src/main/bubble/BubbleController.ts#L70-L90)
+[`src/main/bubble/BubbleController.ts`, lines 81–101](../../apps/desktop/src/main/bubble/BubbleController.ts#L81-L101)
 
 ```ts
 const FRAME_MS = 16
@@ -325,7 +350,7 @@ The class, with the comment that describes it:
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.class -->
 
-[`src/main/bubble/BubbleController.ts`, lines 92–106](../../apps/desktop/src/main/bubble/BubbleController.ts#L92-L106)
+[`src/main/bubble/BubbleController.ts`, lines 103–119](../../apps/desktop/src/main/bubble/BubbleController.ts#L103-L119)
 
 ```ts
 /**
@@ -335,12 +360,14 @@ The class, with the comment that describes it:
  *
  *   collapsed ⇄ expanded                     click, Esc, blur
  *   collapsed/expanded → dragging → returning → collapsed     drag, release (falls to the taskbar)
- *   * → bouncing → returning → collapsed     Bounce action, then a click
  *   expanded → capturing → expanded          screenshot
  *
  * While collapsed and left alone, it wanders: now and then it walks somewhere else near its corner
  * and, once it's been alone a while, sometimes fidgets instead. Dropped far from its corner, it
  * walks back. Anything the user does stops it where it is.
+ *
+ * It also owns her size (`scale`, one of CHARACTER_SIZES): the size the user chose, kept to the
+ * biggest that fits her display, with both windows sized and placed to match.
  */
 export class BubbleController {
   // …
@@ -349,12 +376,13 @@ export class BubbleController {
 
 <!-- /code -->
 
-The comment sums up the state machine in four lines, then what the character does on its own; the
-lists at the top of this page are the long version. These are the class's fields:
+The comment sums up the state machine in three lines, then what the character does on its own,
+then her size; the lists at the top of this page are the long version. These are the class's
+fields:
 
-<!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.mode,pose,position,anchor,inset,motion,ticker,hideTimer,idleTimer,walking,lastFidget,lastInteraction,lastBlurCollapse,expandedAt,expandAfterReturn,now,random -->
+<!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.mode,pose,position,anchor,inset,chosenScale,scale,ticker,hideTimer,idleTimer,walking,lastFidget,lastInteraction,lastBlurCollapse,expandedAt,expandAfterReturn,now,random -->
 
-[`src/main/bubble/BubbleController.ts`, lines 107–127](../../apps/desktop/src/main/bubble/BubbleController.ts#L107-L127)
+[`src/main/bubble/BubbleController.ts`, lines 120–142](../../apps/desktop/src/main/bubble/BubbleController.ts#L120-L142)
 
 ```ts
 private mode: Mode = 'collapsed'
@@ -368,7 +396,10 @@ private anchor: BubbleAnchor
 /** How far along the taskbar from its corner it stands (see restPosition). */
 private inset = 0
 
-private motion: Motion | null = null
+/** The size the user chose (saved), and the size she is: that, or less if it doesn't fit. */
+private chosenScale: number
+
+private scale: number
 
 private ticker: ReturnType<typeof setInterval> | null = null
 
@@ -402,17 +433,21 @@ private readonly random: () => number
   change the field (TypeScript checks this when compiling). Everything starts at rest.
 - `private pose: Pose = 'idle'`: what the character is doing, for the bubble's page to animate.
   Only `setPose()` changes it.
-- `private position: Point = { x: 0, y: 0 }`: the top-left corner of the bubble's 80×80 _box_
-  (not of its window; see `layout.ts`), in DIPs. A placeholder until `start()` sets it.
+- `private position: Point = { x: 0, y: 0 }`: the top-left corner of the bubble's _box_ (80×80
+  at her usual size; not of its window; see `layout.ts`), in DIPs. A placeholder until `start()`
+  sets it.
 - `private anchor: BubbleAnchor`: no starting value here; the constructor sets it. With the
   project's `strict` settings, TypeScript refuses to compile if the constructor could finish
   without assigning it.
 - `private inset = 0`: as its comment says, how far along the taskbar from its corner the
   character stands, in DIPs (see `restPosition()` in `layout.ts`). It changes as the character
   walks and when it's dropped somewhere new (`endDrag()`). It starts at 0, right in the corner.
-- `private motion: Motion | null = null`: the bounce's current position and velocity (see
-  `bounce.ts`), or `null` when not bouncing. `| null` makes TypeScript insist on a check before
-  it's used.
+- `private chosenScale: number`, `private scale: number`: as the comment says, the size the user
+  chose, which is saved, and the size she is: the size chosen, or less if that doesn't fit her
+  display. Both are multiples of her usual size, one of `CHARACTER_SIZES`. Usually they're the
+  same; they differ only on a screen too small for the size chosen, and then `scale` goes back up
+  to `chosenScale` once there's room (see `fitScale()`). Everything that places a window uses
+  `scale`. The constructor sets both.
 - `ReturnType<typeof setInterval>`: "whatever type `setInterval` returns". It saves caring whether
   that's Node's `Timeout` object or a browser's number. `ticker` is the running animation timer,
   if any.
@@ -432,7 +467,7 @@ private readonly random: () => number
 - `private expandedAt = Number.NEGATIVE_INFINITY`: when the panel last opened, for the grace
   period in `panelBlurred()`.
 - `private expandAfterReturn = false`: set when something asks to open the panel while the
-  character is still falling or gliding back; `settle()` opens it on arrival.
+  character is still falling; `settle()` opens it once she lands.
 - `private readonly now: () => number`: `readonly` means it's set once, in the constructor, and
   never reassigned. The same goes for `random`.
 
@@ -440,7 +475,7 @@ private readonly random: () => number
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.constructor -->
 
-[`src/main/bubble/BubbleController.ts`, lines 129–142](../../apps/desktop/src/main/bubble/BubbleController.ts#L129-L142)
+[`src/main/bubble/BubbleController.ts`, lines 144–159](../../apps/desktop/src/main/bubble/BubbleController.ts#L144-L159)
 
 ```ts
 constructor(private readonly deps: BubbleControllerDeps) {
@@ -456,13 +491,15 @@ constructor(private readonly deps: BubbleControllerDeps) {
     saved && deps.displays.byId(saved.displayId)
       ? { displayId: saved.displayId, corner }
       : { displayId: deps.displays.primary().id, corner }
+  this.chosenScale = snapSize(deps.initialScale ?? DEFAULT_SIZE)
+  this.scale = Math.min(this.chosenScale, this.largestScale())
 }
 ```
 
 <!-- /code -->
 
-Stores the dependencies, picks the clock and random source, and decides the anchor. Nothing
-appears on screen until `start()`.
+Stores the dependencies, picks the clock and random source, and decides the anchor and her size.
+Nothing appears on screen until `start()`.
 
 - `constructor(private readonly deps: BubbleControllerDeps)`: TypeScript shorthand. Marking a
   constructor parameter `private readonly` declares a field called `deps` and stores the argument
@@ -491,12 +528,20 @@ appears on screen until `start()`.
 - `this.anchor =`: sets the field directly rather than through `setAnchor()`, so `onAnchorChange`
   doesn't fire, and a fallback anchor or a corrected corner isn't saved. The pages get the corner
   from `getState()`.
+- `this.chosenScale = snapSize(deps.initialScale ?? DEFAULT_SIZE)`: the size saved last time, or
+  her usual size (`DEFAULT_SIZE`, 1) if there isn't one. `snapSize()` (from `geometry.ts`) turns
+  any number into the nearest of `CHARACTER_SIZES`, so a saved number that isn't one of them (from
+  an older version, say, or edited by hand) still gives a size she comes in.
+- `this.scale = Math.min(this.chosenScale, this.largestScale())`: the size she starts at: the size
+  chosen, or the biggest that fits her display if that's smaller. It comes after the anchor because
+  `largestScale()` looks at her display, which the anchor says. Like the anchor, it's set directly,
+  for the pages to read from `getState()` (`size`, below), with no `onSizeChange`.
 
 ### `BubbleController.currentMode`, `currentPose`, `bubblePosition`, `corner`
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.currentMode,currentPose,bubblePosition,corner -->
 
-[`src/main/bubble/BubbleController.ts`, lines 144–158](../../apps/desktop/src/main/bubble/BubbleController.ts#L144-L158)
+[`src/main/bubble/BubbleController.ts`, lines 161–175](../../apps/desktop/src/main/bubble/BubbleController.ts#L161-L175)
 
 ```ts
 get currentMode(): Mode {
@@ -526,11 +571,82 @@ can't assign to it. `index.ts` reads `currentMode`, `currentPose` and `corner` i
 - `return { ...this.position }`: returns a copy, so a caller can't move the character by editing
   the object it got back. Nothing outside the class reads `bubblePosition` at the moment.
 
+### `BubbleController.size`, `standing`
+
+<!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.size,standing -->
+
+[`src/main/bubble/BubbleController.ts`, lines 177–189](../../apps/desktop/src/main/bubble/BubbleController.ts#L177-L189)
+
+```ts
+/** How big she is, and the biggest she can be on her display. */
+get size(): CharacterSize {
+  return { scale: this.scale, max: this.largestScale() }
+}
+
+/** Where she stands, for her clones: her display's work area, her window, and her size. */
+get standing(): { workArea: Rect; bounds: Rect; scale: number } {
+  return {
+    workArea: this.display().workArea,
+    bounds: bubbleWindowBounds(this.position, this.scale),
+    scale: this.scale,
+  }
+}
+```
+
+<!-- /code -->
+
+Two more read-only properties, both about her size.
+
+- `size`: as its comment says, how big she is, and the biggest she can be on her display, as a
+  `CharacterSize` (`{ scale, max }`, from `geometry.ts`). `index.ts` reads it in `getState()`, so
+  a page that has just loaded knows her size, and `setScale()` returns it. The panel's size menu
+  uses `max` to know when Bigger can't go any further.
+- `max: this.largestScale()`: worked out afresh each time, from her display as it is now.
+- `standing`: as its comment says, where she stands, for her clones: her display's work area, her
+  window's rectangle and her size. The Clones handler in `actions.ts` reads it and hands it to
+  `Clones.start()`, which opens the clones' window along the bottom of that work area, with them
+  setting off from where her window is, at her size.
+- `bubbleWindowBounds(this.position, this.scale)`: her window as it is placed now (see
+  `layout.ts`), a new object each time.
+
+### `BubbleController.setScale()`
+
+<!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.setScale -->
+
+[`src/main/bubble/BubbleController.ts`, lines 191–200](../../apps/desktop/src/main/bubble/BubbleController.ts#L191-L200)
+
+```ts
+/**
+ * Makes her `scale` times her usual size (snapped to one of CHARACTER_SIZES), or as big as fits
+ * her display if that's smaller. She grows or shrinks where she stands: her feet stay on the
+ * taskbar and her side nearest her corner stays put. Both windows are resized to match.
+ */
+setScale(scale: number): CharacterSize {
+  this.chosenScale = snapSize(scale)
+  this.fitScale()
+  return this.size
+}
+```
+
+<!-- /code -->
+
+Changes her size. `ipc.ts` calls it when the size menu's Smaller or Bigger is pressed
+(`IPC.characterSetSize`), then saves the size chosen (`SettingsService.setCharacterScale()`) and
+sends the result back to the page.
+
+- `this.chosenScale = snapSize(scale)`: the size asked for, snapped to one of `CHARACTER_SIZES`
+  (`ipc.ts` already refuses any other number, so this is a second line of defence). It's what's
+  remembered even when it doesn't fit: on a bigger screen later, she grows to it.
+- `this.fitScale()`: makes her that size, or the biggest that fits her display, and, as the
+  comment says, resizes both windows where she stands and tells the pages (see `fitScale()`).
+- `return this.size`: her size now, and the biggest she can be, so the caller can tell whether she
+  got the size asked for.
+
 ### `BubbleController.start()`
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.start -->
 
-[`src/main/bubble/BubbleController.ts`, lines 160–166](../../apps/desktop/src/main/bubble/BubbleController.ts#L160-L166)
+[`src/main/bubble/BubbleController.ts`, lines 202–208](../../apps/desktop/src/main/bubble/BubbleController.ts#L202-L208)
 
 ```ts
 /** Stands the character in its saved corner (or bottom-right of the main display) and shows it. */
@@ -550,8 +666,9 @@ anchor was already chosen in the constructor; this just puts the windows there.
 
 - `this.position = this.rest()`: on the taskbar in the anchor's corner (the inset is still 0; see
   `rest()`).
-- `this.placeWindows()`: positions both windows, although only the bubble is shown. The panel is
-  then already in the right place when it first opens.
+- `this.placeWindows()`: positions both windows, although only the bubble is shown, and sizes them
+  for her size (`index.ts` creates them at her usual size). The panel is then already in the right
+  place when it first opens.
 - `this.deps.bubble.show()`: for the real window this is `showInactive()` (see `bubbleSurface()`),
   so the character appears without stealing focus from whatever you're doing.
 - `this.scheduleActivity(true)`: starts the wait for the first thing the character does on its
@@ -561,7 +678,7 @@ anchor was already chosen in the constructor; this just puts the windows there.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.clickBubble -->
 
-[`src/main/bubble/BubbleController.ts`, lines 168–192](../../apps/desktop/src/main/bubble/BubbleController.ts#L168-L192)
+[`src/main/bubble/BubbleController.ts`, lines 210–231](../../apps/desktop/src/main/bubble/BubbleController.ts#L210-L231)
 
 ```ts
 /** A click on the bubble. `pressedAt` is when its mouse button went down (wall-clock ms). */
@@ -578,9 +695,6 @@ clickBubble(pressedAt?: number): void {
     }
     case 'expanded':
       this.collapse()
-      return
-    case 'bouncing':
-      this.glideHome()
       return
     case 'dragging':
     case 'returning':
@@ -616,8 +730,6 @@ which knows the mode and when the panel last closed.
   a click within 300 ms of a blur-close counts as part of the same gesture.
 - `if (closedByThisPress) return`: as the comment says, closing the panel was the click's job.
   Otherwise `this.expand()` opens it.
-- `case 'bouncing':`: clicking a bouncing character catches it and sends it back to where it
-  stood, without opening the panel.
 - `case 'collapsed'` also covers a character that's walking or fidgeting on its own: those happen
   in `collapsed`, so a click on a walking character opens the panel (and `expand()` stops the walk
   first).
@@ -630,18 +742,14 @@ which knows the mode and when the panel last closed.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.expand -->
 
-[`src/main/bubble/BubbleController.ts`, lines 194–219](../../apps/desktop/src/main/bubble/BubbleController.ts#L194-L219)
+[`src/main/bubble/BubbleController.ts`, lines 233–254](../../apps/desktop/src/main/bubble/BubbleController.ts#L233-L254)
 
 ```ts
-/** Opens the panel where the character stands. While bouncing, glides home first and then opens. */
+/** Opens the panel where the character stands. While she's falling, once she lands. */
 expand(): void {
   switch (this.mode) {
     case 'expanded':
       this.deps.panel.focus()
-      return
-    case 'bouncing':
-      this.expandAfterReturn = true
-      this.glideHome()
       return
     case 'returning':
       this.expandAfterReturn = true
@@ -668,10 +776,9 @@ outside use: the tray icon, launching the app again while it's running, finishin
 the browser, and clicking one of the app's Windows notifications (all in `index.ts`).
 
 - `this.deps.panel.focus()`: already open, so just give it the keyboard again.
-- `this.expandAfterReturn = true`: the panel opens beside the character, so it can't open while
-  the character is flying about or falling. The request is remembered, and `settle()` opens the
-  panel once the character is standing again. A bouncing character is sent back first; a
-  returning one (falling or gliding) is already on its way.
+- `this.expandAfterReturn = true`: as the comment says, while she's falling, the panel opens once
+  she lands. It opens beside the character, so it can't open while she's still in the air. The
+  request is remembered, and `settle()` opens the panel once the character is standing again.
 - `case 'dragging':`: ignored while you're holding the character, and while capturing (the panel
   reopens by itself when the screenshot is done).
 - `this.cancelHide()`: if the panel is still fading out from a moment ago, its pending "hide"
@@ -688,7 +795,7 @@ the browser, and clicking one of the app's Windows notifications (all in `index.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.collapse -->
 
-[`src/main/bubble/BubbleController.ts`, lines 221–229](../../apps/desktop/src/main/bubble/BubbleController.ts#L221-L229)
+[`src/main/bubble/BubbleController.ts`, lines 256–264](../../apps/desktop/src/main/bubble/BubbleController.ts#L256-L264)
 
 ```ts
 collapse(): void {
@@ -720,7 +827,7 @@ has been handed to Claude Desktop, by `ipc.ts`.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.panelBlurred -->
 
-[`src/main/bubble/BubbleController.ts`, lines 231–239](../../apps/desktop/src/main/bubble/BubbleController.ts#L231-L239)
+[`src/main/bubble/BubbleController.ts`, lines 266–274](../../apps/desktop/src/main/bubble/BubbleController.ts#L266-L274)
 
 ```ts
 panelBlurred(): void {
@@ -753,7 +860,7 @@ behaves like a popup and closes.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.startDrag -->
 
-[`src/main/bubble/BubbleController.ts`, lines 241–253](../../apps/desktop/src/main/bubble/BubbleController.ts#L241-L253)
+[`src/main/bubble/BubbleController.ts`, lines 276–288](../../apps/desktop/src/main/bubble/BubbleController.ts#L276-L288)
 
 ```ts
 /** The mouse pressed on the character and moved: it dangles from the pointer until released. */
@@ -778,7 +885,7 @@ The bubble page decides a press has become a drag once the pointer moves more th
 process moves the window and the page just waits for the release.
 
 - `if (this.mode !== 'collapsed' && this.mode !== 'expanded') return`: a drag can only start from
-  standing (walking counts, being `collapsed`), not mid-bounce, mid-fall or during a screenshot.
+  standing (walking counts, being `collapsed`), not mid-fall or during a screenshot.
 - `this.deps.panel.hide()`: the panel can't follow the character, so it's hidden at once, without
   the fade. `cancelHide()` drops any fade timer that was still pending.
 - `this.setMode('dragging')`: comes before the grab is measured. Changing the mode stops a walk
@@ -799,7 +906,7 @@ it.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.endDrag -->
 
-[`src/main/bubble/BubbleController.ts`, lines 255–271](../../apps/desktop/src/main/bubble/BubbleController.ts#L255-L271)
+[`src/main/bubble/BubbleController.ts`, lines 290–309](../../apps/desktop/src/main/bubble/BubbleController.ts#L290-L309)
 
 ```ts
 /**
@@ -809,14 +916,17 @@ it.
 endDrag(): void {
   if (this.mode !== 'dragging') return
   this.stopTicker()
+  const half = bubbleMetrics(this.scale).size / 2
   const centre = {
-    x: Math.round(this.position.x + UI.bubbleSize / 2),
-    y: Math.round(this.position.y + UI.bubbleSize / 2),
+    x: Math.round(this.position.x + half),
+    y: Math.round(this.position.y + half),
   }
   const display = this.deps.displays.nearest(centre)
-  const corner = nearestCorner(display.workArea, this.position)
+  const corner = nearestCorner(display.workArea, this.position, this.scale)
   this.setAnchor({ displayId: display.id, corner })
-  this.inset = insetAt(display.workArea, corner, this.position.x)
+  // Another display may not have room for her at this size.
+  this.fitScale()
+  this.inset = insetAt(display.workArea, corner, this.position.x, this.scale)
   this.fall()
 }
 ```
@@ -829,74 +939,34 @@ from then on lives near that display's nearer bottom corner. Dropped far from th
 walks back once it has landed.
 
 - `if (this.mode !== 'dragging') return`: a release that doesn't end a drag (say, a drag that was
-  refused because the character was bouncing) does nothing.
+  refused because the character was still falling) does nothing.
+- `const half = bubbleMetrics(this.scale).size / 2`: half the width of her box at her size
+  (`bubbleMetrics()` in `geometry.ts`), 40 DIPs at her usual size.
 - `const centre`: the display is picked by the character's centre, not its top-left, so a
   character straddling two monitors goes to the one its centre is on. It's rounded because
   Electron's display lookup works in whole DIPs.
-- `nearestCorner(display.workArea, this.position)`: the bottom corner on the side of that display
-  the character is on, left half or right half (`layout.ts`). How high it was dropped doesn't
-  matter.
+- `nearestCorner(display.workArea, this.position, this.scale)`: the bottom corner on the side of
+  that display the character is on, left half or right half (`layout.ts`). How high it was dropped
+  doesn't matter.
 - `this.setAnchor({ displayId: display.id, corner })`: saves and broadcasts the new anchor, but
   only if it actually changed. Dropping the character anywhere in the same half of the same
   display keeps it.
-- `this.inset = insetAt(display.workArea, corner, this.position.x)`: where it will land, as an
-  inset from that corner: the same `x` it was let go at, kept on the work area (`layout.ts`). So it
-  falls straight down.
+- `this.fitScale()`: as the comment says, another display may not have room for her at this size
+  (a smaller laptop screen beside a big monitor, say), so her size is fitted to the display she's
+  now on, or grows back to the size chosen if that one has room. It comes after `setAnchor()`, so
+  it looks at the new display. While dragging, it only changes `scale` and tells the pages; the
+  fall that follows moves her window at the new size.
+- `this.inset = insetAt(display.workArea, corner, this.position.x, this.scale)`: where it will
+  land, as an inset from that corner: the same `x` it was let go at, kept on the work area
+  (`layout.ts`). So it falls straight down.
 - `this.fall()`: the fall onto the taskbar. The mode goes to `returning`, then `collapsed`, and a
   character that landed beyond its zone then walks back (see `fall()`).
-
-### `BubbleController.startBounce()`
-
-<!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.startBounce -->
-
-[`src/main/bubble/BubbleController.ts`, lines 273–285](../../apps/desktop/src/main/bubble/BubbleController.ts#L273-L285)
-
-```ts
-startBounce(): void {
-  if (this.mode !== 'collapsed' && this.mode !== 'expanded') return
-  this.cancelHide()
-  this.deps.panel.hide()
-  this.setMode('bouncing')
-  this.motion = launch(this.position, this.random, this.anchor.corner)
-  this.runTicker((dtMs) => {
-    if (!this.motion) return
-    // Across every display. The anchor doesn't change, so a click brings it home.
-    this.motion = step(this.motion, dtMs, travelAreas(this.deps.displays.all()))
-    this.moveBubble({ x: this.motion.x, y: this.motion.y })
-  })
-}
-```
-
-<!-- /code -->
-
-The Bounce action: the character flies around the screen, across every monitor, bouncing off the
-outer edges, until clicked. `actions.ts` calls this for the Bounce icon. A click glides it back to
-where it stood on its own display (`glideHome()`), wherever it has wandered, because bouncing
-never changes the anchor or the inset.
-
-- `if (this.mode !== 'collapsed' && this.mode !== 'expanded') return`: the same rule as for
-  dragging. In practice it's `expanded`, because the Bounce icon is in the panel.
-- `this.setMode('bouncing')`: before `launch()`, for the same reason as in `startDrag()`: from
-  `collapsed`, changing the mode stops a walk where it is, so the bounce sets off from there. The
-  pose becomes `dragged`, so the character is thrown about dangling.
-- `launch(this.position, this.random, this.anchor.corner)`: the starting position and velocity,
-  heading away from the character's corner into the screen, which from a bottom corner means
-  upward (`bounce.ts`).
-- `if (!this.motion) return`: mostly for TypeScript. `motion` is typed `Motion | null`, and inside
-  the callback TypeScript can't assume it's still set.
-- `travelAreas(this.deps.displays.all())`: where the character may go: every display's work area,
-  plus any taskbar lying between two displays (`layout.ts`), read again every frame. If a monitor
-  is unplugged or the resolution or taskbar changes mid-bounce, the character carries on within
-  the displays as they are now (`displayChanged()` deliberately leaves a bounce alone).
-- `step(this.motion, dtMs,`: moves the character by the real time since the last frame.
-- `this.moveBubble(`: moves only the bubble window. The panel is hidden, and is put back next to
-  the character when it settles.
 
 ### `BubbleController.whileHidden()`
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.whileHidden -->
 
-[`src/main/bubble/BubbleController.ts`, lines 287–303](../../apps/desktop/src/main/bubble/BubbleController.ts#L287-L303)
+[`src/main/bubble/BubbleController.ts`, lines 311–327](../../apps/desktop/src/main/bubble/BubbleController.ts#L311-L327)
 
 ```ts
 /** Hides both windows, runs `task` (a screenshot), then reopens the panel. */
@@ -943,21 +1013,23 @@ hidden first and brought back afterwards.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.displayChanged -->
 
-[`src/main/bubble/BubbleController.ts`, lines 305–320](../../apps/desktop/src/main/bubble/BubbleController.ts#L305-L320)
+[`src/main/bubble/BubbleController.ts`, lines 329–346](../../apps/desktop/src/main/bubble/BubbleController.ts#L329-L346)
 
 ```ts
 /**
  * The resolution, taskbar or monitors changed. If the character's display was unplugged, it
- * moves to the same corner of the main display. Moving characters re-read the display every
- * frame; one standing (or strolling) is put back on the taskbar, as far from its corner as fits.
+ * moves to the same corner of the main display. Her size is kept to what fits (and back to the
+ * size chosen once there's room again). Moving characters re-read the display every frame; one
+ * standing (or strolling) is put back on the taskbar, as far from its corner as fits.
  */
 displayChanged(): void {
   if (!this.deps.displays.byId(this.anchor.displayId)) {
     this.setAnchor({ displayId: this.deps.displays.primary().id, corner: this.anchor.corner })
   }
-  if (this.mode === 'bouncing' || this.mode === 'returning' || this.mode === 'dragging') return
+  this.fitScale()
+  if (this.mode === 'returning' || this.mode === 'dragging') return
   this.stopIdling()
-  this.inset = Math.min(this.inset, maxInset(this.display().workArea))
+  this.inset = Math.min(this.inset, maxInset(this.display().workArea, this.scale))
   this.position = this.rest()
   this.placeWindows()
   if (this.mode === 'collapsed') this.scheduleActivity(false)
@@ -974,30 +1046,32 @@ taskbar moving or resizing (which changes the work area).
   example unplugged or a laptop undocked. The anchor moves to the same corner of the main display,
   through `setAnchor()`, so the change is saved and broadcast. The inset is kept, so it stands as
   far along the main display's taskbar as it did on the old one, if that fits.
-- `this.mode === 'bouncing' || this.mode === 'returning'`: moving characters adapt by themselves.
-  The bounce, the fall and the glide re-read the display every frame, and a drag follows the
-  pointer. Moving the windows here would make the character jump.
+- `this.fitScale()`: as the comment says, her size is kept to what fits the display as it is now:
+  on a screen that got smaller (a lower resolution, or another display), she shrinks; once there's
+  room again, she grows back to the size chosen. It runs in every mode, before the line below, so
+  a falling or dragged character is resized too (the next frame moves her window at the new size).
+- `this.mode === 'returning' || this.mode === 'dragging'`: moving characters adapt by themselves.
+  The fall re-reads the display every frame, and a drag follows the pointer. Moving the windows
+  here would make the character jump.
 - `this.stopIdling()`: as the comment says, a strolling character is put back on the taskbar too;
   a walk or a fidget stops, standing idle.
   Its walk stops where it is, standing idle, and the last line below starts the wait for its next
   activity afresh.
-- `this.inset = Math.min(this.inset, maxInset(this.display().workArea))`: on a narrower screen, as
-  far from its corner as still fits. `restPosition()` would keep it on screen anyway, but storing
-  the shorter inset means later walks start from where it really stands.
+- `this.inset = Math.min(this.inset, maxInset(this.display().workArea, this.scale))`: on a
+  narrower screen, as far from its corner as still fits at her size. `restPosition()` would keep it
+  on screen anyway, but storing the shorter inset means later walks start from where it really
+  stands.
 - `this.position = this.rest()`: in every other mode, both windows go back onto the taskbar of the
   (possibly resized) work area. That includes `expanded`, so an open panel moves with the
   character, and `capturing`, where the windows are hidden but will come back in the right place.
 - `if (this.mode === 'collapsed') this.scheduleActivity(false)`: a standing character starts its
   wait for the next thing to do over again.
 
-If a bouncing character's display is unplugged, the next frame's `step()` pulls it into the main
-display's travel box, so it reappears there.
-
 ### `BubbleController.dispose()`
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.dispose -->
 
-[`src/main/bubble/BubbleController.ts`, lines 322–326](../../apps/desktop/src/main/bubble/BubbleController.ts#L322-L326)
+[`src/main/bubble/BubbleController.ts`, lines 348–352](../../apps/desktop/src/main/bubble/BubbleController.ts#L348-L352)
 
 ```ts
 dispose(): void {
@@ -1017,7 +1091,7 @@ fires against a window that is being destroyed. The tests call it after each tes
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.display,rest -->
 
-[`src/main/bubble/BubbleController.ts`, lines 328–336](../../apps/desktop/src/main/bubble/BubbleController.ts#L328-L336)
+[`src/main/bubble/BubbleController.ts`, lines 354–362](../../apps/desktop/src/main/bubble/BubbleController.ts#L354-L362)
 
 ```ts
 /** The anchor's display, or the main display if it's gone. */
@@ -1027,7 +1101,7 @@ private display(): DisplayArea {
 
 /** Where the character stands now: on the taskbar, `inset` from its corner. */
 private rest(): Point {
-  return restPosition(this.display().workArea, this.anchor.corner, this.inset)
+  return restPosition(this.display().workArea, this.anchor.corner, this.inset, this.scale)
 }
 ```
 
@@ -1035,16 +1109,75 @@ private rest(): Point {
 
 - `?? this.deps.displays.primary()`: if the anchor's display has gone and `displayChanged()`
   hasn't run yet, use the main display rather than fail.
-- `restPosition(this.display().workArea, this.anchor.corner, this.inset)`: as its comment says,
-  where the character stands now: on the display's taskbar, `inset` along from its corner
-  (`layout.ts`). It's worked out fresh on every call, from the display's current work area and the
-  current inset, so it's never stale. A walk changes `inset` and calls `rest()` every frame.
+- `restPosition(this.display().workArea, this.anchor.corner, this.inset, this.scale)`: as its
+  comment says, where the character stands now: on the display's taskbar, `inset` along from its
+  corner, at her size (`layout.ts`). It's worked out fresh on every call, from the display's
+  current work area, the current inset and her current size, so it's never stale. A walk changes
+  `inset` and calls `rest()` every frame.
+
+### `BubbleController.largestScale()`, `fitScale()`
+
+<!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.largestScale,fitScale -->
+
+[`src/main/bubble/BubbleController.ts`, lines 364–385](../../apps/desktop/src/main/bubble/BubbleController.ts#L364-L385)
+
+```ts
+/** The biggest she can be on her display (see largestSize). */
+private largestScale(): number {
+  return largestSize(this.display().workArea, this.deps.actionCount)
+}
+
+/**
+ * Makes her the size chosen, or the biggest that fits her display, and tells the pages if that
+ * (or the biggest) changed. Standing or strolling, she's put back on the taskbar at her new size
+ * and both windows are sized to match; moving, the next frame does that.
+ */
+private fitScale(): void {
+  const before = this.size
+  this.scale = Math.min(this.chosenScale, this.largestScale())
+  const after = this.size
+  if (after.scale === before.scale && after.max === before.max) return
+  if (this.mode === 'collapsed' || this.mode === 'expanded') {
+    this.inset = Math.min(this.inset, maxInset(this.display().workArea, this.scale))
+    this.position = this.rest()
+    this.placeWindows()
+  }
+  this.deps.onSizeChange?.(after)
+}
+```
+
+<!-- /code -->
+
+How her size is kept to what fits. `fitScale()` is the one place `scale` changes after the
+constructor: `setScale()` calls it with a new size chosen, and `endDrag()` and `displayChanged()`
+call it when her display may have changed.
+
+- `largestScale()`: as its comment says, the biggest she can be on her display, from
+  `largestSize()` in `geometry.ts`. That checks every size in `CHARACTER_SIZES` and keeps the
+  biggest at which she fits across the work area with 16 DIPs either side and her panel window,
+  with its chat card and every action icon (`this.deps.actionCount` of them), fits the work area
+  too. So however big she gets, the size menu can still be reached.
+- `const before = this.size`: her size and the biggest she can be, before the change. `size` makes
+  a new object each time, so this is a copy, not something that changes along with the fields.
+- `this.scale = Math.min(this.chosenScale, this.largestScale())`: as the comment says, the size
+  chosen, or the biggest that fits her display.
+- `if (after.scale === before.scale && after.max === before.max) return`: nothing changed, so
+  nothing is moved and the pages aren't told. Both are compared because the size menu shows `max`
+  too: on a smaller screen it can change while her size stays the same.
+- `if (this.mode === 'collapsed' || this.mode === 'expanded')`: standing (or strolling), she's put
+  back on the taskbar at her new size, and both windows are resized and placed to match. Her inset
+  is kept, if it still fits, so the side of her nearest her corner stays where it was and she grows
+  or shrinks from there, her feet on the taskbar; with the panel open, it stays open beside her. In
+  the other modes, as the comment says, the next frame does that (a fall or a drag), or nothing
+  needs moving yet (while capturing, `displayChanged()` places the hidden windows itself).
+- `this.deps.onSizeChange?.(after)`: tells `index.ts`, which broadcasts the new size to both
+  pages.
 
 ### `BubbleController.fall()`
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.fall -->
 
-[`src/main/bubble/BubbleController.ts`, lines 338–354](../../apps/desktop/src/main/bubble/BubbleController.ts#L338-L354)
+[`src/main/bubble/BubbleController.ts`, lines 387–403](../../apps/desktop/src/main/bubble/BubbleController.ts#L387-L403)
 
 ```ts
 /** After a drop: falls onto the taskbar, then walks back toward its corner if it's far off. */
@@ -1075,8 +1208,8 @@ anchor and the inset, so `rest()` is where it lands: straight below where it was
 - `fallDuration(from, this.rest())`: as long as gravity takes to fall that far, and at least
   150 ms (`wander.ts`). The duration is fixed when the fall starts.
 - `this.setMode('returning')`: the pose stays `dragged`, so the character dangles on the way down.
-- `const to = this.rest()`: inside the frame callback, so it's re-read every frame, as in the
-  glide. If the display changes mid-fall, the character still lands on the taskbar.
+- `const to = this.rest()`: inside the frame callback, so it's re-read every frame. If the display
+  (or her size) changes mid-fall, the character still lands on the taskbar.
 - `const t = (this.now() - startedAt) / duration`: progress from 0 to 1, based on real elapsed
   time, so a late frame doesn't slow the fall down.
 - `this.moveBubble(fallPosition(from, to, t))`: only the bubble window moves during the fall.
@@ -1089,56 +1222,14 @@ anchor and the inset, so `rest()` is where it lands: straight below where it was
   landed too, and `settle()`'s change to `collapsed` has already started the wait for its next
   activity.
 
-### `BubbleController.glideHome()`
-
-<!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.glideHome -->
-
-[`src/main/bubble/BubbleController.ts`, lines 356–372](../../apps/desktop/src/main/bubble/BubbleController.ts#L356-L372)
-
-```ts
-/** Glides the character back to where it stands (after a bounce), then switches to collapsed. */
-private glideHome(): void {
-  this.motion = null
-  const from = { ...this.position }
-  const duration = glideDuration(from, this.rest())
-  const startedAt = this.now()
-  this.setMode('returning')
-  this.runTicker(() => {
-    // Re-read where it stands every frame in case the display changes mid-glide.
-    const t = (this.now() - startedAt) / duration
-    if (t < 1) {
-      this.moveBubble(glidePosition(from, this.rest(), t))
-      return
-    }
-    this.settle()
-  })
-}
-```
-
-<!-- /code -->
-
-Animates the character from wherever it is back to where it stands, then switches to `collapsed`.
-Used to end a bounce (`clickBubble()`, `expand()`). A drop doesn't glide; it falls (`fall()`).
-
-- `this.motion = null`: any bounce is over.
-- `glideDuration(from, this.rest())`: longer trips take longer, between 0.3 and 0.9 s
-  (`bounce.ts`). The duration is fixed when the glide starts.
-- `// Re-read where it stands every frame`: as the comment says, `this.rest()` is called inside
-  the frame callback, so if the display changes mid-glide, the character still ends up on the
-  taskbar.
-- `const t = (this.now() - startedAt) / duration`: progress from 0 to 1, as in `fall()`.
-- `this.moveBubble(glidePosition(from, this.rest(), t))`: only the bubble window moves during the
-  glide.
-- `this.settle()`: when `t` reaches 1, the same ending as a fall.
-
 ### `BubbleController.settle()`
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.settle -->
 
-[`src/main/bubble/BubbleController.ts`, lines 374–384](../../apps/desktop/src/main/bubble/BubbleController.ts#L374-L384)
+[`src/main/bubble/BubbleController.ts`, lines 405–415](../../apps/desktop/src/main/bubble/BubbleController.ts#L405-L415)
 
 ```ts
-/** The end of a fall or a glide: standing, collapsed, and opening if that was asked for. */
+/** The end of a fall: standing, collapsed, and opening if that was asked for. */
 private settle(): void {
   this.stopTicker()
   this.position = this.rest()
@@ -1153,40 +1244,46 @@ private settle(): void {
 
 <!-- /code -->
 
-As its comment says, the end of a fall or a glide, shared by `fall()` and `glideHome()`.
+As its comment says, the end of a fall. `fall()` calls it when the character lands.
 
 - `this.stopTicker()`: the animation is over.
 - `this.position = this.rest()`: the character is put exactly where it stands (the last frame was
   probably just short). `placeWindows()` moves the hidden panel next to it, ready to open.
 - `this.setMode('collapsed')`: the pose goes back to `idle`, and the wait for the character's next
   activity starts (see `setMode()`).
-- `if (this.expandAfterReturn)`: something asked to open the panel during the trip (see
+- `if (this.expandAfterReturn)`: something asked to open the panel during the fall (see
   `expand()`). The flag is cleared, then `expand()` runs from `collapsed` as normal.
 
 ### `BubbleController.zone()`
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.zone -->
 
-[`src/main/bubble/BubbleController.ts`, lines 386–389](../../apps/desktop/src/main/bubble/BubbleController.ts#L386-L389)
+[`src/main/bubble/BubbleController.ts`, lines 417–421](../../apps/desktop/src/main/bubble/BubbleController.ts#L417-L421)
 
 ```ts
-/** How far from its corner it wanders on its display. */
+/** How far from its corner it wanders on its display: further when she's bigger. */
 private zone(): number {
-  return Math.min(WANDER.zone, maxInset(this.display().workArea))
+  const zone = WANDER.zone * Math.max(1, this.scale)
+  return Math.min(zone, maxInset(this.display().workArea, this.scale))
 }
 ```
 
 <!-- /code -->
 
-The zone: how far from its corner the character wanders, which is 240 DIPs (`WANDER.zone` in
-`wander.ts`), or less on a work area too narrow for that (`maxInset()` in `layout.ts`). `fall()`
-uses it to decide whether to walk back after a drop, and `doActivity()` to choose where to walk.
+The zone: how far from its corner the character wanders. As the comment says, it's further when
+she's bigger: 240 DIPs (`WANDER.zone` in `wander.ts`) at her usual size, times her size above that
+(480 at twice her size), or less on a work area too narrow for that (`maxInset()` in `layout.ts`,
+at her size). `fall()` uses it to decide whether to walk back after a drop, and `doActivity()` to
+choose where to walk.
+
+- `Math.max(1, this.scale)`: only the bigger sizes widen it. Smaller than usual, she keeps the
+  full 240 DIPs.
 
 ### `BubbleController.scheduleActivity()`
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.scheduleActivity -->
 
-[`src/main/bubble/BubbleController.ts`, lines 391–396](../../apps/desktop/src/main/bubble/BubbleController.ts#L391-L396)
+[`src/main/bubble/BubbleController.ts`, lines 423–428](../../apps/desktop/src/main/bubble/BubbleController.ts#L423-L428)
 
 ```ts
 /** Waits a while, then does something on its own (see doActivity). Collapsed only. */
@@ -1216,7 +1313,7 @@ Starts the wait before the character does something on its own. It's called by `
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.doActivity -->
 
-[`src/main/bubble/BubbleController.ts`, lines 398–414](../../apps/desktop/src/main/bubble/BubbleController.ts#L398-L414)
+[`src/main/bubble/BubbleController.ts`, lines 430–446](../../apps/desktop/src/main/bubble/BubbleController.ts#L430-L446)
 
 ```ts
 private doActivity(): void {
@@ -1269,13 +1366,13 @@ done, waits for the next.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.walkTo -->
 
-[`src/main/bubble/BubbleController.ts`, lines 416–436](../../apps/desktop/src/main/bubble/BubbleController.ts#L416-L436)
+[`src/main/bubble/BubbleController.ts`, lines 448–469](../../apps/desktop/src/main/bubble/BubbleController.ts#L448-L469)
 
 ```ts
 /** Walks along the taskbar to `target` (an inset), then waits for the next thing to do. */
 private walkTo(target: number): void {
   this.cancelActivity()
-  const to = Math.min(Math.max(target, 0), maxInset(this.display().workArea))
+  const to = Math.min(Math.max(target, 0), maxInset(this.display().workArea, this.scale))
   if (Math.abs(to - this.inset) < 1) {
     this.scheduleActivity(false)
     return
@@ -1286,7 +1383,8 @@ private walkTo(target: number): void {
   this.walking = true
   this.setPose(left ? 'walk-left' : 'walk-right')
   this.runTicker((dtMs) => {
-    this.inset = walkStep(this.inset, to, dtMs)
+    // Her steps are as long as she is big, so she walks faster the bigger she is.
+    this.inset = walkStep(this.inset, to, dtMs, WANDER.walkSpeed * this.scale)
     this.moveBubble(this.rest())
     if (this.inset !== to) return
     this.stopWalking()
@@ -1298,14 +1396,14 @@ private walkTo(target: number): void {
 <!-- /code -->
 
 A walk: the character strolls along the taskbar to another inset at walking speed (80 DIPs a
-second), with its window moved a frame at a time. `doActivity()` calls it for a stroll, and
+second at her usual size, times her size), with its window moved a frame at a time. `doActivity()` calls it for a stroll, and
 `fall()` to walk back after a drop far from the corner. The mode stays `collapsed` throughout, so
 the rest of the controller treats a walking character like a standing one: a click opens the
 panel, a press and move picks it up.
 
 - `this.cancelActivity()`: drops any pending wait; the walk starts the next one when it ends.
-- `Math.min(Math.max(target, 0), maxInset(this.display().workArea))`: keeps the target on the
-  taskbar.
+- `Math.min(Math.max(target, 0), maxInset(this.display().workArea, this.scale))`: keeps the
+  target on the taskbar, at her size.
 - `if (Math.abs(to - this.inset) < 1)`: already there, give or take a DIP: no walk, just wait for
   the next thing to do.
 - `const inward = to > this.inset`: whether it's walking toward the middle of the screen. As the
@@ -1317,6 +1415,9 @@ panel, a press and move picks it up.
   `walkStep()` (`wander.ts`) moves the inset closer to `to` by the real time since the last frame,
   and `this.moveBubble(this.rest())` puts the window there. Only the bubble window moves; the panel
   is hidden while collapsed.
+- `WANDER.walkSpeed * this.scale`: as the comment says, her steps are as long as she is big, so
+  she walks faster the bigger she is: 160 DIPs a second at twice her size, 40 at half. The page
+  plays the same walk at every size, so each stride covers more ground the bigger she's drawn.
 - `if (this.inset !== to) return`: `walkStep()` never goes past `to`, and returns exactly `to` on
   the last step, so comparing with `!==` is safe.
 - `this.stopWalking()`, then `this.scheduleActivity(false)`: arrived: standing idle, the panel
@@ -1326,7 +1427,7 @@ panel, a press and move picks it up.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.stopWalking -->
 
-[`src/main/bubble/BubbleController.ts`, lines 438–446](../../apps/desktop/src/main/bubble/BubbleController.ts#L438-L446)
+[`src/main/bubble/BubbleController.ts`, lines 471–479](../../apps/desktop/src/main/bubble/BubbleController.ts#L471-L479)
 
 ```ts
 /** Stops a walk where it is, standing idle, with the panel moved to open from there. */
@@ -1360,7 +1461,7 @@ Ends a walk cleanly, wherever the character has got to. This is how a walk is in
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.stopIdling,cancelActivity -->
 
-[`src/main/bubble/BubbleController.ts`, lines 448–458](../../apps/desktop/src/main/bubble/BubbleController.ts#L448-L458)
+[`src/main/bubble/BubbleController.ts`, lines 481–491](../../apps/desktop/src/main/bubble/BubbleController.ts#L481-L491)
 
 ```ts
 /** Stops whatever it was doing on its own: the next activity, a fidget, a walk. */
@@ -1389,7 +1490,7 @@ private cancelActivity(): void {
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.runTicker,stopTicker -->
 
-[`src/main/bubble/BubbleController.ts`, lines 460–473](../../apps/desktop/src/main/bubble/BubbleController.ts#L460-L473)
+[`src/main/bubble/BubbleController.ts`, lines 493–506](../../apps/desktop/src/main/bubble/BubbleController.ts#L493-L506)
 
 ```ts
 private runTicker(onFrame: (dtMs: number) => void): void {
@@ -1410,33 +1511,34 @@ private stopTicker(): void {
 
 <!-- /code -->
 
-The 60 fps ticker. It drives every animation (drag, bounce, glide, fall and walk), but only one
-runs at a time.
+The 60 fps ticker. It drives every animation (drag, fall and walk), but only one runs at a time.
 
-- `this.stopTicker()`: starting a new animation always replaces the old one. That's how a click on
-  a bouncing character switches from the bounce to the glide.
+- `this.stopTicker()`: starting a new animation always replaces the old one, so two can never move
+  the window at once. The callers already stop the one before (`endDrag()` stops the drag's before
+  the fall, a fall's ends in `settle()`, and a change of mode stops a walk), so this is a safety
+  net.
 - `this.ticker = setInterval(`: calls the frame function about every 16 ms (`FRAME_MS`).
 - `onFrame(now - last)`: Node's timers aren't exact, and can run late when the main process is
-  busy, so each frame is told how many milliseconds really passed. The bounce and the walk use
-  this to move the right distance.
+  busy, so each frame is told how many milliseconds really passed. The walk uses this to move the
+  right distance; the fall works out its progress from when it started instead.
 - `if (this.ticker) clearInterval(this.ticker)`: safe to call when nothing is running.
 
 ### `BubbleController.moveBubble()`, `placeWindows()`
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.moveBubble,placeWindows -->
 
-[`src/main/bubble/BubbleController.ts`, lines 475–485](../../apps/desktop/src/main/bubble/BubbleController.ts#L475-L485)
+[`src/main/bubble/BubbleController.ts`, lines 508–518](../../apps/desktop/src/main/bubble/BubbleController.ts#L508-L518)
 
 ```ts
 private moveBubble(position: Point): void {
   this.position = position
-  this.deps.bubble.setBounds(bubbleWindowBounds(position))
+  this.deps.bubble.setBounds(bubbleWindowBounds(position, this.scale))
 }
 
 private placeWindows(): void {
-  this.deps.bubble.setBounds(bubbleWindowBounds(this.position))
+  this.deps.bubble.setBounds(bubbleWindowBounds(this.position, this.scale))
   this.deps.panel.setBounds(
-    panelWindowBounds(this.position, this.deps.actionCount, this.anchor.corner),
+    panelWindowBounds(this.position, this.deps.actionCount, this.anchor.corner, this.scale),
   )
 }
 ```
@@ -1445,19 +1547,22 @@ private placeWindows(): void {
 
 - `moveBubble`: changes the position and moves only the bubble window. Animations call it every
   frame; the panel is hidden during them, so moving it too would be wasted work. A walk is the one
-  that happens while `collapsed`, so `stopWalking()` calls `placeWindows()` when it ends.
-- `placeWindows`: positions both windows for the current position and anchor. The panel's place
-  depends on the corner, because it always opens toward the middle of the screen.
-- `bubbleWindowBounds(this.position)`: turns the character's position (the top-left of its 80×80
-  box) into its window's rectangle, 8 DIPs bigger on every side (`layout.ts`).
-- `panelWindowBounds(this.position, this.deps.actionCount, this.anchor.corner)`: the panel's
-  rectangle (`layout.ts`).
+  that happens while `collapsed`, so `stopWalking()` calls `placeWindows()` when it ends. The
+  rectangle includes the window's size, so if her size changed mid-fall, the next frame resizes
+  the window too.
+- `placeWindows`: positions and sizes both windows for the current position, anchor and size. The
+  panel's place depends on the corner, because it always opens toward the middle of the screen.
+- `bubbleWindowBounds(this.position, this.scale)`: turns the character's position (the top-left of
+  her box) into her window's rectangle, her padding bigger on every side: an 80×80 box and 8 DIPs
+  at her usual size, both times her size otherwise (`layout.ts`).
+- `panelWindowBounds(this.position, this.deps.actionCount, this.anchor.corner, this.scale)`: the
+  panel's rectangle, which is bigger when she is, since its pieces sit further out (`layout.ts`).
 
 ### `BubbleController.setAnchor()`, `cancelHide()`, `setMode()`, `setPose()`
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.setAnchor,cancelHide,setMode,setPose -->
 
-[`src/main/bubble/BubbleController.ts`, lines 487–519](../../apps/desktop/src/main/bubble/BubbleController.ts#L487-L519)
+[`src/main/bubble/BubbleController.ts`, lines 520–550](../../apps/desktop/src/main/bubble/BubbleController.ts#L520-L550)
 
 ```ts
 private setAnchor(anchor: BubbleAnchor): void {
@@ -1482,9 +1587,7 @@ private setMode(mode: Mode): void {
   this.mode = mode
   this.lastInteraction = this.now()
   this.deps.onModeChange(mode)
-  this.setPose(
-    mode === 'dragging' || mode === 'bouncing' || mode === 'returning' ? 'dragged' : 'idle',
-  )
+  this.setPose(mode === 'dragging' || mode === 'returning' ? 'dragged' : 'idle')
   if (mode === 'collapsed') this.scheduleActivity(false)
 }
 
@@ -1509,11 +1612,11 @@ Small helpers, though `setMode()` does more than it used to.
 - `if (this.mode === 'collapsed') this.stopIdling()`: leaving `collapsed`, for whatever reason,
   stops a walk, a fidget or the wait for one, right where the character is, before the new mode
   takes over. As the comment says, every change of mode is something the user did (a click, a
-  drag, Bounce, a screenshot, the panel closing) or the end of it (landing after a drop).
+  drag, a screenshot, the panel closing) or the end of it (landing after a drop).
 - `this.lastInteraction = this.now()`: for the same reason, every change of mode restarts the
   quiet spell, so fidgets wait another 30 seconds.
 - `this.setPose(...)`: as the comment says, dangling (`dragged`) while it's moved about (dragged,
-  bounced, falling or gliding back), standing (`idle`) otherwise.
+  or falling after a drop), standing (`idle`) otherwise.
 - `if (mode === 'collapsed') this.scheduleActivity(false)`: back to `collapsed`, it starts waiting
   to do something again.
 - `setPose`: like `setMode()`, changes the pose and broadcasts it only if it really changed.
@@ -1523,7 +1626,7 @@ Small helpers, though `setMode()` does more than it used to.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#bottomOf -->
 
-[`src/main/bubble/BubbleController.ts`, lines 522–526](../../apps/desktop/src/main/bubble/BubbleController.ts#L522-L526)
+[`src/main/bubble/BubbleController.ts`, lines 553–557](../../apps/desktop/src/main/bubble/BubbleController.ts#L553-L557)
 
 ```ts
 /** The bottom corner on the same side: the character always stands at the bottom. */
@@ -1545,20 +1648,23 @@ bottom corner is returned as it is.
 ## `src/main/bubble/layout.ts`: where the windows go
 
 Pure maths, no Electron. Given a work area and a corner, it works out where the character stands,
-how far along the taskbar a position is, which corner a dropped character belongs to, where it may
-bounce, and the exact rectangles of the two windows. `BubbleController` is its only user in the
-app; `tests/layout.test.ts` checks each function on its own.
+how far along the taskbar a position is, which corner a dropped character belongs to, the exact
+rectangles of the two windows, and the strip her clones walk in. `BubbleController` and `Clones`
+are its only users in the app; `tests/layout.test.ts` checks each function on its own.
 
 Key ideas:
 
-- A position always means the top-left corner of the bubble's _box_ (80×80 DIPs,
-  `UI.bubbleSize`), not of its window. The bubble window is bigger, `BUBBLE_BOX` = 96×96, with
-  8 DIPs (`UI.bubblePad`) more on every side. The box dates from the round logo, which filled it
-  (at 56 DIPs); the character is drawn across the whole window, with its feet on the window's
-  bottom edge, but
-  positions, bouncing and the panel's layout are still measured from the box. Only
-  `bubbleWindowBounds()` and `restPosition()` (which puts the window's bottom edge on the taskbar)
-  deal with the difference.
+- A position always means the top-left corner of the bubble's _box_ (80×80 DIPs at her usual
+  size, `UI.bubbleSize`), not of its window. The bubble window is bigger, `BUBBLE_BOX` = 96×96 at
+  her usual size, with 8 DIPs (`UI.bubblePad`) more on every side. The box dates from the round
+  logo, which filled it (at 56 DIPs); the character is drawn across the whole window, with its feet
+  on the window's bottom edge, but positions and the panel's layout are still measured from the
+  box. Only `bubbleWindowBounds()`, `restPosition()` (which puts the window's bottom edge on the
+  taskbar) and `cloneStrip()` deal with the difference.
+- Every function takes her size, `scale` (a multiple of her usual size, one of `CHARACTER_SIZES`),
+  last, and leaves it at 1 (`DEFAULT_SIZE`) when it's left out. As the comment at the top of the
+  file says, the box and its padding grow with her (`bubbleMetrics()` in `geometry.ts` gives both
+  at a size), but the margin to the screen's side doesn't.
 - Along the taskbar, where the character stands is an _inset_: how far it is from its corner,
   growing toward the middle of the screen (see the top of this page). `restPosition()` turns an
   inset into a position, and `insetAt()` turns a position back into an inset.
@@ -1567,51 +1673,38 @@ Key ideas:
 - All sizes come from `UI` in `src/shared/geometry.ts`, which the pages use too, so the window
   sizes and the page layout can't drift apart.
 
-### `TravelBox`
-
-<!-- code: apps/desktop/src/main/bubble/layout.ts#TravelBox -->
-
-[`src/main/bubble/layout.ts`, lines 12–20](../../apps/desktop/src/main/bubble/layout.ts#L12-L20)
-
-```ts
-// Positions are the top-left corner of the bubble's box (where the character is drawn, inside
-// its window's padding), not of its window.
-
-export interface TravelBox {
-  minX: number
-  minY: number
-  maxX: number
-  maxY: number
-}
-```
-
-<!-- /code -->
-
-The range of positions where the box is wholly on one display: lowest and highest `x`, lowest and
-highest `y`. Made by `travelBox()` below; `bounce.ts` uses it to put a character that's ended up
-off screen back on the nearest display. The comment above it applies to the whole file.
-
 ### `maxInset()`
 
 <!-- code: apps/desktop/src/main/bubble/layout.ts#maxInset -->
 
-[`src/main/bubble/layout.ts`, lines 22–25](../../apps/desktop/src/main/bubble/layout.ts#L22-L25)
+[`src/main/bubble/layout.ts`, lines 13–20](../../apps/desktop/src/main/bubble/layout.ts#L13-L20)
 
 ```ts
+// Positions are the top-left corner of the bubble's box (where the character is drawn, inside
+// its window's padding), not of its window. `scale` is her size (see CHARACTER_SIZES): the box
+// and its padding grow with her, the margin to the screen's side doesn't.
+
 /** How far from its corner the character can stand on this work area and still be wholly on it. */
-export function maxInset(workArea: Rect): number {
-  return Math.max(0, workArea.width - 2 * UI.edgeMargin - UI.bubbleSize)
+export function maxInset(workArea: Rect, scale: number = DEFAULT_SIZE): number {
+  return Math.max(0, workArea.width - 2 * UI.edgeMargin - bubbleMetrics(scale).size)
 }
 ```
 
 <!-- /code -->
 
+The first lines are the comment at the top of the file, which applies to all of it: positions are
+the top-left corner of her box, and `scale` is her size.
+
 The largest inset on a work area: as the comment says, as far from its corner as the character can
 stand and still be wholly on it. That's from 16 DIPs (`UI.edgeMargin`) in from one side to 16 DIPs
-in from the other, less the box's own width: 1920 − 32 − 80 = 1808 on a 1920-wide screen. At that
-inset the character stands in the opposite bottom corner, so it could walk the whole width of the
-taskbar, though it keeps to its zone.
+in from the other, less the box's own width: 1920 − 32 − 80 = 1808 on a 1920-wide screen at her
+usual size, and 1920 − 32 − 160 = 1728 at twice it. At that inset the character stands in the
+opposite bottom corner, so it could walk the whole width of the taskbar, though it keeps to its
+zone.
 
+- `scale: number = DEFAULT_SIZE`: her size, 1 if left out. The other functions take it the same
+  way.
+- `bubbleMetrics(scale).size`: the width of her box at that size (`geometry.ts`).
 - `Math.max(0, ...)`: on a work area too narrow to hold the character at all, 0 rather than a
   negative number.
 
@@ -1619,7 +1712,7 @@ taskbar, though it keeps to its zone.
 
 <!-- code: apps/desktop/src/main/bubble/layout.ts#restPosition -->
 
-[`src/main/bubble/layout.ts`, lines 27–40](../../apps/desktop/src/main/bubble/layout.ts#L27-L40)
+[`src/main/bubble/layout.ts`, lines 22–41](../../apps/desktop/src/main/bubble/layout.ts#L22-L41)
 
 ```ts
 /**
@@ -1627,13 +1720,19 @@ taskbar, though it keeps to its zone.
  * bottom corner on `corner`'s side, `inset` along toward the middle of the screen. Only the side
  * of `corner` matters: the character always stands at the bottom.
  */
-export function restPosition(workArea: Rect, corner: Corner = 'bottom-right', inset = 0): Point {
-  const along = Math.min(Math.max(inset, 0), maxInset(workArea))
+export function restPosition(
+  workArea: Rect,
+  corner: Corner = 'bottom-right',
+  inset = 0,
+  scale: number = DEFAULT_SIZE,
+): Point {
+  const { size, pad } = bubbleMetrics(scale)
+  const along = Math.min(Math.max(inset, 0), maxInset(workArea, scale))
   return {
     x: isLeftCorner(corner)
       ? workArea.x + UI.edgeMargin + along
-      : workArea.x + workArea.width - UI.edgeMargin - UI.bubbleSize - along,
-    y: workArea.y + workArea.height - UI.bubblePad - UI.bubbleSize,
+      : workArea.x + workArea.width - UI.edgeMargin - size - along,
+    y: workArea.y + workArea.height - pad - size,
   }
 }
 ```
@@ -1644,20 +1743,24 @@ Where the character stands, as a position (the box's top-left). As the comment s
 bottom edge sits on the work area's bottom edge, which is the top of the taskbar when the taskbar
 is along the bottom of the screen (with the taskbar at the top or a side, the character stands on
 the bottom edge of the screen instead). Its feet are drawn on the window's bottom edge
-(`Character.tsx`), so it looks as if it's standing on the taskbar.
+(`Character.tsx`), so it looks as if it's standing on the taskbar. That holds at every size: a
+bigger character grows up and away from her corner, her feet staying where they were.
 
-- `const along = Math.min(Math.max(inset, 0), maxInset(workArea))`: keeps the inset between 0 and
-  `maxInset()`, so whatever it's given, the character is never off the work area.
+- `const { size, pad } = bubbleMetrics(scale)`: her box's width and its padding at her size (80
+  and 8 DIPs at her usual size; `geometry.ts`). The braces _destructure_ the two fields into
+  variables of the same names.
+- `const along = Math.min(Math.max(inset, 0), maxInset(workArea, scale))`: keeps the inset between
+  0 and `maxInset()`, so whatever it's given, the character is never off the work area.
 - `workArea.x + UI.edgeMargin + along`: from a left corner, 16 DIPs in from the left edge, then
   further right by the inset. `isLeftCorner(corner)` (from `geometry.ts`) is true for `top-left`
-  and `bottom-left`.
-- `workArea.x + workArea.width - UI.edgeMargin - UI.bubbleSize - along`: from a right corner, the
-  box's own width is subtracted too, because the position is its left edge; the inset then moves
-  it left, toward the middle.
-- `y: workArea.y + workArea.height - UI.bubblePad - UI.bubbleSize`: the same height from either
-  corner. The box's bottom is 8 DIPs (`bubblePad`) above the work area's bottom, so the window's
-  bottom edge is exactly on it. As the comment says, only the side of `corner` is used, so a top
-  corner gives the bottom one below it.
+  and `bottom-left`. The margin is the same at every size.
+- `workArea.x + workArea.width - UI.edgeMargin - size - along`: from a right corner, the box's own
+  width is subtracted too, because the position is its left edge; the inset then moves it left,
+  toward the middle.
+- `y: workArea.y + workArea.height - pad - size`: the same height from either corner. The box's
+  bottom is `pad` (8 DIPs at her usual size) above the work area's bottom, so the window's bottom
+  edge is exactly on it. As the comment says, only the side of `corner` is used, so a top corner
+  gives the bottom one below it.
 - `corner: Corner = 'bottom-right'`, `inset = 0`: default values, used if the caller leaves the
   arguments out: right in the bottom-right corner.
 
@@ -1665,15 +1768,20 @@ the bottom edge of the screen instead). Its feet are drawn on the window's botto
 
 <!-- code: apps/desktop/src/main/bubble/layout.ts#insetAt -->
 
-[`src/main/bubble/layout.ts`, lines 42–48](../../apps/desktop/src/main/bubble/layout.ts#L42-L48)
+[`src/main/bubble/layout.ts`, lines 43–54](../../apps/desktop/src/main/bubble/layout.ts#L43-L54)
 
 ```ts
 /** The inset (see restPosition) of a character standing at `x`, kept on the work area. */
-export function insetAt(workArea: Rect, corner: Corner, x: number): number {
+export function insetAt(
+  workArea: Rect,
+  corner: Corner,
+  x: number,
+  scale: number = DEFAULT_SIZE,
+): number {
   const inset = isLeftCorner(corner)
     ? x - (workArea.x + UI.edgeMargin)
-    : workArea.x + workArea.width - UI.edgeMargin - UI.bubbleSize - x
-  return Math.min(Math.max(inset, 0), maxInset(workArea))
+    : workArea.x + workArea.width - UI.edgeMargin - bubbleMetrics(scale).size - x
+  return Math.min(Math.max(inset, 0), maxInset(workArea, scale))
 }
 ```
 
@@ -1683,20 +1791,20 @@ The opposite of `restPosition()`: given an `x`, how far along from `corner` that
 uses it so a dropped character lands straight below where it was let go.
 
 - The two sides of `isLeftCorner(corner) ? ... : ...` are `restPosition()`'s `x` worked backwards
-  for the inset.
-- `Math.min(Math.max(inset, 0), maxInset(workArea))`: kept on the work area, so a character dropped
-  partly past the edge of the screen lands in the corner (or at the far end) instead.
+  for the inset, with her box's width at her size (`bubbleMetrics(scale).size`).
+- `Math.min(Math.max(inset, 0), maxInset(workArea, scale))`: kept on the work area, so a character
+  dropped partly past the edge of the screen lands in the corner (or at the far end) instead.
 
 ### `nearestCorner()`
 
 <!-- code: apps/desktop/src/main/bubble/layout.ts#nearestCorner -->
 
-[`src/main/bubble/layout.ts`, lines 50–54](../../apps/desktop/src/main/bubble/layout.ts#L50-L54)
+[`src/main/bubble/layout.ts`, lines 56–60](../../apps/desktop/src/main/bubble/layout.ts#L56-L60)
 
 ```ts
 /** The bottom corner nearest the character: whichever half of the work area its centre is in. */
-export function nearestCorner(workArea: Rect, bubble: Point): Corner {
-  const centreX = bubble.x + UI.bubbleSize / 2
+export function nearestCorner(workArea: Rect, bubble: Point, scale: number = DEFAULT_SIZE): Corner {
+  const centreX = bubble.x + bubbleMetrics(scale).size / 2
   return centreX < workArea.x + workArea.width / 2 ? 'bottom-left' : 'bottom-right'
 }
 ```
@@ -1707,187 +1815,46 @@ Used by `endDrag()`. It splits the work area into a left half and a right half, 
 bottom corner on the side the character's centre is in. How high up it was dropped doesn't
 matter, because it always lives at the bottom.
 
-- `bubble.x + UI.bubbleSize / 2`: the centre, not the top-left, so a character across the middle
-  line goes to the side most of it is on.
+- `bubble.x + bubbleMetrics(scale).size / 2`: the centre, not the top-left, so a character across
+  the middle line goes to the side most of it is on. Half her box's width at her size: 40 DIPs at
+  her usual size.
 - `workArea.x + workArea.width / 2`: the middle of this work area, measured from its own `x` (a
   monitor to the left of the main one has negative coordinates).
-
-### `travelAreas()`
-
-<!-- code: apps/desktop/src/main/bubble/layout.ts#travelAreas -->
-
-[`src/main/bubble/layout.ts`, lines 56–97](../../apps/desktop/src/main/bubble/layout.ts#L56-L97)
-
-```ts
-/**
- * Where a bouncing bubble may go: every display's work area, plus the parts of a taskbar that lie
- * between two displays (where a monitor stacked above another has its taskbar along the edge they
- * share, say), so the bubble can pass over that taskbar from one display to the other. A taskbar
- * on an outer edge stays a wall.
- */
-export function travelAreas(displays: { bounds: Rect; workArea: Rect }[]): Rect[] {
-  const areas = displays.map((display) => display.workArea)
-  for (const { bounds: b, workArea: w } of displays) {
-    // The strips of the screen outside its work area (normally just the taskbar's).
-    const strips = [
-      { side: 'top', rect: { x: b.x, y: b.y, width: b.width, height: w.y - b.y } },
-      {
-        side: 'bottom',
-        rect: {
-          x: b.x,
-          y: w.y + w.height,
-          width: b.width,
-          height: b.y + b.height - (w.y + w.height),
-        },
-      },
-      { side: 'left', rect: { x: b.x, y: b.y, width: w.x - b.x, height: b.height } },
-      {
-        side: 'right',
-        rect: {
-          x: w.x + w.width,
-          y: b.y,
-          width: b.x + b.width - (w.x + w.width),
-          height: b.height,
-        },
-      },
-    ].filter((strip) => strip.rect.width > 0 && strip.rect.height > 0)
-    for (const { side, rect } of strips) {
-      for (const { bounds: n } of displays) {
-        if (n === b) continue
-        const bridge = bridgeTo(side, rect, b, n)
-        if (bridge) areas.push(bridge)
-      }
-    }
-  }
-  return areas
-}
-```
-
-<!-- /code -->
-
-Where a bouncing bubble may go, as a list of rectangles. Mostly that's each display's work area, but
-a taskbar can sit right between two monitors: on a laptop with a monitor stacked above it, for
-example, the upper monitor's taskbar runs along the edge they share. Work areas alone would make
-that taskbar a wall the bubble could never get past, so the stretch of it that another display lies
-right beyond is added too. A taskbar on an outer edge, with no display beyond, stays a wall.
-
-- `strips`: the four bands of the screen outside its work area (top, bottom, left and right).
-  Normally only one has any size, the taskbar's; `.filter(...)` drops the empty ones.
-- `if (n === b) continue`: a display isn't its own neighbour.
-- `bridgeTo(side, rect, b, n)`: the part of that band with display `n` right beyond it, if any.
-
-### `bridgeTo()`, `TOUCHING`
-
-<!-- code: apps/desktop/src/main/bubble/layout.ts#TOUCHING,bridgeTo -->
-
-[`src/main/bubble/layout.ts`, lines 99–127](../../apps/desktop/src/main/bubble/layout.ts#L99-L127)
-
-```ts
-/** Edges this close count as touching (scaled displays can be a pixel out). */
-const TOUCHING = 1
-
-/**
- * The part of `strip` (on `side` of the display with `bounds`) that another display (`other`)
- * lies right beyond, or null if `other` isn't there.
- */
-function bridgeTo(side: string, strip: Rect, bounds: Rect, other: Rect): Rect | null {
-  const near = (a: number, b: number) => Math.abs(a - b) <= TOUCHING
-  const vertical = side === 'top' || side === 'bottom'
-  const touching =
-    side === 'top'
-      ? near(other.y + other.height, bounds.y)
-      : side === 'bottom'
-        ? near(other.y, bounds.y + bounds.height)
-        : side === 'left'
-          ? near(other.x + other.width, bounds.x)
-          : near(other.x, bounds.x + bounds.width)
-  if (!touching) return null
-  // Only as far along the edge as the other display reaches.
-  if (vertical) {
-    const from = Math.max(strip.x, other.x)
-    const to = Math.min(strip.x + strip.width, other.x + other.width)
-    return to > from ? { ...strip, x: from, width: to - from } : null
-  }
-  const from = Math.max(strip.y, other.y)
-  const to = Math.min(strip.y + strip.height, other.y + other.height)
-  return to > from ? { ...strip, y: from, height: to - from } : null
-}
-```
-
-<!-- /code -->
-
-The part of a taskbar band that another display lies right beyond. Not exported; `travelAreas()`
-uses it.
-
-- `TOUCHING = 1`: two edges within a pixel of each other count as touching. Windows lays the
-  monitors out in real pixels and Electron converts that to DIPs, so a scaled monitor's edge can
-  come out a fraction of a pixel away from its neighbour's.
-- `touching`: whether `other` starts where this display ends, on the band's side: for a band along
-  the bottom, `other`'s top edge must be at this display's bottom edge, and so on.
-- `Math.max(strip.x, other.x)` and `Math.min(...)`: only as far along the edge as the other display
-  reaches. Past the end of the laptop under a wide monitor, there's nothing below its taskbar, so
-  that part stays a wall.
-- `to > from ? ... : null`: the two don't overlap along the edge at all (they only meet at a
-  corner, say).
-
-### `travelBox()`
-
-<!-- code: apps/desktop/src/main/bubble/layout.ts#travelBox -->
-
-[`src/main/bubble/layout.ts`, lines 129–137](../../apps/desktop/src/main/bubble/layout.ts#L129-L137)
-
-```ts
-/** Every position where the bubble is fully inside the work area. */
-export function travelBox(workArea: Rect): TravelBox {
-  return {
-    minX: workArea.x,
-    minY: workArea.y,
-    maxX: workArea.x + workArea.width - UI.bubbleSize,
-    maxY: workArea.y + workArea.height - UI.bubbleSize,
-  }
-}
-```
-
-<!-- /code -->
-
-Every position where the whole box is inside the work area. Unlike where the character stands
-there's no 16 DIP margin, so a bouncing character touches the edges, but it never goes under the
-taskbar or off the screen.
-
-- `workArea.x + workArea.width - UI.bubbleSize`: the highest `x` is a box's width short of the
-  right edge, because the position is the box's left edge. If the work area were narrower than
-  the bubble, the maximum would be less than the minimum; `onScreen()` in `bounce.ts` allows for
-  that.
 
 ### `bubbleWindowBounds()`
 
 <!-- code: apps/desktop/src/main/bubble/layout.ts#bubbleWindowBounds -->
 
-[`src/main/bubble/layout.ts`, lines 139–146](../../apps/desktop/src/main/bubble/layout.ts#L139-L146)
+[`src/main/bubble/layout.ts`, lines 62–70](../../apps/desktop/src/main/bubble/layout.ts#L62-L70)
 
 ```ts
-export function bubbleWindowBounds(bubble: Point): Rect {
+export function bubbleWindowBounds(bubble: Point, scale: number = DEFAULT_SIZE): Rect {
+  const { pad, box } = bubbleMetrics(scale)
   return {
-    x: Math.round(bubble.x) - UI.bubblePad,
-    y: Math.round(bubble.y) - UI.bubblePad,
-    width: BUBBLE_BOX,
-    height: BUBBLE_BOX,
+    x: Math.round(bubble.x) - pad,
+    y: Math.round(bubble.y) - pad,
+    width: box,
+    height: box,
   }
 }
 ```
 
 <!-- /code -->
 
-The bubble window's rectangle: 8 DIPs up and to the left of the box, 96×96.
+The bubble window's rectangle: the padding up and to the left of the box, and the box plus its
+padding square. At her usual size that's 8 DIPs and 96×96; at twice it, 16 DIPs and 192×192.
 
-- `Math.round(bubble.x)`: the bounce, the glide, the fall and the walk produce fractional
-  positions, but a window can only be placed on whole pixels.
+- `const { pad, box } = bubbleMetrics(scale)`: the padding, and the window's width (`box`: her box
+  plus the padding on both sides), at her size (`geometry.ts`). Every size in `CHARACTER_SIZES`
+  makes both whole numbers.
+- `Math.round(bubble.x)`: the fall and the walk produce fractional positions, but a window can
+  only be placed on whole pixels.
 
 ### `panelWindowBounds()`
 
 <!-- code: apps/desktop/src/main/bubble/layout.ts#panelWindowBounds -->
 
-[`src/main/bubble/layout.ts`, lines 148–164](../../apps/desktop/src/main/bubble/layout.ts#L148-L164)
+[`src/main/bubble/layout.ts`, lines 72–89](../../apps/desktop/src/main/bubble/layout.ts#L72-L89)
 
 ```ts
 /**
@@ -1898,9 +1865,10 @@ export function panelWindowBounds(
   bubble: Point,
   actionCount: number,
   corner: Corner = 'bottom-right',
+  scale: number = DEFAULT_SIZE,
 ): Rect {
-  const box = bubbleWindowBounds(bubble)
-  const size = panelWindowSize(actionCount)
+  const box = bubbleWindowBounds(bubble, scale)
+  const size = panelWindowSize(actionCount, scale)
   return {
     x: isLeftCorner(corner) ? box.x : box.x + box.width - size.width,
     y: isTopCorner(corner) ? box.y : box.y + box.height - size.height,
@@ -1912,7 +1880,8 @@ export function panelWindowBounds(
 <!-- /code -->
 
 The panel window's rectangle. Its size comes from `panelWindowSize()` in `geometry.ts` (big enough
-for the chat card at full height, a toast, and the action icons), and it's placed so it shares one
+for the chat card at full height, a toast, and the action icons, all further out the bigger she
+is), and it's placed so it shares one
 corner with the bubble window: the corner that points into the screen's corner. With the bubble
 bottom-right, the two windows' bottom-right corners coincide and the panel extends left and up,
 toward the middle of the screen. The panel goes wherever the bubble window is, so it opens beside
@@ -1920,21 +1889,58 @@ the character at whatever inset it stands. The `top` corners only matter to this
 now: the character always stands at the bottom, but the panel's layout still works from any
 corner.
 
+- `bubbleWindowBounds(bubble, scale)`, `panelWindowSize(actionCount, scale)`: both at her size.
 - `isLeftCorner(corner) ? box.x : box.x + box.width - size.width`: in a left corner the left edges
   line up; in a right corner the right edges do. The `y` line does the same for top and bottom.
 - `...size`: copies `width` and `height` into the result.
 
-The two windows overlap. The panel's page lays out its content from the shared corner
-(`PANEL_LAYOUT` in `geometry.ts`) and leaves the bubble's square empty. Empty parts of the panel
-are click-through, so the bubble still gets its clicks.
+The two windows overlap. The panel's page lays out its content from the shared corner, with the
+same offsets for her size (`panelLayout(scale)` in `geometry.ts`), and leaves the bubble's square
+empty. Empty parts of the panel are click-through, so the bubble still gets its clicks.
+
+### `cloneStrip()`
+
+<!-- code: apps/desktop/src/main/bubble/layout.ts#cloneStrip -->
+
+[`src/main/bubble/layout.ts`, lines 91–103](../../apps/desktop/src/main/bubble/layout.ts#L91-L103)
+
+```ts
+/**
+ * Where her clones walk: a strip as tall as her window along the bottom of the work area, its
+ * bottom edge on the taskbar, so they stand where she does.
+ */
+export function cloneStrip(workArea: Rect, scale: number = DEFAULT_SIZE): Rect {
+  const { box } = bubbleMetrics(scale)
+  return {
+    x: workArea.x,
+    y: workArea.y + workArea.height - box,
+    width: workArea.width,
+    height: box,
+  }
+}
+```
+
+<!-- /code -->
+
+The rectangle of the clones' window (see `clones.ts` below). As the comment says, it's a strip as
+tall as her window along the bottom of the work area, its bottom edge on the taskbar, so the
+clones stand where she does: their page draws each one in a box her window's size, with its feet
+on the strip's bottom edge, as hers are on her window's.
+
+- `const { box } = bubbleMetrics(scale)`: her window's width and height at her size, 96 DIPs at
+  her usual size.
+- `x: workArea.x`, `width: workArea.width`: the whole width of the work area, so the clones can
+  walk from one end of the taskbar to the other. Unlike her, they don't keep 16 DIPs from the
+  sides.
+- `y: workArea.y + workArea.height - box`: the strip's top, a window's height above the bottom of
+  the work area.
 
 ---
 
 ## `src/main/bubble/wander.ts`: strolling, fidgeting and falling
 
 Pure maths and decisions for what the character does on its own while nobody is using it, and for
-how it falls after a drop. Like `bounce.ts`, nothing here keeps anything between calls or touches
-a window: `BubbleController` calls these from its timers (`scheduleActivity()`, `doActivity()`,
+how it falls after a drop. Nothing here keeps anything between calls or touches a window: `BubbleController` calls these from its timers (`scheduleActivity()`, `doActivity()`,
 `walkTo()` and `fall()`), and `tests/wander.test.ts` checks each one directly. As the comment at the
 top of the file says, positions along the taskbar are insets (see `restPosition()` above).
 
@@ -1973,9 +1979,11 @@ Every number that sets how the character behaves on its own, in one place so the
 tune. `as const` makes them read-only, and keeps each pair a fixed pair of numbers.
 
 - `zone: 240`: as the comment says, how far from its corner the character wanders: the first 240
-  DIPs of taskbar from its corner. `BubbleController.zone()` makes it smaller on a screen too
-  narrow for that.
-- `walkSpeed: 80`: DIPs per second, an unhurried stroll. Crossing the whole zone takes 3 seconds.
+  DIPs of taskbar from its corner, at her usual size. `BubbleController.zone()` makes it wider
+  when she's bigger, and smaller on a screen too narrow for that.
+- `walkSpeed: 80`: DIPs per second, an unhurried stroll, at her usual size (`walkTo()` multiplies
+  it by her size). Crossing the whole zone takes 3 seconds, at any size of 1 or more, since the
+  zone grows with her too.
 - `minWalk: 40`: as the comment says, shorter walks aren't worth it. Every walk covers at least
   this much, unless the zone is too small for that (see `walkTarget()`).
 - `firstDelay: [5000, 12000]`, `delay: [8000, 20000]`: as the comments say, the first thing it
@@ -2122,12 +2130,20 @@ toward its corner or away from it, with `roll` choosing the spot.
 
 <!-- code: apps/desktop/src/main/bubble/wander.ts#walkStep -->
 
-[`src/main/bubble/wander.ts`, lines 67–71](../../apps/desktop/src/main/bubble/wander.ts#L67-L71)
+[`src/main/bubble/wander.ts`, lines 67–79](../../apps/desktop/src/main/bubble/wander.ts#L67-L79)
 
 ```ts
-/** One frame of walking: `dtMs` closer to `to` at walking speed, never past it. */
-export function walkStep(from: number, to: number, dtMs: number): number {
-  const step = (WANDER.walkSpeed * Math.min(Math.max(dtMs, 0), 100)) / 1000
+/**
+ * One frame of walking: `dtMs` closer to `to` at `speed` (DIP per second; WANDER.walkSpeed at her
+ * usual size), never past it.
+ */
+export function walkStep(
+  from: number,
+  to: number,
+  dtMs: number,
+  speed: number = WANDER.walkSpeed,
+): number {
+  const step = (speed * Math.min(Math.max(dtMs, 0), 100)) / 1000
   return to > from ? Math.min(to, from + step) : Math.max(to, from - step)
 }
 ```
@@ -2136,10 +2152,12 @@ export function walkStep(from: number, to: number, dtMs: number): number {
 
 One frame of a walk: the new inset, `dtMs` milliseconds of walking closer to `to`.
 
-- `Math.min(Math.max(dtMs, 0), 100)`: the elapsed time is kept between 0 and 100 ms, as in the
-  bounce (`MAX_STEP_MS` in `bounce.ts`), so after a stall the character carries on from where it
-  was instead of jumping.
-- `(WANDER.walkSpeed * ...) / 1000`: speed in DIPs per second times seconds is the distance.
+- `speed: number = WANDER.walkSpeed`: as the comment says, DIPs per second, which is
+  `WANDER.walkSpeed` at her usual size. `walkTo()` passes `WANDER.walkSpeed * scale`, so she walks
+  faster the bigger she is; left out, it's the usual speed.
+- `Math.min(Math.max(dtMs, 0), 100)`: the elapsed time is kept between 0 and 100 ms, so after a
+  stall the character carries on from where it was instead of jumping.
+- `(speed * ...) / 1000`: speed in DIPs per second times seconds is the distance.
 - `Math.min(to, from + step)` and `Math.max(to, from - step)`: never past the target in either
   direction. The last step lands exactly on it, which is how `walkTo()` knows it has arrived.
 
@@ -2147,7 +2165,7 @@ One frame of a walk: the new inset, `dtMs` milliseconds of walking closer to `to
 
 <!-- code: apps/desktop/src/main/bubble/wander.ts#fallDuration -->
 
-[`src/main/bubble/wander.ts`, lines 73–81](../../apps/desktop/src/main/bubble/wander.ts#L73-L81)
+[`src/main/bubble/wander.ts`, lines 81–89](../../apps/desktop/src/main/bubble/wander.ts#L81-L89)
 
 ```ts
 /**
@@ -2176,7 +2194,7 @@ How long the fall after a drop takes, in milliseconds.
 
 <!-- code: apps/desktop/src/main/bubble/wander.ts#fallPosition -->
 
-[`src/main/bubble/wander.ts`, lines 83–89](../../apps/desktop/src/main/bubble/wander.ts#L83-L89)
+[`src/main/bubble/wander.ts`, lines 91–97](../../apps/desktop/src/main/bubble/wander.ts#L91-L97)
 
 ```ts
 /** Position at progress `t` (0–1) of the fall: speeding up as it falls, like a dropped thing. */
@@ -2195,7 +2213,7 @@ Where the character is at progress `t` of its fall (0 at the start, 1 on the tas
 - `Math.min(Math.max(t, 0), 1)`: clamps `t`, so it can never go past where it stands.
 - `progress ** 2`: falling, the distance covered grows with the square of the time, which is how a
   dropped thing really falls: a quarter of the way down at half the time, and faster and faster
-  after that. It's an _ease-in_, the opposite of the glide's ease-out.
+  after that. It's an _ease-in_: slow to start, then faster and faster.
 - `1 - (1 - progress) ** 2`: going up onto the taskbar instead, it slows as it rises, like a hop.
 - `from.x + (to.x - from.x) * progress`: sideways at an even pace. Usually `to.x` is the same as
   `from.x` and it falls straight down; they differ only when it was dropped partly past the edge of
@@ -2203,328 +2221,210 @@ Where the character is at progress `t` of its fall (0 at the start, 1 on the tas
 
 ---
 
-## `src/main/bubble/bounce.ts`: bounce physics
+## `src/main/bubble/clones.ts`: her clones
 
-Pure maths for two of the animations: the bounce (the character moves at a constant speed across
-all the monitors and reflects off their outer edges, like an old DVD screensaver) and the glide
-home after it (a smooth slow-down back to where the character stood). The walk and the fall after a
-drop are in `wander.ts`. Each function takes a state and returns a new one; none keeps
-anything between calls or touches a window. `BubbleController` calls them from its frame timer
-(`startBounce()` and `glideHome()`), and `tests/bounce.test.ts` tests them directly.
+The Clones action: ten of her walk about the taskbar for ten seconds. This file is the main
+process's half of it, and it's small: it opens one window for all the clones, along the bottom of
+her display, and closes it again when their time is up. The clones themselves, where each one walks
+and when it stops, are worked out by the page in that window (`ClonesView.tsx`, with the maths in
+`lib/clones.ts`; see [The pages](7-renderer-pages.md)), so nothing has to go back and forth while
+they wander.
 
-### `Motion`
+Who uses it:
 
-<!-- code: apps/desktop/src/main/bubble/bounce.ts#Motion -->
+- `src/main/index.ts` creates the one `Clones` in `start()`. It passes the tenant's accent colour,
+  and `open`, which makes the window with `createOverlayWindow('clones', …)` (`windows.ts`), shows
+  it once its page has drawn, and puts the bubble back in front of it. It calls `stop()` when the
+  app quits.
+- `src/main/actions.ts` calls `start()` for the Clones icon, with `BubbleController.standing`,
+  after closing the panel so the clones can be seen.
 
-[`src/main/bubble/bounce.ts`, lines 4–10](../../apps/desktop/src/main/bubble/bounce.ts#L4-L10)
+Like `BubbleController`, it never imports Electron: windows are made by the `open` function it's
+given. `tests/clones.test.ts` passes one that just records what it was asked for, and uses
+Vitest's fake timers to check the window closes after exactly ten seconds.
+
+### `CloneWindow`, `ClonesDeps`
+
+<!-- code: apps/desktop/src/main/bubble/clones.ts#CloneWindow,ClonesDeps -->
+
+[`src/main/bubble/clones.ts`, lines 5–20](../../apps/desktop/src/main/bubble/clones.ts#L5-L20)
 
 ```ts
-/** Position (DIP) and velocity (DIP per second) of the bouncing bubble. */
-export interface Motion {
-  x: number
-  y: number
-  vx: number
-  vy: number
+/** A window of clones, as Clones uses it. index.ts makes them (see createOverlayWindow). */
+export interface CloneWindow {
+  close(): void
+}
+
+export interface ClonesDeps {
+  /**
+   * Opens a window of clones over `bounds`, its page told (in its query string) where she stands
+   * in it (`from`, DIPs from its left edge), her size, the accent colour and when they end.
+   */
+  open(bounds: Rect, query: Record<string, string>): CloneWindow
+  /** The tenant's accent colour, for the clones' robes and hats. */
+  accentColor: string
+  /** Wall-clock time (ms), shared with the page, which fades the clones out at the end. */
+  now?: () => number
 }
 ```
 
 <!-- /code -->
 
-A position plus a velocity: how many DIPs per second the bubble moves in each direction. A
-positive `vx` means moving right; a positive `vy` means moving down, because screen coordinates
-grow downward.
+What `Clones` needs, passed to its constructor.
 
-### `BOUNCE_SPEED`, `MAX_STEP_MS`
+- `CloneWindow`: as its comment says, a window of clones as `Clones` uses it, which is only to
+  close it. `index.ts` makes the real ones.
+- `open(bounds: Rect, query: Record<string, string>): CloneWindow`: as the comment says, opens a
+  window of clones over `bounds`, with what its page needs to know in its query string: where she
+  stands in it (`from`, in DIPs from the window's left edge), her size, the accent colour, and when
+  they end. `Record<string, string>` is an object whose keys and values are all strings, as a query
+  string's are.
+- `accentColor: string`: the tenant's accent colour (`accentColor` in `tenant.json`). Her robe and
+  hat are drawn in it, so the clones' are too. The clones' window doesn't get the app state like
+  the other two pages, so it's passed in the query string.
+- `now?: () => number`: as the comment says, the wall-clock time in milliseconds, shared with the
+  page: `ends` is a `Date.now()` time, and the page compares it with its own `Date.now()` to fade
+  the clones out just before the window closes. Tests pass a fixed clock.
 
-<!-- code: apps/desktop/src/main/bubble/bounce.ts#BOUNCE_SPEED,MAX_STEP_MS -->
+### `Clones`
 
-[`src/main/bubble/bounce.ts`, lines 12–14](../../apps/desktop/src/main/bubble/bounce.ts#L12-L14)
+<!-- code: apps/desktop/src/main/bubble/clones.ts#Clones.class -->
 
-```ts
-export const BOUNCE_SPEED = 280
-
-/** Longer gaps (e.g. the machine was asleep) are treated as one short step. */
-const MAX_STEP_MS = 100
-```
-
-<!-- /code -->
-
-- `BOUNCE_SPEED = 280`: DIPs per second, about 4.5 DIPs per frame.
-- `MAX_STEP_MS = 100`: if the timer stalls (the PC slept, or the main process was busy), the next
-  frame reports a long gap. Moving the full distance would make the bubble teleport; capping the
-  step means it just carries on from where it was.
-
-### `launch()`
-
-<!-- code: apps/desktop/src/main/bubble/bounce.ts#launch -->
-
-[`src/main/bubble/bounce.ts`, lines 16–32](../../apps/desktop/src/main/bubble/bounce.ts#L16-L32)
-
-```ts
-/** Sets off away from the bubble's corner, into the screen, at a random 25°–65° angle. */
-export function launch(
-  from: Point,
-  random: () => number = Math.random,
-  corner: Corner = 'bottom-right',
-  speed = BOUNCE_SPEED,
-): Motion {
-  const angle = ((25 + random() * 40) * Math.PI) / 180
-  const dx = isLeftCorner(corner) ? 1 : -1
-  const dy = isTopCorner(corner) ? 1 : -1
-  return {
-    x: from.x,
-    y: from.y,
-    vx: dx * speed * Math.cos(angle),
-    vy: dy * speed * Math.sin(angle),
-  }
-}
-```
-
-<!-- /code -->
-
-Sets the character off: away from the corner it lives near, into the screen, at a random angle
-between 25° and 65° from horizontal. The range keeps it from running flat along an edge or straight up.
-
-- `((25 + random() * 40) * Math.PI) / 180`: `random()` gives a number from 0 to 1, so the angle is
-  25° to 65°. It's converted to radians, which `Math.cos` and `Math.sin` expect.
-- `const dx = isLeftCorner(corner) ? 1 : -1`: from a left corner go right (+1); from a right corner
-  go left (-1). `dy` does the same vertically: from a bottom corner, -1 means up. The character's
-  corner is always a bottom one now, so it always sets off upward; the top case is left over from
-  the logo bubble.
-- `vx: dx * speed * Math.cos(angle)`: splits the speed into its horizontal and vertical parts, so
-  the overall speed is always `speed`, whatever the angle.
-- `random: () => number = Math.random`: a default, like `speed = BOUNCE_SPEED`. The controller
-  passes its own `random` so the tests can fix the angle.
-
-### `step()`
-
-<!-- code: apps/desktop/src/main/bubble/bounce.ts#step -->
-
-[`src/main/bubble/bounce.ts`, lines 34–48](../../apps/desktop/src/main/bubble/bounce.ts#L34-L48)
+[`src/main/bubble/clones.ts`, lines 22–29](../../apps/desktop/src/main/bubble/clones.ts#L22-L29)
 
 ```ts
 /**
- * Advances the motion by `dtMs` across `areas` (where the bubble may go: the displays' work areas
- * and the taskbars between them, from travelAreas()), reflecting off their outer edges. The bubble
- * can be anywhere it's wholly inside them, so it crosses from one display to the next where they
- * meet, and bounces off an edge with no display beyond it (such as the part of a taller monitor's
- * side that a shorter one doesn't reach).
+ * Her clones (the Clones action): CLONES.count of her, for CLONES.durationMs, walking about the
+ * taskbar of her display at her size and stopping now and then (the page in the window decides
+ * where; see ClonesView). They're all in one window along the bottom of the screen, which never
+ * takes the mouse or the focus: they have no panel, and clicks go to whatever is under them. The
+ * window closes once their time is up; asking again before then starts a new lot.
  */
-export function step(motion: Motion, dtMs: number, areas: Rect[]): Motion {
-  const dt = Math.min(Math.max(dtMs, 0), MAX_STEP_MS) / 1000
-  const start = onScreen(motion, areas)
-  // One direction at a time, so hitting a side wall only turns the bubble sideways.
-  const [x, vx] = reflect(start.x, motion.vx * dt, motion.vx, (x) => fits(x, start.y, areas))
-  const [y, vy] = reflect(start.y, motion.vy * dt, motion.vy, (y) => fits(x, y, areas))
-  return { x, y, vx, vy }
+export class Clones {
+  // …
 }
 ```
 
 <!-- /code -->
 
-Advances one frame: moves by velocity × time on each axis, bouncing off any edge it would have
-crossed. `startBounce()` calls it every frame with the real milliseconds since the last one and
-the areas from `travelAreas()`. Where two monitors meet, the bubble passes from one to the other
-(over a taskbar between them, if there is one); an edge with no monitor beyond it is a wall.
+As the comment says: `CLONES.count` of her (10), for `CLONES.durationMs` (10 seconds; both in
+`src/shared/character.ts`), walking about the taskbar of her display at her size and stopping now
+and then. They're all in one window along the bottom of the screen, which never takes the mouse or
+the focus, so they have no panel and clicks go to whatever is under them. Asking for clones again
+while some are still out starts a new lot. Its fields and constructor:
 
-- `Math.min(Math.max(dtMs, 0), MAX_STEP_MS) / 1000`: clamps the elapsed time to 0–100 ms (it
-  should never be negative, but that costs nothing to rule out), then converts it to seconds to
-  match the velocity.
-- `onScreen(motion, areas)`: where the bubble starts from, put back on screen first if a display
-  went away under it.
-- `const [x, vx] = reflect(`: `reflect()` returns a pair, and this _destructures_ it into two
-  variables. The two axes are handled separately, which is how a bounce off a wall works: hitting a
-  side wall flips only `vx`.
-- `(x) => fits(x, start.y, areas)`: how `reflect()` asks whether a position is allowed. The
-  sideways move is tried at the old height, then the up-or-down move at the new `x`.
-- `return { x, y, vx, vy }`: a new `Motion`; the old one is left unchanged.
+<!-- code: apps/desktop/src/main/bubble/clones.ts#Clones.current,constructor,running -->
 
-### `reflect()`
-
-<!-- code: apps/desktop/src/main/bubble/bounce.ts#reflect -->
-
-[`src/main/bubble/bounce.ts`, lines 65–87](../../apps/desktop/src/main/bubble/bounce.ts#L65-L87)
+[`src/main/bubble/clones.ts`, lines 30–36](../../apps/desktop/src/main/bubble/clones.ts#L30-L36)
 
 ```ts
-/**
- * The position after moving `delta` along one direction from `from` (where the bubble fits),
- * with the velocity: reflected off the wall it would have gone through.
- */
-function reflect(
-  from: number,
-  delta: number,
-  velocity: number,
-  fitsAt: (position: number) => boolean,
-): [number, number] {
-  const to = from + delta
-  if (fitsAt(to)) return [to, velocity]
-  // Find the wall: the furthest point towards `to` where the bubble still fits.
-  let inside = from
-  let outside = to
-  while (Math.abs(outside - inside) > 0.001) {
-    const middle = (inside + outside) / 2
-    if (fitsAt(middle)) inside = middle
-    else outside = middle
-  }
-  const back = inside - (to - inside)
-  return [fitsAt(back) ? back : inside, -velocity]
+private current: { window: CloneWindow; timer: ReturnType<typeof setTimeout> } | null = null
+
+constructor(private readonly deps: ClonesDeps) {}
+
+get running(): boolean {
+  return this.current !== null
 }
 ```
 
 <!-- /code -->
 
-One axis of a bounce. It isn't exported: only `step()` uses it. With several monitors of
-different sizes the walls aren't one simple box, so instead of comparing with limits it asks
-`fitsAt` (which `step()` builds from `fits()`).
+- `private current: { window: CloneWindow; timer: ReturnType<typeof setTimeout> } | null = null`:
+  the clones out now, if any: their window, and the timer that closes it. `null` when there are
+  none.
+- `constructor(private readonly deps: ClonesDeps) {}`: the same shorthand as in
+  `BubbleController`: it stores the argument in a field called `deps`, and there's nothing else to
+  do.
+- `get running(): boolean`: whether there are clones out now. Only the tests read it.
 
-- `if (fitsAt(to)) return [to, velocity]`: the usual case: the bubble is still wholly on screen,
-  so it just moves.
-- `while (Math.abs(outside - inside) > 0.001)`: otherwise the wall is somewhere between `from`
-  (where it fits) and `to` (where it doesn't). Halving the gap each time (a _binary search_) finds
-  it to a thousandth of a DIP in about 15 steps.
-- `const back = inside - (to - inside)`: the bubble went past the wall by `to - inside`, so it's
-  mirrored back by the same amount, as if it had bounced exactly at the wall.
-- `fitsAt(back) ? back : inside`: if even that doesn't fit (a space barely bigger than the bubble),
-  it stays at the wall rather than jittering.
-- `-velocity`: the bubble now heads the other way along this axis.
+### `Clones.start()`
 
-### `fits()`
+<!-- code: apps/desktop/src/main/bubble/clones.ts#Clones.start -->
 
-<!-- code: apps/desktop/src/main/bubble/bounce.ts#fits -->
-
-[`src/main/bubble/bounce.ts`, lines 50–63](../../apps/desktop/src/main/bubble/bounce.ts#L50-L63)
+[`src/main/bubble/clones.ts`, lines 38–50](../../apps/desktop/src/main/bubble/clones.ts#L38-L50)
 
 ```ts
-/** Whether the bubble at (x, y) is wholly inside the displays' work areas. */
-function fits(x: number, y: number, areas: Rect[]): boolean {
-  const size = UI.bubbleSize
-  // Its corners, the middle of each side and its centre: enough to catch a gap between displays.
-  for (const px of [x, x + size / 2, x + size]) {
-    for (const py of [y, y + size / 2, y + size]) {
-      const inside = areas.some(
-        (a) => px >= a.x && px <= a.x + a.width && py >= a.y && py <= a.y + a.height,
-      )
-      if (!inside) return false
-    }
-  }
-  return true
+/** Clones of her where she stands (`standing` from BubbleController), for their time. */
+start(standing: { workArea: Rect; bounds: Rect; scale: number }): void {
+  this.stop()
+  const strip = cloneStrip(standing.workArea, standing.scale)
+  const window = this.deps.open(strip, {
+    from: String(Math.round(standing.bounds.x - strip.x)),
+    scale: String(standing.scale),
+    accent: this.deps.accentColor,
+    ends: String((this.deps.now ?? Date.now)() + CLONES.durationMs),
+  })
+  const timer = setTimeout(() => this.stop(), CLONES.durationMs)
+  this.current = { window, timer }
 }
 ```
 
 <!-- /code -->
 
-Whether the bubble at a position is wholly on screen. Not exported; `step()` and `onScreen()` use
-it.
+As its comment says, clones of her where she stands, for their time.
 
-- `[x, x + size / 2, x + size]` and the same for `y`: nine points around the bubble's square: its
-  corners, the middle of each side and its centre. Checking the middles too catches a narrow gap
-  between two monitors that the corners alone could straddle.
-- `areas.some(...)`: each point has to be inside at least one display's work area. The edges count
-  as inside (`<=`), so where two monitors touch, a bubble half on each still fits.
+- `standing: { workArea: Rect; bounds: Rect; scale: number }`: `BubbleController.standing`: her
+  display's work area, her window's rectangle and her size.
+- `this.stop()`: any clones still out go first, so starting again replaces the old lot rather than
+  adding a second window, and the new lot gets the full ten seconds.
+- `cloneStrip(standing.workArea, standing.scale)`: the window's rectangle (`layout.ts`): the whole
+  width of the work area, as tall as her window, with its bottom edge on the taskbar, so the clones
+  stand where she does.
+- `from: String(Math.round(standing.bounds.x - strip.x))`: where she stands, as the distance from
+  the strip's left edge to her window's, so the clones set off from her. The window and the strip
+  start at the same `x` as the work area, so this works on any display. `String()` because a query
+  string is text.
+- `scale: String(standing.scale)`: her size, so the clones are drawn as big as she is.
+- `accent: this.deps.accentColor`: the colour of their robes and hats.
+- `ends: String((this.deps.now ?? Date.now)() + CLONES.durationMs)`: when their time is up, on the
+  wall clock. `(this.deps.now ?? Date.now)()` picks the clock first, then calls it.
+- `setTimeout(() => this.stop(), CLONES.durationMs)`: closes the window when their time is up.
+- `this.current = { window, timer }`: kept so `stop()` can close the window and cancel the timer.
 
-### `onScreen()`
+### `Clones.stop()`
 
-<!-- code: apps/desktop/src/main/bubble/bounce.ts#onScreen -->
+<!-- code: apps/desktop/src/main/bubble/clones.ts#Clones.stop -->
 
-[`src/main/bubble/bounce.ts`, lines 89–107](../../apps/desktop/src/main/bubble/bounce.ts#L89-L107)
+[`src/main/bubble/clones.ts`, lines 52–58](../../apps/desktop/src/main/bubble/clones.ts#L52-L58)
 
 ```ts
-/**
- * The bubble's position if it fits on screen; otherwise (a display was unplugged or shrank
- * mid-bounce) the nearest place on the closest display.
- */
-function onScreen(position: Point, areas: Rect[]): Point {
-  if (fits(position.x, position.y, areas)) return position
-  // Only areas the bubble fits in on its own (a strip over a taskbar is too thin).
-  const placed = areas
-    .map(travelBox)
-    .filter((box) => box.maxX >= box.minX && box.maxY >= box.minY)
-    .map((box) => {
-      const x = Math.min(Math.max(position.x, box.minX), box.maxX)
-      const y = Math.min(Math.max(position.y, box.minY), box.maxY)
-      return { x, y, distance: Math.hypot(x - position.x, y - position.y) }
-    })
-  if (placed.length === 0) return position
-  const nearest = placed.reduce((best, p) => (p.distance < best.distance ? p : best))
-  return { x: nearest.x, y: nearest.y }
+/** Closes the clones' window now, if there is one. */
+stop(): void {
+  if (!this.current) return
+  clearTimeout(this.current.timer)
+  this.current.window.close()
+  this.current = null
 }
 ```
 
 <!-- /code -->
 
-Where to carry on from. Normally that's simply where the bubble is; but if a monitor was unplugged
-or shrank mid-bounce, the bubble may be somewhere no display covers any more.
+As its comment says, closes the clones' window now, if there is one. The timer calls it when their
+time is up, `start()` calls it before a new lot, and `index.ts` calls it when the app quits.
 
-- `.map(travelBox)`: for each area, the positions where the bubble is wholly inside it
-  (`layout.ts`).
-- `.filter((box) => box.maxX >= box.minX && box.maxY >= box.minY)`: leaves out areas too small to
-  hold the bubble on their own, such as the strip over a taskbar between two monitors, which the
-  bubble only passes over.
-- `Math.min(Math.max(position.x, box.minX), box.maxX)`: the closest such position to where the
-  bubble is (clamping each coordinate into the box).
-- `placed.reduce(...)`: picks the area whose closest position is the least distance away.
-
-### `glideDuration()`
-
-<!-- code: apps/desktop/src/main/bubble/bounce.ts#glideDuration -->
-
-[`src/main/bubble/bounce.ts`, lines 109–113](../../apps/desktop/src/main/bubble/bounce.ts#L109-L113)
-
-```ts
-/** Glide length scales with distance, kept between 0.3 s and 0.9 s. */
-export function glideDuration(from: Point, to: Point): number {
-  const distance = Math.hypot(to.x - from.x, to.y - from.y)
-  return Math.min(900, Math.max(300, distance / 1.5))
-}
-```
-
-<!-- /code -->
-
-How long the glide home takes, in milliseconds: the straight-line distance (`Math.hypot`) divided
-by 1.5, so roughly 1.5 DIPs per millisecond, but never less than 300 ms or more than 900 ms. A
-short hop still looks deliberate, and a long trip across the screen doesn't drag on.
-
-### `glidePosition()`
-
-<!-- code: apps/desktop/src/main/bubble/bounce.ts#glidePosition -->
-
-[`src/main/bubble/bounce.ts`, lines 115–120](../../apps/desktop/src/main/bubble/bounce.ts#L115-L120)
-
-```ts
-/** Position at progress `t` (0–1) along the glide home, easing out as it settles. */
-export function glidePosition(from: Point, to: Point, t: number): Point {
-  const progress = Math.min(Math.max(t, 0), 1)
-  const eased = 1 - (1 - progress) ** 3
-  return { x: from.x + (to.x - from.x) * eased, y: from.y + (to.y - from.y) * eased }
-}
-```
-
-<!-- /code -->
-
-Where the bubble is at progress `t` along the glide (0 at the start, 1 at home).
-
-- `Math.min(Math.max(t, 0), 1)`: clamps `t`, so the bubble can never overshoot home.
-- `1 - (1 - progress) ** 3`: a cubic _ease-out_ curve (`**` means "to the power of"). It climbs
-  quickly at first and flattens out toward 1, so the character moves fast at the start and slows
-  as it settles back on the taskbar.
-- `from.x + (to.x - from.x) * eased`: moves that fraction of the way from the start to home, on
-  each axis.
+- `if (!this.current) return`: safe to call when there are no clones.
+- `clearTimeout(this.current.timer)`: when it's stopped early, the old timer mustn't fire later and
+  close a newer lot's window.
+- `this.current.window.close()`: in `index.ts`, this destroys the window, if it hasn't been
+  destroyed already.
 
 ---
 
 ## `src/main/bubble/windows.ts`: creating the Electron windows
 
-The only file in this folder that uses Electron. It creates the two overlay windows, locks them
-down, and adapts them to the controller's `Surface` interface. `index.ts` calls
-`createOverlayWindow()` twice at startup, once per view, and wraps the results with
-`bubbleSurface()` and `panelSurface()` before handing them to `BubbleController`.
+The only file in this folder that uses Electron. It creates the overlay windows, locks them down,
+and adapts the bubble's and the panel's to the controller's `Surface` interface. `index.ts` calls
+`createOverlayWindow()` twice at startup, once for the bubble and once for the panel, and wraps the
+results with `bubbleSurface()` and `panelSurface()` before handing them to `BubbleController`. It
+calls it again for each lot of clones, for a window that lasts their ten seconds (see `clones.ts`
+above).
 
 Key ideas:
 
-- **Two windows, one page.** Both windows load the same renderer page; `?view=bubble` or
-  `?view=panel` in its address tells `main.tsx` which UI to draw. The bubble has its own tiny
-  window so it never resizes when the panel opens, and only a 96×96 window moves during a drag, a
-  bounce, a fall or a walk.
+- **Three kinds of window, one page.** Every overlay window loads the same renderer page;
+  `?view=bubble`, `?view=panel` or `?view=clones` in its address tells `main.tsx` which UI to draw.
+  The bubble has its own tiny window so it never resizes when the panel opens, and only a window
+  her size (96×96 at her usual size) moves during a drag, a fall or a walk.
 - **Always on top, and kept there.** Both windows stay in front of other apps' windows. They use
   `ON_TOP_LEVEL` rather than Electron's default level, which lost it when the app started behind a
   full-screen app, and `keepOnTop()` puts them back if anything else takes it away.
@@ -2535,7 +2435,8 @@ Key ideas:
   page's `useClickThrough` hook asks the main process to take mouse input again
   (`IPC.setInteractive`, handled in `ipc.ts`). The bubble window is never click-through: it's barely larger than the
   bubble, and relying on Windows' mouse forwarding there made clicks occasionally fall through the
-  bubble to the window behind it.
+  bubble to the window behind it. The clones' window is the opposite: it ignores the mouse
+  altogether, all the time, and can't take the focus.
 
 ### `View`
 
@@ -2544,13 +2445,13 @@ Key ideas:
 [`src/main/bubble/windows.ts`, line 7](../../apps/desktop/src/main/bubble/windows.ts#L7)
 
 ```ts
-export type View = 'bubble' | 'panel'
+export type View = 'bubble' | 'panel' | 'clones'
 ```
 
 <!-- /code -->
 
-A _union type_: a `View` can only be the string `'bubble'` or `'panel'`, and TypeScript rejects
-anything else.
+A _union type_: a `View` can only be the string `'bubble'`, `'panel'` or `'clones'`, and
+TypeScript rejects anything else.
 
 ### `ON_TOP_LEVEL`, `ON_TOP_CHECK_MS`
 
@@ -2596,12 +2497,16 @@ the windows' style: before, neither was on top; now both are.
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#createOverlayWindow -->
 
-[`src/main/bubble/windows.ts`, lines 22–77](../../apps/desktop/src/main/bubble/windows.ts#L22-L77)
+[`src/main/bubble/windows.ts`, lines 22–87](../../apps/desktop/src/main/bubble/windows.ts#L22-L87)
 
 ```ts
 /**
- * Creates one of the two overlay windows. Both are frameless, transparent, always on top and
- * hidden from the taskbar and Alt+Tab.
+ * Creates an overlay window: the bubble, the panel, or a window of clones. All are frameless,
+ * transparent, always on top and hidden from the taskbar and Alt+Tab. `query` adds to the page's
+ * query string (`view` says which page it is).
+ *
+ * The clones' window never takes the mouse or the focus: clicks go straight through it, so the
+ * clones have no panel and never get in the way.
  *
  * The panel window is mostly see-through, so it's click-through: clicks on its empty areas go to
  * whatever is underneath, and the renderer turns mouse input back on while the pointer is over
@@ -2609,7 +2514,11 @@ the windows' style: before, neither was on top; now both are.
  * than the bubble, and relying on Windows' mouse forwarding there made clicks occasionally fall
  * through the bubble to the window behind it.
  */
-export function createOverlayWindow(view: View, size: Size): BrowserWindow {
+export function createOverlayWindow(
+  view: View,
+  size: Size,
+  query: Record<string, string> = {},
+): BrowserWindow {
   const win = new BrowserWindow({
     ...size,
     show: false,
@@ -2629,8 +2538,8 @@ export function createOverlayWindow(view: View, size: Size): BrowserWindow {
     // Both can take the focus. A bubble that couldn't had its mouse presses dropped by Windows /
     // Chromium after clicking elsewhere (only the release arrived, so clicks did nothing).
     // Clicking the bubble now takes the focus from an open panel; BubbleController.clickBubble
-    // knows that press closed it.
-    focusable: true,
+    // knows that press closed it. The clones never need it.
+    focusable: view !== 'clones',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: true,
@@ -2646,12 +2555,14 @@ export function createOverlayWindow(view: View, size: Size): BrowserWindow {
     win.setIgnoreMouseEvents(true, { forward: true })
     addEditContextMenu(win)
   }
+  if (view === 'clones') win.setIgnoreMouseEvents(true)
 
+  const search = { ...query, view }
   const devServer = process.env['ELECTRON_RENDERER_URL']
   if (!app.isPackaged && devServer) {
-    void win.loadURL(`${devServer}?view=${view}`)
+    void win.loadURL(`${devServer}?${new URLSearchParams(search)}`)
   } else {
-    void win.loadFile(join(__dirname, '../renderer/index.html'), { query: { view } })
+    void win.loadFile(join(__dirname, '../renderer/index.html'), { query: search })
   }
   return win
 }
@@ -2660,11 +2571,19 @@ export function createOverlayWindow(view: View, size: Size): BrowserWindow {
 <!-- /code -->
 
 Creates one overlay window. `new BrowserWindow({...})` makes a native window with a Chromium page
-inside; the options say what kind of window.
+inside; the options say what kind of window. As the comment says, `query` adds to the page's query
+string, and the clones' window never takes the mouse or the focus.
 
 - `...size`: the window's `width` and `height`: `BUBBLE_BOX` square for the bubble,
-  `panelWindowSize(actionCount)` for the panel. Neither window changes size later, only position.
-- `show: false`: created hidden. The controller decides when each one appears.
+  `panelWindowSize(actionCount)` for the panel, both at her usual size. The controller sizes them
+  for her size when it first places them, and again whenever her size changes. For the clones,
+  `index.ts` passes the strip they walk in (`cloneStrip()`), and sets the window's bounds straight
+  after.
+- `query: Record<string, string> = {}`: more for the page's query string, beside `view`. Only the
+  clones' window has any (where she stands, her size, the accent colour and when they end; see
+  `Clones.start()`): it doesn't ask for the app state as the other two pages do.
+- `show: false`: created hidden. The controller decides when the bubble and the panel appear, and
+  `index.ts` shows the clones' window once its page has drawn.
 - No `alwaysOnTop: true`: the comment explains that would use Electron's default level, which
   loses it while a full-screen app is in front. `win.setAlwaysOnTop(true, ON_TOP_LEVEL)` straight
   after creating the window makes it always on top at a level that keeps it there.
@@ -2676,8 +2595,10 @@ inside; the options say what kind of window.
   page draws its own.
 - `type: 'toolbar'`: on Windows, a toolbar window is left out of Alt+Tab. `skipTaskbar: true` keeps
   it off the taskbar too.
-- `focusable: true`: both windows can take the keyboard focus. The panel must, since you type in
-  it. The bubble used to be unable to (`focusable: false`), so that clicking it wouldn't take the
+- `focusable: view !== 'clones'`: the bubble and the panel can take the keyboard focus; as the
+  comment says, the clones never need it, so their window can't, and it never takes the focus from
+  the app you're working in. The panel must, since you type in it. The bubble used to be unable to
+  (`focusable: false`), so that clicking it wouldn't take the
   focus from the panel or from the app you were working in. But, as the comment says, in some
   states (after clicking somewhere else) Windows and Chromium dropped the mouse _press_ on that
   never-focusable window and delivered only the release. The page then saw no `pointerdown` and
@@ -2698,11 +2619,19 @@ inside; the options say what kind of window.
 - `win.setIgnoreMouseEvents(true, { forward: true })`: the panel starts click-through. The
   `forward` option (Windows and macOS only) keeps sending mouse moves to the page, which is what
   lets `useClickThrough` notice the pointer arriving over real UI.
+- `if (view === 'clones') win.setIgnoreMouseEvents(true)`: the clones' window is click-through
+  for good: clicks go straight through it to whatever is underneath, so the clones never get in
+  the way. Without `forward`, its page isn't told about the mouse at all, which it has no use for.
+- `const search = { ...query, view }`: the page's query string as an object: whatever the caller
+  added, then `view` last, so nothing the caller adds can change which page it is.
 - `process.env['ELECTRON_RENDERER_URL']`: set by `electron-vite` during `npm run dev` to the
   address of its dev server, which serves the page with live reloading. `!app.isPackaged` makes
   sure an installed app always loads the page bundled with it.
-- `{ query: { view } }`: `loadFile()` adds `?view=bubble` or `?view=panel` to the built page's
-  address.
+- `new URLSearchParams(search)`: the browser's class for query strings. Put inside a template
+  string, it becomes text like `view=clones&from=1808&scale=1&…`, with each value encoded (the `#`
+  of the accent colour becomes `%23`), so the page reads back exactly what was put in.
+- `{ query: search }`: `loadFile()` adds the same to the built page's address (`?view=bubble`,
+  `?view=panel`, or `?view=clones&…`).
 - `void win.loadURL(`: loading returns a promise that isn't awaited; `void` marks that as
   deliberate.
 
@@ -2710,7 +2639,7 @@ inside; the options say what kind of window.
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#keepOnTop -->
 
-[`src/main/bubble/windows.ts`, lines 79–90](../../apps/desktop/src/main/bubble/windows.ts#L79-L90)
+[`src/main/bubble/windows.ts`, lines 89–100](../../apps/desktop/src/main/bubble/windows.ts#L89-L100)
 
 ```ts
 /**
@@ -2744,7 +2673,7 @@ windows and stops it when quitting.
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#bringToFront -->
 
-[`src/main/bubble/windows.ts`, lines 92–104](../../apps/desktop/src/main/bubble/windows.ts#L92-L104)
+[`src/main/bubble/windows.ts`, lines 102–114](../../apps/desktop/src/main/bubble/windows.ts#L102-L114)
 
 ```ts
 /**
@@ -2777,7 +2706,7 @@ calls it for the bubble when Windows says something else is at the bubble's cent
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#bubbleSurface,panelSurface -->
 
-[`src/main/bubble/windows.ts`, lines 106–129](../../apps/desktop/src/main/bubble/windows.ts#L106-L129)
+[`src/main/bubble/windows.ts`, lines 116–139](../../apps/desktop/src/main/bubble/windows.ts#L116-L139)
 
 ```ts
 export function bubbleSurface(win: BrowserWindow): Surface {
@@ -2823,7 +2752,7 @@ forwards each call to the matching Electron method.
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#resetClickThrough -->
 
-[`src/main/bubble/windows.ts`, lines 131–143](../../apps/desktop/src/main/bubble/windows.ts#L131-L143)
+[`src/main/bubble/windows.ts`, lines 141–153](../../apps/desktop/src/main/bubble/windows.ts#L141-L153)
 
 ```ts
 /**
@@ -2861,7 +2790,7 @@ been hidden, for example for a screenshot.
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#lockDown -->
 
-[`src/main/bubble/windows.ts`, lines 145–154](../../apps/desktop/src/main/bubble/windows.ts#L145-L154)
+[`src/main/bubble/windows.ts`, lines 155–164](../../apps/desktop/src/main/bubble/windows.ts#L155-L164)
 
 ```ts
 function lockDown(win: BrowserWindow, view: View): void {
@@ -2878,7 +2807,7 @@ function lockDown(win: BrowserWindow, view: View): void {
 
 <!-- /code -->
 
-Basic safety and crash recovery for both pages.
+Basic safety and crash recovery for every overlay page.
 
 - `setWindowOpenHandler(() => ({ action: 'deny' }))`: the page may never open a new Electron window
   (`window.open`, or a link with `target="_blank"`). Links open in your browser through
@@ -2896,7 +2825,7 @@ Basic safety and crash recovery for both pages.
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#addEditContextMenu -->
 
-[`src/main/bubble/windows.ts`, lines 156–177](../../apps/desktop/src/main/bubble/windows.ts#L156-L177)
+[`src/main/bubble/windows.ts`, lines 166–187](../../apps/desktop/src/main/bubble/windows.ts#L166-L187)
 
 ```ts
 /** Right-click menu for the text box: spelling suggestions plus the usual edit commands. */
@@ -3225,7 +3154,7 @@ export function watchBubbleFront(deps: FrontWatchDeps): () => void {
   let stopped = false
   const checkNow = async (when: string): Promise<void> => {
     if (stopped) return
-    // Open, dragged or bouncing: the user can see it. Look again in a minute.
+    // Open, or being dragged: the user can see it. Look again in a minute.
     if (!deps.isResting()) {
       later(() => void checkNow(when), 60_000)
       return

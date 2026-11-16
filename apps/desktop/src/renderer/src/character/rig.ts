@@ -18,13 +18,14 @@ export const GRID = 96
 
 /** Each material's shades, as palette letters (see PALETTE in sprite.ts). */
 const RAMPS: Record<string, Ramp> = {
-  hair: { line: 'O', shade: 'D', base: 'h', light: 'l' },
-  skin: { line: 'K', shade: 'S', base: 's', light: 'z' },
-  robe: { line: 'q', shade: 'A', base: 'a', light: 'v' },
+  // A broad shadow across the side of each away from the light (`form`), less on her face.
+  hair: { line: 'O', shade: 'D', base: 'h', light: 'l', form: 0.28 },
+  skin: { line: 'K', shade: 'S', base: 's', light: 'z', form: 0.16 },
+  robe: { line: 'q', shade: 'A', base: 'a', light: 'v', form: 0.3 },
   trim: { line: 'q', shade: 'F', base: 'f' },
-  hat: { line: 'q', shade: 'N', base: 'n', light: 'g' },
-  stocking: { line: 'u', shade: 'Q', base: 'o' },
-  boot: { line: 'u', shade: 'B', base: 'b', light: 'y' },
+  hat: { line: 'q', shade: 'N', base: 'n', light: 'g', form: 0.3 },
+  stocking: { line: 'u', shade: 'Q', base: 'o', form: 0.35 },
+  boot: { line: 'u', shade: 'B', base: 'b', light: 'y', form: 0.35 },
   cup: { line: 'u', shade: 'F', base: 'f', light: 'w' },
   book: { line: 'u', shade: 'N', base: 'n', light: 'g' },
   shadow: { line: 'x', shade: 'x', base: 'x' },
@@ -411,11 +412,11 @@ export function draw(pose: Pose): string[] {
       const braidPath =
         view === 'side'
           ? [
-              [-2, 4],
-              [-2.6, 10],
-              [-3.2, 16],
-              [-3.8, 22],
-              [-4.2, 28],
+              [-5.5, 3],
+              [-6, 9],
+              [-6.4, 15],
+              [-6.8, 21],
+              [-7, 27],
             ]
           : [
               [8.6, 1],
@@ -535,9 +536,20 @@ export function draw(pose: Pose): string[] {
         right: skirt[1]![0]! + (skirt[2]![0]! - skirt[1]![0]!) * t,
       }
     }
+    const centre = (y: number) => (swing * y) / hem
+    // Folds: creases falling from her hips and opening out toward the hem, each a line of the
+    // robe's shade with its light beside it, on the side toward the light.
+    if (!sitting) {
+      for (const fold of frontView ? [-4.5, 4.5] : [-1.5]) {
+        for (let y = 2; y < hem - 8; y += 0.5) {
+          const x = fold * (1 + (y / hem) * 0.4) + centre(y)
+          set(onHips({ x, y }), 'A', 'a')
+          set(onHips({ x: x - 1, y }), 'v', 'a')
+        }
+      }
+    }
     // The border: a gold line, and below it gold diamonds with gold dots between, just above the
     // silver trim of the hem; centred on the trim down her front, so it sways with it.
-    const centre = (y: number) => (swing * y) / hem
     const borderY = hem - 4.5
     const edges = skirtAt(borderY)
     for (let x = edges.left + 1; x <= edges.right - 1; x += 0.5) {
@@ -621,13 +633,14 @@ export function draw(pose: Pose): string[] {
       canvas.stamp(['cc'], head.x + 3 + look, head.y + 5)
       canvas.stamp(['cc'], head.x - 5 + look, head.y + 5)
       canvas.stamp(mouth, head.x - mouth[0]!.length / 2 + look * 0.5, head.y + 6)
+      set(onHead({ x: 0.5 + look * 0.5, y: 5.2 }), 'S', 's')
     } else {
       canvas.stamp(eyes[0]!, head.x + 1.5, eyeY)
       canvas.stamp(['cc'], head.x + 1.5, head.y + 4.5)
-      // Her mouth: a short line just inside her lips, between nose and chin.
+      // Her mouth: a short line in from the notch of her lips, between nose and chin.
       canvas.stamp(
-        mouth.map((r) => r.slice(0, 1)),
-        head.x + 5.5,
+        mouth.map((r) => r.slice(0, 2)),
+        head.x + 4.5,
         head.y + 5.5,
       )
     }
@@ -675,17 +688,18 @@ export function draw(pose: Pose): string[] {
       'hair',
     )
     if (view === 'side') {
+      // The back of her head, its front edge behind her ear, so her cheek and jaw show.
       const crown = [
         [1.5, -11.6],
         [-3, -11],
         [-6.5, -8],
         [-7.8, -3],
         [-7.5, 3],
-        [-5.5, 7.5],
-        [-2, 8.5],
-        [-0.8, 3],
-        [0.2, -2.5],
-        [1.5, -5],
+        [-6.5, 7],
+        [-4.5, 7.5],
+        [-3, 2],
+        [-1.5, -2.5],
+        [1, -5],
       ]
       hair.polygon(
         shape(crown, (p) => onHead(blown(p))),
@@ -705,7 +719,7 @@ export function draw(pose: Pose): string[] {
         'hair',
       )
     if (view === 'side') {
-      lock(-1.5, 12)
+      lock(-5.5, 12) // behind her ear, clear of her cheek
     } else {
       lock(8.2 + shiftHair, 13)
       lock(-8.2 + shiftHair * 0.5, 13)
@@ -864,5 +878,38 @@ export function draw(pose: Pose): string[] {
     )
   }
 
+  castShadows(canvas)
   return canvas.rows()
+}
+
+/** Letters by part, for castShadows. */
+const HAT = 'nNgqfFYkG'
+const HAIR = 'ODhlL'
+const ROBE = 'aAvfFYkG'
+
+/**
+ * The shadows things cast on what's just below them, which is most of what makes her look solid
+ * rather than flat: her hat's brim darkens the hair under it, her fringe her forehead (and her
+ * hair the tops of her ears), the sash and her sleeves the robe below them, and the robe's hem
+ * her stockings and boots. Each is a pixel deep, in the shade of what it falls on. It reads the
+ * frame as it was before any of them, so shadows don't pile up, and works on whatever is there,
+ * so the hand-drawn diagonal picture gets them too.
+ */
+function castShadows(canvas: Canvas): void {
+  const rows = canvas.rows()
+  for (let y = 1; y < rows.length; y++) {
+    for (let x = 0; x < rows[y]!.length; x++) {
+      const here = rows[y]![x]!
+      const above = rows[y - 1]![x]!
+      const twoAbove = y > 1 ? rows[y - 2]![x]! : '.'
+      let shade: string | null = null
+      if ('hlL'.includes(here) && HAT.includes(above)) shade = 'D'
+      else if ('sz'.includes(here) && HAIR.includes(above)) shade = 'S'
+      // A seam inside the robe (the sash, a sleeve's edge): an outline with robe above it too.
+      else if ('av'.includes(here) && above === 'q' && ROBE.includes(twoAbove)) shade = 'A'
+      else if (here === 'o' && above === 'q') shade = 'Q'
+      else if ('by'.includes(here) && above === 'q') shade = 'B'
+      if (shade) canvas.set(x, y, shade)
+    }
+  }
 }

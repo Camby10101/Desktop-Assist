@@ -29,7 +29,7 @@ export type Fidget = (typeof FIDGETS)[number]
 /**
  * - `idle`: standing, breathing, blinking now and then.
  * - `walk-left`, `walk-right`: walking along the taskbar (the window moves with her).
- * - `dragged`: dangling while she's dragged, thrown about by Bounce, or falling after a drop.
+ * - `dragged`: dangling while she's dragged, or falling after a drop.
  * - one of the FIDGETS.
  */
 export type Pose = 'idle' | 'walk-left' | 'walk-right' | 'dragged' | Fidget
@@ -49,3 +49,9 @@ export const FIDGET_MS: Record<Fidget, number> = {
 
 export const isFidget = (pose: Pose): pose is Fidget =>
   (FIDGETS as readonly string[]).includes(pose)
+
+/**
+ * Her clones (the Clones action): how many, how long they last (ms), and how long they take to
+ * fade in and out at either end.
+ */
+export const CLONES = { count: 10, durationMs: 10_000, fadeMs: 400 } as const

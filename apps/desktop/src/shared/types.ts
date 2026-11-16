@@ -1,14 +1,14 @@
 import type { ActionId } from './actions'
 import type { Pose } from './character'
-import type { Corner } from './geometry'
+import type { CharacterSize, Corner } from './geometry'
 
 /**
  * What the bubble (the character) is doing. The main process owns this; renderers only display it.
  * - `dragging`: following the mouse while the user drags it.
- * - `returning`: falling onto the taskbar after a drag, or gliding back after a bounce.
+ * - `returning`: falling onto the taskbar after a drag.
  * - `capturing`: windows are hidden while a screenshot is taken.
  */
-export type Mode = 'collapsed' | 'expanded' | 'dragging' | 'bouncing' | 'returning' | 'capturing'
+export type Mode = 'collapsed' | 'expanded' | 'dragging' | 'returning' | 'capturing'
 
 export interface Attachment {
   id: string
@@ -137,6 +137,8 @@ export interface AppState {
   corner: Corner
   /** What the character is doing, for the bubble's page to animate. */
   pose: Pose
+  /** How big she is, and the biggest she can be on her screen. */
+  size: CharacterSize
   notes: Notes
   settings: Settings
   branding: Branding

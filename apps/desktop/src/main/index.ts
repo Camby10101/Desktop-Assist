@@ -30,6 +30,7 @@ import { summarizeIdToken, type IdTokenSummary } from './auth/idToken'
 import { listenForRedirect } from './auth/loopback'
 import { createOidc } from './auth/oidc'
 import { BubbleController, type DisplayArea, type Displays } from './bubble/BubbleController'
+import { Clones } from './bubble/clones'
 import { runFrontCheck, watchBubbleFront } from './bubble/frontCheck'
 import {
   bringToFront,
@@ -141,9 +142,11 @@ async function start(): Promise<void> {
     displays: electronDisplays,
     actionCount,
     initialAnchor: settings.bubbleAnchor,
+    initialScale: settings.characterScale,
     onDiagnostic: (message) => log(message),
     onModeChange: (mode) => broadcast(IPC.modeChanged, mode),
     onPoseChange: (pose) => broadcast(IPC.poseChanged, pose),
+    onSizeChange: (size) => broadcast(IPC.sizeChanged, size),
     onAnchorChange: (anchor) => {
       broadcast(IPC.cornerChanged, anchor.corner)
       void settings.setBubbleAnchor(anchor) // remembered for next time
@@ -151,6 +154,25 @@ async function start(): Promise<void> {
   })
   controller = bubble
   panelWindow.on('blur', () => bubble.panelBlurred())
+
+  // Her clones: a window along the taskbar, which shows once its page is drawn, and then puts her
+  // own window back in front of it.
+  const clones = new Clones({
+    accentColor: tenant.accentColor,
+    open: (bounds, query) => {
+      const win = createOverlayWindow(
+        'clones',
+        { width: bounds.width, height: bounds.height },
+        query,
+      )
+      win.setBounds(bounds)
+      win.once('ready-to-show', () => {
+        win.showInactive()
+        bringToFront(bubbleWindow, false)
+      })
+      return { close: () => !win.isDestroyed() && win.destroy() }
+    },
+  })
 
   const screenshots = new ScreenshotService(screenshotsDir, () =>
     screen.getDisplayMatching(bubbleWindow.getBounds()),
@@ -350,6 +372,7 @@ async function start(): Promise<void> {
     updater,
     actions: createActionHandlers({
       controller: bubble,
+      clones,
       screenshots,
       openServiceDesk: serviceDesk ? () => shell.openExternal(serviceDesk.url) : null,
       quit: () => app.quit(),
@@ -369,6 +392,7 @@ async function start(): Promise<void> {
       mode: bubble.currentMode,
       corner: bubble.corner,
       pose: bubble.currentPose,
+      size: bubble.size,
       notes: notes.get(),
       settings: settings.get(),
       branding: brandingOf(tenant),
@@ -397,6 +421,7 @@ async function start(): Promise<void> {
     shuttingDown = true
     event.preventDefault()
     bubble.dispose()
+    clones.stop()
     for (const stop of stopKeepingOnTop) stop()
     builtIn?.chat.stop()
     void portalApps?.dispose()
@@ -540,7 +565,6 @@ const toArea = (display: Electron.Display): DisplayArea => ({
 })
 const electronDisplays: Displays = {
   primary: () => toArea(screen.getPrimaryDisplay()),
-  all: () => screen.getAllDisplays().map(toArea),
   byId: (id) => {
     const display = screen.getAllDisplays().find((d) => d.id === id)
     return display && toArea(display)

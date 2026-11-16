@@ -13,7 +13,8 @@ A tenant folder contains:
 - `logo.png` or `logo.svg`: The logo. `logo.png` is also the tray icon and the `.exe` icon. If both exist, `logo.png` is used.
 
 Available actions: `ask`, `apps`, `jira`, `servicedesk`, `screenshot`, `theme` (light or dark
-mode), `settings`, `bounce`, `close`.
+mode), `settings`, `size` (a menu to make the character smaller or bigger), `clones` (ten clones
+of her walking about the taskbar for ten seconds), `close`.
 
 `servicedesk` needs `serviceDesk`: `{ "url": "https://…" }`, the company's IT service desk (Morse
 Micro's Jira Service Management help centre), opened in the browser. With `serviceDesk.requests`

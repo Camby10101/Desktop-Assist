@@ -2,18 +2,20 @@
 
 [← Code Guide](CODE_GUIDE.md)
 
-This part covers the renderer's own files: the HTML page both windows load, the startup script,
-the stylesheet, two small helpers, the hooks that connect React to the main process, and the two
-views (the bubble and the panel). The building blocks the views use are covered in
+This part covers the renderer's own files: the HTML page every overlay window loads, the startup
+script, the stylesheet, two small helpers and the clones' wandering, the hooks that connect React
+to the main process, and the three views (the bubble, her clones and the panel). The building
+blocks the views use are covered in
 [the components part](8-renderer-components.md). If React is new to you: a React _component_ is a
 function that returns a description of what to show, written in JSX (HTML-like tags inside
 TypeScript, in `.tsx` files), and whenever the data it uses changes, React calls it again and
 updates only the parts of the page that changed.
 
-## `src/renderer/index.html`: the page both windows load
+## `src/renderer/index.html`: the page every window loads
 
-The bubble window and the panel window both load this one page. It's almost empty: a `<div>` for
-React to fill and a script tag that starts the app. The interesting part is the security policy.
+The bubble window, the panel window and the clones' window all load this one page. It's almost
+empty: a `<div>` for React to fill and a script tag that starts the app. The interesting part is
+the security policy.
 
 <!-- code: apps/desktop/src/renderer/index.html -->
 
@@ -61,29 +63,32 @@ React to fill and a script tag that starts the app. The interesting part is the 
   `main.tsx` and everything it imports into plain JavaScript and, in the build, rewrites this tag to
   point at the bundled file.
 
-## `src/renderer/src/main.tsx`: choosing bubble or panel
+## `src/renderer/src/main.tsx`: choosing bubble, clones or panel
 
 The first code that runs in each window. It works out which window it's in and renders the
-matching view. `BubbleView` and `PanelView` are React components: functions whose names start with
-a capital letter and return JSX. In JSX, `<BubbleView />` means "render the `BubbleView` component
-here".
+matching view. `BubbleView`, `ClonesView` and `PanelView` are React components: functions whose
+names start with a capital letter and return JSX. In JSX, `<BubbleView />` means "render the
+`BubbleView` component here".
 
 <!-- code: apps/desktop/src/renderer/src/main.tsx -->
 
-[`src/renderer/src/main.tsx`, lines 1–12](../../apps/desktop/src/renderer/src/main.tsx#L1-L12)
+[`src/renderer/src/main.tsx`, lines 1–15](../../apps/desktop/src/renderer/src/main.tsx#L1-L15)
 
 ```tsx
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './styles.css'
 import { BubbleView } from './views/BubbleView'
+import { ClonesView } from './views/ClonesView'
 import { PanelView } from './views/PanelView'
 
-// Both overlay windows load this page; the query string says which one this is.
+// Every overlay window loads this page; the query string says which one this is.
 const view = new URLSearchParams(window.location.search).get('view')
 
 createRoot(document.getElementById('root')!).render(
-  <StrictMode>{view === 'bubble' ? <BubbleView /> : <PanelView />}</StrictMode>,
+  <StrictMode>
+    {view === 'bubble' ? <BubbleView /> : view === 'clones' ? <ClonesView /> : <PanelView />}
+  </StrictMode>,
 )
 ```
 
@@ -91,9 +96,11 @@ createRoot(document.getElementById('root')!).render(
 
 - `import './styles.css'`: importing a CSS file from code is a Vite feature; it adds the stylesheet
   (after Tailwind has processed it) to the page.
-- `new URLSearchParams(window.location.search).get('view')`: reads the `?view=bubble` or
-  `?view=panel` that `createOverlayWindow` (src/main/bubble/windows.ts) adds when it loads the page.
-  Anything other than `bubble` gets the panel.
+- `// Every overlay window loads this page`: as the comment says, the query string says which one
+  this is.
+- `new URLSearchParams(window.location.search).get('view')`: reads the `?view=bubble`,
+  `?view=clones` or `?view=panel` that `createOverlayWindow` (src/main/bubble/windows.ts) adds when
+  it loads the page. Anything other than `bubble` or `clones` gets the panel.
 - `document.getElementById('root')!`: the `!` tells TypeScript "this is not null"; the div is in
   `index.html`.
 - `createRoot(`: hands that div to React, which from now on owns everything inside it. `render`
@@ -101,8 +108,10 @@ createRoot(document.getElementById('root')!).render(
 - `<StrictMode>`: a development-only checker. In `npm run dev` it calls each component twice and
   runs each effect, cleans it up, then runs it again, to expose code that doesn't clean up after
   itself. That's why every hook below has a careful cleanup. It does nothing in the installed app.
-- `{view === 'bubble' ? <BubbleView /> : <PanelView />}`: curly braces switch from JSX back to
-  ordinary TypeScript, here a choice between the two views.
+- `{view === 'bubble' ? <BubbleView /> : view === 'clones' ? <ClonesView /> : <PanelView />}`:
+  curly braces switch from JSX back to ordinary TypeScript, here a choice between the three views.
+  The second `? :` only runs when the first test fails, so it reads "the bubble, otherwise the
+  clones, otherwise the panel".
 
 ## `src/renderer/src/env.d.ts`: telling TypeScript about `window.assist`
 
@@ -402,7 +411,7 @@ for just those. This file sets Tailwind up and holds the styles that classes can
   font.
 - `@layer base`: page-wide defaults. Tailwind orders its CSS in layers (theme, base, components,
   utilities) and a later layer wins, so a utility class on an element always beats these rules.
-- `background: transparent`: both windows are transparent (`transparent: true` in
+- `background: transparent`: every overlay window is transparent (`transparent: true` in
   `createOverlayWindow`), so the page must not paint a background, or the see-through areas would
   be white. `overflow: hidden` stops the page itself ever showing scrollbars.
 - `user-select: none`: the UI shouldn't highlight like a web page when you click or drag around.
@@ -495,9 +504,9 @@ export function anchored(corner: Corner, x: number, y: number): CSSProperties {
 <!-- /code -->
 
 Returns a `style` object that places an element `x` pixels across and `y` pixels away from the
-screen edge, measured from the bubble's corner. `ChatBox`, `ActionStack` and `SettingsMenu` call it
-with the offsets in `PANEL_LAYOUT` (src/shared/geometry.ts), the same numbers the main process uses
-to size the window.
+screen edge, measured from the bubble's corner. `ChatBox`, `ActionStack`, `SettingsMenu` and
+`SizeMenu` call it with the offsets from `panelLayout()` (src/shared/geometry.ts) for her size, the
+same numbers the main process uses to size the window.
 
 - `CSSProperties`: React's type for the `style` prop. Plain numbers in it mean pixels.
 - `[isLeftCorner(corner) ? 'left' : 'right']: x`: a computed property name, where the key is
@@ -535,6 +544,256 @@ the bubble.
   must appear in full somewhere or its CSS is never generated.
 - `}[corner]`: picks the entry for this corner. TypeScript checks the table has all four corners.
 
+## `src/renderer/src/lib/clones.ts`: how her clones wander
+
+The Clones action ("Ten clones for ten seconds") fills a window along the taskbar with copies of
+her (see `ClonesView` below, and `Clones` in [The bubble](5-bubble.md)). This file decides where
+each clone goes: plain functions that take a clone and the time and return the clone a moment
+later, without touching the page. Keeping them apart from the page means `tests/clones.test.ts`
+can walk a clone across the window with made-up times and random numbers, in milliseconds. It's
+much like what `wander.ts` does for her in the main process, but for ten of her at once, each on
+its own timetable, and without a corner to stay near.
+
+### `Clone`, `Room` and `CLONE_WALK`
+
+<!-- code: apps/desktop/src/renderer/src/lib/clones.ts#Clone,Room,CLONE_WALK -->
+
+[`src/renderer/src/lib/clones.ts`, lines 4–40](../../apps/desktop/src/renderer/src/lib/clones.ts#L4-L40)
+
+```ts
+// How her clones wander (see ClonesView): each stands a moment, walks somewhere else along the
+// taskbar, stands again, and so on, every one on its own timetable. Positions are DIPs from the
+// left edge of the clones' window to the left edge of a clone's box.
+
+export interface Clone {
+  x: number
+  /** Where it's walking to (when `walking`). */
+  target: number
+  /** Its walking speed (DIP per second). */
+  speed: number
+  facing: Facing
+  walking: boolean
+  /** When it sets off again (when standing): ms, on the same clock as `now` below. */
+  waitUntil: number
+}
+
+/** The room they have: the window's width, a clone's box, and her size. */
+export interface Room {
+  width: number
+  box: number
+  scale: number
+}
+
+export const CLONE_WALK = {
+  /** Walking speed at her usual size (DIP per second), varied a little for each clone... */
+  speed: 80,
+  /** ...by up to this much either way. */
+  speedSpread: 0.25,
+  /** A stop lasts this long (ms, from-to). */
+  pause: [300, 2000],
+  /** Shorter walks aren't worth it (DIP at her usual size). */
+  minWalk: 60,
+  /** The first set off one after another, this far apart (ms)... */
+  stagger: 120,
+  /** ...each up to this much later still (ms), so they don't leave in a line. */
+  scatter: 900,
+} as const
+```
+
+<!-- /code -->
+
+As the comment at the top says, each clone stands a moment, walks somewhere else along the
+taskbar, stands again, and so on. Positions are DIPs from the left edge of the clones' window to
+the left edge of a clone's box.
+
+- `Clone`: one clone. `x` is where it is now and `target` where it's walking to. `speed` is its own
+  walking speed, in DIPs a second, so they don't all walk in step. `facing` (`'left'` or
+  `'right'`, the `Facing` type from `character/sprite.ts`) is the way it walks, and the way it
+  keeps facing when it stops. `walking` says whether it's on the move; while it isn't, `waitUntil`
+  is when it sets off again, in milliseconds on the same clock as the `now` passed to the functions
+  below (`ClonesView` uses the page's `performance.now()`).
+- `Room`: as its comment says, the room they have: the window's `width`, a clone's `box` (her
+  window's size at her size, from `bubbleMetrics()` in `src/shared/geometry.ts`) and her size
+  (`scale`, one of `CHARACTER_SIZES`). A clone's `x` can go from 0 to `width - box`, so it stays
+  wholly in the window.
+- `CLONE_WALK`: the numbers, as their comments say:
+  - `speed: 80`: walking speed at her usual size, the same as her own (`WANDER.walkSpeed`). It's
+    multiplied by `scale`, so bigger clones take longer strides, as she does.
+  - `speedSpread: 0.25`: each walk's speed is varied by up to 25% either way.
+  - `pause: [300, 2000]`: a stop lasts between 0.3 and 2 seconds.
+  - `minWalk: 60`: shorter walks aren't worth it (DIPs at her usual size, also multiplied by
+    `scale`).
+  - `stagger: 120` and `scatter: 900`: the first walks start one after another, 120 ms apart, each
+    up to 900 ms later still, so the clones don't all leave in a line.
+- `as const`: keeps the numbers exact and read-only, and makes `pause` a pair of two numbers rather
+  than any array.
+
+### `spawnClones()`
+
+<!-- code: apps/desktop/src/renderer/src/lib/clones.ts#spawnClones -->
+
+[`src/renderer/src/lib/clones.ts`, lines 42–62](../../apps/desktop/src/renderer/src/lib/clones.ts#L42-L62)
+
+```ts
+/**
+ * `count` clones, all standing where she stands (`from`), each about to set off a moment after
+ * the last, facing either way.
+ */
+export function spawnClones(
+  count: number,
+  from: number,
+  now: number,
+  room: Room,
+  random: () => number,
+): Clone[] {
+  const x = Math.min(Math.max(from, 0), Math.max(0, room.width - room.box))
+  return Array.from({ length: count }, (_, i) => ({
+    x,
+    target: x,
+    speed: CLONE_WALK.speed * room.scale,
+    facing: random() < 0.5 ? 'left' : 'right',
+    walking: false,
+    waitUntil: now + 150 + i * CLONE_WALK.stagger + random() * CLONE_WALK.scatter,
+  }))
+}
+```
+
+<!-- /code -->
+
+As the comment says, `count` clones, all standing where she stands, each about to set off a moment
+after the last, facing either way.
+
+- `from`: where she stands, as an `x` in the window (the main process passes it in the page's query
+  string). `Math.min(Math.max(from, 0), Math.max(0, room.width - room.box))` keeps it in the window,
+  so a clone can't start half off it.
+- `random: () => number`: a source of random numbers between 0 and 1. The page passes
+  `Math.random`; the tests pass a fixed list, so what happens is the same every run.
+- `Array.from({ length: count }, (_, i) => ...)`: makes a list of `count` clones; `i` is each one's
+  place in the list, and `_` stands for the empty slot `Array.from` also passes.
+- `speed: CLONE_WALK.speed * room.scale`: her own walking speed at her size, until each clone picks
+  one of its own for its first walk.
+- `facing: random() < 0.5 ? 'left' : 'right'`: half face one way, half the other (by chance).
+- `waitUntil: now + 150 + i * CLONE_WALK.stagger + random() * CLONE_WALK.scatter`: the first can
+  set off 150 ms after they appear, and each one after that 120 ms later, plus a random wait of up
+  to 900 ms.
+
+### `stepClone()`
+
+<!-- code: apps/desktop/src/renderer/src/lib/clones.ts#stepClone -->
+
+[`src/renderer/src/lib/clones.ts`, lines 64–101](../../apps/desktop/src/renderer/src/lib/clones.ts#L64-L101)
+
+```ts
+/**
+ * A clone a frame later (`dtMs` on, at `now`): walking on toward its target and stopping there
+ * for a while, or, its stop over, setting off somewhere else at a speed of its own.
+ */
+export function stepClone(
+  clone: Clone,
+  now: number,
+  dtMs: number,
+  room: Room,
+  random: () => number,
+): Clone {
+  if (clone.walking) {
+    const step = (clone.speed * Math.min(Math.max(dtMs, 0), 100)) / 1000
+    const x =
+      clone.target > clone.x
+        ? Math.min(clone.target, clone.x + step)
+        : Math.max(clone.target, clone.x - step)
+    if (x !== clone.target) return { ...clone, x }
+    const [shortest, longest] = CLONE_WALK.pause
+    return {
+      ...clone,
+      x,
+      walking: false,
+      waitUntil: now + shortest + random() * (longest - shortest),
+    }
+  }
+  if (now < clone.waitUntil) return clone
+  const target = walkTarget(clone.x, room, random())
+  if (target === clone.x) return { ...clone, waitUntil: now + CLONE_WALK.pause[0] }
+  const spread = 1 + (random() * 2 - 1) * CLONE_WALK.speedSpread
+  return {
+    ...clone,
+    target,
+    walking: true,
+    facing: target > clone.x ? 'right' : 'left',
+    speed: CLONE_WALK.speed * room.scale * spread,
+  }
+}
+```
+
+<!-- /code -->
+
+As the comment says, a clone a frame later: `dtMs` milliseconds on, at the time `now`. It never
+changes the clone it's given; it returns a new one (or the same one, when nothing changed).
+
+- `if (clone.walking) {`: a walking clone moves `step` DIPs toward its target. `dtMs` is kept
+  between 0 and 100, so a long gap (the PC was asleep, say) moves it only as far as a tenth of a
+  second would, rather than in one big jump. `Math.min(clone.target, ...)` and
+  `Math.max(clone.target, ...)` stop it exactly at the target instead of walking past it.
+- `if (x !== clone.target) return { ...clone, x }`: still on its way, so only `x` changes.
+- Once there, it stops: `walking: false`, and `waitUntil` is somewhere between 300 and 2000 ms from
+  now (`shortest + random() * (longest - shortest)`). The line before takes `CLONE_WALK.pause`
+  apart into `shortest` and `longest`.
+- `if (now < clone.waitUntil) return clone`: standing, and its stop isn't over yet. Returning the
+  very same object tells the page nothing changed.
+- `walkTarget(clone.x, room, random())`: its stop over, it picks somewhere else to go (below). If
+  there's nowhere far enough away (a window hardly wider than a clone), it waits another 300 ms and
+  tries again.
+- `const spread = 1 + (random() * 2 - 1) * CLONE_WALK.speedSpread`: `random() * 2 - 1` is a number
+  from -1 to 1, so `spread` is between 0.75 and 1.25: each walk is a little faster or slower than
+  her usual pace.
+- `facing: target > clone.x ? 'right' : 'left'`: it turns to face the way it's going.
+
+### `walkTarget()` and `clonePose()`
+
+<!-- code: apps/desktop/src/renderer/src/lib/clones.ts#walkTarget,clonePose -->
+
+[`src/renderer/src/lib/clones.ts`, lines 103–121](../../apps/desktop/src/renderer/src/lib/clones.ts#L103-L121)
+
+```ts
+/**
+ * Somewhere else along the window to walk to, at least CLONE_WALK.minWalk away (at her size)
+ * when there's room: `roll` (0–1) picks among the places far enough away, either side.
+ */
+export function walkTarget(x: number, room: Room, roll: number): number {
+  const far = Math.max(0, room.width - room.box)
+  const minWalk = Math.min(CLONE_WALK.minWalk * room.scale, far / 2)
+  const before = Math.max(0, x - minWalk)
+  const after = Math.max(0, far - (x + minWalk))
+  if (before + after === 0) return x
+  const along = roll * (before + after)
+  return along < before ? along : x + minWalk + (along - before)
+}
+
+/** What a clone looks like doing what it's doing: walking its way, or standing. */
+export function clonePose(clone: Clone): Pose {
+  if (!clone.walking) return 'idle'
+  return clone.facing === 'right' ? 'walk-right' : 'walk-left'
+}
+```
+
+<!-- /code -->
+
+- `walkTarget(x, room, roll)`: as the comment says, somewhere else along the window to walk to, at
+  least `CLONE_WALK.minWalk` away (at her size) when there's room. It's worked out the same way as
+  `walkTarget()` in `wander.ts`:
+  - `far`: the furthest `x` a clone can stand at, its right-hand edge on the window's.
+  - `minWalk`: 60 DIPs times her size, but never more than half of `far`, so a narrow window still
+    leaves somewhere to go.
+  - `before` and `after`: the lengths of the two stretches far enough away: from the window's left
+    edge up to `minWalk` short of the clone, and from `minWalk` past it to `far`. If both are 0
+    there's nowhere to go, and it returns `x`.
+  - `roll` (between 0 and 1) picks a point along the two stretches laid end to end: in the first,
+    it's that place on the left; past it, the same distance into the second stretch, on the right.
+    So every place far enough away, on either side, is as likely as any other.
+- `clonePose(clone)`: as the comment says, what a clone looks like doing what it's doing: `idle`
+  when it's standing, otherwise `walk-right` or `walk-left` by the way it faces. These are the same
+  poses the main process gives her (`Pose` in `src/shared/character.ts`), so `Character` draws the
+  clones with the same frames.
+
 ## `src/renderer/src/hooks/useAssistState.ts`: the app state, kept live
 
 **Hooks in brief.** Functions whose names start with `use` are _hooks_. A component calls them at
@@ -550,19 +809,20 @@ the top of its body, in the same order on every render.
 - **Custom hooks:** an ordinary function that calls other hooks, so several components can share
   the same stateful logic. Each component that calls it gets its own separate copy of the state.
 
-This file's hooks are used by both views. Each window is a separate page, so each keeps its own
+This file's hooks are used by the views: `useAssistState` by the bubble and the panel, and
+`useAccentColor` by those two and the clones. Each window is a separate page, so each keeps its own
 copy of the state.
 
 ### `useAssistState`
 
 <!-- code: apps/desktop/src/renderer/src/hooks/useAssistState.ts#useAssistState -->
 
-[`src/renderer/src/hooks/useAssistState.ts`, lines 4–39](../../apps/desktop/src/renderer/src/hooks/useAssistState.ts#L4-L39)
+[`src/renderer/src/hooks/useAssistState.ts`, lines 4–40](../../apps/desktop/src/renderer/src/hooks/useAssistState.ts#L4-L40)
 
 ```ts
 /**
  * The app state, kept live for the parts the main process changes on its own: the mode, the
- * character's corner and pose, the sign-in status and the chat. (Notes and settings only change through this
+ * character's corner, pose and size, the sign-in status and the chat. (Notes and settings only change through this
  * window's own requests, so the panel tracks their results itself.)
  *
  * Subscriptions start before the state is fetched. Events that arrive before the reply are
@@ -579,6 +839,7 @@ export function useAssistState(): AppState | null {
       window.assist.onModeChanged((mode) => update((s) => ({ ...s, mode }))),
       window.assist.onPoseChanged((pose) => update((s) => ({ ...s, pose }))),
       window.assist.onCornerChanged((corner) => update((s) => ({ ...s, corner }))),
+      window.assist.onSizeChanged((size) => update((s) => ({ ...s, size }))),
       window.assist.onAuthStatus((auth) => update((s) => ({ ...s, auth }))),
       window.assist.onChatMessage((message) =>
         update((s) => ({ ...s, chat: upsert(s.chat, message) })),
@@ -600,7 +861,7 @@ export function useAssistState(): AppState | null {
 
 <!-- /code -->
 
-Fetches the whole app state (`AppState` in src/shared/types.ts: mode, corner, pose, draft,
+Fetches the whole app state (`AppState` in src/shared/types.ts: mode, corner, pose, her size, draft,
 settings, branding, version, sign-in status and chat) when the page loads, then applies the
 changes the main process broadcasts. It returns `null` until the first reply arrives.
 
@@ -627,6 +888,13 @@ later one arrives after it. Nothing is missed and nothing is applied twice.
 - `window.assist.onPoseChanged((pose) => update((s) => ({ ...s, pose })))`: the character's pose,
   which changes often (every walk and fidget). Only the bubble's page uses it, to animate the
   character, but both windows get the broadcast and keep it, like everything else here.
+- `window.assist.onSizeChanged((size) => update((s) => ({ ...s, size })))`: her size
+  (`CharacterSize` in src/shared/geometry.ts: her `scale`, and `max`, the biggest she can be on her
+  screen). As the main process's comment puts it, it's sent when her size changes, or the biggest
+  she can be on her screen does: from the size menu, or when she's dropped on another display or
+  the screen changes, and she has to be smaller there or has room to be bigger again. The bubble's
+  page sizes her by it, and the panel lays itself out round her by it and shows it in the size
+  menu.
 - `upsert(s.chat, message)`: a streaming reply arrives many times with the same id and growing
   text (from `ChatSession`, at most every 50 ms), so it replaces the old copy rather than being
   added again.
@@ -643,7 +911,7 @@ them, so `Panel` tracks their results itself.
 
 <!-- code: apps/desktop/src/renderer/src/hooks/useAssistState.ts#upsert -->
 
-[`src/renderer/src/hooks/useAssistState.ts`, lines 41–47](../../apps/desktop/src/renderer/src/hooks/useAssistState.ts#L41-L47)
+[`src/renderer/src/hooks/useAssistState.ts`, lines 42–48](../../apps/desktop/src/renderer/src/hooks/useAssistState.ts#L42-L48)
 
 ```ts
 function upsert(messages: ChatMessage[], message: ChatMessage): ChatMessage[] {
@@ -664,7 +932,7 @@ copies the array first, so the old array React is holding is left unchanged.
 
 <!-- code: apps/desktop/src/renderer/src/hooks/useAssistState.ts#useAccentColor -->
 
-[`src/renderer/src/hooks/useAssistState.ts`, lines 49–54](../../apps/desktop/src/renderer/src/hooks/useAssistState.ts#L49-L54)
+[`src/renderer/src/hooks/useAssistState.ts`, lines 50–55](../../apps/desktop/src/renderer/src/hooks/useAssistState.ts#L50-L55)
 
 ```ts
 /** Applies the tenant's accent colour to the `accent` Tailwind colour. */
@@ -693,9 +961,10 @@ The panel window is a large rectangle that's mostly transparent. So that clicks 
 reach whatever is underneath, the main process makes the window ignore the mouse, while still
 passing pointer movements to the page. This hook watches those movements and asks the main process
 to switch mouse input on only while the pointer is over real UI, which is any element marked
-`data-hit` (the chat card, each action icon and the settings menu). See
+`data-hit` (the chat card, each action icon, the settings menu and the size menu). See
 [Code Guide section 1](CODE_GUIDE.md#1-background-how-an-electron-app-is-put-together) for the
-background. Only `PanelView` uses it; the bubble window always takes the mouse.
+background. Only `PanelView` uses it; the bubble window always takes the mouse, and the clones'
+window never does.
 
 ### `useClickThrough`
 
@@ -930,14 +1199,13 @@ button; the logo is now only the tray icon and the `.exe` icon.
 
 <!-- code: apps/desktop/src/renderer/src/views/BubbleView.tsx#ACTION_LABEL,DRAG_THRESHOLD -->
 
-[`src/renderer/src/views/BubbleView.tsx`, lines 7–17](../../apps/desktop/src/renderer/src/views/BubbleView.tsx#L7-L17)
+[`src/renderer/src/views/BubbleView.tsx`, lines 7–16](../../apps/desktop/src/renderer/src/views/BubbleView.tsx#L7-L16)
 
 ```tsx
 const ACTION_LABEL: Record<Mode, string> = {
   collapsed: 'Open',
   expanded: 'Close',
   dragging: 'Moving',
-  bouncing: 'Stop bouncing',
   returning: 'Returning',
   capturing: 'Taking screenshot',
 }
@@ -958,7 +1226,7 @@ const DRAG_THRESHOLD = 5
 
 <!-- code: apps/desktop/src/renderer/src/views/BubbleView.tsx#BubbleView -->
 
-[`src/renderer/src/views/BubbleView.tsx`, lines 19–91](../../apps/desktop/src/renderer/src/views/BubbleView.tsx#L19-L91)
+[`src/renderer/src/views/BubbleView.tsx`, lines 18–94](../../apps/desktop/src/renderer/src/views/BubbleView.tsx#L18-L94)
 
 ```tsx
 /**
@@ -973,6 +1241,9 @@ export function BubbleView() {
   useAccentColor(state?.branding.accentColor)
   const mode = state?.mode ?? 'collapsed'
   const appName = state?.branding.appName ?? 'Desktop Assist'
+  // Her window, as big as she is; she faces the middle of the screen, away from her corner.
+  const { box } = bubbleMetrics(state?.size.scale ?? DEFAULT_SIZE)
+  const corner = state?.corner ?? 'bottom-right'
 
   const press = useRef<{ x: number; y: number; dragging: boolean } | null>(null)
   // When the button last went down: the main process uses it to tell whether this press is what
@@ -1023,12 +1294,13 @@ export function BubbleView() {
         else window.assist.bubbleClick(pressedAt.current ?? Date.now())
         pressedAt.current = undefined
       }}
-      style={{ width: BUBBLE_BOX, height: BUBBLE_BOX }}
+      style={{ width: box, height: box }}
       className="block cursor-grab outline-offset-[-2px] active:cursor-grabbing"
     >
       <Character
         pose={state?.pose ?? 'idle'}
-        corner={state?.corner ?? 'bottom-right'}
+        facing={isLeftCorner(corner) ? 'right' : 'left'}
+        box={box}
         expanded={mode === 'expanded'}
       />
     </button>
@@ -1045,10 +1317,17 @@ attributes and event handlers (`onClick`, `onPointerDown`); on our own component
 the function's argument (see `Panel` below).
 
 - `const state = useAssistState()`: the bubble needs only the mode (for its label and the
-  character's shadow), the pose, the corner (which way the character faces) and the branding.
-  Until the state arrives, it falls back to `'collapsed'`, `'idle'`, `'bottom-right'` and
-  `'Desktop Assist'`.
+  character's shadow), the pose, the corner (which way the character faces), her size and the
+  branding. Until the state arrives, it falls back to `'collapsed'`, `'idle'`, `'bottom-right'`,
+  her usual size and `'Desktop Assist'`.
 - `useAccentColor(state?.branding.accentColor)`: `?.` because `state` is `null` at first.
+- `const { box } = bubbleMetrics(state?.size.scale ?? DEFAULT_SIZE)`: as the comment says, her
+  window, as big as she is. `bubbleMetrics()` (src/shared/geometry.ts) gives the bubble's
+  measurements at a size; `box` is its window's width and height: 96 DIPs at her usual size
+  (`DEFAULT_SIZE`, 1), twice that at size 2, and so on. The main process sizes the window with the
+  same function, so the page and the window agree.
+- `const corner = state?.corner ?? 'bottom-right'`: the bottom corner she lives near, used below to
+  face her away from it.
 - `const press = useRef<{ x: number; y: number; dragging: boolean } | null>(null)`: `useRef` gives
   a box (`.current`) that keeps its contents between renders, but unlike state, changing it doesn't
   re-render. It suits values that only event handlers need: here, where the press started and
@@ -1062,7 +1341,8 @@ the function's argument (see `Panel` below).
 - `pressedAt.current = Date.now()`: the press time, on the wall clock the main process uses too.
 - `event.currentTarget.setPointerCapture(event.pointerId)`: sends all further events from this
   pointer to the button, even when the pointer is outside it, until it's released. The window is
-  only 96 pixels square and gets moved during a drag, so without this the release could be lost.
+  small (96 DIPs square at her usual size) and gets moved during a drag, so without this the
+  release could be lost.
 - `if (!current || current.dragging) return`: only needed until the drag starts. From then on the
   main process moves the window with the mouse itself (`BubbleController.startDrag`), so the page
   just waits for the release.
@@ -1078,7 +1358,8 @@ the function's argument (see `Panel` below).
   it away), so this ends the press too. After a normal release both events fire; the second call
   finds `press.current` already `null` and does nothing.
 - `onClick={() => {`: a real click calls `bubbleClick()`, and `BubbleController.clickBubble`
-  decides what it means: open, close, or glide back from a bounce.
+  decides what it means: open or close the panel, or nothing while she's falling or a screenshot
+  is being taken.
 - `window.assist.bubbleClick(pressedAt.current ?? Date.now())`: the click goes with its press
   time. As the comment says, a click from the keyboard (Enter or Space on the focused button) has
   no press, so it's "now". `pressedAt.current = undefined` then forgets it, so it can't be
@@ -1089,10 +1370,9 @@ the function's argument (see `Panel` below).
   so here it has no effect.
 - `ACTION_LABEL[mode]`: the `aria-label` reads, for example, "Close Desktop Assist" while the panel
   is open.
-- `style={{ width: BUBBLE_BOX, height: BUBBLE_BOX }}`: 96 pixels square, the whole window
-  (`BUBBLE_BOX` in `src/shared/geometry.ts`, the same number the main process sizes the window
-  with). The character is drawn across the whole window, so the button covers all of it and a
-  press anywhere on the window reaches it.
+- `style={{ width: box, height: box }}`: the whole window, `box` square (see above). The character
+  is drawn across the whole window, so the button covers all of it and a press anywhere on the
+  window reaches it.
 - `block`: lays the button out as a box of its own rather than inline like a word of text, so
   nothing adds space around it in the small window.
 - `cursor-grab`, `active:cursor-grabbing`: an open hand over the character, and a closed one while
@@ -1101,19 +1381,218 @@ the function's argument (see `Panel` below).
   2 pixels inside the button instead of outside it, where the window's edge would cut it off.
   Square brackets give a Tailwind class a custom value.
 - `<Character`: the figure, in the `pose` the main process chose (standing until the state
-  arrives). `corner` is the bottom corner she lives near, so she can face away from it, toward the
-  middle of the screen (until the state arrives, `bottom-right`, the default corner). `expanded`
-  turns her shadow the accent colour while the panel is open, as the logo's accent ring used to.
-  All the drawing and animation is in `Character` and the code it draws her with
-  (`src/renderer/src/character/`); this page only passes the pose and the corner on.
+  arrives).
+  - `facing={isLeftCorner(corner) ? 'right' : 'left'}`: as the comment above says, she faces the
+    middle of the screen, away from her corner: right from the bottom-left corner, left from the
+    bottom-right one (until the state arrives, left, from the default corner). Walking, she faces
+    the way she walks instead (`framesOf()` in `character/sprite.ts` sees to that).
+  - `box={box}`: how big to draw her, the size of the window.
+  - `expanded` turns her shadow the accent colour while the panel is open, as the logo's accent
+    ring used to.
+  - All the drawing and animation is in `Character` and the code it draws her with
+    (`src/renderer/src/character/`); this page only passes the pose, the way she faces and her size
+    on.
+
+## `src/renderer/src/views/ClonesView.tsx`: her clones
+
+The page shown in the clones' window, which the main process opens for the Clones action ("Ten
+clones for ten seconds"; see `Clones` in [The bubble](5-bubble.md)). The window is a strip as wide
+as her screen and as tall as her window, its bottom edge on the taskbar, and it never takes the
+mouse or the focus: clicks go straight through it, and the clones have no panel. Unlike the other
+two pages, it never asks the main process for the app state: everything it needs comes in its query
+string, and once the window closes it's gone.
+
+### `<ClonesView>`
+
+<!-- code: apps/desktop/src/renderer/src/views/ClonesView.tsx#ClonesView -->
+
+[`src/renderer/src/views/ClonesView.tsx`, lines 8–93](../../apps/desktop/src/renderer/src/views/ClonesView.tsx#L8-L93)
+
+```tsx
+/**
+ * Her clones (the Clones action), in a see-through window along the taskbar that never takes the
+ * mouse: CLONES.count of her, at her size, setting off from where she stands and wandering up and
+ * down (see lib/clones.ts), each stopping now and then. They fade in, and fade out just before
+ * the main process closes the window. Everything they need comes in the query string: where she
+ * stands (`from`), her size (`scale`), the accent colour, and when they end (`ends`, Date.now()).
+ */
+export function ClonesView() {
+  const [params] = useState(() => new URLSearchParams(window.location.search))
+  const scale = snapSize(Number(params.get('scale')) || DEFAULT_SIZE)
+  const { box } = bubbleMetrics(scale)
+  useAccentColor(params.get('accent') ?? undefined)
+
+  const [clones, setClones] = useState<Clone[]>(() =>
+    spawnClones(
+      CLONES.count,
+      Number(params.get('from')) || 0,
+      performance.now(),
+      { width: window.innerWidth, box, scale },
+      Math.random,
+    ),
+  )
+  const [visible, setVisible] = useState(false)
+  const boxes = useRef<(HTMLDivElement | null)[]>([])
+
+  // Each frame, move them (straight in the page, not through React) and redraw only when one of
+  // them starts or stops walking.
+  useEffect(() => {
+    let current = clones
+    let last = performance.now()
+    let frame = requestAnimationFrame(function tick(now) {
+      const room: Room = { width: window.innerWidth, box, scale }
+      const next = current.map((clone) => stepClone(clone, now, now - last, room, Math.random))
+      last = now
+      next.forEach((clone, i) => {
+        const element = boxes.current[i]
+        if (element) element.style.transform = `translateX(${Math.round(clone.x)}px)`
+      })
+      if (
+        next.some(
+          (clone, i) =>
+            clonePose(clone) !== clonePose(current[i]!) || clone.facing !== current[i]!.facing,
+        )
+      ) {
+        setClones(next)
+      }
+      current = next
+      frame = requestAnimationFrame(tick)
+    })
+    return () => cancelAnimationFrame(frame)
+    // Started once: the loop keeps its own copy of where they are.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // In, and out again just before their time is up.
+  useEffect(() => {
+    const show = requestAnimationFrame(() => setVisible(true))
+    const ends = Number(params.get('ends')) || Date.now() + CLONES.durationMs
+    const hide = setTimeout(() => setVisible(false), ends - CLONES.fadeMs - Date.now())
+    return () => {
+      cancelAnimationFrame(show)
+      clearTimeout(hide)
+    }
+  }, [params])
+
+  return (
+    <div
+      aria-hidden
+      className="relative h-full w-full overflow-hidden"
+      style={{ opacity: visible ? 1 : 0, transition: `opacity ${CLONES.fadeMs}ms ease-out` }}
+    >
+      {clones.map((clone, i) => (
+        <div
+          key={i}
+          ref={(element) => {
+            boxes.current[i] = element
+          }}
+          className="absolute bottom-0 left-0"
+          style={{ transform: `translateX(${Math.round(clone.x)}px)` }}
+        >
+          <Character pose={clonePose(clone)} facing={clone.facing} box={box} />
+        </div>
+      ))}
+    </div>
+  )
+}
+```
+
+<!-- /code -->
+
+As the comment says, `CLONES.count` (10) of her, at her size, set off from where she stands and
+wander up and down (with `lib/clones.ts`), each stopping now and then. They fade in, and fade out
+just before the main process closes the window, `CLONES.durationMs` (10 seconds) after it opened
+it. `CLONES` is in `src/shared/character.ts`, so the main process and the page use the same
+numbers.
+
+Reading the query string:
+
+- `const [params] = useState(() => new URLSearchParams(window.location.search))`: reads the query
+  string once, when the page starts. The function form of `useState` runs only the first time, and
+  only the value is kept (there's no setter, since it never changes).
+- `const scale = snapSize(Number(params.get('scale')) || DEFAULT_SIZE)`: her size, as the main
+  process sent it (her usual size if it's missing), snapped to one of `CHARACTER_SIZES`
+  (src/shared/geometry.ts), so the page draws only sizes she really comes in.
+- `const { box } = bubbleMetrics(scale)`: a clone's box: the size of her window at that size (96
+  DIPs at her usual size), the same as `BubbleView` uses.
+- `useAccentColor(params.get('accent') ?? undefined)`: the tenant's accent colour, for the clones'
+  robes and hats, from the query string rather than the app state. `params.get()` gives `null`
+  when there's none, and `?? undefined` turns that into what `useAccentColor` expects.
+
+State:
+
+- `useState<Clone[]>(() => spawnClones(...))`: the clones, made once: `CLONES.count` of them,
+  standing at `from` (where she stands, in DIPs from the window's left edge; `|| 0` uses 0 if it's
+  missing or not a number), at the page's clock (`performance.now()`), in a room as wide as the
+  window (`window.innerWidth`), with `Math.random` for the random numbers.
+- `const [visible, setVisible] = useState(false)`: whether they're showing, for the fades.
+- `const boxes = useRef<(HTMLDivElement | null)[]>([])`: each clone's element, so the frame loop
+  can move it directly.
+
+Effects:
+
+- The first effect is the frame loop. As its comment says, each frame it moves the clones straight
+  in the page, not through React, and only asks React to draw again when one of them starts or
+  stops walking (or turns round).
+  - `let current = clones`: the loop keeps its own copy of where they are, so it doesn't depend on
+    React's state, which only catches up at those moments.
+  - `requestAnimationFrame(function tick(now) {`: the browser calls `tick` just before it next
+    paints, about 60 times a second, passing the time on the same clock as `performance.now()`.
+    `tick` asks for the next frame at its end, so it keeps going until the cleanup cancels it.
+  - `const room: Room = { width: window.innerWidth, box, scale }`: read every frame, in case the
+    window's width changed.
+  - `current.map((clone) => stepClone(clone, now, now - last, room, Math.random))`: every clone a
+    frame later (`now - last` is how long the frame took).
+  - ``element.style.transform = `translateX(${Math.round(clone.x)}px)` ``: moves each clone's box
+    to its new place across the window, in whole pixels so the pixel art stays sharp. Changing the
+    element's style directly skips React, which would otherwise draw all ten `Character`s again
+    sixty times a second.
+  - `if (next.some(...)) { setClones(next) }`: when any clone's pose (`clonePose()`: standing or
+    walking) or way of facing changed, the new list goes into React's state, and React draws those
+    clones with their new pose. `current[i]!` tells TypeScript the clone at the same place in the
+    old list is there.
+  - `return () => cancelAnimationFrame(frame)`: the cleanup stops the loop.
+  - `// eslint-disable-next-line react-hooks/exhaustive-deps`: the lint rule would want `clones`,
+    `box` and `scale` in the list. As the comment says, the loop is started once on purpose and
+    keeps its own copy of where they are; `box` and `scale` never change.
+- The second effect fades them, as its comment says: in, and out again just before their time is
+  up.
+  - `requestAnimationFrame(() => setVisible(true))`: on the next frame, after the page has been
+    drawn once with them see-through, so the change of opacity is animated (the fade in).
+  - `const ends = Number(params.get('ends')) || Date.now() + CLONES.durationMs`: when their time is
+    up, on the wall clock (`Date.now()`), which the main process and the page share. If it's
+    missing, ten seconds from now.
+  - `setTimeout(() => setVisible(false), ends - CLONES.fadeMs - Date.now())`: starts the fade out
+    `CLONES.fadeMs` (400 ms) before the end, so it has finished as the main process closes the
+    window.
+  - The cleanup cancels both, if the page goes first.
+
+The JSX it returns:
+
+- `aria-hidden`: the clones are only for show, so screen readers skip them.
+- `className="relative h-full w-full overflow-hidden"`: fills the window, as the box the clones are
+  placed in, cutting off anything that would stick out.
+- `style={{ opacity: visible ? 1 : 0, transition: ... }}`: the fades: a CSS transition of the
+  opacity over `CLONES.fadeMs`, easing out.
+- `{clones.map((clone, i) => (`: one box per clone. `key={i}` keeps each clone's element the same
+  from one render to the next (the list never changes length or order).
+- `ref={(element) => { boxes.current[i] = element }}`: React calls this with the element once it's
+  on the page (and with `null` when it goes), which is how the frame loop finds it. The braces make
+  the function return nothing; React would take a returned function as a cleanup.
+- `className="absolute bottom-0 left-0"`: each clone's box stands on the window's bottom edge, on
+  the taskbar, like her. `style={{ transform: ... }}` places it across the window, where it was at
+  the last render; the frame loop moves it on from there.
+- `<Character pose={clonePose(clone)} facing={clone.facing} box={box} />`: each clone is drawn with
+  the same component as her, in its own pose, the way it faces, and at her size. There's no
+  `expanded`, so its shadow is never tinted.
 
 ## `src/renderer/src/views/PanelView.tsx`: everything around the bubble
 
-The page shown in the panel window: the chat card, the action icons and the settings menu. All the
-panel's shared state and handlers live in `Panel`; the components it renders (`ChatBox`,
-`ActionStack`, `SettingsMenu`, `SignInPanel`, `Banner`, `AppsList`, `JiraPage`, `ServiceDeskPage`,
-`IssueView`) get their data and callbacks from it as props. Those are covered in
-[the components part](8-renderer-components.md), except `AppsList`, which is in
+The page shown in the panel window: the chat card, the action icons, the settings menu and the
+size menu. All the panel's shared state and handlers live in `Panel`; the components it renders
+(`ChatBox`, `ActionStack`, `SettingsMenu`, `SizeMenu`, `SignInPanel`, `Banner`, `AppsList`,
+`JiraPage`, `ServiceDeskPage`, `IssueView`) get their data and callbacks from it as props. Those
+are covered in [the components part](8-renderer-components.md), except `AppsList`, which is in
 [Your apps](10-apps.md), and the Jira and service desk pages, which are in
 [The Jira and service desk pages](12-atlassian-pages.md).
 
@@ -1133,7 +1612,7 @@ types, the service desk icon swaps in the service desk page; a Jira issue opens 
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#ASK_ERRORS -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 32–38](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L32-L38)
+[`src/renderer/src/views/PanelView.tsx`, lines 33–39](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L33-L39)
 
 ```tsx
 /** What to say when a question couldn't be handed to Claude Desktop. */
@@ -1163,7 +1642,7 @@ The toast for each way handing a question to Claude Desktop can fail (`AskResult
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#UNINSTALL_ERRORS -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 40–45](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L40-L45)
+[`src/renderer/src/views/PanelView.tsx`, lines 41–46](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L41-L46)
 
 ```tsx
 /** What to say when Settings → Uninstall couldn't start the uninstaller. */
@@ -1184,7 +1663,7 @@ app can always be uninstalled.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#View,EMPTY_FEED -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 47–55](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L47-L55)
+[`src/renderer/src/views/PanelView.tsx`, lines 48–56](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L48-L56)
 
 ```tsx
 /**
@@ -1209,7 +1688,7 @@ const EMPTY_FEED: JiraFeed = {
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#PanelView -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 57–63](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L57-L63)
+[`src/renderer/src/views/PanelView.tsx`, lines 58–64](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L58-L64)
 
 ```tsx
 /** Everything that appears around the bubble when it's clicked. */
@@ -1240,7 +1719,7 @@ returns. The sections after it take its values and functions one at a time.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 65–542](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L65-L542)
+[`src/renderer/src/views/PanelView.tsx`, lines 66–574](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L66-L574)
 
 ```tsx
 function Panel({ state }: { state: AppState }) {
@@ -1254,6 +1733,7 @@ function Panel({ state }: { state: AppState }) {
   const [attachments, setAttachments] = useState(state.notes.attachments)
   const [settings, setSettings] = useState(state.settings)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [sizeOpen, setSizeOpen] = useState(false)
   const [asking, setAsking] = useState(false)
   // The card shows the tenant's start page (the text box or the Apps list) when the panel opens,
   // and another page while its icon is on (Ask Claude, Your apps, Jira, the service desk).
@@ -1276,7 +1756,10 @@ function Panel({ state }: { state: AppState }) {
   useEffect(
     () =>
       window.assist.onModeChanged((mode) => {
-        if (mode !== 'expanded') setSettingsOpen(false)
+        if (mode !== 'expanded') {
+          setSettingsOpen(false)
+          setSizeOpen(false)
+        }
         // The panel always reopens on the start page (but taking a screenshot isn't closing it).
         if (mode === 'collapsed') {
           setView(startPage)
@@ -1336,13 +1819,14 @@ function Panel({ state }: { state: AppState }) {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
       if (settingsOpen) setSettingsOpen(false)
+      else if (sizeOpen) setSizeOpen(false)
       else if (issueKey) setIssueKey(null)
       else if (view !== startPage) setView(startPage)
       else window.assist.collapse()
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [settingsOpen, issueKey, view, startPage])
+  }, [settingsOpen, sizeOpen, issueKey, view, startPage])
 
   // Not signed in: the chat box shows the sign-in instead of the chat. While a saved sign-in is
   // being renewed, or JumpCloud can't be reached, the chat stays (sending tries JumpCloud again).
@@ -1354,6 +1838,8 @@ function Panel({ state }: { state: AppState }) {
   const canSend = signedIn && !busy && !asking && (draft.trim() !== '' || attachments.length > 0)
 
   async function runAction(id: ActionId) {
+    // Any icon but the size menu's own closes the size menu (the settings menu's, below).
+    if (id !== 'size') setSizeOpen(false)
     // With request types, the service desk icon opens a page for them instead of the portal.
     if (id === 'apps' || id === 'ask' || id === 'jira' || (id === 'servicedesk' && requestTypes)) {
       // Swaps the card to that page, or back again: the text box and the Apps list swap with
@@ -1369,6 +1855,11 @@ function Panel({ state }: { state: AppState }) {
       setSettings(
         await window.assist.settings.setTheme(settings.theme === 'dark' ? 'light' : 'dark'),
       )
+      return
+    }
+    if (id === 'size') {
+      setSettingsOpen(false)
+      setSizeOpen(!sizeOpen)
       return
     }
     if (id === 'settings') {
@@ -1512,11 +2003,14 @@ function Panel({ state }: { state: AppState }) {
     setSettings(await window.assist.settings.setAutoSend(!settings.autoSend))
   }
 
-  // Clicking anywhere else in the panel closes the settings menu.
-  function closeSettingsOnOutsideClick(event: PointerEvent) {
-    if (!settingsOpen || !(event.target instanceof Element)) return
-    if (!event.target.closest('[data-settings-menu], [data-action="settings"]')) {
+  // Clicking anywhere else in the panel closes the settings menu, or the size menu.
+  function closeMenusOnOutsideClick(event: PointerEvent) {
+    if (!(event.target instanceof Element)) return
+    if (settingsOpen && !event.target.closest('[data-settings-menu], [data-action="settings"]')) {
       setSettingsOpen(false)
+    }
+    if (sizeOpen && !event.target.closest('[data-size-menu], [data-action="size"]')) {
+      setSizeOpen(false)
     }
   }
 
@@ -1567,7 +2061,11 @@ function Panel({ state }: { state: AppState }) {
       </Banner>
     ) : null
 
+  // Everything sits further out the bigger she is (see panelLayout).
+  const scale = state.size.scale
+  const layout = panelLayout(scale)
   const settingsIndex = branding.actions.indexOf('settings')
+  const sizeIndex = branding.actions.indexOf('size')
   // Only keys of real projects, once the projects are known.
   const issueKeys = atlassianSite
     ? findIssueKeys(draft).filter(
@@ -1650,10 +2148,11 @@ function Panel({ state }: { state: AppState }) {
     <div
       className={cn('group relative h-full w-full', !open && 'pointer-events-none')}
       data-open={open ? '' : undefined}
-      onPointerDown={closeSettingsOnOutsideClick}
+      onPointerDown={closeMenusOnOutsideClick}
     >
       <ChatBox
         corner={state.corner}
+        layout={layout}
         open={open}
         toast={toast}
         inClaudeDesktop={inClaudeDesktop}
@@ -1680,9 +2179,10 @@ function Panel({ state }: { state: AppState }) {
       />
       <ActionStack
         corner={state.corner}
+        layout={layout}
         actions={branding.actions}
         open={open}
-        activeId={settingsOpen ? 'settings' : view !== startPage ? view : null}
+        activeId={settingsOpen ? 'settings' : sizeOpen ? 'size' : view !== startPage ? view : null}
         theme={settings.theme}
         pages={requestTypes ? ['servicedesk'] : []}
         dotted={[
@@ -1697,7 +2197,8 @@ function Panel({ state }: { state: AppState }) {
       {open && settingsOpen && settingsIndex >= 0 && (
         <SettingsMenu
           corner={state.corner}
-          offset={actionOffset(settingsIndex)}
+          layout={layout}
+          offset={actionOffset(settingsIndex, scale)}
           settings={settings}
           branding={branding}
           version={state.version}
@@ -1718,6 +2219,15 @@ function Panel({ state }: { state: AppState }) {
           onUninstall={() => void uninstall()}
         />
       )}
+      {open && sizeOpen && sizeIndex >= 0 && (
+        <SizeMenu
+          corner={state.corner}
+          layout={layout}
+          offset={actionOffset(sizeIndex, scale)}
+          size={state.size}
+          onSetSize={(next) => void window.assist.character.setSize(next)}
+        />
+      )}
     </div>
   )
 }
@@ -1730,13 +2240,15 @@ Props and state:
 - `function Panel({ state }: { state: AppState })`: a component receives its props as one object.
   This takes `state` out of it, and `{ state: AppState }` is the type of the props.
 - `const open = state.mode === 'expanded'`: the panel is open only in `expanded`. In every other
-  mode (collapsed, dragging, bouncing and so on) it's closed or hidden.
+  mode (collapsed, dragging, returning or capturing) it's closed or hidden.
 - `const inClaudeDesktop = branding.chatApp === 'claude-desktop'`: whether questions go to Claude
   Desktop. Much of what follows checks it.
 - `const [draft, setDraft] = useState(state.notes.text)`: the text box's contents. Like
   `attachments` and `settings`, it starts from the app state but is then owned here: the panel
   updates it as you type and from the main process's replies.
 - `const [settingsOpen, setSettingsOpen] = useState(false)`: whether the settings menu is showing.
+- `const [sizeOpen, setSizeOpen] = useState(false)`: whether the size menu is showing. At most one
+  of the two menus is open at a time.
 - `const [asking, setAsking] = useState(false)`: true while a question is being handed to Claude
   Desktop, so it can't be sent twice. (Only for that moment: sending it in Claude carries on in
   the main process after the panel has closed.)
@@ -1766,9 +2278,9 @@ Props and state:
 
 Effects:
 
-- `window.assist.onModeChanged((mode) => {`: closes the settings menu whenever the panel closes,
-  so it isn't still open the next time. The arrow returns what `onModeChanged` returns, the
-  unsubscribe function, which React uses as the cleanup.
+- `window.assist.onModeChanged((mode) => {`: closes the settings menu and the size menu whenever
+  the panel closes, so neither is still open the next time. The arrow returns what
+  `onModeChanged` returns, the unsubscribe function, which React uses as the cleanup.
 - `if (mode === 'collapsed') {`: once the panel has really closed, the next opening is on the start
   page again (`setView(startPage)`), with no issue open (`setIssueKey(null)`). Only `collapsed`
   counts: taking a screenshot hides the panel too (`capturing`), and the user expects to come back
@@ -1801,14 +2313,14 @@ Effects:
   `useAssistState`. If the panel closes before the answer arrives, the cleanup sets `alive` to
   `false` and the late answer is ignored.
 - `}, [open, inClaudeDesktop])`: the effect runs again when the panel opens or closes.
-- `if (event.key !== 'Escape') return`: Esc closes the settings menu if it's open, otherwise
-  closes an open issue (back to the page under it), otherwise goes back to the start page if
-  another page is showing, otherwise asks the main process to close the panel
-  (`BubbleController.collapse`). Keys reach the panel because the main process focuses
+- `if (event.key !== 'Escape') return`: Esc closes the settings menu if it's open, otherwise the
+  size menu if that's open, otherwise closes an open issue (back to the page under it), otherwise
+  goes back to the start page if another page is showing, otherwise asks the main process to close
+  the panel (`BubbleController.collapse`). Keys reach the panel because the main process focuses
   it when it opens.
-- `}, [settingsOpen, issueKey, view, startPage])`: the listener reads these, and a function only
-  sees the values from the render it was created in. Listing them here makes React remove the old
-  listener and add a fresh one whenever one changes.
+- `}, [settingsOpen, sizeOpen, issueKey, view, startPage])`: the listener reads these, and a
+  function only sees the values from the render it was created in. Listing them here makes React
+  remove the old listener and add a fresh one whenever one changes.
 
 The JSX it returns:
 
@@ -1821,9 +2333,12 @@ The JSX it returns:
 - `data-open={open ? '' : undefined}`: the attribute is present while open and left out while
   closed (React omits attributes set to `undefined`). Children use `group-data-open:` classes, such
   as `group-data-open:opacity-100`, so the open and close animations are plain CSS transitions.
-- `onPointerDown={closeSettingsOnOutsideClick}`: see below.
+- `onPointerDown={closeMenusOnOutsideClick}`: see below.
 - `<ChatBox`: the card. It gets what to draw (corner, toast, sign-in prompt, banner, messages, draft
   and attachments) and a callback for each thing you can do there.
+- `layout={layout}`: where things sit in the window for her size (`panelLayout()`, below).
+  `ChatBox`, `ActionStack`, `SettingsMenu` and `SizeMenu` all get it, so the card, the icons and
+  the menus move out together when she's bigger.
 - `inClaudeDesktop={inClaudeDesktop}`: the card shows an "Ask in Claude" button instead of the
   round Send arrow, and a note about what happens to attached screenshots.
 - `autoSend={settings.autoSend}`: whether "Send in Claude automatically" is on, which changes that
@@ -1839,10 +2354,11 @@ The JSX it returns:
   which get an **Open** button each, and what that button does.
 - `onReport={requestTypes ? report : null}`: **Report to IT** under the text box, only when the
   tenant lists request types.
-- `activeId={settingsOpen ? 'settings' : view !== startPage ? view : null}`: the gear stays
-  highlighted while its menu is open, and otherwise the icon of the page showing, when it isn't
-  the start page (Ask Claude while the text box is on, for a panel that starts on the Apps list;
-  the bell while the Jira page is on). The start page itself has no icon to highlight.
+- `activeId={settingsOpen ? 'settings' : sizeOpen ? 'size' : view !== startPage ? view : null}`:
+  the gear stays highlighted while its menu is open, and the size icon while the size menu is;
+  otherwise the icon of the page showing, when it isn't the start page (Ask Claude while the text
+  box is on, for a panel that starts on the Apps list; the bell while the Jira page is on). The
+  start page itself has no icon to highlight.
 - `theme={settings.theme}`: the current mode, so the theme icon shows the mode it switches to.
 - `pages={requestTypes ? ['servicedesk'] : []}`: the service desk icon opens a page when there are
   request types, so `ActionStack` marks it as expandable like the popover icons.
@@ -1855,8 +2371,8 @@ The JSX it returns:
 - `{open && settingsOpen && settingsIndex >= 0 && (`: JSX's way of saying "only if": when any part
   is false, nothing is rendered. Removing the menu also resets its own state (its "click again to
   confirm" on New conversation or Clear text box).
-- `offset={actionOffset(settingsIndex)}`: how far the gear is from the bubble, so the menu lines up
-  with it.
+- `offset={actionOffset(settingsIndex, scale)}`: how far the gear is from the bubble's edge of the
+  window at her size, so the menu lines up with it.
 - `user={auth?.state === 'signed-in' || auth?.state === 'offline' ? auth.user : null}`: who's
   signed in, for the menu's "Signed in as" and Log out. `auth?.state` is `undefined` when `auth`
   is `null` (Claude Desktop), so then there's no user. After the check, TypeScript knows `auth`
@@ -1874,12 +2390,20 @@ The JSX it returns:
 - `onClearText={() => void clearText()}`: the menu's Clear text box, offered instead of New
   conversation with Claude Desktop.
 - `onUninstall={() => void uninstall()}`: the menu's Uninstall.
+- `{open && sizeOpen && sizeIndex >= 0 && (`: the size menu, drawn the same way as the settings
+  menu: only while the panel is open, its icon has toggled it on, and the tenant shows the size
+  icon. `offset={actionOffset(sizeIndex, scale)}` lines it up with the size icon.
+- `size={state.size}`: her size and the biggest she can be, from the app state, so the menu shows
+  what she really is.
+- `onSetSize={(next) => void window.assist.character.setSize(next)}`: Smaller or Bigger asks the
+  main process to resize her, which saves it. The panel doesn't use the answer: the new size comes
+  back through `onSizeChanged` in `useAssistState`, and with it the new `layout`.
 
 #### `signedIn`, `busy`, `canSend`
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.signedIn,busy,canSend -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 166–173](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L166-L173)
+[`src/renderer/src/views/PanelView.tsx`, lines 172–179](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L172-L179)
 
 ```tsx
 // Not signed in: the chat box shows the sign-in instead of the chat. While a saved sign-in is
@@ -1917,10 +2441,12 @@ Values worked out on every render from the current state.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.runAction -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 175–202](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L175-L202)
+[`src/renderer/src/views/PanelView.tsx`, lines 181–215](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L181-L215)
 
 ```tsx
 async function runAction(id: ActionId) {
+  // Any icon but the size menu's own closes the size menu (the settings menu's, below).
+  if (id !== 'size') setSizeOpen(false)
   // With request types, the service desk icon opens a page for them instead of the portal.
   if (id === 'apps' || id === 'ask' || id === 'jira' || (id === 'servicedesk' && requestTypes)) {
     // Swaps the card to that page, or back again: the text box and the Apps list swap with
@@ -1936,6 +2462,11 @@ async function runAction(id: ActionId) {
     setSettings(
       await window.assist.settings.setTheme(settings.theme === 'dark' ? 'light' : 'dark'),
     )
+    return
+  }
+  if (id === 'size') {
+    setSettingsOpen(false)
+    setSizeOpen(!sizeOpen)
     return
   }
   if (id === 'settings') {
@@ -1954,6 +2485,8 @@ async function runAction(id: ActionId) {
 
 Runs when an action icon is clicked (`ActionStack`'s `onAction`).
 
+- `if (id !== 'size') setSizeOpen(false)`: as the comment says, any icon but the size menu's own
+  closes the size menu. The settings menu is closed further down, by each branch that needs to.
 - `if (id === 'apps' || id === 'ask' || id === 'jira' || (id === 'servicedesk' && requestTypes))`:
   the icons that swap the card to a page. Your apps, Ask Claude and Jira are "popover" actions
   (src/shared/actions.ts); the service desk is a command, but, as the comment says, with request
@@ -1969,6 +2502,9 @@ Runs when an action icon is clicked (`ActionStack`'s `onAction`).
 - `if (id === 'theme') {`: the light or dark mode icon, a "switch" action. It asks the main
   process for the other mode (`settings.setTheme()`), which switches every window at once, and
   keeps the settings it returns, so the icon shows the new mode.
+- `if (id === 'size') {`: Her size is a "popover" action: it closes the settings menu and opens the
+  size menu, or closes it if it's open. Like Settings, it never reaches the main process itself;
+  the menu's buttons do (see `SizeMenu` in [the components part](8-renderer-components.md)).
 - `if (id === 'settings') {`: Settings is a "popover" action too: it opens UI inside the panel and
   never reaches the main process.
 - `setSettingsOpen(!settingsOpen)`: setting state doesn't change the variable in this run of the
@@ -1976,13 +2512,14 @@ Runs when an action icon is clicked (`ActionStack`'s `onAction`).
   `if (!settingsOpen)` means "the menu is being opened now".
 - `setSettings(await window.assist.settings.get())`: refreshes the settings as the menu opens,
   because Start with Windows can also be changed in Windows Settings.
-- `window.assist.invokeAction(id)`: after the `apps`, `ask`, `jira`, `theme` and `settings` branches
-  return, TypeScript knows `id` is `servicedesk` (without request types), `screenshot`, `bounce` or
-  `close`, which is exactly the `CommandActionId` type `invokeAction` accepts. The main process runs
-  the matching handler from src/main/actions.ts.
+- `window.assist.invokeAction(id)`: after the `apps`, `ask`, `jira`, `theme`, `size` and
+  `settings` branches return, TypeScript knows `id` is `servicedesk` (without request types),
+  `screenshot`, `clones` or `close`, which is exactly the `CommandActionId` type `invokeAction`
+  accepts. The main process runs the matching handler from src/main/actions.ts.
 - `if (result.message) showToast(result.message, result.ok ? 'info' : 'error')`: for example
-  "Screenshot saved", or "Couldn't take a screenshot" in red. Bounce, close and the service desk
-  return no message when they work (the service desk closes the panel as the browser opens).
+  "Screenshot saved", or "Couldn't take a screenshot" in red. Clones, close and the service desk
+  return no message when they work (the service desk closes the panel as the browser opens, and so
+  does Clones, so the clones can be seen walking along the taskbar).
 - There's no change of page after a screenshot: the panel comes back showing whatever it showed
   before (the Apps list, say). The view isn't reset either, because taking a screenshot moves the
   mode through `capturing`, not `collapsed` (see the mode effect above).
@@ -1991,7 +2528,7 @@ Runs when an action icon is clicked (`ActionStack`'s `onAction`).
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.changeDraft -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 204–207](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L204-L207)
+[`src/renderer/src/views/PanelView.tsx`, lines 217–220](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L217-L220)
 
 ```tsx
 function changeDraft(next: string) {
@@ -2010,7 +2547,7 @@ writes notes.json about half a second after typing stops, so an unsent message s
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.send -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 209–221](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L209-L221)
+[`src/renderer/src/views/PanelView.tsx`, lines 222–234](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L222-L234)
 
 ```tsx
 async function send() {
@@ -2050,7 +2587,7 @@ The other two reasons, `busy` and `empty`, are ignored: `canSend` already rules 
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.askInClaudeDesktop -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 223–235](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L223-L235)
+[`src/renderer/src/views/PanelView.tsx`, lines 236–248](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L236-L248)
 
 ```tsx
 async function askInClaudeDesktop() {
@@ -2095,7 +2632,7 @@ Claude automatically" on) carries on in the main process; the panel isn't told h
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.toggleFavorite -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 237–239](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L237-L239)
+[`src/renderer/src/views/PanelView.tsx`, lines 250–252](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L250-L252)
 
 ```tsx
 async function toggleFavorite(app: PortalApp, favorite: boolean) {
@@ -2113,7 +2650,7 @@ with the starred apps first.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.openApp -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 241–252](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L241-L252)
+[`src/renderer/src/views/PanelView.tsx`, lines 254–265](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L254-L265)
 
 ```tsx
 async function openApp(app: PortalApp) {
@@ -2148,7 +2685,7 @@ panel stays open with a toast, and the portal itself is one click away at the bo
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.openIssue,report,disconnectAtlassian -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 254–274](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L254-L274)
+[`src/renderer/src/views/PanelView.tsx`, lines 267–287](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L267-L287)
 
 ```tsx
 /** Opens a Jira issue in the card if connected to Atlassian, otherwise in the browser. */
@@ -2191,7 +2728,7 @@ async function disconnectAtlassian() {
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.attachLatest,removeAttachment,openAttachment -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 276–292](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L276-L292)
+[`src/renderer/src/views/PanelView.tsx`, lines 289–305](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L289-L305)
 
 ```tsx
 async function attachLatest() {
@@ -2232,7 +2769,7 @@ result.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.copy -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 294–297](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L294-L297)
+[`src/renderer/src/views/PanelView.tsx`, lines 307–310](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L307-L310)
 
 ```tsx
 async function copy(text: string) {
@@ -2250,7 +2787,7 @@ The Copy button on Claude's replies. The main process writes the text to the cli
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.signOut,clearText,uninstall,newConversation,setEffort,toggleAutoSend -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 299–332](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L299-L332)
+[`src/renderer/src/views/PanelView.tsx`, lines 312–345](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L312-L345)
 
 ```tsx
 async function signOut() {
@@ -2313,41 +2850,46 @@ Settings menu actions.
   Claude automatically" (Claude Desktop only) and shows the settings the main process returns.
   The menu stays open, as for the other switch.
 
-#### `closeSettingsOnOutsideClick`
+#### `closeMenusOnOutsideClick`
 
-<!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.closeSettingsOnOutsideClick -->
+<!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.closeMenusOnOutsideClick -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 334–340](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L334-L340)
+[`src/renderer/src/views/PanelView.tsx`, lines 347–356](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L347-L356)
 
 ```tsx
-// Clicking anywhere else in the panel closes the settings menu.
-function closeSettingsOnOutsideClick(event: PointerEvent) {
-  if (!settingsOpen || !(event.target instanceof Element)) return
-  if (!event.target.closest('[data-settings-menu], [data-action="settings"]')) {
+// Clicking anywhere else in the panel closes the settings menu, or the size menu.
+function closeMenusOnOutsideClick(event: PointerEvent) {
+  if (!(event.target instanceof Element)) return
+  if (settingsOpen && !event.target.closest('[data-settings-menu], [data-action="settings"]')) {
     setSettingsOpen(false)
+  }
+  if (sizeOpen && !event.target.closest('[data-size-menu], [data-action="size"]')) {
+    setSizeOpen(false)
   }
 }
 ```
 
 <!-- /code -->
 
-Closes the settings menu when you press anywhere else in the panel. The page only receives the
-press where the window takes the mouse, so "elsewhere" means the chat card or another icon.
-Clicking outside the panel altogether takes focus away from the window, the main process closes
-the panel (`BubbleController.panelBlurred`), and the mode effect above closes the menu.
+As the comment says, closes the settings menu, or the size menu, when you press anywhere else in
+the panel. The page only receives the press where the window takes the mouse, so "elsewhere" means
+the chat card, another icon or the other menu. Clicking outside the panel altogether takes focus
+away from the window, the main process closes the panel (`BubbleController.panelBlurred`), and the
+mode effect above closes the menus.
 
 - `event: PointerEvent`: React's own event type, imported from `react`, not the browser's.
 - `!(event.target instanceof Element)`: `target` is typed as a general `EventTarget`; this check
   lets TypeScript allow `closest`.
-- `closest('[data-settings-menu], [data-action="settings"]')`: presses inside the menu or on the
-  gear don't count. Without the gear exception, pressing the gear would close the menu on the way
-  down and its click would open it again straight away.
+- `closest('[data-settings-menu], [data-action="settings"]')`: with the settings menu open, presses
+  inside the menu or on the gear don't count. Without the gear exception, pressing the gear would
+  close the menu on the way down and its click would open it again straight away.
+- `closest('[data-size-menu], [data-action="size"]')`: the same for the size menu and its icon.
 
 #### `signInPrompt`, `banner`: sign-in or chat
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.signInPrompt,banner -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 342–387](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L342-L387)
+[`src/renderer/src/views/PanelView.tsx`, lines 358–403](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L358-L403)
 
 ```tsx
 const signInPrompt =
@@ -2442,26 +2984,41 @@ one saying Claude Desktop isn't installed. With the built-in chat, it depends on
   saved sign-in.
 - `{auth.message}`: the offline reason, written by `AuthManager`.
 
-#### `settingsIndex`
+#### `scale`, `layout`, `settingsIndex`, `sizeIndex`
 
-<!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.settingsIndex -->
+<!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.scale,layout,settingsIndex,sizeIndex -->
 
-[`src/renderer/src/views/PanelView.tsx`, line 389](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L389)
+[`src/renderer/src/views/PanelView.tsx`, lines 405–409](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L405-L409)
 
 ```tsx
+// Everything sits further out the bigger she is (see panelLayout).
+const scale = state.size.scale
+
+const layout = panelLayout(scale)
+
 const settingsIndex = branding.actions.indexOf('settings')
+
+const sizeIndex = branding.actions.indexOf('size')
 ```
 
 <!-- /code -->
 
-Where the gear is in the tenant's list of icons (`actions` in tenant.json), counting from the
-bubble. It's `-1` if the tenant doesn't show Settings, and then the menu is never drawn.
+- `scale`, `layout`: as the comment says, everything sits further out the bigger she is.
+  `state.size.scale` is her size (1 usually), kept live by `useAssistState`, and `panelLayout()`
+  (src/shared/geometry.ts) turns it into where each piece sits, measured from the bubble's corner
+  of the window: the chat card beside her and the action stack above her, both past her box and
+  its padding, which grow with her. At her usual size the card starts 100 px across and the stack
+  100 px up; at twice her size, 188 px. The main process sizes the panel window from the same
+  function, so everything fits.
+- `settingsIndex`, `sizeIndex`: where the gear and the size icon are in the tenant's list of icons
+  (`actions` in tenant.json), counting from the bubble. Each is `-1` if the tenant doesn't show
+  that icon, and then its menu is never drawn.
 
 #### `issueKeys`, `unreadNotifications`, `requestNews`, `pageContent`, `page`
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.issueKeys,unreadNotifications,requestNews,pageContent,page -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 390–466](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L390-L466)
+[`src/renderer/src/views/PanelView.tsx`, lines 410–486](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L410-L486)
 
 ```tsx
 // Only keys of real projects, once the projects are known.

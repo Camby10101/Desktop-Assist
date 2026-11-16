@@ -1,5 +1,5 @@
 import { useRef, type PointerEvent } from 'react'
-import { BUBBLE_BOX } from '@shared/geometry'
+import { bubbleMetrics, DEFAULT_SIZE, isLeftCorner } from '@shared/geometry'
 import type { Mode } from '@shared/types'
 import { Character } from '../components/Character'
 import { useAccentColor, useAssistState } from '../hooks/useAssistState'
@@ -8,7 +8,6 @@ const ACTION_LABEL: Record<Mode, string> = {
   collapsed: 'Open',
   expanded: 'Close',
   dragging: 'Moving',
-  bouncing: 'Stop bouncing',
   returning: 'Returning',
   capturing: 'Taking screenshot',
 }
@@ -28,6 +27,9 @@ export function BubbleView() {
   useAccentColor(state?.branding.accentColor)
   const mode = state?.mode ?? 'collapsed'
   const appName = state?.branding.appName ?? 'Desktop Assist'
+  // Her window, as big as she is; she faces the middle of the screen, away from her corner.
+  const { box } = bubbleMetrics(state?.size.scale ?? DEFAULT_SIZE)
+  const corner = state?.corner ?? 'bottom-right'
 
   const press = useRef<{ x: number; y: number; dragging: boolean } | null>(null)
   // When the button last went down: the main process uses it to tell whether this press is what
@@ -78,12 +80,13 @@ export function BubbleView() {
         else window.assist.bubbleClick(pressedAt.current ?? Date.now())
         pressedAt.current = undefined
       }}
-      style={{ width: BUBBLE_BOX, height: BUBBLE_BOX }}
+      style={{ width: box, height: box }}
       className="block cursor-grab outline-offset-[-2px] active:cursor-grabbing"
     >
       <Character
         pose={state?.pose ?? 'idle'}
-        corner={state?.corner ?? 'bottom-right'}
+        facing={isLeftCorner(corner) ? 'right' : 'left'}
+        box={box}
         expanded={mode === 'expanded'}
       />
     </button>

@@ -3,7 +3,7 @@ import type { AppState, ChatMessage } from '@shared/types'
 
 /**
  * The app state, kept live for the parts the main process changes on its own: the mode, the
- * character's corner and pose, the sign-in status and the chat. (Notes and settings only change through this
+ * character's corner, pose and size, the sign-in status and the chat. (Notes and settings only change through this
  * window's own requests, so the panel tracks their results itself.)
  *
  * Subscriptions start before the state is fetched. Events that arrive before the reply are
@@ -20,6 +20,7 @@ export function useAssistState(): AppState | null {
       window.assist.onModeChanged((mode) => update((s) => ({ ...s, mode }))),
       window.assist.onPoseChanged((pose) => update((s) => ({ ...s, pose }))),
       window.assist.onCornerChanged((corner) => update((s) => ({ ...s, corner }))),
+      window.assist.onSizeChanged((size) => update((s) => ({ ...s, size }))),
       window.assist.onAuthStatus((auth) => update((s) => ({ ...s, auth }))),
       window.assist.onChatMessage((message) =>
         update((s) => ({ ...s, chat: upsert(s.chat, message) })),

@@ -7,7 +7,10 @@ import { draw, GRID, LEG_LENGTH, type Arm, type Leg, type Pose } from './rig'
 // long robe in the tenant's accent colour. Frames are drawn the first time a pose is needed, then
 // kept.
 
-/** The grid's size in pixels (square): 96, one pixel a DIP, filling the bubble's window. */
+/**
+ * The grid's size in pixels (square): 96, filling the bubble's window, one pixel a DIP at her
+ * usual size (more at a bigger size; see CHARACTER_SIZES).
+ */
 export const SPRITE_SIZE = GRID
 
 /** Each letter's colour, as a CSS class (character.css): robe and hat follow the accent colour. */

@@ -1,6 +1,6 @@
 import type { CommandActionId } from './actions'
 import type { Pose } from './character'
-import type { Corner, Point } from './geometry'
+import type { CharacterSize, Corner, Point } from './geometry'
 import type {
   ActionResult,
   AppsState,
@@ -52,6 +52,7 @@ export const IPC = {
   settingsSetAutoSend: 'assist:settings-set-auto-send',
   settingsSetFavoriteApp: 'assist:settings-set-favorite-app',
   settingsSetTheme: 'assist:settings-set-theme',
+  characterSetSize: 'assist:character-set-size',
   authSignIn: 'assist:auth-sign-in',
   authCancel: 'assist:auth-cancel',
   authSignOut: 'assist:auth-sign-out',
@@ -93,6 +94,7 @@ export const IPC = {
   modeChanged: 'assist:mode-changed',
   poseChanged: 'assist:pose-changed',
   cornerChanged: 'assist:corner-changed',
+  sizeChanged: 'assist:size-changed',
   clickThroughReset: 'assist:click-through-reset',
   authStatus: 'assist:auth-status',
   chatMessage: 'assist:chat-message',
@@ -142,6 +144,10 @@ export interface AssistApi {
     setFavoriteApp(id: string, favorite: boolean): Promise<Settings>
     /** Light or dark mode for all of Desktop Assist; saved. */
     setTheme(theme: Theme): Promise<Settings>
+  }
+  character: {
+    /** Makes her `scale` times her usual size (one of CHARACTER_SIZES); saved. */
+    setSize(scale: number): Promise<CharacterSize>
   }
   auth: {
     /** Opens JumpCloud in the browser; progress arrives through `onAuthStatus`. */
@@ -237,6 +243,8 @@ export interface AssistApi {
   /** The character's pose changed (walking, fidgeting, dangling...). */
   onPoseChanged(callback: (pose: Pose) => void): () => void
   onCornerChanged(callback: (corner: Corner) => void): () => void
+  /** Her size changed, or the biggest she can be on her screen did. */
+  onSizeChanged(callback: (size: CharacterSize) => void): () => void
   /** The panel was just shown with click-through reset; `pointer` is where the mouse is now. */
   onClickThroughReset(callback: (pointer: Point) => void): () => void
   onAuthStatus(callback: (status: AuthStatus) => void): () => void

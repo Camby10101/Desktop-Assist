@@ -1,7 +1,7 @@
 import { useEffect, useState, type PointerEvent } from 'react'
 import type { ActionId } from '@shared/actions'
 import { CLAUDE_DOWNLOAD_PAGE } from '@shared/claudeDesktop'
-import { actionOffset } from '@shared/geometry'
+import { actionOffset, panelLayout } from '@shared/geometry'
 import { browseUrl, findIssueKeys } from '@shared/jira'
 import type {
   AppsState,
@@ -23,6 +23,7 @@ import { IssueView } from '../components/IssueView'
 import { JiraPage } from '../components/JiraPage'
 import { ServiceDeskPage, type ServiceDeskTab } from '../components/ServiceDeskPage'
 import { SettingsMenu } from '../components/SettingsMenu'
+import { SizeMenu } from '../components/SizeMenu'
 import { SignInPanel } from '../components/SignInPanel'
 import { useAccentColor, useAssistState } from '../hooks/useAssistState'
 import { useClickThrough } from '../hooks/useClickThrough'
@@ -73,6 +74,7 @@ function Panel({ state }: { state: AppState }) {
   const [attachments, setAttachments] = useState(state.notes.attachments)
   const [settings, setSettings] = useState(state.settings)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [sizeOpen, setSizeOpen] = useState(false)
   const [asking, setAsking] = useState(false)
   // The card shows the tenant's start page (the text box or the Apps list) when the panel opens,
   // and another page while its icon is on (Ask Claude, Your apps, Jira, the service desk).
@@ -95,7 +97,10 @@ function Panel({ state }: { state: AppState }) {
   useEffect(
     () =>
       window.assist.onModeChanged((mode) => {
-        if (mode !== 'expanded') setSettingsOpen(false)
+        if (mode !== 'expanded') {
+          setSettingsOpen(false)
+          setSizeOpen(false)
+        }
         // The panel always reopens on the start page (but taking a screenshot isn't closing it).
         if (mode === 'collapsed') {
           setView(startPage)
@@ -155,13 +160,14 @@ function Panel({ state }: { state: AppState }) {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
       if (settingsOpen) setSettingsOpen(false)
+      else if (sizeOpen) setSizeOpen(false)
       else if (issueKey) setIssueKey(null)
       else if (view !== startPage) setView(startPage)
       else window.assist.collapse()
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [settingsOpen, issueKey, view, startPage])
+  }, [settingsOpen, sizeOpen, issueKey, view, startPage])
 
   // Not signed in: the chat box shows the sign-in instead of the chat. While a saved sign-in is
   // being renewed, or JumpCloud can't be reached, the chat stays (sending tries JumpCloud again).
@@ -173,6 +179,8 @@ function Panel({ state }: { state: AppState }) {
   const canSend = signedIn && !busy && !asking && (draft.trim() !== '' || attachments.length > 0)
 
   async function runAction(id: ActionId) {
+    // Any icon but the size menu's own closes the size menu (the settings menu's, below).
+    if (id !== 'size') setSizeOpen(false)
     // With request types, the service desk icon opens a page for them instead of the portal.
     if (id === 'apps' || id === 'ask' || id === 'jira' || (id === 'servicedesk' && requestTypes)) {
       // Swaps the card to that page, or back again: the text box and the Apps list swap with
@@ -188,6 +196,11 @@ function Panel({ state }: { state: AppState }) {
       setSettings(
         await window.assist.settings.setTheme(settings.theme === 'dark' ? 'light' : 'dark'),
       )
+      return
+    }
+    if (id === 'size') {
+      setSettingsOpen(false)
+      setSizeOpen(!sizeOpen)
       return
     }
     if (id === 'settings') {
@@ -331,11 +344,14 @@ function Panel({ state }: { state: AppState }) {
     setSettings(await window.assist.settings.setAutoSend(!settings.autoSend))
   }
 
-  // Clicking anywhere else in the panel closes the settings menu.
-  function closeSettingsOnOutsideClick(event: PointerEvent) {
-    if (!settingsOpen || !(event.target instanceof Element)) return
-    if (!event.target.closest('[data-settings-menu], [data-action="settings"]')) {
+  // Clicking anywhere else in the panel closes the settings menu, or the size menu.
+  function closeMenusOnOutsideClick(event: PointerEvent) {
+    if (!(event.target instanceof Element)) return
+    if (settingsOpen && !event.target.closest('[data-settings-menu], [data-action="settings"]')) {
       setSettingsOpen(false)
+    }
+    if (sizeOpen && !event.target.closest('[data-size-menu], [data-action="size"]')) {
+      setSizeOpen(false)
     }
   }
 
@@ -386,7 +402,11 @@ function Panel({ state }: { state: AppState }) {
       </Banner>
     ) : null
 
+  // Everything sits further out the bigger she is (see panelLayout).
+  const scale = state.size.scale
+  const layout = panelLayout(scale)
   const settingsIndex = branding.actions.indexOf('settings')
+  const sizeIndex = branding.actions.indexOf('size')
   // Only keys of real projects, once the projects are known.
   const issueKeys = atlassianSite
     ? findIssueKeys(draft).filter(
@@ -469,10 +489,11 @@ function Panel({ state }: { state: AppState }) {
     <div
       className={cn('group relative h-full w-full', !open && 'pointer-events-none')}
       data-open={open ? '' : undefined}
-      onPointerDown={closeSettingsOnOutsideClick}
+      onPointerDown={closeMenusOnOutsideClick}
     >
       <ChatBox
         corner={state.corner}
+        layout={layout}
         open={open}
         toast={toast}
         inClaudeDesktop={inClaudeDesktop}
@@ -499,9 +520,10 @@ function Panel({ state }: { state: AppState }) {
       />
       <ActionStack
         corner={state.corner}
+        layout={layout}
         actions={branding.actions}
         open={open}
-        activeId={settingsOpen ? 'settings' : view !== startPage ? view : null}
+        activeId={settingsOpen ? 'settings' : sizeOpen ? 'size' : view !== startPage ? view : null}
         theme={settings.theme}
         pages={requestTypes ? ['servicedesk'] : []}
         dotted={[
@@ -516,7 +538,8 @@ function Panel({ state }: { state: AppState }) {
       {open && settingsOpen && settingsIndex >= 0 && (
         <SettingsMenu
           corner={state.corner}
-          offset={actionOffset(settingsIndex)}
+          layout={layout}
+          offset={actionOffset(settingsIndex, scale)}
           settings={settings}
           branding={branding}
           version={state.version}
@@ -535,6 +558,15 @@ function Panel({ state }: { state: AppState }) {
           onNewConversation={() => void newConversation()}
           onClearText={() => void clearText()}
           onUninstall={() => void uninstall()}
+        />
+      )}
+      {open && sizeOpen && sizeIndex >= 0 && (
+        <SizeMenu
+          corner={state.corner}
+          layout={layout}
+          offset={actionOffset(sizeIndex, scale)}
+          size={state.size}
+          onSetSize={(next) => void window.assist.character.setSize(next)}
         />
       )}
     </div>

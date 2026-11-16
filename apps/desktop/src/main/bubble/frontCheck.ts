@@ -163,7 +163,7 @@ export function watchBubbleFront(deps: FrontWatchDeps): () => void {
   let stopped = false
   const checkNow = async (when: string): Promise<void> => {
     if (stopped) return
-    // Open, dragged or bouncing: the user can see it. Look again in a minute.
+    // Open, or being dragged: the user can see it. Look again in a minute.
     if (!deps.isResting()) {
       later(() => void checkNow(when), 60_000)
       return

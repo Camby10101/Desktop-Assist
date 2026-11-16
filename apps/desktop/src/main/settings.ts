@@ -16,6 +16,8 @@ const PreferencesSchema = z.object({
   theme: z.enum(['dark', 'light']).optional(),
   /** Apps starred in the Apps list (their IDs), shown first. */
   favoriteApps: z.array(z.string().min(1).max(200)).max(500).optional(),
+  /** How big she is, as a multiple of her usual size (see CHARACTER_SIZES). */
+  characterScale: z.number().min(0.1).max(10).optional(),
   /** Where the bubble was dragged to: a corner of a particular display. */
   bubbleAnchor: z
     .object({
@@ -100,6 +102,15 @@ export class SettingsService {
 
   async setBubbleAnchor(anchor: BubbleAnchor): Promise<void> {
     await this.save({ bubbleAnchor: anchor })
+  }
+
+  /** Her size as chosen in the size menu, or null if it's never been changed. */
+  get characterScale(): number | null {
+    return this.prefs.characterScale ?? null
+  }
+
+  async setCharacterScale(scale: number): Promise<void> {
+    await this.save({ characterScale: scale })
   }
 
   private async save(changes: Preferences): Promise<void> {

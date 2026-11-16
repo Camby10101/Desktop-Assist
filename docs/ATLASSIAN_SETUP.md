@@ -57,7 +57,7 @@ Atlassian's guide: [Available Atlassian Rovo MCP server domains](https://support
 ## 3. tenant.json
 
 ```json
-"actions": ["ask", "jira", "servicedesk", "screenshot", "theme", "settings", "bounce", "close"],
+"actions": ["ask", "jira", "servicedesk", "screenshot", "theme", "settings", "size", "clones", "close"],
 "serviceDesk": {
   "url": "https://morsemicro.atlassian.net/servicedesk/customer/portals",
   "requests": {

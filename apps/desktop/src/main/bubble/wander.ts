@@ -64,9 +64,17 @@ export function walkTarget(inset: number, zone: number, roll: number): number {
   return along < before ? along : from + WANDER.minWalk + (along - before)
 }
 
-/** One frame of walking: `dtMs` closer to `to` at walking speed, never past it. */
-export function walkStep(from: number, to: number, dtMs: number): number {
-  const step = (WANDER.walkSpeed * Math.min(Math.max(dtMs, 0), 100)) / 1000
+/**
+ * One frame of walking: `dtMs` closer to `to` at `speed` (DIP per second; WANDER.walkSpeed at her
+ * usual size), never past it.
+ */
+export function walkStep(
+  from: number,
+  to: number,
+  dtMs: number,
+  speed: number = WANDER.walkSpeed,
+): number {
+  const step = (speed * Math.min(Math.max(dtMs, 0), 100)) / 1000
   return to > from ? Math.min(to, from + step) : Math.max(to, from - step)
 }
 

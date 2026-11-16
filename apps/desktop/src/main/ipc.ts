@@ -9,6 +9,7 @@ import {
 } from 'electron'
 import { z } from 'zod'
 import { COMMAND_ACTION_IDS } from '@shared/actions'
+import { CHARACTER_SIZES } from '@shared/geometry'
 import { IPC } from '@shared/ipc'
 import type {
   AppState,
@@ -166,6 +167,15 @@ export function registerIpc(ctx: IpcContext): void {
   )
   handle(IPC.settingsSetAutoSend, z.boolean(), (autoSend) => ctx.settings.setAutoSend(autoSend))
   handle(IPC.settingsSetTheme, z.enum(['dark', 'light']), (theme) => ctx.settings.setTheme(theme))
+  handle(
+    IPC.characterSetSize,
+    z.number().refine((scale) => (CHARACTER_SIZES as readonly number[]).includes(scale)),
+    async (scale) => {
+      const size = ctx.controller.setScale(scale)
+      await ctx.settings.setCharacterScale(scale)
+      return size
+    },
+  )
   handle(
     IPC.settingsSetFavoriteApp,
     z.object({ id: z.string().min(1).max(200), favorite: z.boolean() }),

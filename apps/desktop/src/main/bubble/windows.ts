@@ -4,7 +4,7 @@ import type { Size } from '@shared/geometry'
 import { IPC } from '@shared/ipc'
 import type { PanelSurface, Surface } from './BubbleController'
 
-export type View = 'bubble' | 'panel'
+export type View = 'bubble' | 'panel' | 'clones'
 
 /**
  * How the overlay windows stay on top. Electron's default level for always-on-top, "floating",
@@ -20,8 +20,12 @@ export const ON_TOP_LEVEL = 'pop-up-menu'
 export const ON_TOP_CHECK_MS = 5000
 
 /**
- * Creates one of the two overlay windows. Both are frameless, transparent, always on top and
- * hidden from the taskbar and Alt+Tab.
+ * Creates an overlay window: the bubble, the panel, or a window of clones. All are frameless,
+ * transparent, always on top and hidden from the taskbar and Alt+Tab. `query` adds to the page's
+ * query string (`view` says which page it is).
+ *
+ * The clones' window never takes the mouse or the focus: clicks go straight through it, so the
+ * clones have no panel and never get in the way.
  *
  * The panel window is mostly see-through, so it's click-through: clicks on its empty areas go to
  * whatever is underneath, and the renderer turns mouse input back on while the pointer is over
@@ -29,7 +33,11 @@ export const ON_TOP_CHECK_MS = 5000
  * than the bubble, and relying on Windows' mouse forwarding there made clicks occasionally fall
  * through the bubble to the window behind it.
  */
-export function createOverlayWindow(view: View, size: Size): BrowserWindow {
+export function createOverlayWindow(
+  view: View,
+  size: Size,
+  query: Record<string, string> = {},
+): BrowserWindow {
   const win = new BrowserWindow({
     ...size,
     show: false,
@@ -49,8 +57,8 @@ export function createOverlayWindow(view: View, size: Size): BrowserWindow {
     // Both can take the focus. A bubble that couldn't had its mouse presses dropped by Windows /
     // Chromium after clicking elsewhere (only the release arrived, so clicks did nothing).
     // Clicking the bubble now takes the focus from an open panel; BubbleController.clickBubble
-    // knows that press closed it.
-    focusable: true,
+    // knows that press closed it. The clones never need it.
+    focusable: view !== 'clones',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: true,
@@ -66,12 +74,14 @@ export function createOverlayWindow(view: View, size: Size): BrowserWindow {
     win.setIgnoreMouseEvents(true, { forward: true })
     addEditContextMenu(win)
   }
+  if (view === 'clones') win.setIgnoreMouseEvents(true)
 
+  const search = { ...query, view }
   const devServer = process.env['ELECTRON_RENDERER_URL']
   if (!app.isPackaged && devServer) {
-    void win.loadURL(`${devServer}?view=${view}`)
+    void win.loadURL(`${devServer}?${new URLSearchParams(search)}`)
   } else {
-    void win.loadFile(join(__dirname, '../renderer/index.html'), { query: { view } })
+    void win.loadFile(join(__dirname, '../renderer/index.html'), { query: search })
   }
   return win
 }

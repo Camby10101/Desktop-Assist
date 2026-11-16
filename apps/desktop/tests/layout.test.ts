@@ -1,14 +1,23 @@
 import { describe, expect, it } from 'vitest'
-import { actionOffset, BUBBLE_BOX, panelWindowSize, UI, type Corner } from '@shared/geometry'
+import {
+  actionOffset,
+  BUBBLE_BOX,
+  CHARACTER_SIZES,
+  largestSize,
+  panelLayout,
+  panelWindowSize,
+  snapSize,
+  UI,
+  type Corner,
+} from '@shared/geometry'
 import {
   bubbleWindowBounds,
+  cloneStrip,
   insetAt,
   maxInset,
   nearestCorner,
   panelWindowBounds,
   restPosition,
-  travelAreas,
-  travelBox,
 } from '../src/main/bubble/layout'
 
 const workArea = { x: 0, y: 0, width: 1920, height: 1040 } // 1080p minus a 40px taskbar
@@ -105,7 +114,7 @@ describe('bubbleWindowBounds', () => {
     })
   })
 
-  it('rounds fractional positions from the bounce animation', () => {
+  it('rounds fractional positions from a fall or a walk', () => {
     const bounds = bubbleWindowBounds({ x: 100.4, y: 200.6 })
     expect(bounds.x).toBe(92)
     expect(bounds.y).toBe(193)
@@ -173,55 +182,71 @@ describe('panelWindowSize', () => {
   })
 })
 
-describe('travelAreas', () => {
-  const laptop = {
-    bounds: { x: 0, y: 0, width: 1536, height: 864 },
-    workArea: { x: 0, y: 0, width: 1536, height: 816 }, // taskbar along the bottom
-  }
-  const above = {
-    bounds: { x: -750, y: -1440, width: 3440, height: 1440 },
-    workArea: { x: -750, y: -1440, width: 3440, height: 1392 }, // taskbar along the shared edge
-  }
-
-  it('adds the stretch of a taskbar that another display lies right beyond', () => {
-    expect(travelAreas([laptop, above])).toEqual([
-      laptop.workArea,
-      above.workArea,
-      // Only the part of the upper monitor's taskbar above the laptop; the laptop's own taskbar,
-      // on an outer edge, stays out.
-      { x: 0, y: -48, width: 1536, height: 48 },
-    ])
+describe('her size', () => {
+  it('comes in steps from half her usual size to six times it, all whole DIPs', () => {
+    expect(CHARACTER_SIZES[0]).toBe(0.5)
+    expect(CHARACTER_SIZES.at(-1)).toBe(6)
+    for (const scale of CHARACTER_SIZES) {
+      expect(Number.isInteger(UI.bubbleSize * scale)).toBe(true)
+      expect(Number.isInteger(UI.bubblePad * scale)).toBe(true)
+    }
   })
 
-  it('needs the displays to touch', () => {
-    const apart = {
-      ...above,
-      bounds: { ...above.bounds, y: -1500 },
-      workArea: { ...above.workArea, y: -1500 },
-    }
-    expect(travelAreas([laptop, apart])).toEqual([laptop.workArea, apart.workArea])
+  it('snaps any number to the nearest size', () => {
+    expect(snapSize(2.2)).toBe(2)
+    expect(snapSize(0.1)).toBe(0.5)
+    expect(snapSize(99)).toBe(6)
+    expect(snapSize(Number.NaN)).toBe(1)
   })
 
-  it('works for a taskbar down the side between two monitors side by side', () => {
-    const left = {
-      bounds: { x: 0, y: 0, width: 1920, height: 1080 },
-      workArea: { x: 0, y: 0, width: 1858, height: 1080 }, // taskbar on the right
+  it('grows her window and box from her feet, keeping 16px from the side', () => {
+    const position = restPosition(workArea, 'bottom-right', 0, 3)
+    const bounds = bubbleWindowBounds(position, 3)
+    expect(bounds.width).toBe(BUBBLE_BOX * 3)
+    expect(bounds.y + bounds.height).toBe(workArea.height)
+    expect(position.x + UI.bubbleSize * 3).toBe(workArea.width - UI.edgeMargin)
+    expect(maxInset(workArea, 3)).toBe(workArea.width - 32 - UI.bubbleSize * 3)
+    expect(insetAt(workArea, 'bottom-right', position.x, 3)).toBe(0)
+    expect(nearestCorner(workArea, position, 3)).toBe('bottom-right')
+  })
+
+  it('moves the chat card and the actions out beside and above her', () => {
+    const usual = panelLayout(1)
+    const big = panelLayout(4)
+    expect(big.chatX - usual.chatX).toBe(UI.bubblePad * 3 + UI.bubbleSize * 3)
+    expect(big.actionsY - usual.actionsY).toBe(UI.bubblePad * 3 + UI.bubbleSize * 3)
+    expect(actionOffset(2, 4)).toBe(big.actionsY + 2 * (UI.actionSize + UI.actionGap))
+    const panel = panelWindowBounds(
+      restPosition(workArea, 'bottom-right', 0, 4),
+      4,
+      'bottom-right',
+      4,
+    )
+    expect(panel.width).toBe(panelWindowSize(4, 4).width)
+    expect(panel.y + panel.height).toBe(workArea.height)
+  })
+
+  it('is at most as big as lets her panel fit the screen', () => {
+    expect(largestSize(workArea, 8)).toBe(6)
+    expect(largestSize({ width: 1280, height: 680 }, 4)).toBe(5)
+    expect(largestSize({ width: 1366, height: 720 }, 9)).toBeLessThan(6)
+    expect(largestSize({ width: 300, height: 300 }, 9)).toBe(0.5) // never less than the smallest
+    for (const scale of CHARACTER_SIZES.filter(
+      (s) => s <= largestSize({ width: 1366, height: 720 }, 9),
+    )) {
+      expect(panelWindowSize(9, scale).height).toBeLessThanOrEqual(720)
     }
-    const right = {
-      bounds: { x: 1920, y: 100, width: 1280, height: 1024 },
-      workArea: { x: 1920, y: 100, width: 1280, height: 1024 },
-    }
-    expect(travelAreas([left, right])).toContainEqual({ x: 1858, y: 100, width: 62, height: 980 })
   })
 })
 
-describe('travelBox', () => {
-  it('keeps the whole bubble inside the work area', () => {
-    expect(travelBox(workArea)).toEqual({
-      minX: 0,
-      minY: 0,
-      maxX: 1920 - UI.bubbleSize,
-      maxY: 1040 - UI.bubbleSize,
+describe('cloneStrip', () => {
+  it('runs along the bottom of the work area, as tall as her window', () => {
+    const second = { x: 1920, y: 0, width: 1280, height: 984 }
+    expect(cloneStrip(second, 2)).toEqual({
+      x: 1920,
+      y: 984 - BUBBLE_BOX * 2,
+      width: 1280,
+      height: BUBBLE_BOX * 2,
     })
   })
 })

@@ -1,7 +1,17 @@
 import { FIDGET_MS, isFidget, type Fidget, type Pose } from '@shared/character'
-import { UI, isLeftCorner, isTopCorner, type Corner, type Point, type Rect } from '@shared/geometry'
+import {
+  bubbleMetrics,
+  isLeftCorner,
+  isTopCorner,
+  largestSize,
+  snapSize,
+  DEFAULT_SIZE,
+  type CharacterSize,
+  type Corner,
+  type Point,
+  type Rect,
+} from '@shared/geometry'
 import type { Mode } from '@shared/types'
-import { glideDuration, glidePosition, launch, step, type Motion } from './bounce'
 import {
   bubbleWindowBounds,
   insetAt,
@@ -9,7 +19,6 @@ import {
   nearestCorner,
   panelWindowBounds,
   restPosition,
-  travelAreas,
 } from './layout'
 import { WANDER, activityDelay, fallDuration, fallPosition, nextActivity, walkStep } from './wander'
 
@@ -34,8 +43,6 @@ export interface DisplayArea {
 /** What the controller needs to know about the screens. Electron's `screen` is adapted in index.ts. */
 export interface Displays {
   primary(): DisplayArea
-  /** Every display (Bounce roams across them all). */
-  all(): DisplayArea[]
   byId(id: number): DisplayArea | undefined
   /** The display containing `point`, or the closest one. */
   nearest(point: Point): DisplayArea
@@ -56,11 +63,15 @@ export interface BubbleControllerDeps {
   actionCount: number
   /** Where the bubble was last time, if saved. */
   initialAnchor?: BubbleAnchor | null
+  /** Her size last time (see CHARACTER_SIZES), if saved. */
+  initialScale?: number | null
   onModeChange(mode: Mode): void
   /** The character settled near the other bottom corner or on another display. */
   onAnchorChange(anchor: BubbleAnchor): void
   /** What the character is doing changed (the bubble's page animates it). */
   onPoseChange?(pose: Pose): void
+  /** Her size changed, or the biggest she can be on her screen did. */
+  onSizeChange?(size: CharacterSize): void
   now?: () => number
   random?: () => number
   /** Things worth a line in the log, such as a click on the bubble that didn't open it. */
@@ -96,12 +107,14 @@ export const HIDE_SETTLE_MS = 150
  *
  *   collapsed ⇄ expanded                     click, Esc, blur
  *   collapsed/expanded → dragging → returning → collapsed     drag, release (falls to the taskbar)
- *   * → bouncing → returning → collapsed     Bounce action, then a click
  *   expanded → capturing → expanded          screenshot
  *
  * While collapsed and left alone, it wanders: now and then it walks somewhere else near its corner
  * and, once it's been alone a while, sometimes fidgets instead. Dropped far from its corner, it
  * walks back. Anything the user does stops it where it is.
+ *
+ * It also owns her size (`scale`, one of CHARACTER_SIZES): the size the user chose, kept to the
+ * biggest that fits her display, with both windows sized and placed to match.
  */
 export class BubbleController {
   private mode: Mode = 'collapsed'
@@ -110,7 +123,9 @@ export class BubbleController {
   private anchor: BubbleAnchor
   /** How far along the taskbar from its corner it stands (see restPosition). */
   private inset = 0
-  private motion: Motion | null = null
+  /** The size the user chose (saved), and the size she is: that, or less if it doesn't fit. */
+  private chosenScale: number
+  private scale: number
   private ticker: ReturnType<typeof setInterval> | null = null
   private hideTimer: ReturnType<typeof setTimeout> | null = null
   /** The next thing it does on its own, or the end of a fidget. */
@@ -139,6 +154,8 @@ export class BubbleController {
       saved && deps.displays.byId(saved.displayId)
         ? { displayId: saved.displayId, corner }
         : { displayId: deps.displays.primary().id, corner }
+    this.chosenScale = snapSize(deps.initialScale ?? DEFAULT_SIZE)
+    this.scale = Math.min(this.chosenScale, this.largestScale())
   }
 
   get currentMode(): Mode {
@@ -155,6 +172,31 @@ export class BubbleController {
 
   get corner(): Corner {
     return this.anchor.corner
+  }
+
+  /** How big she is, and the biggest she can be on her display. */
+  get size(): CharacterSize {
+    return { scale: this.scale, max: this.largestScale() }
+  }
+
+  /** Where she stands, for her clones: her display's work area, her window, and her size. */
+  get standing(): { workArea: Rect; bounds: Rect; scale: number } {
+    return {
+      workArea: this.display().workArea,
+      bounds: bubbleWindowBounds(this.position, this.scale),
+      scale: this.scale,
+    }
+  }
+
+  /**
+   * Makes her `scale` times her usual size (snapped to one of CHARACTER_SIZES), or as big as fits
+   * her display if that's smaller. She grows or shrinks where she stands: her feet stay on the
+   * taskbar and her side nearest her corner stays put. Both windows are resized to match.
+   */
+  setScale(scale: number): CharacterSize {
+    this.chosenScale = snapSize(scale)
+    this.fitScale()
+    return this.size
   }
 
   /** Stands the character in its saved corner (or bottom-right of the main display) and shows it. */
@@ -180,9 +222,6 @@ export class BubbleController {
       case 'expanded':
         this.collapse()
         return
-      case 'bouncing':
-        this.glideHome()
-        return
       case 'dragging':
       case 'returning':
       case 'capturing':
@@ -191,15 +230,11 @@ export class BubbleController {
     }
   }
 
-  /** Opens the panel where the character stands. While bouncing, glides home first and then opens. */
+  /** Opens the panel where the character stands. While she's falling, once she lands. */
   expand(): void {
     switch (this.mode) {
       case 'expanded':
         this.deps.panel.focus()
-        return
-      case 'bouncing':
-        this.expandAfterReturn = true
-        this.glideHome()
         return
       case 'returning':
         this.expandAfterReturn = true
@@ -259,29 +294,18 @@ export class BubbleController {
   endDrag(): void {
     if (this.mode !== 'dragging') return
     this.stopTicker()
+    const half = bubbleMetrics(this.scale).size / 2
     const centre = {
-      x: Math.round(this.position.x + UI.bubbleSize / 2),
-      y: Math.round(this.position.y + UI.bubbleSize / 2),
+      x: Math.round(this.position.x + half),
+      y: Math.round(this.position.y + half),
     }
     const display = this.deps.displays.nearest(centre)
-    const corner = nearestCorner(display.workArea, this.position)
+    const corner = nearestCorner(display.workArea, this.position, this.scale)
     this.setAnchor({ displayId: display.id, corner })
-    this.inset = insetAt(display.workArea, corner, this.position.x)
+    // Another display may not have room for her at this size.
+    this.fitScale()
+    this.inset = insetAt(display.workArea, corner, this.position.x, this.scale)
     this.fall()
-  }
-
-  startBounce(): void {
-    if (this.mode !== 'collapsed' && this.mode !== 'expanded') return
-    this.cancelHide()
-    this.deps.panel.hide()
-    this.setMode('bouncing')
-    this.motion = launch(this.position, this.random, this.anchor.corner)
-    this.runTicker((dtMs) => {
-      if (!this.motion) return
-      // Across every display. The anchor doesn't change, so a click brings it home.
-      this.motion = step(this.motion, dtMs, travelAreas(this.deps.displays.all()))
-      this.moveBubble({ x: this.motion.x, y: this.motion.y })
-    })
   }
 
   /** Hides both windows, runs `task` (a screenshot), then reopens the panel. */
@@ -304,16 +328,18 @@ export class BubbleController {
 
   /**
    * The resolution, taskbar or monitors changed. If the character's display was unplugged, it
-   * moves to the same corner of the main display. Moving characters re-read the display every
-   * frame; one standing (or strolling) is put back on the taskbar, as far from its corner as fits.
+   * moves to the same corner of the main display. Her size is kept to what fits (and back to the
+   * size chosen once there's room again). Moving characters re-read the display every frame; one
+   * standing (or strolling) is put back on the taskbar, as far from its corner as fits.
    */
   displayChanged(): void {
     if (!this.deps.displays.byId(this.anchor.displayId)) {
       this.setAnchor({ displayId: this.deps.displays.primary().id, corner: this.anchor.corner })
     }
-    if (this.mode === 'bouncing' || this.mode === 'returning' || this.mode === 'dragging') return
+    this.fitScale()
+    if (this.mode === 'returning' || this.mode === 'dragging') return
     this.stopIdling()
-    this.inset = Math.min(this.inset, maxInset(this.display().workArea))
+    this.inset = Math.min(this.inset, maxInset(this.display().workArea, this.scale))
     this.position = this.rest()
     this.placeWindows()
     if (this.mode === 'collapsed') this.scheduleActivity(false)
@@ -332,7 +358,30 @@ export class BubbleController {
 
   /** Where the character stands now: on the taskbar, `inset` from its corner. */
   private rest(): Point {
-    return restPosition(this.display().workArea, this.anchor.corner, this.inset)
+    return restPosition(this.display().workArea, this.anchor.corner, this.inset, this.scale)
+  }
+
+  /** The biggest she can be on her display (see largestSize). */
+  private largestScale(): number {
+    return largestSize(this.display().workArea, this.deps.actionCount)
+  }
+
+  /**
+   * Makes her the size chosen, or the biggest that fits her display, and tells the pages if that
+   * (or the biggest) changed. Standing or strolling, she's put back on the taskbar at her new size
+   * and both windows are sized to match; moving, the next frame does that.
+   */
+  private fitScale(): void {
+    const before = this.size
+    this.scale = Math.min(this.chosenScale, this.largestScale())
+    const after = this.size
+    if (after.scale === before.scale && after.max === before.max) return
+    if (this.mode === 'collapsed' || this.mode === 'expanded') {
+      this.inset = Math.min(this.inset, maxInset(this.display().workArea, this.scale))
+      this.position = this.rest()
+      this.placeWindows()
+    }
+    this.deps.onSizeChange?.(after)
   }
 
   /** After a drop: falls onto the taskbar, then walks back toward its corner if it's far off. */
@@ -353,25 +402,7 @@ export class BubbleController {
     })
   }
 
-  /** Glides the character back to where it stands (after a bounce), then switches to collapsed. */
-  private glideHome(): void {
-    this.motion = null
-    const from = { ...this.position }
-    const duration = glideDuration(from, this.rest())
-    const startedAt = this.now()
-    this.setMode('returning')
-    this.runTicker(() => {
-      // Re-read where it stands every frame in case the display changes mid-glide.
-      const t = (this.now() - startedAt) / duration
-      if (t < 1) {
-        this.moveBubble(glidePosition(from, this.rest(), t))
-        return
-      }
-      this.settle()
-    })
-  }
-
-  /** The end of a fall or a glide: standing, collapsed, and opening if that was asked for. */
+  /** The end of a fall: standing, collapsed, and opening if that was asked for. */
   private settle(): void {
     this.stopTicker()
     this.position = this.rest()
@@ -383,9 +414,10 @@ export class BubbleController {
     }
   }
 
-  /** How far from its corner it wanders on its display. */
+  /** How far from its corner it wanders on its display: further when she's bigger. */
   private zone(): number {
-    return Math.min(WANDER.zone, maxInset(this.display().workArea))
+    const zone = WANDER.zone * Math.max(1, this.scale)
+    return Math.min(zone, maxInset(this.display().workArea, this.scale))
   }
 
   /** Waits a while, then does something on its own (see doActivity). Collapsed only. */
@@ -416,7 +448,7 @@ export class BubbleController {
   /** Walks along the taskbar to `target` (an inset), then waits for the next thing to do. */
   private walkTo(target: number): void {
     this.cancelActivity()
-    const to = Math.min(Math.max(target, 0), maxInset(this.display().workArea))
+    const to = Math.min(Math.max(target, 0), maxInset(this.display().workArea, this.scale))
     if (Math.abs(to - this.inset) < 1) {
       this.scheduleActivity(false)
       return
@@ -427,7 +459,8 @@ export class BubbleController {
     this.walking = true
     this.setPose(left ? 'walk-left' : 'walk-right')
     this.runTicker((dtMs) => {
-      this.inset = walkStep(this.inset, to, dtMs)
+      // Her steps are as long as she is big, so she walks faster the bigger she is.
+      this.inset = walkStep(this.inset, to, dtMs, WANDER.walkSpeed * this.scale)
       this.moveBubble(this.rest())
       if (this.inset !== to) return
       this.stopWalking()
@@ -474,13 +507,13 @@ export class BubbleController {
 
   private moveBubble(position: Point): void {
     this.position = position
-    this.deps.bubble.setBounds(bubbleWindowBounds(position))
+    this.deps.bubble.setBounds(bubbleWindowBounds(position, this.scale))
   }
 
   private placeWindows(): void {
-    this.deps.bubble.setBounds(bubbleWindowBounds(this.position))
+    this.deps.bubble.setBounds(bubbleWindowBounds(this.position, this.scale))
     this.deps.panel.setBounds(
-      panelWindowBounds(this.position, this.deps.actionCount, this.anchor.corner),
+      panelWindowBounds(this.position, this.deps.actionCount, this.anchor.corner, this.scale),
     )
   }
 
@@ -506,9 +539,7 @@ export class BubbleController {
     this.mode = mode
     this.lastInteraction = this.now()
     this.deps.onModeChange(mode)
-    this.setPose(
-      mode === 'dragging' || mode === 'bouncing' || mode === 'returning' ? 'dragged' : 'idle',
-    )
+    this.setPose(mode === 'dragging' || mode === 'returning' ? 'dragged' : 'idle')
     if (mode === 'collapsed') this.scheduleActivity(false)
   }
 

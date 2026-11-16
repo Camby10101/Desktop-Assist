@@ -175,6 +175,31 @@ describe('the rig', () => {
     expect(rows.slice(45, 56).some((row) => hair.test(row.slice(57, 62)))).toBe(true)
   })
 
+  it('shades her: a broad shadow on the side away from the light, and the shadows things cast', () => {
+    for (const view of ['front', 'diagonal', 'side'] as const) {
+      const rows = draw({ view })
+      // Her skirt, a row above its border: a broad band of shade on the right, light on the left.
+      const skirt = rows[70]!.replace(/[^aAv]/g, '')
+      expect(skirt.match(/A/g)!.length).toBeGreaterThanOrEqual(4)
+      expect(skirt.slice(-3)).toBe('AAA')
+      // Under her hat no hair is lit, and under her hair no skin is.
+      for (let y = 1; y < rows.length; y++) {
+        for (let x = 0; x < GRID; x++) {
+          const above = rows[y - 1]![x]!
+          const here = rows[y]![x]!
+          if ('nNgfFYkGq'.includes(above)) expect('hlL'.includes(here)).toBe(false)
+          if ('ODhlL'.includes(above)) expect('sz'.includes(here)).toBe(false)
+        }
+      }
+    }
+  })
+
+  it('shows her face side on, cheek and jaw back to her ear, with no hair over them', () => {
+    const rows = draw({ view: 'side' })
+    for (const row of rows.slice(29, 34)) expect(row.slice(46, 52)).not.toMatch(/[ODhlL]/)
+    for (const letter of ['e', 'I', 'c', 'm']) expect(rows.slice(26, 36).join('')).toContain(letter)
+  })
+
   it('puts her face on: eyes, blush and mouth', () => {
     const rows = draw({ view: 'front' }).join('')
     for (const letter of ['e', 'I', 'w', 'c', 'm']) expect(rows).toContain(letter)
@@ -189,6 +214,22 @@ describe('the rig', () => {
 })
 
 describe('the rasteriser', () => {
+  it('shades a broad band across the side away from the light, for materials with a form shadow', () => {
+    const layer = new Layer(30)
+    layer.ellipse({ x: 15, y: 15 }, 10, 10, 'cloth')
+    const canvas = new Canvas(30)
+    canvas.ink(
+      layer,
+      { cloth: { line: 'k', shade: 'S', base: 'b', light: 'L', form: 0.3 } },
+      { x: -1, y: -1 },
+    )
+    const middle = canvas.rows()[15]!.replace(/[.k]/g, '')
+    const shade = middle.match(/S+$/)![0].length
+    expect(shade).toBeGreaterThanOrEqual(Math.floor(middle.length * 0.3))
+    expect(shade).toBeLessThanOrEqual(Math.ceil(middle.length * 0.3) + 1)
+    expect(middle[0]).toBe('L')
+  })
+
   it('fills shapes, shades the side away from the light and outlines them', () => {
     const layer = new Layer(20)
     layer.ellipse({ x: 10, y: 10 }, 6, 6, 'cloth')

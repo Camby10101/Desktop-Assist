@@ -40,8 +40,8 @@ bubble kept in front, and Check for updates). This is version **1.0.0**, the fir
   magic circle, sits on the taskbar, or glances about.
 - **Drag it anywhere**, even onto another monitor: it dangles from the pointer. Let go and it drops
   onto that screen's taskbar, and from then on lives near the nearer bottom corner, walking back
-  if it was dropped far away. The panel opens toward the middle of the screen. It remembers the
-  corner next time.
+  if it was dropped far away (and shrinking if she's too big for that screen). The panel opens
+  toward the middle of the screen. It remembers the corner next time.
 - **Ask Claude**: type a question in the box beside the bubble and press Enter (or **Ask in
   Claude**). The Claude Desktop app opens a new chat and the question is sent there, with any
   attached screenshots pasted in, and Claude answers. It's your own Claude account, so it counts
@@ -79,8 +79,10 @@ bubble kept in front, and Check for updates). This is version **1.0.0**, the fir
     new version) and **Uninstall Desktop Assist**. (With the
     built-in chat: Response style (Fast / Balanced / Thorough), New conversation, and who you're
     signed in as with **Log out**.)
-  - **Bounce** sends the character bouncing around the screen, across all your monitors; click it
-    to bring it back to where it stood.
+  - **Her size** opens a menu to make the character smaller or bigger, from half her usual size to
+    six times it (or as big as fits your screen). It's remembered.
+  - **Clones** puts ten clones of her on the taskbar for ten seconds, walking about. They're only
+    pictures: clicks go straight through them.
   - **Close** quits the app.
 - **Attach screenshot** adds the newest screenshot to your next question; click it again to add
   the one before, and so on (it says when there are no more). **Report to IT** turns
@@ -159,7 +161,8 @@ apps/desktop/
                   the built-in chat (claude/) and its JumpCloud sign-in (auth/), draft,
                   screenshots, uninstall, IPC
   src/preload/    the typed `window.assist` bridge
-  src/renderer/   React views: the bubble, and the panel (actions, settings, chat, sign-in)
+  src/renderer/   React views: the bubble, her clones, and the panel (actions, settings, chat,
+                  sign-in)
   src/shared/     code both sides use: IPC contract, action registry, layout constants, types
   tests/          unit tests
 tenants/          per-business branding, enabled actions, where chats happen, sign-in settings

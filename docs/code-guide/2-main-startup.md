@@ -39,7 +39,7 @@ tests can drive them with fakes. `index.ts` is the only file that knows about al
 
 <!-- code: apps/desktop/src/main/index.ts#SHUTDOWN_TIMEOUT_MS,PRODUCT_NAME,controller,tray,refusedSwitches -->
 
-[`src/main/index.ts`, lines 70–91](../../apps/desktop/src/main/index.ts#L70-L91)
+[`src/main/index.ts`, lines 71–92](../../apps/desktop/src/main/index.ts#L71-L92)
 
 ```ts
 const SHUTDOWN_TIMEOUT_MS = 2000
@@ -118,7 +118,7 @@ backend, the conversation and the JumpCloud sign-in) are in a separate function,
 
 <!-- code: apps/desktop/src/main/index.ts#start.tenant -->
 
-[`src/main/index.ts`, line 108](../../apps/desktop/src/main/index.ts#L108)
+[`src/main/index.ts`, line 109](../../apps/desktop/src/main/index.ts#L109)
 
 ```ts
 const tenant = await withDevOverrides(TenantSchema.parse(tenantConfig))
@@ -145,7 +145,7 @@ const tenant = await withDevOverrides(TenantSchema.parse(tenantConfig))
 
 <!-- code: apps/desktop/src/main/index.ts#start.userData,screenshotsDir,actionCount,log,notes,settings -->
 
-[`src/main/index.ts`, lines 112–123](../../apps/desktop/src/main/index.ts#L112-L123)
+[`src/main/index.ts`, lines 113–124](../../apps/desktop/src/main/index.ts#L113-L124)
 
 ```ts
 const userData = app.getPath('userData')
@@ -184,7 +184,7 @@ const settings = new SettingsService(join(userData, 'preferences.json'), screens
 
 <!-- code: apps/desktop/src/main/index.ts#start.bubbleWindow,panelWindow,windows,stopKeepingOnTop,windowsReady,broadcast -->
 
-[`src/main/index.ts`, lines 126–136](../../apps/desktop/src/main/index.ts#L126-L136)
+[`src/main/index.ts`, lines 127–137](../../apps/desktop/src/main/index.ts#L127-L137)
 
 ```ts
 // The windows are created after the last `await`: from here to registerIpc() below nothing
@@ -216,7 +216,11 @@ page's request is handled, its handler has been registered.
 - `createOverlayWindow('bubble', ...)`: creates a hidden, frameless, transparent, always-on-top
   window and starts loading the page into it (`bubble/windows.ts`, see
   [The bubble](5-bubble.md)). The bubble window is just big enough for the bubble; the panel
-  window's size depends on how many action icons the tenant has (`panelWindowSize()`).
+  window's size depends on how many action icons the tenant has (`panelWindowSize()`). Both are
+  created at the character's usual size: before it shows them, the controller below sizes and
+  places them for the size she really is (which may have been saved bigger or smaller).
+- `const windows = [bubbleWindow, panelWindow]`: these two are the app's lasting windows. The
+  clones' window (see [Her clones](#her-clones) below) comes and goes, and isn't one of them.
 - `windows.map(keepOnTop)`: each window checks every few seconds that it's still on top of other
   apps' windows, and puts itself back if not (`bubble/windows.ts`). The functions that stop the
   checks are kept for quitting.
@@ -233,7 +237,7 @@ page's request is handled, its handler has been registered.
 
 <!-- code: apps/desktop/src/main/index.ts#start.bubble -->
 
-[`src/main/index.ts`, lines 138–151](../../apps/desktop/src/main/index.ts#L138-L151)
+[`src/main/index.ts`, lines 139–154](../../apps/desktop/src/main/index.ts#L139-L154)
 
 ```ts
 const bubble = new BubbleController({
@@ -242,9 +246,11 @@ const bubble = new BubbleController({
   displays: electronDisplays,
   actionCount,
   initialAnchor: settings.bubbleAnchor,
+  initialScale: settings.characterScale,
   onDiagnostic: (message) => log(message),
   onModeChange: (mode) => broadcast(IPC.modeChanged, mode),
   onPoseChange: (pose) => broadcast(IPC.poseChanged, pose),
+  onSizeChange: (size) => broadcast(IPC.sizeChanged, size),
   onAnchorChange: (anchor) => {
     broadcast(IPC.cornerChanged, anchor.corner)
     void settings.setBubbleAnchor(anchor) // remembered for next time
@@ -266,11 +272,19 @@ here.
   this file ([`electronDisplays`](#toarea-and-electrondisplays)).
 - `initialAnchor: settings.bubbleAnchor`: the corner and display the character was dragged to last
   time, or `null` the first time.
+- `initialScale: settings.characterScale`: the size the user last chose for her in the size menu,
+  or `null` if it's never been changed (her usual size then). The controller snaps it to one of
+  `CHARACTER_SIZES` and keeps it to what fits her display.
 - `onModeChange`: every mode change (collapsed, expanded, dragging and so on) is broadcast, so the
   pages can animate to match.
 - `onPoseChange: (pose) => broadcast(IPC.poseChanged, pose)`: every change of the character's pose
   (standing, walking, a fidget, dangling) is broadcast too, and the bubble's page animates the
   character to match.
+- `onSizeChange: (size) => broadcast(IPC.sizeChanged, size)`: her size (a `CharacterSize`: how big
+  she is, and the biggest she can be on her display) is broadcast whenever either changes, so the
+  bubble's page draws her at that size and the panel lays itself out for it. Saving the size is
+  left to the IPC handler for the size menu (see [`registerIpc()`](#registeripc)), so a size she's
+  shrunk to only because a screen is small is never saved.
 - `onDiagnostic: (message) => log(message)`: the controller notes bubble clicks it ignored, and a
   blur it ignored just after opening, in the problem log (see [The bubble](5-bubble.md)).
 - `onAnchorChange`: when the character settles near the other bottom corner or on another display,
@@ -283,11 +297,72 @@ here.
   keyboard focus, for example when the user clicks another app. The controller then closes the
   panel (unless it has only just opened).
 
+#### Her clones
+
+<!-- code: apps/desktop/src/main/index.ts#start.clones -->
+
+[`src/main/index.ts`, lines 158–175](../../apps/desktop/src/main/index.ts#L158-L175)
+
+```ts
+// Her clones: a window along the taskbar, which shows once its page is drawn, and then puts her
+// own window back in front of it.
+const clones = new Clones({
+  accentColor: tenant.accentColor,
+  open: (bounds, query) => {
+    const win = createOverlayWindow(
+      'clones',
+      { width: bounds.width, height: bounds.height },
+      query,
+    )
+    win.setBounds(bounds)
+    win.once('ready-to-show', () => {
+      win.showInactive()
+      bringToFront(bubbleWindow, false)
+    })
+    return { close: () => !win.isDestroyed() && win.destroy() }
+  },
+})
+```
+
+<!-- /code -->
+
+`Clones` (in `bubble/clones.ts`, see [The bubble](5-bubble.md)) runs the Clones action: ten copies
+of the character walking about the taskbar for ten seconds, all drawn by one page in one window of
+their own. Like the controller, it never touches Electron: it asks for a window through `open`,
+and this is where that window is made. As the comment says, the window shows once its page is
+drawn, and then her own window is put back in front of it.
+
+- `accentColor: tenant.accentColor`: the tenant's colour, which `Clones` passes on to the page for
+  the clones' robes and hats.
+- `open: (bounds, query) => {`: `Clones` calls this with where the window goes (a strip along the
+  bottom of her display's work area, as tall as her window) and what its page needs to know (where
+  she stands, her size, the colour and when the clones' time ends), and gets back something it
+  can close.
+- `createOverlayWindow('clones', { width: bounds.width, height: bounds.height }, query)`: a
+  hidden, frameless, transparent, always-on-top
+  window like the other two, loading the same page with `?view=clones` and `query` added to the
+  address (`bubble/windows.ts`). This one can't take the keyboard focus, and the mouse goes
+  straight through it to whatever is underneath, so the clones never get in the way.
+- `win.setBounds(bounds)`: puts the window exactly over the strip, in DIPs, as the controller does
+  for the other two.
+- `win.once('ready-to-show', () => {`: once its page has painted for the first time, so it never
+  shows empty.
+- `win.showInactive()`: shows it without taking the focus from whatever the user is doing.
+- `bringToFront(bubbleWindow, false)`: the clones' window was shown last, so it would be in front
+  of her; this puts her own window back on top of it (`bubble/windows.ts`). `false` means without
+  hiding and showing it again.
+- `return { close: () => !win.isDestroyed() && win.destroy() }`: `Clones` closes the window when
+  the clones' time is up, or when the action is used again before then. `destroy()` closes it
+  straight away; `isDestroyed()` skips one that has already gone (while quitting, say).
+
+The clones' window isn't in `windows`, so it gets no `keepOnTop()` check and no broadcasts: it
+only lasts ten seconds, and everything its page needs comes in its address.
+
 #### Screenshots, notifications and the clipboard
 
 <!-- code: apps/desktop/src/main/index.ts#start.screenshots,notify,copyScreenshots -->
 
-[`src/main/index.ts`, lines 155–176](../../apps/desktop/src/main/index.ts#L155-L176)
+[`src/main/index.ts`, lines 177–198](../../apps/desktop/src/main/index.ts#L177-L198)
 
 ```ts
 const screenshots = new ScreenshotService(screenshotsDir, () =>
@@ -345,7 +420,7 @@ const copyScreenshots = async (paths: string[]) => {
 
 <!-- code: apps/desktop/src/main/index.ts#start.builtIn,claudeDesktop -->
 
-[`src/main/index.ts`, lines 179–208](../../apps/desktop/src/main/index.ts#L179-L208)
+[`src/main/index.ts`, lines 201–230](../../apps/desktop/src/main/index.ts#L201-L230)
 
 ```ts
 const builtIn =
@@ -424,7 +499,7 @@ exists.
 
 <!-- code: apps/desktop/src/main/index.ts#start.netFetch,updater -->
 
-[`src/main/index.ts`, lines 209–239](../../apps/desktop/src/main/index.ts#L209-L239)
+[`src/main/index.ts`, lines 231–261](../../apps/desktop/src/main/index.ts#L231-L261)
 
 ```ts
 // Electron's fetch, so a proxy set in Windows is used.
@@ -503,7 +578,7 @@ const updater = updates
 
 <!-- code: apps/desktop/src/main/index.ts#start.appsStatus,portalApps -->
 
-[`src/main/index.ts`, lines 241–263](../../apps/desktop/src/main/index.ts#L241-L263)
+[`src/main/index.ts`, lines 263–285](../../apps/desktop/src/main/index.ts#L263-L285)
 
 ```ts
 let appsStatus: AppsState['status'] = 'loading'
@@ -568,7 +643,7 @@ icon (see [Your apps](10-apps.md)). It's only set up when the tenant has a `port
 
 <!-- code: apps/desktop/src/main/index.ts#start.requests,memoryPath,atlassianStatus,atlassian,desk -->
 
-[`src/main/index.ts`, lines 268–330](../../apps/desktop/src/main/index.ts#L268-L330)
+[`src/main/index.ts`, lines 290–352](../../apps/desktop/src/main/index.ts#L290-L352)
 
 ```ts
 const requests = serviceDesk?.requests
@@ -692,7 +767,7 @@ Two statements follow:
 
 <!-- code: apps/desktop/src/main/index.ts#start.onDisplayChange -->
 
-[`src/main/index.ts`, line 388](../../apps/desktop/src/main/index.ts#L388)
+[`src/main/index.ts`, line 412](../../apps/desktop/src/main/index.ts#L412)
 
 ```ts
 const onDisplayChange = () => bubble.displayChanged()
@@ -721,12 +796,14 @@ Everything else in this part of `start()` is plain statements:
   `spawn(path, [], { detached: true, stdio: 'ignore' }).unref()`. `detached` runs it as a process
   of its own, `stdio: 'ignore'` connects nothing to it, and `unref()` tells Node not to wait for
   it, so it carries on after Desktop Assist has quit.
-- `actions: createActionHandlers({`: the commands behind the service desk, Screenshot, Bounce
-  and Close icons (`actions.ts`).
+- `actions: createActionHandlers({`: the commands behind the service desk, Screenshot, Clones
+  and Close icons (`actions.ts`). It's given the controller, and `clones`, the `Clones` made above
+  (see [Her clones](#her-clones)).
 - `openServiceDesk: serviceDesk ? () => shell.openExternal(serviceDesk.url) : null`: opens the
   service desk's address from `tenant.json` in the browser, or `null` when the tenant has none.
 - `getState: () => ({`: builds the snapshot a page asks for when it first loads: the bubble's mode
-  and corner, the character's pose (`bubble.currentPose`), the draft, the settings, the branding,
+  and corner, the character's pose (`bubble.currentPose`) and size (`bubble.size`), the draft, the
+  settings, the branding,
   the app version (`app.getVersion()`, from `package.json`), the sign-in status and the chat so far.
   After that the page keeps up through the broadcasts above.
 - `auth: builtIn?.auth.status ?? null`, `chat: builtIn?.chat.list() ?? []`: `?.` reads on only if
@@ -744,7 +821,7 @@ Everything else in this part of `start()` is plain statements:
 
 <!-- code: apps/desktop/src/main/index.ts#start.shuttingDown -->
 
-[`src/main/index.ts`, lines 393–394](../../apps/desktop/src/main/index.ts#L393-L394)
+[`src/main/index.ts`, lines 417–418](../../apps/desktop/src/main/index.ts#L417-L418)
 
 ```ts
 // Save the text box before quitting. before-quit fires again after the second app.quit().
@@ -761,9 +838,10 @@ Quit or the Close icon. It doesn't fire when Windows shuts down or logs off, whi
 - `if (shuttingDown) return`: the handler ends by calling `app.quit()` again, which fires
   `before-quit` a second time. This flag lets that second one through.
 - `event.preventDefault()`: cancels this first quit, to make time for the steps below.
-- `bubble.dispose()`, `builtIn?.chat.stop()`: stops the bubble's animation timers and, with the
-  built-in chat, aborts a reply that is still streaming. The loop over `stopKeepingOnTop` ends the
-  windows' on-top checks.
+- `bubble.dispose()`, `clones.stop()`, `builtIn?.chat.stop()`: stops the bubble's animation
+  timers, closes the clones' window if the clones are about, and, with the built-in chat, aborts a
+  reply that is still streaming. The loop over `stopKeepingOnTop` ends the windows' on-top
+  checks.
 - `void portalApps?.dispose()`: closes the Apps list's connection to JumpCloud, and stops waiting
   for a browser sign-in if one is under way. `atlassian?.dispose()` does the same for Atlassian,
   and stops the 5-minute checks.
@@ -782,7 +860,7 @@ page has drawn anything.
 
 <!-- code: apps/desktop/src/main/index.ts#start.stopWatchingFront -->
 
-[`src/main/index.ts`, lines 413–423](../../apps/desktop/src/main/index.ts#L413-L423)
+[`src/main/index.ts`, lines 438–448](../../apps/desktop/src/main/index.ts#L438-L448)
 
 ```ts
 // For its first ten minutes, make sure the bubble isn't stuck behind other apps' windows.
@@ -806,7 +884,7 @@ after other apps, the bubble could end up behind them even though its window was
 
 - `isResting: () => bubble.currentMode === 'collapsed'`: only a character standing on the taskbar
   (or strolling along it, which is still `collapsed`) is checked; while the panel is open, or the
-  character is being dragged or bouncing, the user can see it.
+  character is being dragged or falling, the user can see it.
 - `getNativeWindowHandle().readBigUInt64LE(0).toString()`: the bubble window's Windows handle
   (`HWND`), which the check gives Windows to ask about that window. Electron hands it over as the
   bytes of a 64-bit number.
@@ -834,7 +912,7 @@ was part of `start()`. It returns a [`BuiltInChat`](#builtinchat): the `AuthMana
 
 <!-- code: apps/desktop/src/main/index.ts#startBuiltInChat.devBaseUrl,lastIdToken,backend,chat -->
 
-[`src/main/index.ts`, lines 443–467](../../apps/desktop/src/main/index.ts#L443-L467)
+[`src/main/index.ts`, lines 468–492](../../apps/desktop/src/main/index.ts#L468-L492)
 
 ```ts
 // Dev runs may point at a local test server; an installed app always talks to Anthropic.
@@ -907,7 +985,7 @@ const chat = new ChatSession({
 
 <!-- code: apps/desktop/src/main/index.ts#startBuiltInChat.missing,localIssuer,authState,auth -->
 
-[`src/main/index.ts`, lines 469–493](../../apps/desktop/src/main/index.ts#L469-L493)
+[`src/main/index.ts`, lines 494–518](../../apps/desktop/src/main/index.ts#L494-L518)
 
 ```ts
 const missing = missingSettings(signIn, claudeAccess)
@@ -984,7 +1062,7 @@ Two statements end the function:
 
 <!-- code: apps/desktop/src/main/index.ts#safeStorageEncryptor -->
 
-[`src/main/index.ts`, lines 499–504](../../apps/desktop/src/main/index.ts#L499-L504)
+[`src/main/index.ts`, lines 524–529](../../apps/desktop/src/main/index.ts#L524-L529)
 
 ```ts
 /** Windows DPAPI through Electron: only this Windows user can decrypt what it encrypts. */
@@ -1012,7 +1090,7 @@ The encryption `SecretStore` uses for the saved sign-in. `SecretStore` only know
 
 <!-- code: apps/desktop/src/main/index.ts#withDevOverrides -->
 
-[`src/main/index.ts`, lines 506–529](../../apps/desktop/src/main/index.ts#L506-L529)
+[`src/main/index.ts`, lines 531–554](../../apps/desktop/src/main/index.ts#L531-L554)
 
 ```ts
 /**
@@ -1068,7 +1146,7 @@ example to try the built-in chat against a test identity provider, without editi
 
 <!-- code: apps/desktop/src/main/index.ts#isLoopback -->
 
-[`src/main/index.ts`, lines 531–533](../../apps/desktop/src/main/index.ts#L531-L533)
+[`src/main/index.ts`, lines 556–558](../../apps/desktop/src/main/index.ts#L556-L558)
 
 ```ts
 function isLoopback(url: URL): boolean {
@@ -1086,7 +1164,7 @@ in `hostname`. Used only to decide whether plain `http` is allowed for a dev ide
 
 <!-- code: apps/desktop/src/main/index.ts#toArea,electronDisplays -->
 
-[`src/main/index.ts`, lines 535–551](../../apps/desktop/src/main/index.ts#L535-L551)
+[`src/main/index.ts`, lines 560–575](../../apps/desktop/src/main/index.ts#L560-L575)
 
 ```ts
 /** Electron's `screen`, in the shape the bubble controller uses. All coordinates are DIPs. */
@@ -1098,7 +1176,6 @@ const toArea = (display: Electron.Display): DisplayArea => ({
 
 const electronDisplays: Displays = {
   primary: () => toArea(screen.getPrimaryDisplay()),
-  all: () => screen.getAllDisplays().map(toArea),
   byId: (id) => {
     const display = screen.getAllDisplays().find((d) => d.id === id)
     return display && toArea(display)
@@ -1116,13 +1193,12 @@ uses (see [The bubble](5-bubble.md)). Keeping Electron behind this small interfa
 `tests/bubbleController.test.ts` run the controller with two fake displays.
 
 - `toArea`: keeps only what the controller needs from a display: its ID, its bounds (the whole
-  screen) and its work area (the screen minus the taskbar).
+  screen, which nothing reads at the moment) and its work area (the screen minus the taskbar).
 - `DIPs`: device-independent pixels. On a display scaled to 150%, one DIP is 1.5 physical pixels.
   Electron's window positions and display sizes are all in DIPs, so the controller never has to
   think about scaling.
-- `screen.getAllDisplays().map(toArea)`: every connected display, for Bounce, which roams across
-  them all.
-- `return display && toArea(display)`: if no display has that ID any more (it was unplugged),
+- `screen.getAllDisplays().find((d) => d.id === id)`: the connected display with that ID.
+  `return display && toArea(display)`: if no display has that ID any more (it was unplugged),
   this returns `undefined` rather than throwing.
 - `Math.round(point.x)`: the bubble's position can be fractional while it animates, but this
   Electron call takes whole numbers.
@@ -1135,7 +1211,7 @@ method is called, which happens after `start()` has begun.
 
 <!-- code: apps/desktop/src/main/index.ts#fail -->
 
-[`src/main/index.ts`, lines 553–557](../../apps/desktop/src/main/index.ts#L553-L557)
+[`src/main/index.ts`, lines 577–581](../../apps/desktop/src/main/index.ts#L577-L581)
 
 ```ts
 function fail(error: unknown): void {
@@ -1341,7 +1417,7 @@ updates' only when it has `updates`.
 
 <!-- code: apps/desktop/src/main/ipc.ts#BuiltInChat -->
 
-[`src/main/ipc.ts`, lines 35–39](../../apps/desktop/src/main/ipc.ts#L35-L39)
+[`src/main/ipc.ts`, lines 36–40](../../apps/desktop/src/main/ipc.ts#L36-L40)
 
 ```ts
 /** The built-in chat and the JumpCloud sign-in it needs. */
@@ -1363,7 +1439,7 @@ which one exists without the other.
 
 <!-- code: apps/desktop/src/main/ipc.ts#IpcContext -->
 
-[`src/main/ipc.ts`, lines 41–64](../../apps/desktop/src/main/ipc.ts#L41-L64)
+[`src/main/ipc.ts`, lines 42–65](../../apps/desktop/src/main/ipc.ts#L42-L65)
 
 ```ts
 export interface IpcContext {
@@ -1398,7 +1474,7 @@ Everything the handlers need, passed in by `start()` in `index.ts`. The main pro
 are created there, so this file only needs their types, not how to build them.
 
 - `windows: BrowserWindow[]`: the bubble and panel windows; requests from any other page are
-  refused.
+  refused (the clones' window included: its page never calls in).
 - `builtIn: BuiltInChat | null`, `claudeDesktop: ClaudeDesktop | null`: where questions go.
   Exactly one of the two is set, depending on the tenant's `chatApp` (see
   [The chat: built in, or in Claude Desktop](#the-chat-built-in-or-in-claude-desktop)).
@@ -1416,7 +1492,7 @@ are created there, so this file only needs their types, not how to build them.
 
 <!-- code: apps/desktop/src/main/ipc.ts#NoArgs,FilePath,IssueKey,TimeSpent,ASK_PROBLEMS,ExternalUrl -->
 
-[`src/main/ipc.ts`, lines 66–93](../../apps/desktop/src/main/ipc.ts#L66-L93)
+[`src/main/ipc.ts`, lines 67–94](../../apps/desktop/src/main/ipc.ts#L67-L94)
 
 ```ts
 const NoArgs = z.undefined()
@@ -1478,7 +1554,7 @@ Schemas used by several channels.
 
 <!-- code: apps/desktop/src/main/ipc.ts#registerIpc -->
 
-[`src/main/ipc.ts`, lines 95–337](../../apps/desktop/src/main/ipc.ts#L95-L337)
+[`src/main/ipc.ts`, lines 96–347](../../apps/desktop/src/main/ipc.ts#L96-L347)
 
 ```ts
 /** Wires every renderer request to the main process. All arguments are validated with zod. */
@@ -1555,6 +1631,15 @@ export function registerIpc(ctx: IpcContext): void {
   )
   handle(IPC.settingsSetAutoSend, z.boolean(), (autoSend) => ctx.settings.setAutoSend(autoSend))
   handle(IPC.settingsSetTheme, z.enum(['dark', 'light']), (theme) => ctx.settings.setTheme(theme))
+  handle(
+    IPC.characterSetSize,
+    z.number().refine((scale) => (CHARACTER_SIZES as readonly number[]).includes(scale)),
+    async (scale) => {
+      const size = ctx.controller.setScale(scale)
+      await ctx.settings.setCharacterScale(scale)
+      return size
+    },
+  )
   handle(
     IPC.settingsSetFavoriteApp,
     z.object({ id: z.string().min(1).max(200), favorite: z.boolean() }),
@@ -1767,10 +1852,10 @@ Check for updates have inner functions of their own too.
 
 **Actions, links and the clipboard**
 
-- `z.enum(COMMAND_ACTION_IDS)`: only the `command` actions (service desk, Screenshot, Bounce, Close)
-  are accepted. `ctx.actions[id]()` runs the matching handler from `actions.ts` and returns its
-  result, which the panel shows as a toast. The Settings icon is a `popover` action that never
-  leaves the page.
+- `z.enum(COMMAND_ACTION_IDS)`: only the `command` actions (service desk, Screenshot, Clones,
+  Close) are accepted. `ctx.actions[id]()` runs the matching handler from `actions.ts` and returns
+  its result, which the panel shows as a toast. The Settings and Her size icons are `popover`
+  actions that never leave the page.
 - `shell.openExternal(url)`: opens a link from a Claude reply (or the Claude Desktop download
   page) in the default browser, after `ExternalUrl` has checked it (an email link opens the email
   app instead).
@@ -1799,6 +1884,14 @@ Check for updates have inner functions of their own too.
   menu always shows what actually took effect. (The menu offers the response style only with the
   built-in chat, and "Send in Claude automatically" only with Claude Desktop.)
 - `IPC.settingsSetTheme`, `z.enum(['dark', 'light'])`: the light or dark mode icon.
+- `IPC.characterSetSize`: the Smaller and Bigger buttons in the size menu.
+  `z.number().refine(...)` accepts only one of `CHARACTER_SIZES` (from `src/shared/geometry.ts`);
+  `CHARACTER_SIZES as readonly number[]` lets `includes()` take any number, since on the list's own
+  type it would only take one of those exact sizes. `ctx.controller.setScale(scale)` resizes the
+  character (or makes her as big as fits her display, if that's smaller), and
+  `ctx.settings.setCharacterScale(scale)` saves the size asked for, not the size she may have been
+  kept to, so next time she starts at that size again wherever it fits. The answer is her size as
+  it now is (a `CharacterSize`).
 - `IPC.settingsSetFavoriteApp`: a star in the Apps list. Its schema,
   `z.object({ id: ..., favorite: z.boolean() })`, checks an object field by field, and
   `({ id, favorite })` unpacks it.
@@ -1937,7 +2030,7 @@ is either a `popover` (opens UI inside the panel, handled entirely by the page) 
 
 <!-- code: apps/desktop/src/main/actions.ts#ActionHandlers,createActionHandlers -->
 
-[`src/main/actions.ts`, lines 6–47](../../apps/desktop/src/main/actions.ts#L6-L47)
+[`src/main/actions.ts`, lines 7–51](../../apps/desktop/src/main/actions.ts#L7-L51)
 
 ```ts
 export type ActionHandlers = Record<CommandActionId, () => Promise<ActionResult>>
@@ -1945,6 +2038,7 @@ export type ActionHandlers = Record<CommandActionId, () => Promise<ActionResult>
 /** Main-process handlers for the `command` actions in the registry (src/shared/actions.ts). */
 export function createActionHandlers(deps: {
   controller: BubbleController
+  clones: Pick<Clones, 'start'>
   screenshots: ScreenshotService
   /** Opens the company's IT service desk in the browser, or null if the tenant has none. */
   openServiceDesk: (() => Promise<void>) | null
@@ -1972,8 +2066,10 @@ export function createActionHandlers(deps: {
         return { ok: false, message: "Couldn't take a screenshot" }
       }
     },
-    async bounce() {
-      deps.controller.startBounce()
+    async clones() {
+      // Out of the way, so the clones can be seen: they walk along the taskbar, where she stands.
+      deps.controller.collapse()
+      deps.clones.start(deps.controller.standing)
       return { ok: true }
     },
     async close() {
@@ -1992,8 +2088,12 @@ export function createActionHandlers(deps: {
 
 - `Record<CommandActionId, () => Promise<ActionResult>>`: `Record<K, V>` is a TypeScript type for
   an object with a `V` under every key in `K`. `CommandActionId` is the list of command actions
-  (`'servicedesk' | 'screenshot' | 'bounce' | 'close'`), so if a new command is added to the
+  (`'servicedesk' | 'screenshot' | 'clones' | 'close'`), so if a new command is added to the
   registry, this file won't compile until it has a handler.
+- `clones: Pick<Clones, 'start'>`: her clones (`bubble/clones.ts`, see [The bubble](5-bubble.md)).
+  `Pick<T, K>` is a TypeScript type with only the members `K` of `T`, so this file can only start
+  the clones, and any object with a matching `start()` method would do. `index.ts` passes the real
+  `Clones`.
 - `openServiceDesk: (() => Promise<void>) | null`: a function that opens the service desk, or
   `null` when the tenant has none. The brackets around the function type are needed so that
   `| null` applies to the whole of it.
@@ -2007,8 +2107,12 @@ export function createActionHandlers(deps: {
   way the app isn't in its own screenshot.
 - `catch (error)`: any failure (including `whileHidden()` refusing because the panel isn't open)
   becomes a friendly message; the details go to the log.
-- `async bounce()`: starts the bubble bouncing around the screen. It's `async` only so that it
-  fits the type: every handler returns a promise.
+- `async clones()`: the Clones icon ("Ten clones for ten seconds"). As the comment says,
+  `deps.controller.collapse()` closes the panel first, out of the way, so the clones can be seen:
+  they walk along the taskbar, where she stands. `deps.clones.start(deps.controller.standing)`
+  then sets them off from where she stands, at her size (`standing` is her display's work area,
+  her window and her size). The handler has nothing to say, so the panel shows no toast. It's
+  `async` only so that it fits the type: every handler returns a promise.
 - `deps.quit()`: `app.quit()`, which goes through the `before-quit` handler in `index.ts`, so the
   draft is saved first.
 
@@ -3531,16 +3635,17 @@ changes.
 
 `SettingsService` keeps the user's preferences in `preferences.json` in the userData folder: the
 reply effort (Fast, Balanced, Thorough) for the built-in chat, whether questions are sent in Claude
-Desktop automatically, the apps starred in the Apps list, light or dark mode, where the bubble was
-dragged to, and whether "Start with Windows" has been set up. It also reports the settings the
+Desktop automatically, the apps starred in the Apps list, light or dark mode, the character's size,
+where the bubble was dragged to, and whether "Start with Windows" has been set up. It also reports
+the settings the
 Settings menu shows. Created in `start()`; the Settings menu reaches it through the `settings...`
-IPC channels.
+IPC channels, and the size menu through `characterSetSize`.
 
 ### `DEFAULT_EFFORT`, `PreferencesSchema` and `Preferences`
 
 <!-- code: apps/desktop/src/main/settings.ts#DEFAULT_EFFORT,PreferencesSchema,Preferences -->
 
-[`src/main/settings.ts`, lines 7–27](../../apps/desktop/src/main/settings.ts#L7-L27)
+[`src/main/settings.ts`, lines 7–29](../../apps/desktop/src/main/settings.ts#L7-L29)
 
 ```ts
 /** Fast answers by default; Balanced and Thorough think longer. */
@@ -3555,6 +3660,8 @@ const PreferencesSchema = z.object({
   theme: z.enum(['dark', 'light']).optional(),
   /** Apps starred in the Apps list (their IDs), shown first. */
   favoriteApps: z.array(z.string().min(1).max(200)).max(500).optional(),
+  /** How big she is, as a multiple of her usual size (see CHARACTER_SIZES). */
+  characterScale: z.number().min(0.1).max(10).optional(),
   /** Where the bubble was dragged to: a corner of a particular display. */
   bubbleAnchor: z
     .object({
@@ -3578,6 +3685,10 @@ type Preferences = z.infer<typeof PreferencesSchema>
 - `autoSend`: "Send in Claude automatically", for Claude Desktop. As the comment says, it's on
   unless the user has turned it off: a missing value counts as on (see `get()`), so it's on for
   everyone who installed before the setting existed too.
+- `characterScale`: as the comment says, how big the character is, as a multiple of her usual size
+  (one of `CHARACTER_SIZES` in `src/shared/geometry.ts`). The schema only asks for a number from
+  0.1 to 10, so a damaged file can't hold anything absurd; `BubbleController` snaps whatever is
+  there to the nearest of her sizes (`snapSize()`).
 - `bubbleAnchor`: a display ID and one of the four corners (`BubbleAnchor` in
   `BubbleController.ts`). The character only ever saves a bottom corner, but the schema still
   accepts all four, so a top corner saved by an older version still loads; the controller then
@@ -3588,7 +3699,7 @@ type Preferences = z.infer<typeof PreferencesSchema>
 
 <!-- code: apps/desktop/src/main/settings.ts#SettingsService.prefs,saving,constructor -->
 
-[`src/main/settings.ts`, lines 30–36](../../apps/desktop/src/main/settings.ts#L30-L36)
+[`src/main/settings.ts`, lines 32–38](../../apps/desktop/src/main/settings.ts#L32-L38)
 
 ```ts
 private prefs: Preferences = {}
@@ -3618,7 +3729,7 @@ constructor(
 
 <!-- code: apps/desktop/src/main/settings.ts#SettingsService.init -->
 
-[`src/main/settings.ts`, lines 38–48](../../apps/desktop/src/main/settings.ts#L38-L48)
+[`src/main/settings.ts`, lines 40–50](../../apps/desktop/src/main/settings.ts#L40-L50)
 
 ```ts
 /** Loads preferences. The first time an installed build runs, turns on "Start with Windows". */
@@ -3654,7 +3765,7 @@ Loads the file once at startup (called from `start()`).
 
 <!-- code: apps/desktop/src/main/settings.ts#SettingsService.get -->
 
-[`src/main/settings.ts`, lines 50–63](../../apps/desktop/src/main/settings.ts#L50-L63)
+[`src/main/settings.ts`, lines 52–65](../../apps/desktop/src/main/settings.ts#L52-L65)
 
 ```ts
 get(): Settings {
@@ -3693,7 +3804,7 @@ The current settings, as the Settings menu shows them (`Settings` in `src/shared
 
 <!-- code: apps/desktop/src/main/settings.ts#SettingsService.setAutoStart -->
 
-[`src/main/settings.ts`, lines 65–68](../../apps/desktop/src/main/settings.ts#L65-L68)
+[`src/main/settings.ts`, lines 67–70](../../apps/desktop/src/main/settings.ts#L67-L70)
 
 ```ts
 setAutoStart(enabled: boolean): Settings {
@@ -3713,7 +3824,7 @@ settings, so the menu shows what actually happened; in a dev run that's still "o
 
 <!-- code: apps/desktop/src/main/settings.ts#SettingsService.setEffort,setAutoSend -->
 
-[`src/main/settings.ts`, lines 70–78](../../apps/desktop/src/main/settings.ts#L70-L78)
+[`src/main/settings.ts`, lines 72–80](../../apps/desktop/src/main/settings.ts#L72-L80)
 
 ```ts
 async setEffort(effort: Effort): Promise<Settings> {
@@ -3738,7 +3849,7 @@ dependency each time it hands a question over.
 
 <!-- code: apps/desktop/src/main/settings.ts#SettingsService.setTheme -->
 
-[`src/main/settings.ts`, lines 80–88](../../apps/desktop/src/main/settings.ts#L80-L88)
+[`src/main/settings.ts`, lines 82–90](../../apps/desktop/src/main/settings.ts#L82-L90)
 
 ```ts
 /**
@@ -3768,7 +3879,7 @@ Switches every Desktop Assist window between light and dark, and saves the choic
 
 <!-- code: apps/desktop/src/main/settings.ts#SettingsService.setFavoriteApp -->
 
-[`src/main/settings.ts`, lines 90–95](../../apps/desktop/src/main/settings.ts#L90-L95)
+[`src/main/settings.ts`, lines 92–97](../../apps/desktop/src/main/settings.ts#L92-L97)
 
 ```ts
 /** Stars an app in the Apps list, or takes its star away. */
@@ -3793,7 +3904,7 @@ list, which the panel adopts.
 
 <!-- code: apps/desktop/src/main/settings.ts#SettingsService.bubbleAnchor,setBubbleAnchor -->
 
-[`src/main/settings.ts`, lines 97–103](../../apps/desktop/src/main/settings.ts#L97-L103)
+[`src/main/settings.ts`, lines 99–105](../../apps/desktop/src/main/settings.ts#L99-L105)
 
 ```ts
 get bubbleAnchor(): BubbleAnchor | null {
@@ -3813,11 +3924,37 @@ has never been moved, and `BubbleController` then uses the bottom-right corner o
 display. `setBubbleAnchor()` is called by `onAnchorChange` in `start()` each time the character
 settles near the other bottom corner or on another display.
 
+### `SettingsService.characterScale` and `SettingsService.setCharacterScale()`
+
+<!-- code: apps/desktop/src/main/settings.ts#SettingsService.characterScale,setCharacterScale -->
+
+[`src/main/settings.ts`, lines 107–114](../../apps/desktop/src/main/settings.ts#L107-L114)
+
+```ts
+/** Her size as chosen in the size menu, or null if it's never been changed. */
+get characterScale(): number | null {
+  return this.prefs.characterScale ?? null
+}
+
+async setCharacterScale(scale: number): Promise<void> {
+  await this.save({ characterScale: scale })
+}
+```
+
+<!-- /code -->
+
+The character's size, saved the same way as where she lives. As the comment says, the getter
+returns her size as chosen in the size menu, or `null` if it's never been changed; `start()` passes
+it to `BubbleController` as `initialScale`, which starts her at her usual size for `null`.
+`setCharacterScale()` is called by the `characterSetSize` handler in `registerIpc()` each time the
+user makes her smaller or bigger. It saves the size the user asked for, even when her screen only
+has room for less.
+
 ### `SettingsService.save()`
 
 <!-- code: apps/desktop/src/main/settings.ts#SettingsService.save -->
 
-[`src/main/settings.ts`, lines 105–112](../../apps/desktop/src/main/settings.ts#L105-L112)
+[`src/main/settings.ts`, lines 116–123](../../apps/desktop/src/main/settings.ts#L116-L123)
 
 ```ts
 private async save(changes: Preferences): Promise<void> {

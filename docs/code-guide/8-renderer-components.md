@@ -2,10 +2,11 @@
 
 [← Code Guide](CODE_GUIDE.md)
 
-These seven files draw almost everything that appears around the bubble when you click it. `Panel`
-in `PanelView.tsx` (see [The pages](7-renderer-pages.md)) renders three of them directly: the
+These eight files draw almost everything that appears around the bubble when you click it. `Panel`
+in `PanelView.tsx` (see [The pages](7-renderer-pages.md)) renders four of them directly: the
 `ActionStack` of round icons in a column beside the bubble, the `ChatBox` card next to the bubble on
-the side facing the middle of the screen, and the `SettingsMenu`, which opens beside the gear icon.
+the side facing the middle of the screen, the `SettingsMenu`, which opens beside the gear icon, and
+the `SizeMenu`, which opens beside the size icon.
 Everything else lives inside the chat card: `SignInPanel` replaces the chat while nobody is signed
 in, `MessageList` shows the conversation (using `Markdown` for Claude's replies), and an
 `AttachmentChip` above the text box stands for each attached screenshot. When questions go to Claude
@@ -19,13 +20,14 @@ One more component belongs to the bubble's page instead: `Character`, with its s
 `character.css`, the pixel-art character that stands in for the bubble. Her frames are drawn by
 code in `src/renderer/src/character/`: a tiny pixel rasteriser (`raster.ts`), the rig that poses
 and draws her (`rig.ts`), the parts of her drawn by hand (`pictures.ts`) and her animations
-(`sprite.ts`). `BubbleView` renders `Character`, and
-all of these are covered at the end of this page.
+(`sprite.ts`). `BubbleView` renders `Character`, and so does `ClonesView`, once for each of her
+clones; all of these are covered at the end of this page.
 
 ## `src/renderer/src/components/ChatBox.tsx`: the chat card
 
 The card beside the bubble, with the text box at its bottom. `Panel` renders one `ChatBox` and
-passes it everything it shows: the bubble's `corner`, whether the panel is `open`, the current
+passes it everything it shows: the bubble's `corner`, the `layout` for her size, whether the panel
+is `open`, the current
 `toast`, the conversation (`messages`), the `draft` and its `attachments`, whether Claude is
 replying (`busy`), whether Send is allowed (`canSend`), whether questions go to Claude Desktop
 (`inClaudeDesktop`) and, if so, whether they're sent there automatically (`autoSend`). `Panel` also
@@ -39,7 +41,7 @@ three components: `ChatBox` (the card), `Composer` (the text box, private to thi
 
 <!-- code: apps/desktop/src/renderer/src/components/ChatBox.tsx#ChatBox -->
 
-[`src/renderer/src/components/ChatBox.tsx`, lines 19–111](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L19-L111)
+[`src/renderer/src/components/ChatBox.tsx`, lines 19–113](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L19-L113)
 
 ```tsx
 /**
@@ -52,6 +54,8 @@ three components: `ChatBox` (the card), `Composer` (the text box, private to thi
  */
 export function ChatBox(props: {
   corner: Corner
+  /** Where things sit for her size: the card goes beside her. */
+  layout: PanelLayout
   open: boolean
   toast: ToastMessage | null
   /** Sending hands the question to Claude Desktop instead of the chat in the panel. */
@@ -95,7 +99,7 @@ export function ChatBox(props: {
         'motion-reduce:transition-none',
       )}
       style={{
-        ...anchored(props.corner, PANEL_LAYOUT.chatX, PANEL_LAYOUT.chatY),
+        ...anchored(props.corner, props.layout.chatX, props.layout.chatY),
         width: UI.panelWidth,
         maxHeight: UI.panelMaxHeight,
       }}
@@ -171,15 +175,18 @@ it.
 through to whatever is underneath. `useClickThrough` (see [The pages](7-renderer-pages.md))
 switches mouse input on only while the pointer is over an element that is, or is inside, one
 marked `data-hit`. So every piece of real UI must carry it. Here it's the whole card, which covers
-everything inside it; in `SettingsMenu` it's the menu, and in `ActionStack` each icon.
+everything inside it; in `SettingsMenu` and `SizeMenu` it's the menu, and in `ActionStack` each
+icon.
 
 **How the layout mirrors for each corner.** The layout works from any corner of the screen,
 though the character only ever lives near the two bottom ones, and the panel always opens toward
 the middle. The panel window shares its outer corner with the
 bubble's window (`panelWindowBounds` in [The bubble](5-bubble.md)), so the components measure
-their positions from that corner. `PANEL_LAYOUT` in `src/shared/geometry.ts` gives each piece's
-distance from it, `X` across and `Y` away from the screen edge (see
-[Shared code and the preload bridge](1-shared-and-preload.md)). `anchored(corner, x, y)` from
+their positions from that corner. `panelLayout(scale)` in `src/shared/geometry.ts` gives each
+piece's distance from it for her size, `X` across and `Y` away from the screen edge (see
+[Shared code and the preload bridge](1-shared-and-preload.md)). `Panel` works it out once and
+passes it to each component as its `layout` prop; the bigger she is, the further out everything
+sits, since her box and the padding round it grow with her. `anchored(corner, x, y)` from
 `lib/anchor.ts` turns those two numbers into CSS: `right` and `bottom` in the bottom-right corner,
 `left` and `top` in the top-left, and so on. So the same numbers work in all four corners, and a
 component only has to check the corner where something must change direction (the toast here,
@@ -188,7 +195,8 @@ the other corners are mirror images:
 
 ```text
                                        [close]
-                                       [bounce]
+                                       [clones]
+                                       [size]        <- SizeMenu opens leftward, over the card
   +-----------------------------+      [settings]    <- SettingsMenu opens leftward, over the card
   | MessageList                 |      [screenshot]
   | Banner (only sometimes)     |
@@ -198,6 +206,8 @@ the other corners are mirror images:
 
 The parts of `ChatBox` itself:
 
+- `layout: PanelLayout`: as the comment says, where things sit for her size; the card goes beside
+  her. `PanelLayout` is the type of what `panelLayout()` returns.
 - `inClaudeDesktop: boolean`: `ChatBox` only passes it on to `Composer`, which changes the send
   button. The rest of the card needs no change: with Claude Desktop, `Panel` never passes a
   sign-in prompt or any messages, so the card is just the text box (and sometimes a banner).
@@ -213,14 +223,15 @@ The parts of `ChatBox` itself:
 - `'group-data-open:scale-100 group-data-open:opacity-100'`: `Panel`'s outer `<div>` has the
   class `group`, and a `data-open` attribute while the panel is open. `group-data-open:` means
   "when an ancestor marked `group` has `data-open`". So opening animates the card in over 150 ms,
-  and closing animates it out; the main process waits 140 ms (`PANEL_FADE_MS` in
+  and closing animates it out; the main process waits 150 ms (`PANEL_FADE_MS` in
   `BubbleController.ts`) before hiding the window, so the fade-out can be seen.
 - `'motion-reduce:transition-none'`: when Windows is set to show fewer animations (the system's
   reduced-motion setting), the card appears and disappears instantly.
-- `...anchored(props.corner, PANEL_LAYOUT.chatX, PANEL_LAYOUT.chatY)`: `style` takes an object of
-  CSS properties, and plain numbers mean pixels. `chatX` is 100 (the 8 px padding around the
-  bubble, the 80 px bubble and a 12 px gap), so the card starts just past the bubble. `chatY` is
-  8, so the card's near edge is level with the bubble's.
+- `...anchored(props.corner, props.layout.chatX, props.layout.chatY)`: `style` takes an object of
+  CSS properties, and plain numbers mean pixels. At her usual size `chatX` is 100 (the 8 px padding
+  around the bubble, the 80 px bubble and a 12 px gap), so the card starts just past the bubble.
+  `chatY` is 8, so the card's near edge is level with the bubble's. At twice her size they're 188
+  (16 + 160 + 12) and 16.
 - `maxHeight: UI.panelMaxHeight`: nothing sets a height. The card is pinned at the bubble's edge
   and grows away from it as content is added, up to 520 px. After that the message list scrolls.
 - `{props.toast && (`: the part after `&&` is rendered only when the left side is truthy, so
@@ -251,7 +262,7 @@ The parts of `ChatBox` itself:
 
 <!-- code: apps/desktop/src/renderer/src/components/ChatBox.tsx#Composer -->
 
-[`src/renderer/src/components/ChatBox.tsx`, lines 113–254](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L113-L254)
+[`src/renderer/src/components/ChatBox.tsx`, lines 115–256](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L115-L256)
 
 ```tsx
 /** The text box: attached screenshots, the text, and the attach / send / stop buttons. */
@@ -489,7 +500,7 @@ first appears. Effects are for work outside drawing the UI, such as moving the k
 
 <!-- code: apps/desktop/src/renderer/src/components/ChatBox.tsx#Banner -->
 
-[`src/renderer/src/components/ChatBox.tsx`, lines 256–265](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L256-L265)
+[`src/renderer/src/components/ChatBox.tsx`, lines 258–267](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L258-L267)
 
 ```tsx
 /** A one-line status above the text box, with an optional action. */
@@ -1099,11 +1110,11 @@ passed as `children`.
 
 The small menu that opens beside the gear icon. `Panel` renders it only while the panel is open, the
 gear has toggled it on, and the tenant's list of actions includes `settings`. Its props are the
-`corner` and `offset` for positioning; the current `settings`, `branding` (app and company name, and
-which kind of chat), `version`, signed-in `user`, the `atlassianUser` connected to Atlassian and
-how Check for updates is going (`update`) to display; and one callback per menu item,
-`onUninstall`, `onDisconnectAtlassian` and `onCheckForUpdates` included. `Panel`
-closes it on Esc, on a click anywhere else in the panel, and when the panel closes.
+`corner`, `layout` and `offset` for positioning; the current `settings`, `branding` (app and
+company name, and which kind of chat), `version`, signed-in `user`, the `atlassianUser` connected
+to Atlassian and how Check for updates is going (`update`) to display; and one callback per menu
+item, `onUninstall`, `onDisconnectAtlassian` and `onCheckForUpdates` included. `Panel` closes it on
+Esc, on a click anywhere else in the panel, and when the panel closes.
 
 ### `CONFIRM_MS`, `EFFORTS`
 
@@ -1134,12 +1145,14 @@ const EFFORTS: { value: Effort; label: string; hint: string }[] = [
 
 <!-- code: apps/desktop/src/renderer/src/components/SettingsMenu.tsx#SettingsMenu -->
 
-[`src/renderer/src/components/SettingsMenu.tsx`, lines 26–234](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L26-L234)
+[`src/renderer/src/components/SettingsMenu.tsx`, lines 26–236](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L26-L236)
 
 ```tsx
 /** The menu that opens beside the gear icon, on the side facing the middle of the screen. */
 export function SettingsMenu(props: {
   corner: Corner
+  /** Where things sit for her size: the menu goes beside the stack. */
+  layout: PanelLayout
   /** Distance from the bubble's edge of the window to the gear, so the menu lines up with it. */
   offset: number
   settings: Settings
@@ -1192,7 +1205,7 @@ export function SettingsMenu(props: {
         'border-black/10 bg-white text-zinc-800 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100',
       )}
       style={{
-        ...anchored(props.corner, PANEL_LAYOUT.settingsX, props.offset),
+        ...anchored(props.corner, props.layout.settingsX, props.offset),
         width: UI.settingsMenuWidth,
       }}
     >
@@ -1365,13 +1378,16 @@ for values that don't affect what's shown, and state for values that do. Here `c
 switches the "New conversation" (or "Clear text box") row into its "Click again" form, and
 `confirmingUninstall` does the same for Uninstall.
 
-- `offset: number`: `Panel` passes `actionOffset()` of the gear's place in the icon stack.
-- `...anchored(props.corner, PANEL_LAYOUT.settingsX, props.offset)`: `settingsX` (76 px) puts the
-  menu 8 px past the action icons, on the side facing the middle of the screen. `offset` makes
-  its near edge level with the gear's: in a bottom corner its bottom lines up with the gear's
-  bottom, so it opens upward; in a top corner it opens downward. It overlaps the chat card and is
-  drawn on top because `Panel` renders it after `ChatBox`.
-- `data-settings-menu`: lets `Panel`'s `closeSettingsOnOutsideClick` recognise a click inside the
+- `layout: PanelLayout`: as the comment says, where things sit for her size; the menu goes beside
+  the stack.
+- `offset: number`: `Panel` passes `actionOffset()` of the gear's place in the icon stack, at her
+  size.
+- `...anchored(props.corner, props.layout.settingsX, props.offset)`: `settingsX` (76 px at her
+  usual size, 124 px at twice it) puts the menu 8 px past the action icons, on the side facing the
+  middle of the screen. `offset` makes its near edge level with the gear's: in a bottom corner its
+  bottom lines up with the gear's bottom, so it opens upward; in a top corner it opens downward. It
+  overlaps the chat card and is drawn on top because `Panel` renders it after `ChatBox`.
+- `data-settings-menu`: lets `Panel`'s `closeMenusOnOutsideClick` recognise a click inside the
   menu, so it doesn't close it.
 - `role="menu"`: this and `role="menuitemcheckbox"`, `role="radiogroup"` and the rest tell screen
   readers what each control is (and `aria-checked` whether it's on), since they're all styled
@@ -1441,7 +1457,7 @@ switches the "New conversation" (or "Clear text box") row into its "Click again"
 
 <!-- code: apps/desktop/src/renderer/src/components/SettingsMenu.tsx#UpdateItem -->
 
-[`src/renderer/src/components/SettingsMenu.tsx`, lines 236–274](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L236-L274)
+[`src/renderer/src/components/SettingsMenu.tsx`, lines 238–276](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L238-L276)
 
 ```tsx
 /** Check for updates, showing how it's going: checking, downloading, installing, or the answer. */
@@ -1510,7 +1526,7 @@ whole job happens in the main process (`Updater` in `src/main/updates.ts`; see
 
 <!-- code: apps/desktop/src/renderer/src/components/SettingsMenu.tsx#MenuItem -->
 
-[`src/renderer/src/components/SettingsMenu.tsx`, lines 276–305](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L276-L305)
+[`src/renderer/src/components/SettingsMenu.tsx`, lines 278–307](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L278-L307)
 
 ```tsx
 function MenuItem(props: {
@@ -1565,7 +1581,7 @@ One row of the menu: an icon and a label, as a button.
 
 <!-- code: apps/desktop/src/renderer/src/components/SettingsMenu.tsx#Switch -->
 
-[`src/renderer/src/components/SettingsMenu.tsx`, lines 307–324](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L307-L324)
+[`src/renderer/src/components/SettingsMenu.tsx`, lines 309–326](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L309-L326)
 
 ```tsx
 function Switch({ on }: { on: boolean }) {
@@ -1597,15 +1613,209 @@ it tells screen readers whether it's on, so the switch itself is `aria-hidden`.
 - `on ? 'translate-x-4.5' : 'translate-x-0.5'`: the 16 px knob sits 2 px from the left of the
   36 px track when off and slides to 18 px when on; `transition-transform` animates the slide.
 
+## `src/renderer/src/components/SizeMenu.tsx`: the size menu
+
+The small menu that opens beside the size icon (Her size), with buttons to make her smaller or
+bigger. `Panel` renders it only while the panel is open, the size icon has toggled it on, and the
+tenant's list of actions includes `size`. Its props are the `corner`, `layout` and `offset` for
+positioning, as for `SettingsMenu`; her `size` (`CharacterSize` in `src/shared/geometry.ts`: her
+`scale`, and `max`, the biggest she can be on her screen); and `onSetSize`, which asks the main
+process for another size. `Panel` closes it on Esc, on a click anywhere else in the panel, when
+another icon is clicked, and when the panel closes.
+
+### `MENU_WIDTH`, `sizeLabel()` and `nextSize()`
+
+<!-- code: apps/desktop/src/renderer/src/components/SizeMenu.tsx#MENU_WIDTH,sizeLabel,nextSize -->
+
+[`src/renderer/src/components/SizeMenu.tsx`, lines 11–23](../../apps/desktop/src/renderer/src/components/SizeMenu.tsx#L11-L23)
+
+```tsx
+const MENU_WIDTH = 200
+
+/** Her size as people say it: "½×", "1.5×", "6×". */
+export function sizeLabel(scale: number): string {
+  return `${scale === 0.5 ? '½' : scale === 0.75 ? '¾' : scale}×`
+}
+
+/** The next size down, or up, of CHARACTER_SIZES, no bigger than `max`; null at either end. */
+export function nextSize(scale: number, way: 1 | -1, max: number): number | null {
+  const sizes = CHARACTER_SIZES.filter((size) => size <= max)
+  const next = way === 1 ? sizes.find((size) => size > scale) : sizes.findLast((s) => s < scale)
+  return next ?? null
+}
+```
+
+<!-- /code -->
+
+- `MENU_WIDTH = 200`: the menu's width in pixels, narrower than the settings menu.
+- `sizeLabel(scale)`: as the comment says, her size as people say it: the two fractions as `½` and
+  `¾`, any other size as the number itself (`1`, `1.5`, `6`), then `×`.
+- `nextSize(scale, way, max)`: as the comment says, the next size down (`way` is `-1`) or up (`1`)
+  in `CHARACTER_SIZES`, leaving out any bigger than `max`, or `null` at either end.
+  `CHARACTER_SIZES` runs from smallest to biggest, so `find()` gives the first size bigger than
+  hers and `findLast()` the last one smaller. Both give `undefined` when there's none, and
+  `?? null` turns that into `null`.
+
+### `SizeMenu`
+
+<!-- code: apps/desktop/src/renderer/src/components/SizeMenu.tsx#SizeMenu -->
+
+[`src/renderer/src/components/SizeMenu.tsx`, lines 25–82](../../apps/desktop/src/renderer/src/components/SizeMenu.tsx#L25-L82)
+
+```tsx
+/**
+ * The menu that opens beside the size icon: buttons to make her smaller and bigger, a step of
+ * CHARACTER_SIZES at a time, from half her usual size up to six times it (or as big as fits her
+ * screen, when that's less). The main process resizes her and remembers it; the new size comes
+ * back in the app state, so this shows whatever she really is.
+ */
+export function SizeMenu(props: {
+  corner: Corner
+  layout: PanelLayout
+  /** Distance from the bubble's edge of the window to the size icon, so the menu lines up. */
+  offset: number
+  size: CharacterSize
+  onSetSize: (scale: number) => void
+}) {
+  const { scale, max } = props.size
+  const smaller = nextSize(scale, -1, max)
+  const bigger = nextSize(scale, 1, max)
+  const limited = max < CHARACTER_SIZES.at(-1)!
+  return (
+    <div
+      data-hit
+      data-size-menu
+      role="group"
+      aria-label="Her size"
+      className={cn(
+        'absolute rounded-xl border p-2.5 shadow-xl',
+        'border-black/10 bg-white text-zinc-800 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100',
+      )}
+      style={{ ...anchored(props.corner, props.layout.settingsX, props.offset), width: MENU_WIDTH }}
+    >
+      <p className="mb-2 text-sm">Her size</p>
+      <div className="flex items-center justify-between gap-2">
+        <SizeButton
+          label="Smaller"
+          disabled={smaller === null}
+          onClick={() => smaller !== null && props.onSetSize(smaller)}
+        >
+          <Minus size={16} aria-hidden />
+        </SizeButton>
+        <span aria-live="polite" className="min-w-12 text-center text-lg font-medium tabular-nums">
+          {sizeLabel(scale)}
+        </span>
+        <SizeButton
+          label="Bigger"
+          disabled={bigger === null}
+          onClick={() => bigger !== null && props.onSetSize(bigger)}
+        >
+          <Plus size={16} aria-hidden />
+        </SizeButton>
+      </div>
+      <p className="mt-2 text-[11px] text-zinc-500">
+        {limited && bigger === null
+          ? 'As big as fits this screen'
+          : `From ${sizeLabel(CHARACTER_SIZES[0])} to ${sizeLabel(limited ? max : CHARACTER_SIZES.at(-1)!)}`}
+      </p>
+    </div>
+  )
+}
+```
+
+<!-- /code -->
+
+As the comment says, a step of `CHARACTER_SIZES` at a time, from half her usual size up to six
+times it, or as big as fits her screen when that's less. It never resizes her itself: clicking a
+button calls `onSetSize`, the main process resizes her and saves the size, and the new size comes
+back in the app state (`onSizeChanged` in `useAssistState`), so the menu always shows what she
+really is.
+
+- `offset: number`: as the comment says, the distance from the bubble's edge of the window to the
+  size icon (`actionOffset()` of its place in the stack, at her size), so the menu lines up with
+  it.
+- `const smaller = nextSize(scale, -1, max)`, `const bigger = nextSize(scale, 1, max)`: the sizes
+  the two buttons go to, or `null` where there's no further to go.
+- `const limited = max < CHARACTER_SIZES.at(-1)!`: whether her screen keeps her from the biggest
+  size, six times. `at(-1)` is the list's last entry; the `!` tells TypeScript it's there.
+- `data-hit`: so the menu takes the mouse (see `data-hit` under `ChatBox`).
+- `data-size-menu`: lets `Panel`'s `closeMenusOnOutsideClick` recognise a click inside the menu, so
+  it doesn't close it.
+- `role="group"`, `aria-label="Her size"`: screen readers present the buttons together, under that
+  name.
+- `...anchored(props.corner, props.layout.settingsX, props.offset)`: placed just as the settings
+  menu is, 8 px past the action icons on the side facing the middle of the screen, but level with
+  the size icon. Its look (rounded corners, a border, a shadow, white or near-black) is the
+  settings menu's too.
+- `disabled={smaller === null}`: Smaller is greyed out at half her usual size, the smallest.
+- `onClick={() => smaller !== null && props.onSetSize(smaller)}`: checks again that there is a
+  smaller size, which also tells TypeScript `smaller` is a number here.
+- `<span aria-live="polite" ...>{sizeLabel(scale)}</span>`: her size between the two buttons, such
+  as `1×`. `aria-live="polite"` makes screen readers read it out when it changes, once they've
+  finished what they're saying. `tabular-nums` gives every digit the same width, and `min-w-12`
+  keeps the space between the buttons the same, so they don't move as the label changes.
+- `disabled={bigger === null}`: Bigger is greyed out at six times her size, or at the biggest that
+  fits her screen.
+- The line at the bottom: at the biggest that fits a screen too small for six times her size, "As
+  big as fits this screen"; otherwise the range she can be on this screen, "From ½× to 6×" (or to
+  `max` when that's less).
+
+### `SizeButton`
+
+<!-- code: apps/desktop/src/renderer/src/components/SizeMenu.tsx#SizeButton -->
+
+[`src/renderer/src/components/SizeMenu.tsx`, lines 84–108](../../apps/desktop/src/renderer/src/components/SizeMenu.tsx#L84-L108)
+
+```tsx
+function SizeButton(props: {
+  label: string
+  disabled: boolean
+  onClick: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      title={props.label}
+      aria-label={props.label}
+      disabled={props.disabled}
+      onClick={props.onClick}
+      className={cn(
+        'grid size-9 place-items-center rounded-full border outline-none',
+        'focus-visible:ring-2 focus-visible:ring-accent',
+        props.disabled
+          ? 'cursor-default border-black/5 text-zinc-300 dark:border-white/5 dark:text-zinc-600'
+          : 'border-black/10 hover:bg-zinc-100 dark:border-white/10 dark:hover:bg-zinc-800',
+      )}
+    >
+      {props.children}
+    </button>
+  )
+}
+```
+
+<!-- /code -->
+
+One of the two round buttons, private to this file.
+
+- `title={props.label}`, `aria-label={props.label}`: "Smaller" or "Bigger", as a tooltip and for
+  screen readers, since the button shows only an icon (a minus or a plus).
+- `disabled={props.disabled}`: a disabled button can't be clicked or focused.
+- `'grid size-9 place-items-center rounded-full border outline-none'`: a 36 px circle with the icon
+  in its middle. With `'focus-visible:ring-2 focus-visible:ring-accent'`, it gets the same accent
+  ring as the action icons when it has the keyboard focus.
+- `props.disabled ? ... : ...`: a disabled button has a fainter border and icon and a plain arrow
+  pointer; otherwise it turns grey on hover.
+
 ## `src/renderer/src/components/ActionStack.tsx`: the action icons
 
 The column of round icon buttons that pops out of the bubble when the panel opens (for Morse
-Micro: Ask Claude, Jira, IT service desk, screenshot, light or dark mode, settings, bounce and
-close),
-in the order the tenant's `tenant.json` lists them, nearest the bubble first. `Panel` always
-renders it; while closed it's simply invisible. Its props are the `corner`, the tenant's
-`actions`, `open`, `activeId` (`settings` while the settings menu is open, otherwise the icon of
-the page showing when it isn't the start page, or `null`), `theme` (the current light or dark
+Micro: Ask Claude, Jira, IT service desk, screenshot, light or dark mode, settings, her size, ten
+clones and close), in the order the tenant's `tenant.json` lists them, nearest the bubble first.
+`Panel` always renders it; while closed it's simply invisible. Its props are the `corner`, the
+`layout` for her size, the tenant's `actions`, `open`, `activeId` (`settings` while the settings
+menu is open, `size` while the size menu is, otherwise the icon of the page showing when it isn't
+the start page, or `null`), `theme` (the current light or dark
 mode), `pages` (command icons that open a page in the panel instead: the service desk, when the
 tenant lists request types), `dotted` (icons that get a small dot) and `onAction`, which is
 `Panel.runAction`.
@@ -1614,7 +1824,7 @@ tenant lists request types), `dotted` (icons that get a small dot) and `onAction
 
 <!-- code: apps/desktop/src/renderer/src/components/ActionStack.tsx#ICONS -->
 
-[`src/renderer/src/components/ActionStack.tsx`, lines 20–30](../../apps/desktop/src/renderer/src/components/ActionStack.tsx#L20-L30)
+[`src/renderer/src/components/ActionStack.tsx`, lines 21–32](../../apps/desktop/src/renderer/src/components/ActionStack.tsx#L21-L32)
 
 ```tsx
 const ICONS: Record<ActionId, LucideIcon> = {
@@ -1625,7 +1835,8 @@ const ICONS: Record<ActionId, LucideIcon> = {
   screenshot: Camera,
   theme: Sun,
   settings: Settings,
-  bounce: Volleyball,
+  size: Scaling,
+  clones: UsersRound,
   close: Power,
 }
 ```
@@ -1634,8 +1845,10 @@ const ICONS: Record<ActionId, LucideIcon> = {
 
 Which lucide icon each action shows. Ask Claude is `MessageCircle`, a speech bubble; Apps is
 `LayoutGrid`, a grid of four squares, the usual sign for "apps"; Jira is `Bell`, for its
-notifications; and the IT service desk is `Headset`, as for a help desk. The theme icon is `Sun`,
-but see below: it changes with the mode.
+notifications; and the IT service desk is `Headset`, as for a help desk. Her size is `Scaling`, a
+box with a diagonal arrow stretching out of its corner, and the clones are `UsersRound`, two
+people, one behind the other. The theme
+icon is `Sun`, but see below: it changes with the mode.
 
 - `Record<ActionId, LucideIcon>`: an object with exactly one entry for every action id. If a new
   id is added to `ACTION_IDS` in `src/shared/actions.ts` without an icon here, TypeScript reports
@@ -1645,7 +1858,7 @@ but see below: it changes with the mode.
 
 <!-- code: apps/desktop/src/renderer/src/components/ActionStack.tsx#ActionStack -->
 
-[`src/renderer/src/components/ActionStack.tsx`, lines 32–112](../../apps/desktop/src/renderer/src/components/ActionStack.tsx#L32-L112)
+[`src/renderer/src/components/ActionStack.tsx`, lines 34–116](../../apps/desktop/src/renderer/src/components/ActionStack.tsx#L34-L116)
 
 ```tsx
 /**
@@ -1654,6 +1867,8 @@ but see below: it changes with the mode.
  */
 export function ActionStack(props: {
   corner: Corner
+  /** Where things sit for her size: the stack goes above her. */
+  layout: PanelLayout
   actions: ActionId[]
   open: boolean
   activeId: ActionId | null
@@ -1670,7 +1885,7 @@ export function ActionStack(props: {
     <div
       className={cn('absolute flex', top ? 'flex-col' : 'flex-col-reverse')}
       style={{
-        ...anchored(props.corner, PANEL_LAYOUT.actionsX, PANEL_LAYOUT.actionsY),
+        ...anchored(props.corner, props.layout.actionsX, props.layout.actionsY),
         gap: UI.actionGap,
       }}
     >
@@ -1738,27 +1953,33 @@ Lays the icons out in a column beside the bubble and animates them in and out.
 - `top ? 'flex-col' : 'flex-col-reverse'`: the first action must be nearest the bubble. In a top
   corner the bubble is above the stack, so it's a normal top-to-bottom column. In a bottom corner
   the bubble is below, so the column is reversed and the first action sits at the bottom.
-- `...anchored(props.corner, PANEL_LAYOUT.actionsX, PANEL_LAYOUT.actionsY)`: `actionsX` (28 px)
-  centres the 40 px icons on the 80 px bubble. `actionsY` (100 px) starts the stack 12 px past the
-  bubble.
+- `layout: PanelLayout`: as the comment says, where things sit for her size; the stack goes above
+  her.
+- `...anchored(props.corner, props.layout.actionsX, props.layout.actionsY)`: `actionsX` centres the
+  40 px icons on her box: 28 px at her usual size, on the 80 px bubble. `actionsY` starts the stack
+  12 px past her box: 100 px at her usual size. The icons themselves stay the same size whatever
+  her size; only where they start moves (at twice her size, 76 px across and 188 px up).
 - `gap: UI.actionGap`: 8 px between icons. The main process sizes the panel window from the same
-  numbers (`panelWindowSize` in `src/shared/geometry.ts`), so the stack always fits.
+  numbers (`panelWindowSize` in `src/shared/geometry.ts`, for her size), so the stack always fits.
 - `const Icon = id === 'theme' && props.theme === 'light' ? Moon : ICONS[id]`: the theme icon shows
   what clicking it switches to: a sun while dark (switch to light), a moon while light.
 - `const label = id === 'theme' ? ... : ACTIONS[id].label`: the tooltip and screen-reader name,
   from the action registry, except for the theme icon, which says what it will do ("Switch to
   light mode" or "Switch to dark mode").
 - `data-hit`: on each button, not on the column, so the gaps between icons stay click-through.
-- `data-action={id}`: `Panel.closeSettingsOnOutsideClick` looks for `[data-action="settings"]`,
-  so clicking the gear toggles the menu instead of counting as a click outside it.
+- `data-action={id}`: `Panel.closeMenusOnOutsideClick` looks for `[data-action="settings"]` and
+  `[data-action="size"]`, so clicking the gear or the size icon toggles its menu instead of
+  counting as a click outside it.
 - `aria-expanded={ACTIONS[id].kind === 'popover' || props.pages?.includes(id) ? active : undefined}`:
-  for a popover action (Settings, Ask Claude, Apps and Jira), or an icon that opens a page (the
-  service desk, with request types), it tells screen readers whether what it opens is showing.
-  `undefined` leaves the attribute off the others, the theme icon included, which opens nothing.
-- `onClick={() => props.onAction(id)}`: `Panel.runAction` toggles the menu for Settings, switches
-  the card's page for Ask Claude, Apps, Jira and (with request types) the service desk, flips light
-  or dark mode for the theme icon, and asks the main process to run any other action (see
-  `src/main/actions.ts` in [Main process: startup, IPC and app plumbing](2-main-startup.md)).
+  for a popover action (Settings, Her size, Ask Claude, Apps and Jira), or an icon that opens a
+  page (the service desk, with request types), it tells screen readers whether what it opens is
+  showing. `undefined` leaves the attribute off the others, the theme icon included, which opens
+  nothing.
+- `onClick={() => props.onAction(id)}`: `Panel.runAction` toggles the menu for Settings and Her
+  size, switches the card's page for Ask Claude, Apps, Jira and (with request types) the service
+  desk, flips light or dark mode for the theme icon, and asks the main process to run any other
+  action, such as the clones (see `src/main/actions.ts` in
+  [Main process: startup, IPC and app plumbing](2-main-startup.md)).
 - ``transitionDelay: props.open ? `${index * 30}ms` : '0ms'``: each icon starts its animation 30
   ms after the one before, so they pop out one after another. Closing has no delay, so they all go
   together.
@@ -1767,8 +1988,8 @@ Lays the icons out in a column beside the bubble and animates them in and out.
   (explained under `ChatBox`) move it to its place at full size when the panel opens.
 - `outline-none`: together with `'focus-visible:ring-2 focus-visible:ring-accent'`, swaps the
   usual square focus outline for an accent ring that follows the round button.
-- `active`: the active action (the gear while its menu is open, or a page's icon while its page
-  is showing) is filled with the accent colour.
+- `active`: the active action (the gear or the size icon while its menu is open, or a page's icon
+  while its page is showing) is filled with the accent colour.
 - `'relative grid ...'`: `relative` makes each button the reference box for the dot below.
 - `{props.dotted?.includes(id) && !active && (`: a small accent-coloured dot in the icon's corner
   (`absolute top-1 right-1`), with a ring in the button's own colour so it stands out. `Panel` puts
@@ -1875,6 +2096,10 @@ art:
   palette's colours.
 - The light comes from one direction (up and to the left), so each part is lit on that side and
   shaded on the other, in flat bands: _cel shading_, as in a cartoon.
+- On most materials the shadow isn't just a rim but a broad band across the side away from the
+  light, two-tone the way anime cel shading does it (the ramp's `form`), so each part looks round
+  rather than flat. The shadows parts cast on what's just below them (her hat's brim on her hair,
+  her fringe on her forehead) are added at the end of each frame (`castShadows()` in `rig.ts`).
 - _Selective outlining_: each part is outlined in the darkest shade of its own colour rather than
   in black, so her silver hair has a dusky violet outline and her skin a rose one. The parts stay
   distinct without the heavy look of black lines.
@@ -1886,7 +2111,7 @@ and `ink()` shades and outlines it and lays it over the frame so far.
 
 <!-- code: apps/desktop/src/renderer/src/character/raster.ts#Point,Ramp -->
 
-[`src/renderer/src/character/raster.ts`, lines 1–19](../../apps/desktop/src/renderer/src/character/raster.ts#L1-L19)
+[`src/renderer/src/character/raster.ts`, lines 1–25](../../apps/desktop/src/renderer/src/character/raster.ts#L1-L25)
 
 ```ts
 // A tiny pixel-art rasteriser for the character: shapes drawn straight onto a grid of pixels (no
@@ -1907,6 +2132,12 @@ export interface Ramp {
   shade: string
   base: string
   light?: string
+  /**
+   * The share of the shape, across each row, in its shadow on the side away from the light (0 to
+   * 1): a broad band of shade, two-tone like anime cel shading, that gives it some volume. Left
+   * out, only a rim of shade along that edge.
+   */
+  form?: number
 }
 ```
 
@@ -1918,12 +2149,16 @@ export interface Ramp {
 - `Ramp`: a material's shades, as letters of the palette (`PALETTE` in `sprite.ts`): `line` for its
   outline, `shade` for the side away from the light, `base` for the rest, and an optional `light`
   for the edge toward the light. `rig.ts` gives each material its ramp (`RAMPS`).
+- `form?: number`: as its comment says, how much of the shape, across each row, is in shadow on the
+  side away from the light, from 0 to 1. `0.3` shades the far 30% of every row of the shape: a
+  broad band of shade, two-tone like anime cel shading, that gives it some volume. A ramp without
+  it gets only the rim of shade along that edge (see `ink()`).
 
 ### `Layer`
 
 <!-- code: apps/desktop/src/renderer/src/character/raster.ts#Layer.class -->
 
-[`src/renderer/src/character/raster.ts`, lines 21–22](../../apps/desktop/src/renderer/src/character/raster.ts#L21-L22)
+[`src/renderer/src/character/raster.ts`, lines 27–28](../../apps/desktop/src/renderer/src/character/raster.ts#L27-L28)
 
 ```ts
 /** A body part's pixels, each the name of its material (or undefined: not part of it). */
@@ -1936,7 +2171,7 @@ export class Layer {
 
 <!-- code: apps/desktop/src/renderer/src/character/raster.ts#Layer.cells,minX,minY,maxX,maxY,constructor,get,set -->
 
-[`src/renderer/src/character/raster.ts`, lines 23–46](../../apps/desktop/src/renderer/src/character/raster.ts#L23-L46)
+[`src/renderer/src/character/raster.ts`, lines 29–52](../../apps/desktop/src/renderer/src/character/raster.ts#L29-L52)
 
 ```ts
 readonly cells: (string | undefined)[]
@@ -1995,7 +2230,7 @@ and its silver cuff) and still be shaded and outlined as one shape.
 
 <!-- code: apps/desktop/src/renderer/src/character/raster.ts#Layer.fill -->
 
-[`src/renderer/src/character/raster.ts`, lines 48–59](../../apps/desktop/src/renderer/src/character/raster.ts#L48-L59)
+[`src/renderer/src/character/raster.ts`, lines 54–65](../../apps/desktop/src/renderer/src/character/raster.ts#L54-L65)
 
 ```ts
 /** Fills every pixel whose centre passes `inside`, within the box from `min` to `max`. */
@@ -2028,7 +2263,7 @@ only has to say whether a point is inside it.
 
 <!-- code: apps/desktop/src/renderer/src/character/raster.ts#Layer.polygon,ellipse -->
 
-[`src/renderer/src/character/raster.ts`, lines 61–91](../../apps/desktop/src/renderer/src/character/raster.ts#L61-L91)
+[`src/renderer/src/character/raster.ts`, lines 67–97](../../apps/desktop/src/renderer/src/character/raster.ts#L67-L97)
 
 ```ts
 /** A filled polygon (even-odd rule). */
@@ -2082,7 +2317,7 @@ ellipse(centre: Point, rx: number, ry: number, material: string): void {
 
 <!-- code: apps/desktop/src/renderer/src/character/raster.ts#Layer.capsule,chain -->
 
-[`src/renderer/src/character/raster.ts`, lines 93–119](../../apps/desktop/src/renderer/src/character/raster.ts#L93-L119)
+[`src/renderer/src/character/raster.ts`, lines 99–125](../../apps/desktop/src/renderer/src/character/raster.ts#L99-L125)
 
 ```ts
 /** A thick line from `a` to `b`, `ra` wide at `a` tapering (or swelling) to `rb` at `b`. */
@@ -2133,7 +2368,7 @@ chain(points: Point[], ra: number, rb: number, material: string): void {
 
 <!-- code: apps/desktop/src/renderer/src/character/raster.ts#Canvas.class -->
 
-[`src/renderer/src/character/raster.ts`, lines 122–123](../../apps/desktop/src/renderer/src/character/raster.ts#L122-L123)
+[`src/renderer/src/character/raster.ts`, lines 128–129](../../apps/desktop/src/renderer/src/character/raster.ts#L128-L129)
 
 ```ts
 /** A frame being drawn: rows of palette letters, `.` where nothing is drawn yet. */
@@ -2146,7 +2381,7 @@ export class Canvas {
 
 <!-- code: apps/desktop/src/renderer/src/character/raster.ts#Canvas.cells,constructor,get,set -->
 
-[`src/renderer/src/character/raster.ts`, lines 124–137](../../apps/desktop/src/renderer/src/character/raster.ts#L124-L137)
+[`src/renderer/src/character/raster.ts`, lines 130–143](../../apps/desktop/src/renderer/src/character/raster.ts#L130-L143)
 
 ```ts
 readonly cells: string[]
@@ -2181,7 +2416,7 @@ front.
 
 <!-- code: apps/desktop/src/renderer/src/character/raster.ts#Canvas.ink -->
 
-[`src/renderer/src/character/raster.ts`, lines 139–167](../../apps/desktop/src/renderer/src/character/raster.ts#L139-L167)
+[`src/renderer/src/character/raster.ts`, lines 145–187](../../apps/desktop/src/renderer/src/character/raster.ts#L145-L187)
 
 ```ts
 /**
@@ -2193,12 +2428,26 @@ front.
 ink(layer: Layer, ramps: Record<string, Ramp>, light: Point, outline = true): void {
   const inside = (x: number, y: number) => layer.get(x, y) !== undefined
   for (let y = layer.minY; y <= layer.maxY; y++) {
+    // Each run of the shape along this row: where it starts and ends, for its form shadow.
+    let runStart = layer.minX
+    let runEnd = layer.minX
     for (let x = layer.minX; x <= layer.maxX; x++) {
       const material = layer.get(x, y)
       if (material === undefined) continue
+      if (!inside(x - 1, y)) {
+        runStart = x
+        runEnd = x
+        while (inside(runEnd + 1, y)) runEnd++
+      }
       const ramp = ramps[material]!
+      let inForm = false
+      if (ramp.form && light.x !== 0) {
+        // How far the run goes on, away from the light (light from the left: to the right).
+        const beyond = light.x < 0 ? runEnd - x : x - runStart
+        inForm = beyond < ramp.form * (runEnd - runStart + 1)
+      }
       const shaded =
-        !inside(x - light.x * 2, y - light.y * 2) || !inside(x - light.x, y - light.y)
+        inForm || !inside(x - light.x * 2, y - light.y * 2) || !inside(x - light.x, y - light.y)
       const lit = !inside(x + light.x, y + light.y)
       this.set(x, y, shaded ? ramp.shade : lit && ramp.light ? ramp.light : ramp.base)
     }
@@ -2222,11 +2471,23 @@ where it sits in its shape, then outlines the shape. `ramps` gives each material
 `light` is a one-pixel step toward the light, such as `{ x: -1, y: -1 }` for up and to the left.
 
 - `inside(x, y)`: whether a pixel is part of this layer.
-- The first pair of loops colours the layer's pixels, within its box. Each pixel's colour depends
-  only on its neighbours in the layer:
-  - `shaded`: the pixel one step away from the light (`x - light.x, y - light.y`, which with the
-    light up and to the left is down and to the right), or two steps away, is outside the shape.
-    So the edges facing away from the light get a band of shadow two pixels deep.
+- The first pair of loops colours the layer's pixels, within its box, a row at a time. Each pixel's
+  colour depends only on the layer's other pixels:
+  - `runStart` and `runEnd`: as the comment says, where the run of the shape the pixel is in
+    starts and ends. A _run_ is an unbroken stretch of the layer along the row; where the pixel to
+    the left isn't part of the layer (`!inside(x - 1, y)`), a new run starts here, and its end is
+    found once, by stepping right while the next pixel is still in the layer.
+  - `inForm`: the form shadow, for a material with a `form` (and a light that comes from one side:
+    with `light.x` 0, straight from above, neither side is further from it). `beyond` is how much
+    of the run lies further from
+    the light than this pixel: with the light from the left (`light.x < 0`), the pixels to its
+    right (`runEnd - x`); otherwise those to its left. The pixel is in the form shadow when that's
+    less than `form` times the run's length, so the far `form` share of every run is shaded.
+    Following each row of the shape, the band curves with its edge.
+  - `shaded`: the pixel is in the form shadow, or the pixel one step away from the light
+    (`x - light.x, y - light.y`, which with the light up and to the left is down and to the right),
+    or two steps away, is outside the shape. So the edges facing away from the light get a band of
+    shadow at least two pixels deep.
   - `lit`: the pixel one step toward the light is outside the shape, so the edges facing the light
     get a one-pixel highlight, for materials that have a `light` shade.
   - `shaded ? ramp.shade : lit && ramp.light ? ramp.light : ramp.base`: shadow wins where both
@@ -2234,7 +2495,8 @@ where it sits in its shape, then outlines the shape. `ramps` gives each material
 - That's cel shading: flat bands of colour following the shape's edges rather than smooth
   gradients. It needs no 3D model, only the silhouette. Because each part is inked on its own, each
   is shaded by its own shape: a sleeve in front of the robe gets its own shadow along its lower
-  edge.
+  edge. A run counts every pixel of the layer, whatever its material, but each pixel uses its own
+  material's `form`.
 - `if (!outline) return`: her shadow on the taskbar is inked without an outline.
 - The second pair of loops draws the outline: every pixel just outside the shape (the loops reach
   one pixel beyond the box on every side) that touches it directly to the left, right, above or
@@ -2248,7 +2510,7 @@ where it sits in its shape, then outlines the shape. `ramps` gives each material
 
 <!-- code: apps/desktop/src/renderer/src/character/raster.ts#Canvas.stamp,rows -->
 
-[`src/renderer/src/character/raster.ts`, lines 169–185](../../apps/desktop/src/renderer/src/character/raster.ts#L169-L185)
+[`src/renderer/src/character/raster.ts`, lines 189–205](../../apps/desktop/src/renderer/src/character/raster.ts#L189-L205)
 
 ```ts
 /** Stamps a small hand-drawn picture (rows of letters, `.` see-through) at a place. */
@@ -2285,7 +2547,7 @@ rows(): string[] {
 
 <!-- code: apps/desktop/src/renderer/src/character/raster.ts#rotate,add,limb -->
 
-[`src/renderer/src/character/raster.ts`, lines 188–203](../../apps/desktop/src/renderer/src/character/raster.ts#L188-L203)
+[`src/renderer/src/character/raster.ts`, lines 208–223](../../apps/desktop/src/renderer/src/character/raster.ts#L208-L223)
 
 ```ts
 /** `v` turned by `angle` (radians, clockwise on screen). */
@@ -2345,6 +2607,10 @@ How she's drawn follows common practice in anime-style pixel art:
   face, a braid with its plaits picked out in a darker shade, and a band of shine across the crown.
 - Every frame on the same baseline: her feet are on the grid's bottom rows (unless she's in the
   air), which are the window's bottom edge, so she doesn't jitter up and down as the frames change.
+- Shading that gives her volume rather than leaving her flat: a broad two-tone shadow across the
+  side of each part away from the light (`form` in `RAMPS`), folds in her skirt, and the shadows
+  parts cast on what's just below them, such as her hat's brim on her hair, her fringe on her
+  forehead and her hem on her boots (`castShadows()`).
 - Patterns small enough to read at this size: a pixel or a few per motif (a three-by-three
   diamond, a four-pixel moon, single-pixel stars), set only on the part they belong to, in a
   colour that stands out from it (gold or silver on the deep robe and hat, pale leather on the
@@ -2375,8 +2641,10 @@ export const GRID = 96
 
 <!-- /code -->
 
-`GRID = 96`: a frame is 96 pixels square, the size of the bubble's window (`BUBBLE_BOX`, 96 DIPs),
-so one pixel is one DIP. As the comment above it says, she's about 88 pixels tall with her hat on,
+`GRID = 96`: a frame is 96 pixels square, the size of the bubble's window at her usual size
+(`BUBBLE_BOX`, 96 DIPs), so one pixel is one DIP; when she's bigger, the same frame is drawn
+bigger, a pixel two DIPs across at twice her size, and so on. As the comment above it says, she's
+about 88 pixels tall with her hat on,
 her feet on the bottom row. That leaves only a few rows above the tip of her hat, which is why her
 hop is a small one.
 
@@ -2384,18 +2652,19 @@ hop is a small one.
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#RAMPS,LIGHT -->
 
-[`src/renderer/src/character/rig.ts`, lines 19–34](../../apps/desktop/src/renderer/src/character/rig.ts#L19-L34)
+[`src/renderer/src/character/rig.ts`, lines 19–35](../../apps/desktop/src/renderer/src/character/rig.ts#L19-L35)
 
 ```ts
 /** Each material's shades, as palette letters (see PALETTE in sprite.ts). */
 const RAMPS: Record<string, Ramp> = {
-  hair: { line: 'O', shade: 'D', base: 'h', light: 'l' },
-  skin: { line: 'K', shade: 'S', base: 's', light: 'z' },
-  robe: { line: 'q', shade: 'A', base: 'a', light: 'v' },
+  // A broad shadow across the side of each away from the light (`form`), less on her face.
+  hair: { line: 'O', shade: 'D', base: 'h', light: 'l', form: 0.28 },
+  skin: { line: 'K', shade: 'S', base: 's', light: 'z', form: 0.16 },
+  robe: { line: 'q', shade: 'A', base: 'a', light: 'v', form: 0.3 },
   trim: { line: 'q', shade: 'F', base: 'f' },
-  hat: { line: 'q', shade: 'N', base: 'n', light: 'g' },
-  stocking: { line: 'u', shade: 'Q', base: 'o' },
-  boot: { line: 'u', shade: 'B', base: 'b', light: 'y' },
+  hat: { line: 'q', shade: 'N', base: 'n', light: 'g', form: 0.3 },
+  stocking: { line: 'u', shade: 'Q', base: 'o', form: 0.35 },
+  boot: { line: 'u', shade: 'B', base: 'b', light: 'y', form: 0.35 },
   cup: { line: 'u', shade: 'F', base: 'f', light: 'w' },
   book: { line: 'u', shade: 'N', base: 'n', light: 'g' },
   shadow: { line: 'x', shade: 'x', base: 'x' },
@@ -2410,6 +2679,9 @@ const LIGHT: Point = { x: -1, y: -1 }
 - `RAMPS`: each material's ramp (`Ramp` in `raster.ts`): which letters of `PALETTE` (in
   `sprite.ts`) are its outline, shadow, base and light. Most have all four; the trim, stockings
   and shadow make do with fewer.
+  - `form`: as the comment says, a broad shadow across the side of each away from the light: 28%
+    of each row of her hair, 30% of her robe and hat, 35% of her stockings and boots, and only 16%
+    of her skin, so her face stays mostly light. The trim, cup, book and shadow have none.
   - `robe`, `trim` and `hat` share the robe's outline (`q`). The trim is the silver along the
     robe's edges; it's mostly set pixel by pixel on top of the robe, and only inked as a shape of
     its own at the cuff of each sleeve.
@@ -2425,7 +2697,7 @@ const LIGHT: Point = { x: -1, y: -1 }
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#View,Face,Arm,Leg,Pose,DOWN,STAND,LEG_LENGTH -->
 
-[`src/renderer/src/character/rig.ts`, lines 36–86](../../apps/desktop/src/renderer/src/character/rig.ts#L36-L86)
+[`src/renderer/src/character/rig.ts`, lines 37–87](../../apps/desktop/src/renderer/src/character/rig.ts#L37-L87)
 
 ```ts
 export type View = 'front' | 'diagonal' | 'side'
@@ -2526,7 +2798,7 @@ What a pose is made of.
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#EYES,MOUTHS,SPARKLE,TWINKLE,eyesFor -->
 
-[`src/renderer/src/character/rig.ts`, lines 88–155](../../apps/desktop/src/renderer/src/character/rig.ts#L88-L155)
+[`src/renderer/src/character/rig.ts`, lines 89–156](../../apps/desktop/src/renderer/src/character/rig.ts#L89-L156)
 
 ```ts
 // Face pictures, facing right; `.` is see-through. Eyes have a thick upper lid, a dark-to-light
@@ -2635,7 +2907,7 @@ As the comment says, they face right; frames facing left are mirrored with every
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#draw -->
 
-[`src/renderer/src/character/rig.ts`, lines 157–868](../../apps/desktop/src/renderer/src/character/rig.ts#L157-L868)
+[`src/renderer/src/character/rig.ts`, lines 158–883](../../apps/desktop/src/renderer/src/character/rig.ts#L158-L883)
 
 ```ts
 /** Draws one pose as rows of palette letters. */
@@ -2895,11 +3167,11 @@ export function draw(pose: Pose): string[] {
       const braidPath =
         view === 'side'
           ? [
-              [-2, 4],
-              [-2.6, 10],
-              [-3.2, 16],
-              [-3.8, 22],
-              [-4.2, 28],
+              [-5.5, 3],
+              [-6, 9],
+              [-6.4, 15],
+              [-6.8, 21],
+              [-7, 27],
             ]
           : [
               [8.6, 1],
@@ -3019,9 +3291,20 @@ export function draw(pose: Pose): string[] {
         right: skirt[1]![0]! + (skirt[2]![0]! - skirt[1]![0]!) * t,
       }
     }
+    const centre = (y: number) => (swing * y) / hem
+    // Folds: creases falling from her hips and opening out toward the hem, each a line of the
+    // robe's shade with its light beside it, on the side toward the light.
+    if (!sitting) {
+      for (const fold of frontView ? [-4.5, 4.5] : [-1.5]) {
+        for (let y = 2; y < hem - 8; y += 0.5) {
+          const x = fold * (1 + (y / hem) * 0.4) + centre(y)
+          set(onHips({ x, y }), 'A', 'a')
+          set(onHips({ x: x - 1, y }), 'v', 'a')
+        }
+      }
+    }
     // The border: a gold line, and below it gold diamonds with gold dots between, just above the
     // silver trim of the hem; centred on the trim down her front, so it sways with it.
-    const centre = (y: number) => (swing * y) / hem
     const borderY = hem - 4.5
     const edges = skirtAt(borderY)
     for (let x = edges.left + 1; x <= edges.right - 1; x += 0.5) {
@@ -3105,13 +3388,14 @@ export function draw(pose: Pose): string[] {
       canvas.stamp(['cc'], head.x + 3 + look, head.y + 5)
       canvas.stamp(['cc'], head.x - 5 + look, head.y + 5)
       canvas.stamp(mouth, head.x - mouth[0]!.length / 2 + look * 0.5, head.y + 6)
+      set(onHead({ x: 0.5 + look * 0.5, y: 5.2 }), 'S', 's')
     } else {
       canvas.stamp(eyes[0]!, head.x + 1.5, eyeY)
       canvas.stamp(['cc'], head.x + 1.5, head.y + 4.5)
-      // Her mouth: a short line just inside her lips, between nose and chin.
+      // Her mouth: a short line in from the notch of her lips, between nose and chin.
       canvas.stamp(
-        mouth.map((r) => r.slice(0, 1)),
-        head.x + 5.5,
+        mouth.map((r) => r.slice(0, 2)),
+        head.x + 4.5,
         head.y + 5.5,
       )
     }
@@ -3159,17 +3443,18 @@ export function draw(pose: Pose): string[] {
       'hair',
     )
     if (view === 'side') {
+      // The back of her head, its front edge behind her ear, so her cheek and jaw show.
       const crown = [
         [1.5, -11.6],
         [-3, -11],
         [-6.5, -8],
         [-7.8, -3],
         [-7.5, 3],
-        [-5.5, 7.5],
-        [-2, 8.5],
-        [-0.8, 3],
-        [0.2, -2.5],
-        [1.5, -5],
+        [-6.5, 7],
+        [-4.5, 7.5],
+        [-3, 2],
+        [-1.5, -2.5],
+        [1, -5],
       ]
       hair.polygon(
         shape(crown, (p) => onHead(blown(p))),
@@ -3189,7 +3474,7 @@ export function draw(pose: Pose): string[] {
         'hair',
       )
     if (view === 'side') {
-      lock(-1.5, 12)
+      lock(-5.5, 12) // behind her ear, clear of her cheek
     } else {
       lock(8.2 + shiftHair, 13)
       lock(-8.2 + shiftHair * 0.5, 13)
@@ -3348,6 +3633,7 @@ export function draw(pose: Pose): string[] {
     )
   }
 
+  castShadows(canvas)
   return canvas.rows()
 }
 ```
@@ -3360,7 +3646,8 @@ is stamped onto its face (the eyes and mouth painted over with skin first, then 
 `DIAGONAL_EYES` and `DIAGONAL_MOUTH`), and only her near arm, props and sparkles are drawn on top.
 From the front and side on, each part is a `Layer`, inked onto the frame (`Canvas.ink()`) from the
 back to the front, so later parts cover earlier ones; smaller details are set pixel by pixel on
-top. In order:
+top. Whichever way she's seen, `castShadows()` (below) then adds the shadows things cast on what's
+just below them. In order:
 
 **Setting up**
 
@@ -3470,12 +3757,21 @@ Math.PI) % 2`), which turn with `spin`. Six white runes (`w`) go round the outer
   colour (`A`) over its outline colour (`q`), only on the robe's lighter pixels (`'av'`).
 - `skirtAt(y)`: where the skirt's left and right edges are at height `y` in the hips' frame,
   worked out from its corners, so the patterns below stay inside it as it flares and sways.
+- `centre(y)`: where the middle of the skirt is at height `y`, swaying with `swing` (more toward
+  the hem); the trim down her front runs along it.
+- The folds, as the comment says: creases falling from her hips and opening out toward the hem.
+  From the front there are two, 4.5 pixels either side of the middle; side on, one, 1.5 pixels
+  behind it. Each runs from 2 pixels below her hips to 8 above the hem, in half-pixel steps,
+  spreading out as it goes down (`fold * (1 + (y / hem) * 0.4)`) and swaying with `centre(y)`. A
+  fold is a line of the robe's shade (`A`) with a line of its light (`v`) beside it on the side
+  toward the light (`x - 1`), both only over the robe's base colour (`'a'`). Not while sitting,
+  when the skirt is spread out flat.
 - The border, as the comment says: a gold line (`k`, the gold's shade) across the skirt 7.5 pixels
   above the hem, and below it gold diamonds (`.Y.`, `YaY`, `.Y.`: a diamond of gold round a pixel
   of robe) every 6 pixels, with a gold dot between each pair, just above the hem's silver trim.
-  `centre(y)` is where the trim down her front is, swaying with `swing`, and from the front the
-  diamonds sit 3 pixels either side of it, so the trim runs between them; side on (no trim) one
-  is in the middle. Any that would reach the skirt's edge are left out.
+  They're centred on `centre(y)`: from the front the diamonds sit 3 pixels either side of it, so
+  the trim runs between them; side on (no trim) one is in the middle. Any that would reach the
+  skirt's edge are left out.
 - The stars: three staggered rows of single silver pixels (`f`) over the skirt, 6 pixels apart,
   each row shifted 3 from the last, only over the robe's base colour (`'a'`) so they stay off its
   outline and shading, and kept off the trim down her front. Not while sitting, when the skirt is
@@ -3490,13 +3786,17 @@ Math.PI) % 2`), which turn with `spin`. Six white runes (`w`) go round the outer
   the back of her head: her face is `SIDE_FACE` (in `pictures.ts`), a profile drawn by hand and
   stamped over it, placed by the middle of her head.
 - The face is stamped on. From the front: two eyes, moved by `look`, blush (`cc`, pink) under each,
-  and the mouth in the middle. Side on: one eye, blush on her cheek below it, and one pixel of
-  mouth at the notch of her lips.
+  the mouth in the middle, and just above it a single pixel of the skin's shade (`S`), all there is
+  of her nose. Side on: one eye, blush on her cheek below it, and, as the comment says, a short
+  line of mouth in from the notch of her lips: the first two pixels of each row of the
+  expression's mouth (`r.slice(0, 2)`), 4.5 pixels in front of the middle of her head.
 - The hair in front, as one layer. The fringe is a polygon whose lower edge zigzags
   (`[7.5, -3.6], [6.5, -0.4], [4.5, -3.4], ...`), so it falls over her forehead in clumps; side on,
-  a `crown` covers the back of her head too. The side locks (`lock(x, length)`) are chains from her
-  temples down past her chin, 13 pixels long (12 side on), tapering from 1.9 to 0.6 so they end in
-  points: two of them, or one side on, in front of her ear and behind her eye (`-1.5`).
+  a `crown` covers the back of her head too. As its comment says, the crown's front edge runs
+  behind her ear, so her cheek and jaw (from `SIDE_FACE`) show. The side locks (`lock(x, length)`)
+  are chains from her temples down past her chin, 13 pixels long (12 side on), tapering from 1.9
+  to 0.6 so they end in points: from the front, two, 8.2 pixels either side of the middle of her
+  head; side on, one, behind her ear (`-5.5`), clear of her cheek, as the comment says.
 - The shine: as the comment says, a band across her crown: one curved row of the hair's shine
   (`L`), set only over hair pixels (`'hl'`) so it never spills onto the outline. A band like this
   is how anime art shows glossy hair.
@@ -3506,18 +3806,20 @@ Math.PI) % 2`), which turn with `spin`. Six white runes (`w`) go round the outer
   middle of her head), and `p.x * side` mirrors it for the other side. Both show from the front;
   side on, one pointing back. They're inked as skin.
 - The braid, side on: `drawBraid()` (defined with the back hair, above) is called here, so it
-  hangs behind her ear in front of her back hair. `braidPath` is its line, 28 pixels long, in the
-  head's frame: side on it starts behind her jaw and hangs back and down; from the front it starts
-  behind her head (8.6 pixels out from the middle of it, past her cheek at 7.5) and hangs straight
-  down behind her shoulder, about 11 out. `braidPoints` turns each point into a place on the grid,
-  swinging further with the wind toward the tip (`(y / 28) * wind * 0.8`) and blown like the rest
-  of her hair. `chain()` draws it in its own `braid` layer, 2.1 thick tapering to 1.6, so it's
+  hangs behind her ear in front of her back hair. `braidPath` is its line, in the head's frame,
+  down to 27 or 28 pixels below the middle of her head: side on it starts behind her ear (5.5
+  pixels behind the middle of her head and 3 below it) and hangs back and down, to 7 behind; from
+  the front it starts behind her head (8.6 pixels out from the middle of it, past her cheek at 7.5)
+  and hangs straight down behind her shoulder, about 11 out. `braidPoints` turns each point into a
+  place on the grid, swinging further with the wind toward the tip (`(y / 28) * wind * 0.8`) and
+  blown like the rest of her hair. `chain()` draws it in its own `braid` layer, 2.1 thick tapering to 1.6, so it's
   outlined against whatever is behind it.
 - The plaits: as the comment says, a darker stroke across the braid every few pixels. Twice along
   each section (`t` at 0.25 and 0.75), two pixels in the hair's shadow (`D`), one to the left and
   one below, make a short slanted stroke, only over the braid's lighter pixels (`'hl'`). A row of
   slanted strokes is how a plait reads in pixel art.
-- The ribbon: near the braid's end (`braidPoints[4]`, 24 pixels down), three pixels in the robe's
+- The ribbon: at the fifth point of the braid's line (`braidPoints[4]`), which is near its end from
+  the front (23 pixels down) and at its very end side on (27 down), three pixels in the robe's
   colours (`v`, `v` and `a`), drawn over whatever is there.
 
 **The hat**
@@ -3556,7 +3858,81 @@ Math.PI) % 2`), which turn with `spin`. Six white runes (`w`) go round the outer
   slightly different paths a third and two-thirds of a turn behind (`spin + 2.1`, `spin + 4.2`;
   a whole turn is about 6.28). The `- 2` and `- 1` centre each stamp on its point. As `sparkle`
   goes from 0 to 1 over the spell's frames, they circle her hand once.
+- `castShadows(canvas)`: whichever way she's seen, the shadows things cast on what's below them
+  (below).
 - `return canvas.rows()`: the finished frame.
+
+### `castShadows()`, `HAT`, `HAIR` and `ROBE`
+
+<!-- code: apps/desktop/src/renderer/src/character/rig.ts#HAT,HAIR,ROBE,castShadows -->
+
+[`src/renderer/src/character/rig.ts`, lines 885–915](../../apps/desktop/src/renderer/src/character/rig.ts#L885-L915)
+
+```ts
+/** Letters by part, for castShadows. */
+const HAT = 'nNgqfFYkG'
+
+const HAIR = 'ODhlL'
+
+const ROBE = 'aAvfFYkG'
+
+/**
+ * The shadows things cast on what's just below them, which is most of what makes her look solid
+ * rather than flat: her hat's brim darkens the hair under it, her fringe her forehead (and her
+ * hair the tops of her ears), the sash and her sleeves the robe below them, and the robe's hem
+ * her stockings and boots. Each is a pixel deep, in the shade of what it falls on. It reads the
+ * frame as it was before any of them, so shadows don't pile up, and works on whatever is there,
+ * so the hand-drawn diagonal picture gets them too.
+ */
+function castShadows(canvas: Canvas): void {
+  const rows = canvas.rows()
+  for (let y = 1; y < rows.length; y++) {
+    for (let x = 0; x < rows[y]!.length; x++) {
+      const here = rows[y]![x]!
+      const above = rows[y - 1]![x]!
+      const twoAbove = y > 1 ? rows[y - 2]![x]! : '.'
+      let shade: string | null = null
+      if ('hlL'.includes(here) && HAT.includes(above)) shade = 'D'
+      else if ('sz'.includes(here) && HAIR.includes(above)) shade = 'S'
+      // A seam inside the robe (the sash, a sleeve's edge): an outline with robe above it too.
+      else if ('av'.includes(here) && above === 'q' && ROBE.includes(twoAbove)) shade = 'A'
+      else if (here === 'o' && above === 'q') shade = 'Q'
+      else if ('by'.includes(here) && above === 'q') shade = 'B'
+      if (shade) canvas.set(x, y, shade)
+    }
+  }
+}
+```
+
+<!-- /code -->
+
+As the comment says, the shadows things cast on what's just below them, which is most of what makes
+her look solid rather than flat. `ink()` shades each part by its own shape only; it can't know
+that her hat's brim hangs over her hair. This runs once the whole frame is drawn and looks at
+each pixel and the ones just above it.
+
+- `HAT`, `HAIR`, `ROBE`: as the comment above them says, letters by part: the palette letters each
+  part is drawn in, outlines and patterns included. The hat's colours, its outline (`q`), silver,
+  gold and the teal gem; the hair's outline, shade, base, light and shine; and the robe's colours
+  with its silver trim, gold and the teal brooch.
+- `const rows = canvas.rows()`: a copy of the frame as it was before any shadows. As the comment
+  says, the checks read this copy while the shadows go onto the canvas, so each pixel is judged by
+  the frame as it was drawn, never by a shadow just added, and shadows don't pile up.
+- `here`, `above`, `twoAbove`: the pixel, the one above it, and the one above that (`.`,
+  see-through, on the second row, where there's no row two above).
+- Each `if` is one kind of shadow, a pixel deep, in the shade of what it falls on:
+  - her hair's base, light or shine (`'hlL'`) under any of the hat's letters: her hat's brim
+    darkens the hair under it, in the hair's shade (`D`);
+  - her skin's base or light (`'sz'`) under hair: her fringe on her forehead, and her hair on the
+    tops of her ears, in the skin's shade (`S`);
+  - the robe's base or light (`'av'`) under its outline (`q`) with more robe above that: as the
+    comment says, a seam inside the robe (the sash, a sleeve's edge), so the robe just below it
+    gets the robe's shade (`A`). Needing robe two pixels up keeps the robe's own top edge from
+    counting;
+  - her stockings (`o`) under the robe's outline: the robe's hem, in the stockings' shade (`Q`);
+  - her boots' base or light (`'by'`) under it: the hem again, in the boots' shade (`B`).
+- As the comment says, it works on whatever is there, so the hand-drawn diagonal picture gets these
+  shadows too.
 
 ## `src/renderer/src/character/pictures.ts`: the parts drawn by hand
 
@@ -3589,27 +3965,27 @@ export const DIAGONAL_MOUTH = { x: 50, y: 33 }
 /**
  * Her face side on, facing right, drawn by hand in the usual anime profile: a forehead under her
  * fringe, a dip at the eye, a small pointed nose, a little notch at her lips, a soft chin, then
- * her jaw running back under her side lock, her neck in its shadow. It is placed relative to the
+ * her jaw running back up to her ear, her neck in its shadow below it. It is placed relative to the
  * middle of her head (x and y here are offsets from it); her hair, ear and hat are drawn over it,
  * and her eyes, blush and mouth on it.
  */
 export const SIDE_FACE: Picture = {
-  x: -2,
+  x: -5,
   y: -3,
   rows: [
-    'ssssssssssK..',
-    'ssssssssssK..',
-    'ssssssssssK..',
-    'ssssssssssK..',
-    'ssssssssssK..',
-    'sssssssssssK.',
-    'ssssssssssssK',
-    'sssssssssSKK.',
-    'ssssssssssK..',
-    'sssssssssK...',
-    'SSKssssssK...',
-    'SSSKKsssSK...',
-    'SSSSSKKKK....',
+    '...ssssssssssK..',
+    '...ssssssssssK..',
+    '...ssssssssssK..',
+    '...ssssssssssK..',
+    '...ssssssssssK..',
+    '...sssssssssssK.',
+    '.KsssssssssssssK',
+    'SSKsssssssssSKK.',
+    'SSSKsssssssssK..',
+    'SSSSKsssssssK...',
+    'SSSSSKssssssK...',
+    'SSSSSSKKsssSK...',
+    'SSSSSSSSKKKK....',
   ],
 }
 ```
@@ -3624,17 +4000,25 @@ export const SIDE_FACE: Picture = {
   side is toward us: her ear and the back of her head on the left, her near eye larger, her far
   cheek (with a small upturned nose) the right-hand edge of her face, her braid over her near
   shoulder and her near leg in front. Her near arm isn't in it, because it moves; `draw()` adds
-  it. It was made by drawing the rig's diagonal pose once, then retouching it by hand.
+  it. It was made by drawing the rig's diagonal pose once, then retouching it by hand, and has
+  since been retouched again to match the rig's newer shading: a broad shadow down the far side of
+  her hat, hair, robe and boots (as `form` gives the rig's shapes) and a fold down her skirt (a
+  line of the robe's light beside a line of its shade). `ink()` never touches it, since it's
+  stamped as it is, but `castShadows()` still runs over it.
 - `DIAGONAL_EYES` and `DIAGONAL_MOUTH`: where her eyes and mouth are in `DIAGONAL`, so `draw()`
   can paint over them with another expression.
 - `SIDE_FACE`: her face side on, in the usual anime profile, read from the top: her forehead under
   her fringe (`K`, the outline, at the right-hand end of each row); a dip at the eye; a small
   pointed nose (the outline steps out two pixels and back, with a pixel of shade, `S`, beside the
-  nostril); a notch at her lips; a soft chin; then her jaw running back under her side lock, with
-  her neck in its shadow. Its `x` and `y` are offsets from the middle of her head rather than grid
-  positions, since her head moves; her hair, ear and hat are drawn over it, and her eyes, blush
-  and mouth on it. Shading is kept light (mostly the base skin, `s`), since a face in profile in
-  anime art is mostly flat colour.
+  nostril); a notch at her lips; a soft chin; then, as the comment says, her jaw running back up
+  to her ear (the outline climbing diagonally back to the picture's left edge), with her neck in
+  its shadow below it (the block of `S` in the bottom-left corner). Its `x` and `y` are offsets
+  from the middle of her head rather than grid positions, since her head moves: it starts 5 pixels
+  behind the middle of her head and 3 above it, far enough back for the jaw to reach her ear. Her
+  hair, ear and hat are drawn over it, and her eyes, blush and mouth on it. Its top rows start
+  with three see-through pixels (`...`), leaving the back of her head, already drawn, as it is.
+  The face itself is kept light (mostly the base skin, `s`), since a face in profile in anime art
+  is mostly flat colour.
 
 ## `src/renderer/src/character/sprite.ts`: her animations
 
@@ -3650,7 +4034,7 @@ kept, and `Character` (below) plays them.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#SPRITE_SIZE,PALETTE -->
 
-[`src/renderer/src/character/sprite.ts`, lines 4–58](../../apps/desktop/src/renderer/src/character/sprite.ts#L4-L58)
+[`src/renderer/src/character/sprite.ts`, lines 4–61](../../apps/desktop/src/renderer/src/character/sprite.ts#L4-L61)
 
 ```ts
 // The character's animations: for each pose, a list of frames drawn by the rig (rig.ts) from key
@@ -3659,7 +4043,10 @@ kept, and `Character` (below) plays them.
 // long robe in the tenant's accent colour. Frames are drawn the first time a pose is needed, then
 // kept.
 
-/** The grid's size in pixels (square): 96, one pixel a DIP, filling the bubble's window. */
+/**
+ * The grid's size in pixels (square): 96, filling the bubble's window, one pixel a DIP at her
+ * usual size (more at a bigger size; see CHARACTER_SIZES).
+ */
 export const SPRITE_SIZE = GRID
 
 /** Each letter's colour, as a CSS class (character.css): robe and hat follow the accent colour. */
@@ -3713,7 +4100,8 @@ export const PALETTE: Record<string, string> = {
 <!-- /code -->
 
 - `SPRITE_SIZE = GRID`: as its comment says, 96 pixels square, one pixel a DIP, filling the bubble's
-  window (`BUBBLE_BOX`). `Character` uses it for the `<svg>`'s `viewBox`.
+  window (`BUBBLE_BOX`). That's at her usual size: `Character` uses it for the `<svg>`'s
+  `viewBox`, and draws the same grid bigger when she's bigger.
 - `PALETTE`: each letter's colour, as a CSS class in `character.css` rather than a colour itself.
   That's what lets her robe and hat follow the tenant's accent colour, which `useAccentColor()`
   sets at runtime, as the comment says.
@@ -3731,7 +4119,7 @@ export const PALETTE: Record<string, string> = {
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#Frame,Key -->
 
-[`src/renderer/src/character/sprite.ts`, lines 60–70](../../apps/desktop/src/renderer/src/character/sprite.ts#L60-L70)
+[`src/renderer/src/character/sprite.ts`, lines 63–73](../../apps/desktop/src/renderer/src/character/sprite.ts#L63-L73)
 
 ```ts
 /** A frame as rows of letters (SPRITE_SIZE × SPRITE_SIZE), and how long it shows. */
@@ -3758,7 +4146,7 @@ interface Key {
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#smooth,lerp,mixArm,mixLeg,ARM_DOWN,LEG_STAND,mix -->
 
-[`src/renderer/src/character/sprite.ts`, lines 72–111](../../apps/desktop/src/renderer/src/character/sprite.ts#L72-L111)
+[`src/renderer/src/character/sprite.ts`, lines 75–114](../../apps/desktop/src/renderer/src/character/sprite.ts#L75-L114)
 
 ```ts
 // ------------------------------------------------------------------------------------- tweening
@@ -3832,7 +4220,7 @@ _Tweening_: working out the poses between two key poses.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#FRAME_MS,tween,hold,crouch -->
 
-[`src/renderer/src/character/sprite.ts`, lines 113–139](../../apps/desktop/src/renderer/src/character/sprite.ts#L113-L139)
+[`src/renderer/src/character/sprite.ts`, lines 116–142](../../apps/desktop/src/renderer/src/character/sprite.ts#L116-L142)
 
 ```ts
 /** In-betweens come about this often (ms): 25 frames a second. */
@@ -3894,7 +4282,7 @@ function crouch(depth: number): [Leg, Leg] {
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#FRONT,DIAGONAL,idle -->
 
-[`src/renderer/src/character/sprite.ts`, lines 141–163](../../apps/desktop/src/renderer/src/character/sprite.ts#L141-L163)
+[`src/renderer/src/character/sprite.ts`, lines 144–166](../../apps/desktop/src/renderer/src/character/sprite.ts#L144-L166)
 
 ```ts
 // ----------------------------------------------------------------------------------- the poses
@@ -3941,7 +4329,7 @@ function idle(): Key[] {
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#walk -->
 
-[`src/renderer/src/character/sprite.ts`, lines 165–193](../../apps/desktop/src/renderer/src/character/sprite.ts#L165-L193)
+[`src/renderer/src/character/sprite.ts`, lines 168–196](../../apps/desktop/src/renderer/src/character/sprite.ts#L168-L196)
 
 ```ts
 /**
@@ -4003,7 +4391,7 @@ a cycle ahead: positive while that leg swings forward, negative while it pushes 
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#hop -->
 
-[`src/renderer/src/character/sprite.ts`, lines 195–253](../../apps/desktop/src/renderer/src/character/sprite.ts#L195-L253)
+[`src/renderer/src/character/sprite.ts`, lines 198–256](../../apps/desktop/src/renderer/src/character/sprite.ts#L198-L256)
 
 ```ts
 /** A hop: crouch, spring up with her arms flung up, float, fall, land with a bounce. */
@@ -4091,7 +4479,7 @@ named, and `tween()` eases from each to the next, about 30 frames altogether.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#wave -->
 
-[`src/renderer/src/character/sprite.ts`, lines 255–275](../../apps/desktop/src/renderer/src/character/sprite.ts#L255-L275)
+[`src/renderer/src/character/sprite.ts`, lines 258–278](../../apps/desktop/src/renderer/src/character/sprite.ts#L258-L278)
 
 ```ts
 /** A wave, seen diagonally: her hand up, waving to and fro, head tilted, smiling. */
@@ -4134,7 +4522,7 @@ As the comment says, a wave, seen diagonally, smiling, with her head tilted.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#stretch -->
 
-[`src/renderer/src/character/sprite.ts`, lines 277–300](../../apps/desktop/src/renderer/src/character/sprite.ts#L277-L300)
+[`src/renderer/src/character/sprite.ts`, lines 280–303](../../apps/desktop/src/renderer/src/character/sprite.ts#L280-L303)
 
 ```ts
 /** A stretch: arms up, a yawn, a lean one way and the other, arms down. */
@@ -4176,7 +4564,7 @@ As the comment says, a stretch, from the front.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#sip -->
 
-[`src/renderer/src/character/sprite.ts`, lines 302–334](../../apps/desktop/src/renderer/src/character/sprite.ts#L302-L334)
+[`src/renderer/src/character/sprite.ts`, lines 305–337](../../apps/desktop/src/renderer/src/character/sprite.ts#L305-L337)
 
 ```ts
 /** A sip of tea, seen diagonally: the cup up to her mouth, a sip, down, a contented smile. */
@@ -4231,7 +4619,7 @@ As the comment says, a sip of tea, seen diagonally.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#read -->
 
-[`src/renderer/src/character/sprite.ts`, lines 336–366](../../apps/desktop/src/renderer/src/character/sprite.ts#L336-L366)
+[`src/renderer/src/character/sprite.ts`, lines 339–369](../../apps/desktop/src/renderer/src/character/sprite.ts#L339-L369)
 
 ```ts
 /** Reading her spellbook, seen diagonally: head down, turning a page, a smile at something. */
@@ -4284,7 +4672,7 @@ As the comment says, reading her spellbook, seen diagonally.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#spell -->
 
-[`src/renderer/src/character/sprite.ts`, lines 368–391](../../apps/desktop/src/renderer/src/character/sprite.ts#L368-L391)
+[`src/renderer/src/character/sprite.ts`, lines 371–394](../../apps/desktop/src/renderer/src/character/sprite.ts#L371-L394)
 
 ```ts
 /** A little spell: her hand up, sparkles circling it, then gone with a smile. */
@@ -4329,7 +4717,7 @@ As the comment says, a little spell, seen diagonally.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#levitate -->
 
-[`src/renderer/src/character/sprite.ts`, lines 393–443](../../apps/desktop/src/renderer/src/character/sprite.ts#L393-L443)
+[`src/renderer/src/character/sprite.ts`, lines 396–446](../../apps/desktop/src/renderer/src/character/sprite.ts#L396-L446)
 
 ```ts
 /**
@@ -4406,7 +4794,7 @@ As the comment says, she levitates, from the front.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#sit -->
 
-[`src/renderer/src/character/sprite.ts`, lines 445–485](../../apps/desktop/src/renderer/src/character/sprite.ts#L445-L485)
+[`src/renderer/src/character/sprite.ts`, lines 448–488](../../apps/desktop/src/renderer/src/character/sprite.ts#L448-L488)
 
 ```ts
 /** Sitting on the taskbar, her robe spread round her, swaying gently, looking about, then up again. */
@@ -4470,7 +4858,7 @@ As the comment says, sitting on the taskbar with her robe spread round her, the 
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#look -->
 
-[`src/renderer/src/character/sprite.ts`, lines 487–509](../../apps/desktop/src/renderer/src/character/sprite.ts#L487-L509)
+[`src/renderer/src/character/sprite.ts`, lines 490–512](../../apps/desktop/src/renderer/src/character/sprite.ts#L490-L512)
 
 ```ts
 /**
@@ -4515,7 +4903,7 @@ used again.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#dragged -->
 
-[`src/renderer/src/character/sprite.ts`, lines 511–537](../../apps/desktop/src/renderer/src/character/sprite.ts#L511-L537)
+[`src/renderer/src/character/sprite.ts`, lines 514–540](../../apps/desktop/src/renderer/src/character/sprite.ts#L514-L540)
 
 ```ts
 /** Carried by her collar: off the ground, arms up, legs kicking, swaying, hair lifted. */
@@ -4549,8 +4937,8 @@ function dragged(): Key[] {
 
 <!-- /code -->
 
-As the comment says, carried by her collar: the pose while she's dragged, thrown about by Bounce,
-or falling after a drop. Twelve frames of 55 ms, round and round.
+As the comment says, carried by her collar: the pose while she's dragged, or falling after a drop.
+Twelve frames of 55 ms, round and round.
 
 - `y: -4`: off the ground, so her feet leave the bottom rows (a test checks), and her shadow is
   smaller.
@@ -4563,7 +4951,7 @@ or falling after a drop. Twelve frames of 55 ms, round and round.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#drawn,MAKERS,LOOPS -->
 
-[`src/renderer/src/character/sprite.ts`, lines 539–575](../../apps/desktop/src/renderer/src/character/sprite.ts#L539-L575)
+[`src/renderer/src/character/sprite.ts`, lines 542–578](../../apps/desktop/src/renderer/src/character/sprite.ts#L542-L578)
 
 ```ts
 // ------------------------------------------------------------------------------------- frames
@@ -4621,7 +5009,7 @@ export const LOOPS: Record<Name, boolean> = {
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#Facing,made,framesOf -->
 
-[`src/renderer/src/character/sprite.ts`, lines 577–596](../../apps/desktop/src/renderer/src/character/sprite.ts#L577-L596)
+[`src/renderer/src/character/sprite.ts`, lines 580–599](../../apps/desktop/src/renderer/src/character/sprite.ts#L580-L599)
 
 ```ts
 export type Facing = 'left' | 'right'
@@ -4660,7 +5048,7 @@ export function framesOf(pose: Name, facing: Facing): Frame[] {
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#animationLength,mirror -->
 
-[`src/renderer/src/character/sprite.ts`, lines 598–605](../../apps/desktop/src/renderer/src/character/sprite.ts#L598-L605)
+[`src/renderer/src/character/sprite.ts`, lines 601–608](../../apps/desktop/src/renderer/src/character/sprite.ts#L601-L608)
 
 ```ts
 /** How long a pose's frames last altogether (a fidget's must match FIDGET_MS). */
@@ -4686,7 +5074,7 @@ export function mirror(rows: string[]): string[] {
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#framePaths -->
 
-[`src/renderer/src/character/sprite.ts`, lines 607–631](../../apps/desktop/src/renderer/src/character/sprite.ts#L607-L631)
+[`src/renderer/src/character/sprite.ts`, lines 610–634](../../apps/desktop/src/renderer/src/character/sprite.ts#L610-L634)
 
 ```ts
 /**
@@ -4725,7 +5113,7 @@ pixel (a frame has a few thousand).
 === pixel) end++` finds where a run ends.
 - A run becomes `M{x} {y}h{n}v1h-{n}z`: move to its top-left corner, a line `n` pixels across, one
   down, back, and close the shape. That's a rectangle `n` pixels wide and one tall, in grid units,
-  which the `<svg>`'s `viewBox` makes one DIP each.
+  which the `<svg>`'s `viewBox` makes one DIP each at her usual size.
 - The runs are collected by letter in a `Map` (which keeps the order letters were first seen), and
   each letter's runs, joined, become one path with that letter's class.
 - See-through runs (`.`) are skipped. A letter that isn't in the palette, which the tests rule out,
@@ -4733,16 +5121,18 @@ pixel (a frame has a few thousand).
 
 ## `src/renderer/src/components/Character.tsx` and `character.css`: the character
 
-The component that draws the character, the one used by the bubble's page rather than the panel's.
-It decides nothing itself: the main process chooses the pose (`Pose` in `src/shared/character.ts`)
-and moves the window while she walks, `BubbleView` passes in the pose and the bubble's corner, and
-this plays the pose's frames from `character/sprite.ts`, facing the middle of the screen.
+The component that draws the character, used by the bubble's page and by the clones' page rather
+than the panel's. It decides nothing itself: in the bubble, the main process chooses the pose
+(`Pose` in `src/shared/character.ts`) and moves the window while she walks, `BubbleView` passes in
+the pose, the way she faces (toward the middle of the screen) and how big to draw her, and this
+plays the pose's frames from `character/sprite.ts`. `ClonesView` does the same for each clone, with
+the pose and way of facing from `lib/clones.ts`.
 
 ### `paths`, `pathsOf()`, `ALL_POSES` and `Character`
 
 <!-- code: apps/desktop/src/renderer/src/components/Character.tsx#paths,pathsOf,ALL_POSES,Character -->
 
-[`src/renderer/src/components/Character.tsx`, lines 14–66](../../apps/desktop/src/renderer/src/components/Character.tsx#L14-L66)
+[`src/renderer/src/components/Character.tsx`, lines 13–65](../../apps/desktop/src/renderer/src/components/Character.tsx#L13-L65)
 
 ```tsx
 /** Each frame's SVG paths, worked out the first time it shows. */
@@ -4761,14 +5151,14 @@ function pathsOf(frame: Frame): ReturnType<typeof framePaths> {
 const ALL_POSES: Pose[] = ['idle', 'walk-left', 'walk-right', 'dragged', ...FIDGETS]
 
 /**
- * The character that stands in for the bubble: pixel art (character/sprite.ts) filling the
- * bubble's window, one pixel a DIP, her feet on its bottom edge, which the main process keeps on
- * the taskbar. The main process decides the pose (and moves the window while she walks); this
- * plays the pose's frames. She faces the middle of the screen: left from the right-hand corner
- * (walking, she faces the way she walks). `expanded` tints her shadow while the panel is open.
+ * The character: pixel art (character/sprite.ts) drawn `box` DIPs square, her feet on its bottom
+ * edge. In the bubble that fills its window, which the main process keeps on the taskbar (one
+ * sprite pixel a DIP at her usual size, more when she's bigger); her clones use it too. This plays
+ * the pose's frames, facing `facing` (walking, she faces the way she walks). `expanded` tints her
+ * shadow while the panel is open.
  */
-export function Character(props: { pose: Pose; corner: Corner; expanded: boolean }) {
-  const facing: Facing = isLeftCorner(props.corner) ? 'right' : 'left'
+export function Character(props: { pose: Pose; facing: Facing; box: number; expanded?: boolean }) {
+  const { facing } = props
 
   // Draws every pose's frames in the background, one pose at a time, so starting one never
   // stutters.
@@ -4786,8 +5176,8 @@ export function Character(props: { pose: Pose; corner: Corner; expanded: boolean
   return (
     <svg
       viewBox={`0 0 ${SPRITE_SIZE} ${SPRITE_SIZE}`}
-      width={BUBBLE_BOX}
-      height={BUBBLE_BOX}
+      width={props.box}
+      height={props.box}
       shapeRendering="crispEdges"
       className="character"
       data-pose={props.pose}
@@ -4811,9 +5201,17 @@ export function Character(props: { pose: Pose; corner: Corner; expanded: boolean
   written out twice.
 - `ALL_POSES`: every pose, for drawing ahead of time: the four that aren't fidgets, then
   `...FIDGETS`.
-- `Character({ pose, corner, expanded })`: the component itself.
-  - `facing`: as the comment says, she faces the middle of the screen: right from the left-hand
-    corner, left from the right-hand one. (Walking, `framesOf()` faces her the way she walks.)
+- `Character({ pose, facing, box, expanded })`: the component itself. As the comment says, it draws
+  her `box` DIPs square, her feet on its bottom edge. In the bubble that fills its window, which the
+  main process keeps on the taskbar; her clones use it too.
+  - `facing`: which way she faces, `'left'` or `'right'` (`Facing` in `sprite.ts`). `BubbleView`
+    faces her toward the middle of the screen: right from the left-hand corner, left from the
+    right-hand one. As the comment says, walking, she faces the way she walks (`framesOf()` sees to
+    that).
+  - `box`: how big to draw her: 96 DIPs at her usual size, one sprite pixel a DIP, and more when
+    she's bigger (192 at twice her size, two DIPs a pixel).
+  - `expanded?`: as the comment says, tints her shadow while the panel is open. The `?` makes it
+    optional: the clones leave it out.
   - The effect: as its comment says, it draws every pose's frames in the background, one pose at a
     time, so starting one never stutters. Drawing a pose means the rig drawing every frame and
     `framePaths()` turning each into paths, which, done on the spot, could make the pose's first
@@ -4821,9 +5219,11 @@ export function Character(props: { pose: Pose; corner: Corner; expanded: boolean
     the page stays free to respond in between. `function next()` is named so it can schedule
     itself again, and `waiting.shift()` takes the next pose off the front of the list. The effect
     runs again when `facing` changes (she's moved to the other corner), and the cleanup cancels
-    whatever was scheduled.
-  - `<svg>`: the size of the bubble's window (`BUBBLE_BOX`, 96 DIPs), with a `viewBox` of the
-    sprite's grid (96 pixels), so each pixel is one DIP.
+    whatever was scheduled. Every clone runs it too, but frames and their paths are only ever made
+    once (`framesOf()` and `pathsOf()` keep them), so after the first it costs next to nothing.
+  - `<svg>`: `box` wide and high, with a `viewBox` of the sprite's grid (96 pixels), so the browser
+    scales the grid to fill it: each pixel is one DIP at her usual size, and `box / 96` DIPs
+    otherwise.
   - `shapeRendering="crispEdges"`: tells the browser not to smooth the rectangles' edges, so the
     pixels stay sharp, as pixel art should. At 125% display scaling a sprite pixel is 1.25 screen
     pixels, so some come out a screen pixel wider than others; crisp is still better than blurred.
@@ -4840,7 +5240,7 @@ export function Character(props: { pose: Pose; corner: Corner; expanded: boolean
 
 <!-- code: apps/desktop/src/renderer/src/components/Character.tsx#Frames -->
 
-[`src/renderer/src/components/Character.tsx`, lines 68–87](../../apps/desktop/src/renderer/src/components/Character.tsx#L68-L87)
+[`src/renderer/src/components/Character.tsx`, lines 67–86](../../apps/desktop/src/renderer/src/components/Character.tsx#L67-L86)
 
 ```tsx
 /**

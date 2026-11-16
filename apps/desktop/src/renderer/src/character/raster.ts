@@ -16,6 +16,12 @@ export interface Ramp {
   shade: string
   base: string
   light?: string
+  /**
+   * The share of the shape, across each row, in its shadow on the side away from the light (0 to
+   * 1): a broad band of shade, two-tone like anime cel shading, that gives it some volume. Left
+   * out, only a rim of shade along that edge.
+   */
+  form?: number
 }
 
 /** A body part's pixels, each the name of its material (or undefined: not part of it). */
@@ -145,12 +151,26 @@ export class Canvas {
   ink(layer: Layer, ramps: Record<string, Ramp>, light: Point, outline = true): void {
     const inside = (x: number, y: number) => layer.get(x, y) !== undefined
     for (let y = layer.minY; y <= layer.maxY; y++) {
+      // Each run of the shape along this row: where it starts and ends, for its form shadow.
+      let runStart = layer.minX
+      let runEnd = layer.minX
       for (let x = layer.minX; x <= layer.maxX; x++) {
         const material = layer.get(x, y)
         if (material === undefined) continue
+        if (!inside(x - 1, y)) {
+          runStart = x
+          runEnd = x
+          while (inside(runEnd + 1, y)) runEnd++
+        }
         const ramp = ramps[material]!
+        let inForm = false
+        if (ramp.form && light.x !== 0) {
+          // How far the run goes on, away from the light (light from the left: to the right).
+          const beyond = light.x < 0 ? runEnd - x : x - runStart
+          inForm = beyond < ramp.form * (runEnd - runStart + 1)
+        }
         const shaded =
-          !inside(x - light.x * 2, y - light.y * 2) || !inside(x - light.x, y - light.y)
+          inForm || !inside(x - light.x * 2, y - light.y * 2) || !inside(x - light.x, y - light.y)
         const lit = !inside(x + light.x, y + light.y)
         this.set(x, y, shaded ? ramp.shade : lit && ramp.light ? ramp.light : ramp.base)
       }

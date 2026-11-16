@@ -8,7 +8,7 @@ import {
   Ticket,
 } from 'lucide-react'
 import { useEffect, useRef, type KeyboardEvent, type ReactNode } from 'react'
-import { PANEL_LAYOUT, UI, isLeftCorner, isTopCorner, type Corner } from '@shared/geometry'
+import { UI, isLeftCorner, isTopCorner, type Corner, type PanelLayout } from '@shared/geometry'
 import type { Attachment, ChatMessage } from '@shared/types'
 import type { ToastMessage } from '../hooks/useToast'
 import { anchored, originClass } from '../lib/anchor'
@@ -26,6 +26,8 @@ import { MessageList } from './MessageList'
  */
 export function ChatBox(props: {
   corner: Corner
+  /** Where things sit for her size: the card goes beside her. */
+  layout: PanelLayout
   open: boolean
   toast: ToastMessage | null
   /** Sending hands the question to Claude Desktop instead of the chat in the panel. */
@@ -69,7 +71,7 @@ export function ChatBox(props: {
         'motion-reduce:transition-none',
       )}
       style={{
-        ...anchored(props.corner, PANEL_LAYOUT.chatX, PANEL_LAYOUT.chatY),
+        ...anchored(props.corner, props.layout.chatX, props.layout.chatY),
         width: UI.panelWidth,
         maxHeight: UI.panelMaxHeight,
       }}

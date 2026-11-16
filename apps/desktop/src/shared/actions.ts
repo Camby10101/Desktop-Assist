@@ -13,7 +13,8 @@ export const ACTION_IDS = [
   'screenshot',
   'theme',
   'settings',
-  'bounce',
+  'size',
+  'clones',
   'close',
 ] as const
 
@@ -28,7 +29,8 @@ export const ACTIONS = {
   screenshot: { label: 'Take screenshot', kind: 'command' },
   theme: { label: 'Light or dark mode', kind: 'switch' },
   settings: { label: 'Settings', kind: 'popover' },
-  bounce: { label: 'Bounce', kind: 'command' },
+  size: { label: 'Her size', kind: 'popover' },
+  clones: { label: 'Ten clones for ten seconds', kind: 'command' },
   close: { label: 'Close Desktop Assist', kind: 'command' },
 } as const satisfies Record<ActionId, { label: string; kind: 'command' | 'popover' | 'switch' }>
 

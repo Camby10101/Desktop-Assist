@@ -6,13 +6,14 @@ import {
   MessageCircle,
   Moon,
   Power,
+  Scaling,
   Settings,
   Sun,
-  Volleyball,
+  UsersRound,
   type LucideIcon,
 } from 'lucide-react'
 import { ACTIONS, type ActionId } from '@shared/actions'
-import { PANEL_LAYOUT, UI, isTopCorner, type Corner } from '@shared/geometry'
+import { UI, isTopCorner, type Corner, type PanelLayout } from '@shared/geometry'
 import type { Theme } from '@shared/types'
 import { anchored } from '../lib/anchor'
 import { cn } from '../lib/cn'
@@ -25,7 +26,8 @@ const ICONS: Record<ActionId, LucideIcon> = {
   screenshot: Camera,
   theme: Sun,
   settings: Settings,
-  bounce: Volleyball,
+  size: Scaling,
+  clones: UsersRound,
   close: Power,
 }
 
@@ -35,6 +37,8 @@ const ICONS: Record<ActionId, LucideIcon> = {
  */
 export function ActionStack(props: {
   corner: Corner
+  /** Where things sit for her size: the stack goes above her. */
+  layout: PanelLayout
   actions: ActionId[]
   open: boolean
   activeId: ActionId | null
@@ -51,7 +55,7 @@ export function ActionStack(props: {
     <div
       className={cn('absolute flex', top ? 'flex-col' : 'flex-col-reverse')}
       style={{
-        ...anchored(props.corner, PANEL_LAYOUT.actionsX, PANEL_LAYOUT.actionsY),
+        ...anchored(props.corner, props.layout.actionsX, props.layout.actionsY),
         gap: UI.actionGap,
       }}
     >

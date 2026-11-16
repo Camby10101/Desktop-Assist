@@ -5,7 +5,8 @@ sign-in), 4 (logos, favourites, service desk, light/dark, the bubble-click fix) 
 app-opening spinner; Jira and the service desk), its fixes 5.1 and 5.2 (the bubble kept in front;
 Check for updates), and features 3.1 (questions open in Claude Desktop) and 3.2 (Apps list,
 Uninstall, fixes) complete**. Version 1.0.0 is the first release (§7h). On trial (branch
-`character`): the bubble as an animated character (§7i). Last updated 2026-11-13.
+`character`): the bubble as an animated character, in a choice of sizes, with Clones in place of
+Bounce (§7i). Last updated 2026-11-16.
 
 A Windows desktop assistant that runs in the background, shows a small circular company logo
 in the bottom-right corner of the screen, and opens a panel when clicked. It's built for Morse
@@ -49,7 +50,8 @@ account and usage limit (§7e); the built-in chat stays available as a tenant se
   and **grows upward** as you type. Action icons stack **above** the bubble.
 - **Collapse** by clicking the bubble again, pressing Esc, or clicking anywhere else.
 - On trial since 6: the bubble is an animated character standing on the taskbar near a bottom
-  corner instead of the logo in a corner (§7i).
+  corner instead of the logo in a corner, and the Bounce icon has given way to Her size and Clones
+  (§7i).
 - Only one copy runs at a time. Launching it again just opens the panel.
 
 ## 2. Important: which "Claude" this connects to (from M1)
@@ -87,7 +89,7 @@ against their own limit. The tenant setting `chatApp` picks `claude-desktop` or 
 - **Packaging:** **electron-builder**. NSIS installer, not yet code-signed. Electron's fuses set in the `.exe`; updates from GitHub releases, signed with a release key kept off GitHub (5.2)
 - **UI:** **React 19** + **Tailwind CSS 4** + **lucide-react** icons. Light or dark mode (its own setting since M4, dark by default; it followed Windows before)
 - **Validation:** **zod 4**. Every IPC payload, saved file and tenant config is checked at runtime
-- **Tests:** **Vitest**. Pure logic (layout, bounce physics, autosave, screenshot files, tenant config)
+- **Tests:** **Vitest**. Pure logic (layout, the character's wandering and clones, autosave, screenshot files, tenant config)
 - **Quality:** ESLint 10 + typescript-eslint + Prettier
 - **Repo:** npm workspaces (`apps/*`). `apps/gateway` and `packages/shared` are added when the backend arrives
 - **_M1:_ Claude:** `@anthropic-ai/sdk`, streaming Messages API, `claude-opus-5-5`. Effort set explicitly; server-side refusal fallbacks; prompt caching
@@ -108,8 +110,8 @@ and has rougher transparent-window behaviour on WebView2. **.NET WinUI** is Wind
 ```
 ┌─────────────────────────── Main process (Node) ───────────────────────────┐
 │ BubbleController: mode state machine                                       │
-│   collapsed ⇄ expanded, bouncing → returning → collapsed, capturing         │
-│ Bubble window (72×72, never resizes, moves while bouncing)                  │
+│   collapsed ⇄ expanded, dragging → returning → collapsed, capturing         │
+│ Bubble window (her size; moves when she is dragged, walks or falls)         │
 │ Panel window  (fixed size, shown/hidden; transparent areas click-through)   │
 │ NotesStore (autosave) · ScreenshotService · Settings · Tray · IPC (zod)     │
 └──────────────▲───────────────────────────────────────────▲────────────────┘
@@ -121,9 +123,10 @@ and has rougher transparent-window behaviour on WebView2. **.NET WinUI** is Wind
                                                 └──────────────────────┘
 ```
 
-- **Two windows, one renderer bundle** (`?view=bubble` / `?view=panel`). The bubble window is
-  tiny, can't take focus and never resizes. That means no flicker on open/close and nothing large
-  moving during Bounce. The panel window has a fixed size and its empty areas pass clicks through
+- **Two windows, one renderer bundle** (`?view=bubble` / `?view=panel`; on the `character` branch
+  also `?view=clones`, a click-through window for the Clones action, §7i). The bubble window is
+  tiny, can't take focus and never resizes when the panel opens. That means no flicker on
+  open/close and nothing large moving during a drag or a walk. The panel window has a fixed size and its empty areas pass clicks through
   to whatever is underneath (`setIgnoreMouseEvents` with forwarding, toggled whenever the pointer
   is over real UI, and reset each time the panel is shown). The bubble window is never
   click-through: relying on mouse forwarding there let clicks occasionally fall through it.
@@ -199,12 +202,12 @@ Desktop-Assist/
 ├─ apps/desktop/
 │  ├─ electron.vite.config.ts   TENANT=<id> picks tenants/<id> at build time
 │  ├─ electron-builder.yml
-│  ├─ src/main/                 index (lifecycle), bubble/ (windows, layout, bounce, controller),
+│  ├─ src/main/                 index (lifecycle), bubble/ (windows, layout, clones, controller),
 │  │                            claudeDesktop + sendInClaude (3.1), apps/ (3.2), auth/
 │  │                            (JumpCloud sign-in), claude/ (chat), storage/, actions, notes/,
 │  │                            screenshots/, settings, tray, uninstall, ipc
 │  ├─ src/preload/              typed contextBridge API (window.assist)
-│  ├─ src/renderer/             React views: BubbleView, PanelView (+ components)
+│  ├─ src/renderer/             React views: BubbleView, ClonesView, PanelView (+ components)
 │  ├─ src/shared/               IPC contract, action registry, UI geometry constants, types
 │  └─ tests/                    Vitest unit tests
 ├─ tenants/morse-micro/         tenant.json (names, colours, actions, chatApp, portal, sign-in
@@ -224,7 +227,7 @@ Desktop-Assist/
 - **Text box**: A multi-line box. **Autosaves** about 0.5 s after you stop typing, and also when it closes and when the app quits. It's restored after a restart and shows a "Saved" indicator. Saved to `%APPDATA%\Desktop Assist\notes.json` with atomic writes. A corrupt file is backed up and replaced with an empty one. No Claude connection yet.
 - **Screenshot**: An action icon. It hides Desktop Assist's own windows, captures **the screen the bubble is on** at full resolution, saves `Pictures\Desktop Assist\Screenshot YYYY-MM-DD HHMMSS.png`, reopens the panel and shows a "Screenshot saved" toast. Files are never deleted automatically.
 - **Attach latest**: A 📎 button in the text box. It adds the most recent screenshot as a **thumbnail chip** (no duplicates). Click the chip to open it full size, × to remove it. Chips are saved with the text. A chip whose file was deleted shows as missing.
-- **Bounce**: An action icon. The panel collapses and the bubble moves at a constant speed, bouncing off the edges of the work area. **Clicking the bubble stops it and it glides back to the corner.**
+- **Bounce**: _Removed on the `character` branch, where Clones takes its place (§7i)._ An action icon. The panel collapses and the bubble moves at a constant speed, bouncing off the edges of the work area. **Clicking the bubble stops it and it glides back to the corner.**
 
 **Extension points built in M0 (so later features are small additions):**
 
@@ -445,7 +448,8 @@ tab, as asked). IT's setup guide: [ATLASSIAN_SETUP.md](ATLASSIAN_SETUP.md).
   only the work areas (screens minus taskbars) counted, so that taskbar was a wall. Now a taskbar
   between two monitors can be crossed (only along the stretch where the other monitor lies
   beyond it). Checked live on that desk: the bubble went up onto the ultrawide, stayed on screen
-  throughout, and a click brought it back to its corner on the laptop.
+  throughout, and a click brought it back to its corner on the laptop. (On the `character` branch
+  Bounce has since been removed, replaced by Clones; §7i.)
 
   These three are tested with unit tests (271 in all now: going back through the screenshots one
   click at a time, crossing between monitors, over a taskbar between stacked monitors, the walls
@@ -573,15 +577,20 @@ pointed ears, silver-white hair in one long braid over her shoulder (a fringe in
 and a shine band), amber eyes, a wide-brimmed crooked hat with a silver band, and a long flared
 robe in the tenant's accent colour with bell sleeves, silver trim, a sash and a teal gem brooch,
 over dark stockings and boots. She's about 88 pixels tall with her hat on a 96 × 96 grid, one pixel
-a DIP, in a 96-DIP window (the bubble's box is now 80 DIP, so the panel's layout moved out a little
-to match).
+a DIP at her usual size, in a 96-DIP window (the bubble's box is now 80 DIP, so the panel's layout
+moved out a little to match).
 
 She's drawn by a small **pixel rig** (`src/renderer/src/character/`): her body parts are shapes
 (polygons, ellipses and tapered lines) posed by joint angles, drawn straight onto the pixel grid
 with no smoothing, then cel-shaded (the side away from the light in shade, the edge toward it lit)
-and outlined, each part in a dark shade of its own colour. Her face (eyes, blush, mouth) is
-hand-placed pixels. Seen diagonally she's one hand-drawn picture, and side on her face is a
-hand-drawn anime profile (both in `pictures.ts`), so nothing overlaps wrongly. Her clothes are
+and outlined, each part in a dark shade of its own colour. So she doesn't look flat, her hair,
+face, robe, hat, stockings and boots also have a broad two-tone shadow across the side away from
+the light, things cast a pixel of shadow on what's just below them (her hat's brim on her hair, her
+fringe on her forehead, the sash and sleeves on her robe, the hem on her stockings and boots), her
+skirt falls in folds, and from the front her nose casts a pixel of shade. Her face (eyes, blush,
+mouth) is hand-placed pixels. Seen diagonally she's one hand-drawn picture, and side on her face is
+a hand-drawn anime profile, her cheek and jaw running back to her ear with her hair behind it (both
+in `pictures.ts`), so nothing overlaps wrongly. Her clothes are
 patterned, the same from every side: a gold buckle, moon and stars and silver stitching on her
 hat; gold diamonds above the robe's hem, silver stars, gold buttons, a gold sash buckle and gold
 lines above the cuffs; cuffs, laces and buckled straps on her boots. From the front her braid
@@ -615,22 +624,31 @@ this was merged.)
     idle animations were the model: breathing as the base, varied fidgets at random intervals.
     Each habit's frames add up to exactly the time the main process waits.
   - **Dragged**, from the front: held up by her collar, off the ground, mouth open, arms up, legs
-    kicking, swaying, hair lifted. Also while Bounce throws her about, and while she falls after a
-    drop.
+    kicking, swaying, hair lifted. Also while she falls after a drop.
 - **Which way she faces**: the middle of the screen (left from the right-hand corner); walking,
   the way she walks. Facing left is the mirror image of facing right.
 - **Where it lives**: no longer stuck in a corner, but near one of the bottom corners. It stands on
   the taskbar (its window's bottom edge on the work area's) and strolls within 240 DIP of its
-  corner: every 8 to 20 s (5 to 12 s after settling) it walks somewhere else in that stretch, or,
+  corner (at her usual size; further, and faster, when she's bigger): every 8 to 20 s (5 to 12 s after settling) it walks somewhere else in that stretch, or,
   once it's been alone 30 s, more often than not does one of her habits instead.
 - **Dragging**: dropped, it falls onto the taskbar of that display with gravity, and from then on
   lives near that display's nearer bottom corner (the half of the screen it's in). Dropped further
   than 240 DIP from that corner, it walks back. The corner is remembered as before; a top corner
   saved by 1.0.0 means the bottom corner below it.
 - **Anything the user does stops it where it is**: clicking it opens the panel from where it
-  stands (the panel still opens toward the middle of the screen); dragging or Bounce interrupt a
-  walk or a fidget. Nothing happens on its own while the panel is open.
-- Bounce still roams every monitor; a click brings it back to where it stood.
+  stands (the panel still opens toward the middle of the screen); dragging interrupts a walk or a
+  fidget. Nothing happens on its own while the panel is open.
+- **Her size**: a size icon opens a menu with Smaller and Bigger, in steps from half her usual size
+  to six times it (½, ¾, 1, 1.5, 2, 3, 4, 5, 6). She grows or shrinks where she stands, her feet on
+  the taskbar, with the panel's chat card and icons moving out to suit. The size is remembered
+  (`characterScale` in `preferences.json`), but she's never bigger than lets her panel, with all
+  its icons, fit her screen, so the menu can always be reached; on a smaller screen she shrinks to
+  fit, and grows back once there's room. The bigger she is, the further she strolls and the faster
+  she walks.
+- **Clones** (in place of Bounce, which has been removed): ten of her, at her size, walk about the
+  taskbar of her display for ten seconds, each on its own timetable, then fade away. They're in one
+  window along the bottom of the screen that never takes the mouse or the focus, so clicks go
+  straight through them; using it again starts a new lot.
 - With Windows' reduced-motion setting it still walks, but holds still otherwise (the first frame
   of each pose).
 - Her shadow on the taskbar turns the accent colour while the panel is open, and she glows softly
@@ -640,10 +658,12 @@ Tested with unit tests (where it stands and which corner it belongs to; choosing
 fidgets, walking, falling; the controller with fake timers: standing, strolling both ways,
 fidgeting only after a quiet spell, stopping when clicked with the panel where it stands, nothing
 while open, dangling while dragged, falling where dropped, walking back from far away, another
-display, Bounce, display changes, habits never repeated back to back; the animations: every pose's
-frames, feet on the ground except at the top of the hop and while carried, each habit's length
-matching the main process, mirroring, the rig's three views and face, the rasteriser's shading
-and outlines) and the real app: she stood on the taskbar, walked, sat down and later glanced
+display, display changes, habits never repeated back to back; her size: saved and snapped, growing
+where she stands, kept to what fits the screen, walking faster when bigger; the clones' window and
+how they wander; the animations: every pose's frames, feet on the ground except at the top of the
+hop and while carried, each habit's length matching the main process, mirroring, the rig's three
+views and face, the rasteriser's shading, form shadows and outlines, the shadows things cast) and
+the real app: she stood on the taskbar, walked, sat down and later glanced
 about on her own, with no errors; contact sheets of every frame drawn with the real CSS.
 
 ## 8. Milestones
@@ -658,7 +678,7 @@ about on her own, with no errors; contact sheets of every frame drawn with the r
 - **5** ✅ **Jira and the service desk**: The app-opening spinner, and Atlassian ideas 1 to 9. See §7h.
 - **5.1** ✅ **The bubble on top after starting**: always-on-top that survives a full-screen app. See §7h.
 - **5.2** ✅ **The bubble kept in front, and Check for updates**: the startup front check; updating from GitHub releases, signed with a release key; the `.exe` locked down; version 1.0.0, the first release. See §7h.
-- **6** 🧪 **The character** (on trial, branch `character`): the bubble as an animated character on the taskbar near a bottom corner. See §7i.
+- **6** 🧪 **The character** (on trial, branch `character`): the bubble as an animated character on the taskbar near a bottom corner, in a choice of sizes, with Clones in place of Bounce. See §7i.
 - 7 (next): To be chosen. Candidates:
   - Shipping: code signing (no "unrecognised app" warning), silent deployment through JumpCloud (with Claude Desktop), CI on GitHub Actions (tests and the installer on every pull request, and building the release), a "What's new" note after an update
   - Bubble and screenshots: a keyboard shortcut to open the panel and to take a screenshot, snipping a region or a window, pasting an image into the text box, hiding during full-screen apps and presentations, a first-run tour
@@ -698,7 +718,8 @@ Step-by-step instructions are in [CLAUDE_DESKTOP_SETUP.md](CLAUDE_DESKTOP_SETUP.
 - Screenshots → `Pictures\Desktop Assist`, kept forever
 - Capture → the screen the bubble is on
 - Settings (M0) → Start with Windows, Open screenshots folder, Clear text box
-- Bounce → glides back to the corner when stopped
+- Bounce → glides back to the corner when stopped (removed on the `character` branch, replaced by
+  Clones)
 - Close → quits immediately
 - M1 credentials → the user's own API key (replaced in M3)
 - M3 credentials → JumpCloud sign-in, with Claude reached through Workload Identity Federation
