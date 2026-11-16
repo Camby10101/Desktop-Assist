@@ -1,4 +1,4 @@
-import type { Pose as Name } from '@shared/character'
+import { FIDGET_MS, type Pose as Name } from '@shared/character'
 import { draw, GRID, LEG_LENGTH, type Arm, type Leg, type Pose } from './rig'
 
 // The character's animations: for each pose, a list of frames drawn by the rig (rig.ts) from key
@@ -108,6 +108,7 @@ function mix(a: Pose, b: Pose, t: number): Pose {
     lift: lerp(a.lift, b.lift, t),
     rune: lerp(a.rune, b.rune, t),
     spin: lerp(a.spin, b.spin, t),
+    spread: lerp(a.spread, b.spread, t),
     arms: [mixArm(an, bn, t), mixArm(af, bf, t)],
     legs: [mixLeg(ln, mn, t), mixLeg(lf, mf, t)],
   }
@@ -523,6 +524,185 @@ function sit(): Key[] {
   ]
 }
 
+/** A curtsy, from the front: her robe held out at the sides, a dip with her head tilted, smiling. */
+function curtsy(): Key[] {
+  const holding = (depth: number, spread: number, face: Pose['face'], tilt = 0): Pose => ({
+    view: 'front',
+    y: depth,
+    legs: crouch(depth),
+    spread,
+    face,
+    tilt,
+    // Hands out low at her sides, holding the robe's edges.
+    arms: [
+      { shoulder: 0.5, elbow: -0.3 },
+      { shoulder: 0.5, elbow: -0.3 },
+    ],
+  })
+  const dip = holding(4, 6, 'happy', 0.1)
+  return [
+    ...hold(FRONT, 160),
+    ...tween(FRONT, holding(0, 4, 'neutral'), 280),
+    ...tween(holding(0, 4, 'neutral'), dip, 420),
+    ...tween(dip, dip, 500),
+    ...tween(dip, holding(0, 4, 'happy'), 420),
+    ...tween(holding(0, 4, 'happy'), FRONT, 300),
+    ...hold(FRONT, 120),
+  ]
+}
+
+/**
+ * Gazing into a crystal ball, from the front: she brings it up in both hands, looks down into it
+ * as a wisp of light turns inside and sparkles circle it, then smiles at what she sees and puts it
+ * away.
+ */
+function orb(): Key[] {
+  const holding = (face: Pose['face'], spin = 0, sparkle = 0): Pose => ({
+    view: 'front',
+    prop: 'orb',
+    face,
+    spin,
+    sparkle,
+    // Both forearms turned in and up, so her hands meet in front of her waist.
+    arms: [
+      { shoulder: 0.25, elbow: -1.55 },
+      { shoulder: 0.25, elbow: -1.55 },
+    ],
+  })
+  const gazing: Key[] = Array.from({ length: 40 }, (_, i) => ({
+    pose: holding('down', i / 20, i >= 8 ? (i - 8) / 32 : 0),
+    ms: 50,
+  }))
+  return [
+    ...hold(FRONT, 200),
+    ...tween(FRONT, holding('neutral'), 400),
+    ...tween(holding('neutral'), holding('down'), 200),
+    ...gazing,
+    ...tween(holding('down', 2), holding('happy', 2.4), 300),
+    ...tween(holding('happy', 2.4), holding('happy', 3), 600),
+    ...hold(holding('blink', 3), 120),
+    ...tween(holding('happy', 3), FRONT, 400),
+    ...hold(FRONT, 180),
+  ]
+}
+
+/**
+ * A twirl: she spins round three times on the spot, arms out, her robe flaring wider as she goes
+ * and her hair swinging, then lands, smiling, as the robe settles. A turn is the views in order,
+ * front, diagonal, side, then the side and diagonal mirrored (facing the other way): her back,
+ * which she has no picture of, goes by in between too fast to miss.
+ */
+function twirl(): Frame[] {
+  const out: [Arm, Arm] = [
+    { shoulder: 0.9, elbow: 0.2 },
+    { shoulder: 0.9, elbow: 0.2 },
+  ]
+  const front = (spread: number, wind = 0, face: Pose['face'] = 'happy') =>
+    draw({ view: 'front', spread, wind, face, arms: out })
+  const diagonal = draw({ view: 'diagonal', face: 'happy', arms: [out[0], ARM_DOWN] })
+  const side = (spread: number) =>
+    draw({ view: 'side', spread, wind: -2, face: 'happy', arms: out })
+  const turn = (spread: number, ms: number): Frame[] => [
+    { rows: diagonal, ms },
+    { rows: side(spread), ms },
+    { rows: mirror(side(spread)), ms },
+    { rows: mirror(diagonal), ms },
+    { rows: front(spread), ms },
+  ]
+  return [
+    { rows: draw(FRONT), ms: 200 },
+    { rows: front(2), ms: 120 },
+    ...turn(4, 70),
+    ...turn(6, 60),
+    ...turn(5, 70),
+    { rows: front(6, 1), ms: 160 },
+    { rows: front(4, -1), ms: 120 },
+    { rows: front(2, 0.5), ms: 120 },
+    { rows: front(0), ms: 200 },
+    { rows: draw({ view: 'front', face: 'blink' }), ms: 120 },
+    { rows: draw(FRONT), ms: 160 },
+  ]
+}
+
+/**
+ * A butterfly, from the front: she holds up a finger beside her; a little magic butterfly flutters
+ * down to it and rests there, opening and shutting its wings, while she watches it, smiling; then
+ * it flies off up and away, and she lowers her hand.
+ */
+function butterfly(): Key[] {
+  const steps = Math.round(FIDGET_MS.butterfly / FRAME_MS)
+  return Array.from({ length: steps }, (_, i) => {
+    const t = i / steps
+    // Her near hand up beside her head (raised over the first 8%, lowered over the last 10%).
+    const up = Math.min(1, t / 0.08, (1 - t) / 0.1)
+    const lift = up * up * (3 - 2 * up)
+    const arm = { shoulder: 0.08 + 1.47 * lift, elbow: 0.95 * lift }
+    return {
+      pose: {
+        view: 'front',
+        butterfly: t,
+        arms: [arm, ARM_DOWN],
+        look: t > 0.04 && t < 0.92 ? 1 : 0,
+        face: t > 0.32 && t < 0.72 ? 'happy' : 'neutral',
+      },
+      ms: FRAME_MS,
+    }
+  })
+}
+
+/**
+ * Dozing, from the front: her eyes close, her head droops and she sways a little while z's float
+ * up from her; her head nods, and she wakes with a start, hair flying, looks one way and the other,
+ * and blinks.
+ */
+function doze(flipText = false): Key[] {
+  const steps = Math.round(FIDGET_MS.doze / FRAME_MS)
+  return Array.from({ length: steps }, (_, i) => {
+    const t = i / steps
+    if (t < 0.6) {
+      // Nodding off: eyes heavy, then shut; head drooping further, a deeper nod near the end.
+      const droop = Math.min(1, t / 0.15)
+      const nod = t > 0.48 && t < 0.56 ? 0.06 : 0
+      return {
+        pose: {
+          view: 'front',
+          face: t < 0.06 ? 'down' : 'blink',
+          tilt: 0.12 * droop + nod,
+          x: Math.round(Math.sin(t * 14) * 0.6),
+          zzz: t > 0.1 ? (t - 0.1) / 0.5 : 0,
+          flipText,
+        },
+        ms: FRAME_MS,
+      }
+    }
+    if (t < 0.68) {
+      // Awake with a start.
+      return {
+        pose: {
+          view: 'front',
+          face: 'surprised',
+          y: -2,
+          lift: 1.5,
+          arms: [
+            { shoulder: 0.45, elbow: 0.2 },
+            { shoulder: 0.45, elbow: 0.2 },
+          ],
+        },
+        ms: FRAME_MS,
+      }
+    }
+    // Looking about, then a blink.
+    return {
+      pose: {
+        view: 'front',
+        look: t < 0.76 ? -1 : t < 0.84 ? 1 : 0,
+        face: t > 0.9 && t < 0.93 ? 'blink' : 'neutral',
+      },
+      ms: FRAME_MS,
+    }
+  })
+}
+
 /**
  * A glance one way, then the other (the second a mirror image), her eyes leading her head, then a
  * blink.
@@ -547,7 +727,10 @@ function look(): Frame[] {
   ]
 }
 
-/** Carried by her collar: off the ground, arms up, legs kicking, swaying, hair lifted. */
+/**
+ * Carried by her collar: off the ground, arms up, legs kicking, swaying, hair lifted, and no
+ * shadow under her (she's in the air, wherever the pointer takes her).
+ */
 function dragged(): Key[] {
   return Array.from({ length: 12 }, (_, i) => {
     const phase = (i / 12) * Math.PI * 2
@@ -556,6 +739,7 @@ function dragged(): Key[] {
       pose: {
         view: 'front',
         face: 'surprised',
+        shadow: false,
         x: Math.round(Math.sin(phase)),
         y: -4,
         tilt: Math.sin(phase) * 0.05,
@@ -592,9 +776,22 @@ const MAKERS: Record<Name, () => Frame[]> = {
   spell: () => drawn(spell()),
   levitate: () => drawn(levitate()),
   vision: () => drawn(vision()),
+  curtsy: () => drawn(curtsy()),
+  orb: () => drawn(orb()),
+  twirl,
+  butterfly: () => drawn(butterfly()),
+  doze: () => drawn(doze()),
   sit: () => drawn(sit()),
   look,
   dragged: () => drawn(dragged()),
+}
+
+/**
+ * Poses with letters in them (the dozer's z's), drawn the other way round for facing left, so
+ * they read right once the frame is mirrored.
+ */
+const LEFT_MAKERS: Partial<Record<Name, () => Frame[]>> = {
+  doze: () => drawn(doze(true)),
 }
 
 /** Whether a pose's animation repeats (the fidgets play once, for FIDGET_MS). */
@@ -611,6 +808,11 @@ export const LOOPS: Record<Name, boolean> = {
   spell: false,
   levitate: false,
   vision: false,
+  curtsy: false,
+  orb: false,
+  twirl: false,
+  butterfly: false,
+  doze: false,
   sit: false,
   look: false,
 }
@@ -630,7 +832,10 @@ export function framesOf(pose: Name, facing: Facing): Frame[] {
   if (!frames) {
     const right = made.get(`${pose}:right`) ?? MAKERS[pose]()
     made.set(`${pose}:right`, right)
-    frames = way === 'right' ? right : right.map((f) => ({ rows: mirror(f.rows), ms: f.ms }))
+    frames =
+      way === 'right'
+        ? right
+        : (LEFT_MAKERS[pose]?.() ?? right).map((f) => ({ rows: mirror(f.rows), ms: f.ms }))
     made.set(key, frames)
   }
   return frames

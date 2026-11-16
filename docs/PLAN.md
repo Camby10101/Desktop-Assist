@@ -590,8 +590,10 @@ the light, things cast a pixel of shadow on what's just below them (her hat's br
 fringe on her forehead, the sash and sleeves on her robe, the hem on her stockings and boots), her
 skirt falls in folds, and from the front her nose casts a pixel of shade. Her face (eyes, blush,
 mouth) is hand-placed pixels. Seen diagonally she's one hand-drawn picture, and side on her face is
-a hand-drawn anime profile, her cheek and jaw running back to her ear with her hair behind it (both
-in `pictures.ts`), so nothing overlaps wrongly. Her clothes are
+a hand-drawn anime profile: a small nose a pixel out, a soft round chin, and her jaw curving back
+to her ear, with her fringe clear of her eye and the rest of her hair behind (both in
+`pictures.ts`), so nothing overlaps wrongly. Side on her eye is a round iris with a glint, as from
+the front, a pixel higher, level with the bridge of her nose. Her clothes are
 patterned, the same from every side: a gold buckle, moon and stars and silver stitching on her
 hat; gold diamonds above the robe's hem, silver stars, gold buttons, a gold sash buckle and gold
 lines above the cuffs; cuffs, laces and buckled straps on her boots. From the front her braid
@@ -611,7 +613,7 @@ this was merged.)
   - **Walk left / walk right**, side on: twelve frames, two steps; each leg swings forward with its
     knee bent and pushes back, the arms swing against the legs, her body rises as her legs pass and
     her hair trails behind, while the window moves along the taskbar (80 DIP a second).
-  - **Ten habits** (fidgets), only once she's been left alone for 30 s, chosen at random, never
+  - **Fifteen habits** (fidgets), only once she's been left alone for 30 s, chosen at random, never
     the same twice in a row: **hop** (crouch, spring, float with her legs tucked, land with a
     bounce; 1.2 s), **wave** (diagonal, forearm upright swinging to and fro, smiling; 2 s),
     **stretch** (arms up, a yawn, a lean each way; 2.4 s), **sip** (diagonal, her teacup up to
@@ -620,17 +622,26 @@ this was merged.)
     head; she looks up in wonder, smiles and opens her arms as it arrives, and watches it rise away
     as the light fades; it hovers for about five seconds, 8.6 s in all; rare, about a fifth as
     likely as any other habit; the light and the logo are drawn in a click-through window of their
-    own above her, in time with her from a shared timetable), **read** (diagonal, her spellbook open, head down,
+    own above her, in time with her from a shared timetable), **curtsy** (from the front, her robe
+    held out at the sides, a dip with her head tilted, smiling; 2.2 s), **orb** (from the front,
+    she gazes down into a crystal ball held in both hands as a wisp of light turns inside and
+    sparkles circle it, then smiles at what she sees; 4.4 s), **read** (diagonal, her spellbook open, head down,
     turning pages, a smile at something; 4 s), **spell** (diagonal, her hand raised, sparkles
     circling it; 2.4 s), **levitate** (eyes shut, she floats up over a glowing magic circle,
     hovers, bobbing and smiling, as its runes turn and sparks rise, then settles; 3.6 s), **sit**
     (down on the taskbar, her robe spread round her, swaying, looking
-    about, then up; 6 s) and **look** (her eyes, then her head, turning one way, then the other;
-    2.4 s). Desktop mascots and games'
+    about, then up; 6 s), **twirl** (three spins on the spot through every view and its mirror,
+    arms out, her robe flaring wider, then she lands smiling as it settles; 2.2 s), **butterfly**
+    (from the front, she holds up a finger and a little magic butterfly flutters down to it, rests
+    there opening and shutting its wings while she smiles at it, and flies off; 4.8 s), **doze**
+    (from the front, she nods off where she stands with z's floating up from above her hat, wakes
+    with a start, hair flying, looks one way and the other, and blinks; 5.6 s) and **look** (her
+    eyes, then her head, turning one way, then the other; 2.4 s). Desktop mascots and games'
     idle animations were the model: breathing as the base, varied fidgets at random intervals.
     Each habit's frames add up to exactly the time the main process waits.
   - **Dragged**, from the front: held up by her collar, off the ground, mouth open, arms up, legs
-    kicking, swaying, hair lifted. Also while she falls after a drop.
+    kicking, swaying, hair lifted, with no shadow under her (she's in the air). Also while she falls
+    after a drop.
 - **Which way she faces**: the middle of the screen (left from the right-hand corner); walking,
   the way she walks. Facing left is the mirror image of facing right.
 - **Where it lives**: no longer stuck in a corner, but near one of the bottom corners. It stands on
@@ -652,7 +663,8 @@ this was merged.)
   fit, and grows back once there's room. The bigger she is, the further she strolls and the faster
   she walks.
 - **Clones** (in place of Bounce, which has been removed): ten of her, at her size, walk about the
-  taskbar of her display for thirty seconds, each on its own timetable, then fade away. They're in one
+  taskbar of her display for thirty seconds, each on its own timetable, stopping now and then and
+  sometimes waving when it does (one stop in five), then fade away. They're in one
   window along the bottom of the screen that never takes the mouse or the focus, so clicks go
   straight through them; using it again starts a new lot.
 - With Windows' reduced-motion setting it still walks, but holds still otherwise (the first frame
@@ -669,9 +681,11 @@ fidgeting only after a quiet spell, stopping when clicked with the panel where i
 while open, dangling while dragged, falling where dropped, walking back from far away, another
 display, display changes, habits never repeated back to back; her size: saved and snapped, growing
 where she stands, kept to what fits the screen, walking faster when bigger; the clones' window and
-how they wander; the vision's window and timetable; the animations: every pose's frames, feet on the ground except at the top of the
-hop and while carried, each habit's length matching the main process, mirroring, the rig's three
-views and face, looking up for the vision, the rasteriser's shading, form shadows and outlines,
+how they wander and wave; the vision's window and timetable; the animations: every pose's frames, feet on the ground except at the top of the
+hop and while carried (with no shadow while carried), the dozer's z's the right way round facing
+left, each habit's length matching the main process, mirroring, the rig's three
+views and face, looking up for the vision, the newer habits' crystal ball, butterfly, z's and
+flared robe, the rasteriser's shading, form shadows and outlines,
 the shadows things cast) and
 the real app: she stood on the taskbar, walked, sat down and later glanced
 about on her own, with no errors; contact sheets of every frame drawn with the real CSS.

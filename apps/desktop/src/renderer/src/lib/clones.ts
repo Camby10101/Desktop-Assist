@@ -1,4 +1,4 @@
-import type { Pose } from '@shared/character'
+import { FIDGET_MS, type Pose } from '@shared/character'
 import type { Facing } from '../character/sprite'
 
 // How her clones wander (see ClonesView): each stands a moment, walks somewhere else along the
@@ -13,6 +13,8 @@ export interface Clone {
   speed: number
   facing: Facing
   walking: boolean
+  /** Waving (her wave habit) while it stands, for once. */
+  waving: boolean
   /** When it sets off again (when standing): ms, on the same clock as `now` below. */
   waitUntil: number
 }
@@ -33,6 +35,8 @@ export const CLONE_WALK = {
   pause: [300, 2000],
   /** Shorter walks aren't worth it (DIP at her usual size). */
   minWalk: 60,
+  /** How often a clone waves when it stops (instead of just standing), 0 to 1. */
+  waveChance: 0.2,
   /** The first set off one after another, this far apart (ms)... */
   stagger: 120,
   /** ...each up to this much later still (ms), so they don't leave in a line. */
@@ -57,13 +61,15 @@ export function spawnClones(
     speed: CLONE_WALK.speed * room.scale,
     facing: random() < 0.5 ? 'left' : 'right',
     walking: false,
+    waving: false,
     waitUntil: now + 150 + i * CLONE_WALK.stagger + random() * CLONE_WALK.scatter,
   }))
 }
 
 /**
  * A clone a frame later (`dtMs` on, at `now`): walking on toward its target and stopping there
- * for a while, or, its stop over, setting off somewhere else at a speed of its own.
+ * for a while (now and then waving, as she does), or, its stop over, setting off somewhere else at
+ * a speed of its own.
  */
 export function stepClone(
   clone: Clone,
@@ -79,22 +85,29 @@ export function stepClone(
         ? Math.min(clone.target, clone.x + step)
         : Math.max(clone.target, clone.x - step)
     if (x !== clone.target) return { ...clone, x }
+    // Arrived: now and then it waves (for as long as her wave takes), otherwise it just stands.
+    const waving = random() < CLONE_WALK.waveChance
     const [shortest, longest] = CLONE_WALK.pause
     return {
       ...clone,
       x,
       walking: false,
-      waitUntil: now + shortest + random() * (longest - shortest),
+      waving,
+      waitUntil: now + (waving ? FIDGET_MS.wave : shortest + random() * (longest - shortest)),
     }
   }
   if (now < clone.waitUntil) return clone
   const target = walkTarget(clone.x, room, random())
-  if (target === clone.x) return { ...clone, waitUntil: now + CLONE_WALK.pause[0] }
+  // Nowhere far enough to go: it stands a little longer (and stops waving, if it was).
+  if (target === clone.x) {
+    return { ...clone, waving: false, waitUntil: now + CLONE_WALK.pause[0] }
+  }
   const spread = 1 + (random() * 2 - 1) * CLONE_WALK.speedSpread
   return {
     ...clone,
     target,
     walking: true,
+    waving: false,
     facing: target > clone.x ? 'right' : 'left',
     speed: CLONE_WALK.speed * room.scale * spread,
   }
@@ -114,8 +127,9 @@ export function walkTarget(x: number, room: Room, roll: number): number {
   return along < before ? along : x + minWalk + (along - before)
 }
 
-/** What a clone looks like doing what it's doing: walking its way, or standing. */
+/** What a clone looks like doing what it's doing: walking its way, waving, or standing. */
 export function clonePose(clone: Clone): Pose {
+  if (clone.waving) return 'wave'
   if (!clone.walking) return 'idle'
   return clone.facing === 'right' ? 'walk-right' : 'walk-left'
 }

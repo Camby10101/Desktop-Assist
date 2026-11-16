@@ -79,9 +79,10 @@ page in it moves them (`ClonesView`, see [The pages](7-renderer-pages.md)).
 **Left alone.** While `collapsed`, the character has a life of its own. Every 8 to 20 seconds it
 walks somewhere else in its zone (the pose `walk-left` or `walk-right`, while the controller moves
 its window along the taskbar a frame at a time). Once nobody has done anything with it for 30
-seconds, more often than not it does one of its ten fidgets instead (a hop, a wave, a stretch, a
-sip of tea, a vision, reading its spellbook, a little spell, levitating over a magic circle, a sit
-on the taskbar, or a glance about), never the same one twice in a row. In the vision, a light
+seconds, more often than not it does one of its fifteen fidgets instead (a hop, a wave, a stretch,
+a sip of tea, a vision, a curtsy, gazing into a crystal ball, reading its spellbook, a little
+spell, levitating over a magic circle, a sit on the taskbar, a twirl, a butterfly landing on its
+finger, a doze, or a glance about), never the same one twice in a row. In the vision, a light
 shines down from the top of the screen and the company's logo comes down it to hover over her head
 while she looks up at it; the light and the logo are drawn in a window of their own above her
 (`vision.ts`, below). None of this changes the mode, and every change of mode counts as the user doing something: it stops whatever the
@@ -1366,8 +1367,8 @@ done, waits for the next.
 - `this.idleTimer = setTimeout(() => {`: the fidget's end goes in `idleTimer` too, so anything
   that stops the character's own activity also stops this. When it fires, the pose goes back to
   `idle` and the next wait starts.
-- `FIDGET_MS[activity.pose]`: how long the fidget lasts, from 1.2 s for the hop to 6 s for sitting
-  down (`src/shared/character.ts`). The page's frames for each fidget add up to the same numbers
+- `FIDGET_MS[activity.pose]`: how long the fidget lasts, from 1.2 s for the hop to 8.6 s for the
+  vision (`src/shared/character.ts`). The page's frames for each fidget add up to the same numbers
   (see `character/sprite.ts`; a test checks it), so the pose changes back just as the last frame
   ends.
 
@@ -2103,14 +2104,14 @@ they wait for a quiet spell rather than starting up while someone has just been 
 - `last?: Fidget`: the fidget it did last (`BubbleController.lastFidget`), or `undefined` if it
   hasn't done one yet. The `?` makes the parameter optional.
 - `FIDGETS.filter((fidget) => fidget !== last)`: every fidget but that one, so it never does the
-  same one twice in a row. With no `last`, all ten are choices.
+  same one twice in a row. With no `last`, all fifteen are choices.
 - `weights`: how likely each choice is, from `FIDGET_WEIGHT` (above): 1 for every fidget but the
   vision, which is 0.2, so it's rare. `?? 1` gives 1 to any fidget the list leaves out.
 - `let roll = random() * ...`: a second roll, as a point along all the weights laid end to end
-  (`reduce()` adds them up): 9.2 long with all ten fidgets as choices.
+  (`reduce()` adds them up): 14.2 long with all fifteen fidgets as choices.
 - The loop walks along the choices, taking each one's weight off the roll; the first that takes it
   below 0 is the one the point fell in. So each fidget is picked in proportion to its weight: the
-  vision about one time in 46 (0.2 of 9.2), each of the others about one in 9. `choices.entries()`
+  vision about one time in 71 (0.2 of 14.2), each of the others about one in 14. `choices.entries()`
   gives each choice with its index, for its weight.
 - `choices.at(-1)!`: the last choice, if rounding ever leaves the roll at exactly the end (it
   can't with `Math.random()`, but this keeps TypeScript and odd `random`s happy). The `!` tells

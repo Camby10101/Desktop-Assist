@@ -504,7 +504,7 @@ both sides need too.
 
 <!-- code: apps/desktop/src/shared/character.ts#FIDGETS,Fidget,Pose,FIDGET_MS,isFidget -->
 
-[`src/shared/character.ts`, lines 1–55](../../apps/desktop/src/shared/character.ts#L1-L55)
+[`src/shared/character.ts`, lines 1–71](../../apps/desktop/src/shared/character.ts#L1-L71)
 
 ```ts
 // The character that stands in for the bubble: what she's doing (her pose), shared by the main
@@ -518,10 +518,16 @@ both sides need too.
  * - `sip`: a sip of tea.
  * - `vision`: a light shines down from above and brings the company's logo down to her; she looks
  *   up at it in wonder for a moment, then it rises away again (see VISION).
+ * - `curtsy`: holds her robe out at the sides and dips in a little curtsy, smiling.
+ * - `orb`: gazes into a crystal ball, which swirls and sparkles, then smiles at what she sees.
  * - `read`: reads her spellbook (and smiles at something in it).
  * - `spell`: a little spell, sparkles circling her hand.
  * - `levitate`: floats up over a glowing magic circle, hovers with her eyes shut, and settles.
  * - `sit`: sits on the taskbar, her robe spread round her, swaying, then gets up.
+ * - `twirl`: spins round three times, her robe flaring out, and lands smiling.
+ * - `butterfly`: holds up a finger; a little magic butterfly flutters down to it, rests, and flies
+ *   off.
+ * - `doze`: nods off where she stands (floating z's), wakes with a start and looks about.
  * - `look`: glances one way and the other.
  */
 export const FIDGETS = [
@@ -530,10 +536,15 @@ export const FIDGETS = [
   'stretch',
   'sip',
   'vision',
+  'curtsy',
+  'orb',
   'read',
   'spell',
   'levitate',
   'sit',
+  'twirl',
+  'butterfly',
+  'doze',
   'look',
 ] as const
 
@@ -554,10 +565,15 @@ export const FIDGET_MS: Record<Fidget, number> = {
   stretch: 2400,
   sip: 3200,
   vision: 8600,
+  curtsy: 2200,
+  orb: 4400,
   read: 4000,
   spell: 2400,
   levitate: 3600,
   sit: 6000,
+  twirl: 2200,
+  butterfly: 4800,
+  doze: 5600,
   look: 2400,
 }
 
@@ -567,10 +583,11 @@ export const isFidget = (pose: Pose): pose is Fidget =>
 
 <!-- /code -->
 
-- `FIDGETS`: the ten things she does now and then once she's been left alone a while, each
+- `FIDGETS`: the fifteen things she does now and then once she's been left alone a while, each
   described in the comment above it. One, `vision`, needs more than her own window: the light and
-  the company's logo are drawn in a window of their own above her (see `VISION` below). `as const` makes it a fixed list of those exact strings,
-  rather than any list of strings, which is what lets the next line make a type from it. It's a
+  the company's logo are drawn in a window of their own above her (see `VISION` below). The
+  others, the butterfly and the dozer's z's included, are drawn in her own window. `as const`
+  makes it a fixed list of those exact strings, rather than any list of strings, which is what lets the next line make a type from it. It's a
   real list, not only a type, because code goes through it: `nextActivity()` in
   `src/main/bubble/wander.ts` picks one at random, and `Character` draws each one's frames ahead of
   time.
@@ -583,8 +600,8 @@ export const isFidget = (pose: Pose): pose is Fidget =>
   how the figure looks. `idle` and the fidgets happen while she stands; `walk-left` and
   `walk-right` while the main process moves her window along the taskbar; `dragged` whenever she's
   being moved about (dragged, or falling after a drop).
-- `FIDGET_MS`: as the comment says, how long each fidget plays, from 1.2 seconds for the hop to 6
-  for sitting down. Both sides use it. The main process waits this long before setting the pose
+- `FIDGET_MS`: as the comment says, how long each fidget plays, from 1.2 seconds for the hop to
+  8.6 for the vision. Both sides use it. The main process waits this long before setting the pose
   back to `idle`, and the frames of each fidget's animation (`character/sprite.ts` in the
   renderer) add up to exactly the same time, which a test checks, so the pose changes back just as
   the last frame ends. `Record<Fidget, number>` makes TypeScript insist on a length for each
@@ -599,7 +616,7 @@ export const isFidget = (pose: Pose): pose is Fidget =>
 
 <!-- code: apps/desktop/src/shared/character.ts#VISION -->
 
-[`src/shared/character.ts`, lines 57–68](../../apps/desktop/src/shared/character.ts#L57-L68)
+[`src/shared/character.ts`, lines 73–84](../../apps/desktop/src/shared/character.ts#L73-L84)
 
 ```ts
 /**
@@ -638,7 +655,7 @@ pages. Each entry is a `[from, to]` pair:
 
 <!-- code: apps/desktop/src/shared/character.ts#CLONES -->
 
-[`src/shared/character.ts`, lines 70–74](../../apps/desktop/src/shared/character.ts#L70-L74)
+[`src/shared/character.ts`, lines 86–90](../../apps/desktop/src/shared/character.ts#L86-L90)
 
 ```ts
 /**

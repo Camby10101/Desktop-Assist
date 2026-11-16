@@ -143,13 +143,15 @@ export function ChatBox(props: {
 
 /** Her mouth, in sprite pixels down from the top of her window (rig.ts draws it there). */
 const MOUTH_ROW = 33.5
-/** How far from her middle the tail stops (sprite pixels): just short of her face and hair. */
+/** How far from her middle the tail would reach (sprite pixels): just short of her face and hair. */
 const TAIL_REACH = 11
+/** How much of the way from the card to her mouth it goes, so it's short, aimed at her mouth. */
+const TAIL_SHARE = 0.55
 /** The card's corner radius (`rounded-2xl`), which the tail's base keeps clear of. */
 const CARD_RADIUS = 16
 
 /**
- * The speech bubble's tail: from the card's side nearest her to just short of her mouth, at her
+ * The speech bubble's tail: from the card's side nearest her, pointing at her mouth, at her
  * height and size, so it points at her mouth however big she is (her mouth is at MOUTH_ROW of her
  * 96-pixel grid, scaled with her). Its sides curve out of the card's edge in rounded joins and
  * narrow to a sharp point at her mouth, like a drawn speech bubble's. Its base slides along the card's edge to stay level with her
@@ -166,17 +168,21 @@ function SpeechTail(props: {
 }) {
   const { scale, layout } = props
   const { box } = bubbleMetrics(scale)
-  // From the card's edge out to the tip, and up from the card's near edge (its bottom, in a
-  // bottom corner) to the tip.
-  const out = Math.max(8, layout.chatX - (box / 2 + TAIL_REACH * scale))
-  const up = (SPRITE_SIZE - MOUTH_ROW) * scale - layout.chatY
+  // Where her mouth is: how far out from the card's edge (stopping just short of her face) and how
+  // high above the card's near edge (its bottom, in a bottom corner).
+  const reach = Math.max(8, layout.chatX - (box / 2 + TAIL_REACH * scale))
+  const mouth = (SPRITE_SIZE - MOUTH_ROW) * scale - layout.chatY
   // Half the base's width, and how far along the card's edge, beyond it, each side curves in
   // from, so the tail grows out of the card in a rounded join; both grow with her.
   const half = 9 + 2 * scale
   const curve = half * 0.7
   const lowest = CARD_RADIUS + half + curve
   const highest = Math.max(lowest, props.cardHeight - CARD_RADIUS - half - curve)
-  const base = Math.min(Math.max(up, lowest), highest)
+  const base = Math.min(Math.max(mouth, lowest), highest)
+  // The tip: TAIL_SHARE of the way from the middle of the base towards her mouth, so the tail is
+  // short, but points at her mouth wherever on the card it starts.
+  const out = reach * TAIL_SHARE
+  const up = base + (mouth - base) * TAIL_SHARE
   const width = out + 2
   const height = Math.max(up, base + half + curve) + 2
   // A point `x` out from the card's edge and `u` up from its near edge, in the drawing's terms.

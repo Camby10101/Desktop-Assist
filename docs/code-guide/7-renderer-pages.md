@@ -3,8 +3,8 @@
 [← Code Guide](CODE_GUIDE.md)
 
 This part covers the renderer's own files: the HTML page every overlay window loads, the startup
-script, the stylesheet, two small helpers and the clones' wandering, the hooks that connect React
-to the main process, and the four views (the bubble, her clones, her vision and the panel). The building
+script, the stylesheet, two small helpers and the clones' wandering, the hooks (most of them
+connecting React to the main process), and the four views (the bubble, her clones, her vision and the panel). The building
 blocks the views use are covered in
 [the components part](8-renderer-components.md). If React is new to you: a React _component_ is a
 function that returns a description of what to show, written in JSX (HTML-like tags inside
@@ -567,7 +567,7 @@ its own timetable, and without a corner to stay near.
 
 <!-- code: apps/desktop/src/renderer/src/lib/clones.ts#Clone,Room,CLONE_WALK -->
 
-[`src/renderer/src/lib/clones.ts`, lines 4–40](../../apps/desktop/src/renderer/src/lib/clones.ts#L4-L40)
+[`src/renderer/src/lib/clones.ts`, lines 4–44](../../apps/desktop/src/renderer/src/lib/clones.ts#L4-L44)
 
 ```ts
 // How her clones wander (see ClonesView): each stands a moment, walks somewhere else along the
@@ -582,6 +582,8 @@ export interface Clone {
   speed: number
   facing: Facing
   walking: boolean
+  /** Waving (her wave habit) while it stands, for once. */
+  waving: boolean
   /** When it sets off again (when standing): ms, on the same clock as `now` below. */
   waitUntil: number
 }
@@ -602,6 +604,8 @@ export const CLONE_WALK = {
   pause: [300, 2000],
   /** Shorter walks aren't worth it (DIP at her usual size). */
   minWalk: 60,
+  /** How often a clone waves when it stops (instead of just standing), 0 to 1. */
+  waveChance: 0.2,
   /** The first set off one after another, this far apart (ms)... */
   stagger: 120,
   /** ...each up to this much later still (ms), so they don't leave in a line. */
@@ -612,13 +616,15 @@ export const CLONE_WALK = {
 <!-- /code -->
 
 As the comment at the top says, each clone stands a moment, walks somewhere else along the
-taskbar, stands again, and so on. Positions are DIPs from the left edge of the clones' window to
+taskbar, stands again, and so on; now and then, when it stops, it waves, as she does. Positions are DIPs from the left edge of the clones' window to
 the left edge of a clone's box.
 
 - `Clone`: one clone. `x` is where it is now and `target` where it's walking to. `speed` is its own
   walking speed, in DIPs a second, so they don't all walk in step. `facing` (`'left'` or
   `'right'`, the `Facing` type from `character/sprite.ts`) is the way it walks, and the way it
-  keeps facing when it stops. `walking` says whether it's on the move; while it isn't, `waitUntil`
+  keeps facing when it stops. `walking` says whether it's on the move. `waving`, as its comment
+  says, is whether it's waving (her `wave` habit) while it stands, for once. While it isn't walking,
+  `waitUntil`
   is when it sets off again, in milliseconds on the same clock as the `now` passed to the functions
   below (`ClonesView` uses the page's `performance.now()`).
 - `Room`: as its comment says, the room they have: the window's `width`, a clone's `box` (her
@@ -632,6 +638,8 @@ the left edge of a clone's box.
   - `pause: [300, 2000]`: a stop lasts between 0.3 and 2 seconds.
   - `minWalk: 60`: shorter walks aren't worth it (DIPs at her usual size, also multiplied by
     `scale`).
+  - `waveChance: 0.2`: as its comment says, how often a clone waves when it stops, instead of just
+    standing: one stop in five.
   - `stagger: 120` and `scatter: 900`: the first walks start one after another, 120 ms apart, each
     up to 900 ms later still, so the clones don't all leave in a line.
 - `as const`: keeps the numbers exact and read-only, and makes `pause` a pair of two numbers rather
@@ -641,7 +649,7 @@ the left edge of a clone's box.
 
 <!-- code: apps/desktop/src/renderer/src/lib/clones.ts#spawnClones -->
 
-[`src/renderer/src/lib/clones.ts`, lines 42–62](../../apps/desktop/src/renderer/src/lib/clones.ts#L42-L62)
+[`src/renderer/src/lib/clones.ts`, lines 46–67](../../apps/desktop/src/renderer/src/lib/clones.ts#L46-L67)
 
 ```ts
 /**
@@ -662,6 +670,7 @@ export function spawnClones(
     speed: CLONE_WALK.speed * room.scale,
     facing: random() < 0.5 ? 'left' : 'right',
     walking: false,
+    waving: false,
     waitUntil: now + 150 + i * CLONE_WALK.stagger + random() * CLONE_WALK.scatter,
   }))
 }
@@ -682,6 +691,7 @@ after the last, facing either way.
 - `speed: CLONE_WALK.speed * room.scale`: her own walking speed at her size, until each clone picks
   one of its own for its first walk.
 - `facing: random() < 0.5 ? 'left' : 'right'`: half face one way, half the other (by chance).
+- `waving: false`: none waves to begin with.
 - `waitUntil: now + 150 + i * CLONE_WALK.stagger + random() * CLONE_WALK.scatter`: the first can
   set off 150 ms after they appear, and each one after that 120 ms later, plus a random wait of up
   to 900 ms.
@@ -690,12 +700,13 @@ after the last, facing either way.
 
 <!-- code: apps/desktop/src/renderer/src/lib/clones.ts#stepClone -->
 
-[`src/renderer/src/lib/clones.ts`, lines 64–101](../../apps/desktop/src/renderer/src/lib/clones.ts#L64-L101)
+[`src/renderer/src/lib/clones.ts`, lines 69–114](../../apps/desktop/src/renderer/src/lib/clones.ts#L69-L114)
 
 ```ts
 /**
  * A clone a frame later (`dtMs` on, at `now`): walking on toward its target and stopping there
- * for a while, or, its stop over, setting off somewhere else at a speed of its own.
+ * for a while (now and then waving, as she does), or, its stop over, setting off somewhere else at
+ * a speed of its own.
  */
 export function stepClone(
   clone: Clone,
@@ -711,22 +722,29 @@ export function stepClone(
         ? Math.min(clone.target, clone.x + step)
         : Math.max(clone.target, clone.x - step)
     if (x !== clone.target) return { ...clone, x }
+    // Arrived: now and then it waves (for as long as her wave takes), otherwise it just stands.
+    const waving = random() < CLONE_WALK.waveChance
     const [shortest, longest] = CLONE_WALK.pause
     return {
       ...clone,
       x,
       walking: false,
-      waitUntil: now + shortest + random() * (longest - shortest),
+      waving,
+      waitUntil: now + (waving ? FIDGET_MS.wave : shortest + random() * (longest - shortest)),
     }
   }
   if (now < clone.waitUntil) return clone
   const target = walkTarget(clone.x, room, random())
-  if (target === clone.x) return { ...clone, waitUntil: now + CLONE_WALK.pause[0] }
+  // Nowhere far enough to go: it stands a little longer (and stops waving, if it was).
+  if (target === clone.x) {
+    return { ...clone, waving: false, waitUntil: now + CLONE_WALK.pause[0] }
+  }
   const spread = 1 + (random() * 2 - 1) * CLONE_WALK.speedSpread
   return {
     ...clone,
     target,
     walking: true,
+    waving: false,
     facing: target > clone.x ? 'right' : 'left',
     speed: CLONE_WALK.speed * room.scale * spread,
   }
@@ -735,7 +753,8 @@ export function stepClone(
 
 <!-- /code -->
 
-As the comment says, a clone a frame later: `dtMs` milliseconds on, at the time `now`. It never
+As the comment says, a clone a frame later: `dtMs` milliseconds on, at the time `now`: walking on,
+stopping (now and then waving, as she does), or setting off again. It never
 changes the clone it's given; it returns a new one (or the same one, when nothing changed).
 
 - `if (clone.walking) {`: a walking clone moves `step` DIPs toward its target. `dtMs` is kept
@@ -743,24 +762,29 @@ changes the clone it's given; it returns a new one (or the same one, when nothin
   second would, rather than in one big jump. `Math.min(clone.target, ...)` and
   `Math.max(clone.target, ...)` stop it exactly at the target instead of walking past it.
 - `if (x !== clone.target) return { ...clone, x }`: still on its way, so only `x` changes.
-- Once there, it stops: `walking: false`, and `waitUntil` is somewhere between 300 and 2000 ms from
-  now (`shortest + random() * (longest - shortest)`). The line before takes `CLONE_WALK.pause`
-  apart into `shortest` and `longest`.
+- Once there, it stops (`walking: false`). As the comment says, now and then it waves: a roll below
+  `CLONE_WALK.waveChance` (one in five) sets `waving`, and then it stands for exactly as long as
+  her wave takes (`FIDGET_MS.wave`, 2 seconds, from `src/shared/character.ts`), so the animation
+  plays through once. Otherwise it just stands, for somewhere between 300 and 2000 ms
+  (`shortest + random() * (longest - shortest)`; the line before takes `CLONE_WALK.pause` apart
+  into `shortest` and `longest`).
 - `if (now < clone.waitUntil) return clone`: standing, and its stop isn't over yet. Returning the
   very same object tells the page nothing changed.
 - `walkTarget(clone.x, room, random())`: its stop over, it picks somewhere else to go (below). If
-  there's nowhere far enough away (a window hardly wider than a clone), it waits another 300 ms and
-  tries again.
+  there's nowhere far enough away (a window hardly wider than a clone), as the comment says, it
+  stands another 300 ms and tries again, and stops waving if it was, so a clone that waved there
+  doesn't stay frozen on the wave's last frame.
 - `const spread = 1 + (random() * 2 - 1) * CLONE_WALK.speedSpread`: `random() * 2 - 1` is a number
   from -1 to 1, so `spread` is between 0.75 and 1.25: each walk is a little faster or slower than
   her usual pace.
+- `waving: false`: setting off, it stops waving.
 - `facing: target > clone.x ? 'right' : 'left'`: it turns to face the way it's going.
 
 ### `walkTarget()` and `clonePose()`
 
 <!-- code: apps/desktop/src/renderer/src/lib/clones.ts#walkTarget,clonePose -->
 
-[`src/renderer/src/lib/clones.ts`, lines 103–121](../../apps/desktop/src/renderer/src/lib/clones.ts#L103-L121)
+[`src/renderer/src/lib/clones.ts`, lines 116–135](../../apps/desktop/src/renderer/src/lib/clones.ts#L116-L135)
 
 ```ts
 /**
@@ -777,8 +801,9 @@ export function walkTarget(x: number, room: Room, roll: number): number {
   return along < before ? along : x + minWalk + (along - before)
 }
 
-/** What a clone looks like doing what it's doing: walking its way, or standing. */
+/** What a clone looks like doing what it's doing: walking its way, waving, or standing. */
 export function clonePose(clone: Clone): Pose {
+  if (clone.waving) return 'wave'
   if (!clone.walking) return 'idle'
   return clone.facing === 'right' ? 'walk-right' : 'walk-left'
 }
@@ -798,8 +823,9 @@ export function clonePose(clone: Clone): Pose {
   - `roll` (between 0 and 1) picks a point along the two stretches laid end to end: in the first,
     it's that place on the left; past it, the same distance into the second stretch, on the right.
     So every place far enough away, on either side, is as likely as any other.
-- `clonePose(clone)`: as the comment says, what a clone looks like doing what it's doing: `idle`
-  when it's standing, otherwise `walk-right` or `walk-left` by the way it faces. These are the same
+- `clonePose(clone)`: as the comment says, what a clone looks like doing what it's doing: `wave`
+  while it's waving, `idle` when it's otherwise standing, and `walk-right` or `walk-left` by the way
+  it faces while it walks. These are the same
   poses the main process gives her (`Pose` in `src/shared/character.ts`), so `Character` draws the
   clones with the same frames.
 
@@ -1196,6 +1222,69 @@ sent-screenshot thumbnails in `MessageList` use it too (see
   picture isn't shown for it. Comparing paths here means the effect doesn't have to clear the old
   result itself.
 
+## `src/renderer/src/hooks/useFitInWindow.ts`: keeping a side menu in the window
+
+### `useFitInWindow`
+
+<!-- code: apps/desktop/src/renderer/src/hooks/useFitInWindow.ts#useFitInWindow -->
+
+[`src/renderer/src/hooks/useFitInWindow.ts`, lines 4–26](../../apps/desktop/src/renderer/src/hooks/useFitInWindow.ts#L4-L26)
+
+```ts
+/**
+ * Keeps a menu that opens beside the action stack (Settings, Size) inside the panel window. It
+ * lines up with its icon, `offset` from the bubble's edge of the window, unless that would push its
+ * far edge out of the window (a long menu by an icon high up the stack), when it moves back toward
+ * the bubble just enough to fit. One taller than the whole window scrolls (`maxHeight`). `menu` is
+ * the menu's element, whose height is measured as it renders and changes (an item appearing, say).
+ */
+export function useFitInWindow(
+  menu: RefObject<HTMLElement | null>,
+  offset: number,
+): { offset: number; maxHeight: number } {
+  const [height, setHeight] = useState(0)
+  useEffect(() => {
+    const element = menu.current
+    if (!element) return
+    const observer = new ResizeObserver(() => setHeight(element.offsetHeight))
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [menu])
+  // The window's height, less the room kept along its far edge for drop shadows.
+  const room = window.innerHeight - UI.shadowPad
+  return { offset: Math.max(0, Math.min(offset, room - height)), maxHeight: room }
+}
+```
+
+<!-- /code -->
+
+As the comment says, keeps a menu that opens beside the action stack (the settings menu and the
+size menu) inside the panel window. Each menu lines up with its icon: its near edge is `offset`
+from the bubble's edge of the window (the window's bottom, in a bottom corner), where the icon is.
+But the icons stack away from the bubble, and a long menu beside an icon high up the stack (the
+settings menu, beside the gear) could run past the top of the window and be cut off. This hook
+moves a menu back toward the bubble just far enough to fit, and lets one taller than the whole
+window scroll. `SettingsMenu` and `SizeMenu` use it (see
+[the components part](8-renderer-components.md)).
+
+- `menu: RefObject<HTMLElement | null>`: as the comment says, the menu's element, from a `useRef`
+  in the menu, whose height is measured as it renders and whenever it changes (an item appearing,
+  say).
+- `offset: number`: where the menu would like to be: level with its icon (`actionOffset()` in
+  `src/shared/geometry.ts`).
+- `new ResizeObserver(() => setHeight(element.offsetHeight))`: the browser calls this when the
+  menu's size changes (and once when it starts watching), and keeping its height in state draws
+  the menu again in its new place. The cleanup stops watching. `[menu]`: the ref object never
+  changes, so this runs once.
+- `const room = window.innerHeight - UI.shadowPad`: as the comment says, the window's height, less
+  the room kept along its far edge for drop shadows (`UI.shadowPad`, the same margin the panel
+  window is sized with).
+- `Math.max(0, Math.min(offset, room - height))`: the offset the menu gets: where it would like to
+  be, unless its far edge (`offset + height`) would pass `room`, in which case just low enough to
+  fit, but never past the bubble's edge of the window (0).
+- `maxHeight: room`: a menu taller than the whole window is held to that height, and scrolls (the
+  menus also set `overflowY: 'auto'`).
+
 ## `src/renderer/src/views/BubbleView.tsx`: the character's page
 
 The page shown in the small bubble window: one button filling the window, with the character
@@ -1551,7 +1640,7 @@ Effects:
 
 - The first effect is the frame loop. As its comment says, each frame it moves the clones straight
   in the page, not through React, and only asks React to draw again when one of them starts or
-  stops walking (or turns round).
+  stops walking (or waving, or turns round).
   - `let current = clones`: the loop keeps its own copy of where they are, so it doesn't depend on
     React's state, which only catches up at those moments.
   - `requestAnimationFrame(function tick(now) {`: the browser calls `tick` just before it next
@@ -1565,8 +1654,8 @@ Effects:
     to its new place across the window, in whole pixels so the pixel art stays sharp. Changing the
     element's style directly skips React, which would otherwise draw all ten `Character`s again
     sixty times a second.
-  - `if (next.some(...)) { setClones(next) }`: when any clone's pose (`clonePose()`: standing or
-    walking) or way of facing changed, the new list goes into React's state, and React draws those
+  - `if (next.some(...)) { setClones(next) }`: when any clone's pose (`clonePose()`: standing,
+    waving or walking) or way of facing changed, the new list goes into React's state, and React draws those
     clones with their new pose. `current[i]!` tells TypeScript the clone at the same place in the
     old list is there.
   - `return () => cancelAnimationFrame(frame)`: the cleanup stops the loop.

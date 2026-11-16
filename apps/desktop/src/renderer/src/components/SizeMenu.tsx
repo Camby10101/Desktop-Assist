@@ -1,10 +1,12 @@
 import { Minus, Plus } from 'lucide-react'
+import { useRef } from 'react'
 import {
   CHARACTER_SIZES,
   type CharacterSize,
   type Corner,
   type PanelLayout,
 } from '@shared/geometry'
+import { useFitInWindow } from '../hooks/useFitInWindow'
 import { anchored } from '../lib/anchor'
 import { cn } from '../lib/cn'
 
@@ -37,11 +39,15 @@ export function SizeMenu(props: {
   onSetSize: (scale: number) => void
 }) {
   const { scale, max } = props.size
+  // Beside the size icon, but never past the top of the window.
+  const menu = useRef<HTMLDivElement>(null)
+  const fit = useFitInWindow(menu, props.offset)
   const smaller = nextSize(scale, -1, max)
   const bigger = nextSize(scale, 1, max)
   const limited = max < CHARACTER_SIZES.at(-1)!
   return (
     <div
+      ref={menu}
       data-hit
       data-size-menu
       role="group"
@@ -50,7 +56,12 @@ export function SizeMenu(props: {
         'absolute rounded-xl border p-2.5 shadow-xl',
         'border-black/10 bg-white text-zinc-800 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100',
       )}
-      style={{ ...anchored(props.corner, props.layout.settingsX, props.offset), width: MENU_WIDTH }}
+      style={{
+        ...anchored(props.corner, props.layout.settingsX, fit.offset),
+        width: MENU_WIDTH,
+        maxHeight: fit.maxHeight,
+        overflowY: 'auto',
+      }}
     >
       <p className="mb-2 text-sm">Size</p>
       <div className="flex items-center justify-between gap-2">

@@ -9,9 +9,10 @@ import {
   Trash2,
   type LucideIcon,
 } from 'lucide-react'
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { UI, type Corner, type PanelLayout } from '@shared/geometry'
 import type { Branding, Effort, Settings, SignedInUser, UpdateState } from '@shared/types'
+import { useFitInWindow } from '../hooks/useFitInWindow'
 import { anchored } from '../lib/anchor'
 import { cn } from '../lib/cn'
 
@@ -66,11 +67,15 @@ export function SettingsMenu(props: {
   }, [confirmingUninstall])
 
   const { settings, branding } = props
+  // Beside the gear, but never past the top of the window: it's a long menu.
+  const menu = useRef<HTMLDivElement>(null)
+  const fit = useFitInWindow(menu, props.offset)
   // With Claude Desktop, the chat and its settings live there; only the text box is here.
   const builtInChat = branding.chatApp === 'built-in'
 
   return (
     <div
+      ref={menu}
       data-hit
       data-settings-menu
       role="menu"
@@ -80,8 +85,10 @@ export function SettingsMenu(props: {
         'border-black/10 bg-white text-zinc-800 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100',
       )}
       style={{
-        ...anchored(props.corner, props.layout.settingsX, props.offset),
+        ...anchored(props.corner, props.layout.settingsX, fit.offset),
         width: UI.settingsMenuWidth,
+        maxHeight: fit.maxHeight,
+        overflowY: 'auto',
       }}
     >
       <button

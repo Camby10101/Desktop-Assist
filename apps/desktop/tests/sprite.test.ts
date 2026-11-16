@@ -13,6 +13,7 @@ import {
 } from '../src/renderer/src/character/sprite'
 
 const POSES: PoseName[] = ['idle', 'walk-left', 'walk-right', 'dragged', ...FIDGETS]
+const DOWN_ARM = { shoulder: 0.08, elbow: 0 }
 /** Her shoes and their outline: what's on the ground when she stands on it. */
 const FEET = /[bBy]/
 const lowRows = (rows: string[]) => rows.slice(SPRITE_SIZE - 4).join('')
@@ -58,7 +59,10 @@ describe('the animations', { timeout: 30_000 }, () => {
     expect(lowRows(peak!.rows)).toContain('x')
     expect(lowRows(hop[0]!.rows)).toMatch(FEET)
     expect(lowRows(hop.at(-1)!.rows)).toMatch(FEET)
-    for (const { rows } of framesOf('dragged', 'right')) expect(lowRows(rows)).not.toMatch(FEET)
+    for (const { rows } of framesOf('dragged', 'right')) {
+      expect(lowRows(rows)).not.toMatch(FEET)
+      expect(rows.join('')).not.toContain('x') // no shadow while she's carried
+    }
   })
 
   it('float her up over a magic circle while she levitates, and back down', () => {
@@ -106,6 +110,16 @@ describe('the animations', { timeout: 30_000 }, () => {
       expect(frames.length).toBeGreaterThanOrEqual(animationLength(fidget) / 160)
     }
     expect(framesOf('idle', 'right')).toHaveLength(32)
+  })
+
+  it('keep the dozer’s z’s the right way round when she faces left', () => {
+    // A row of the big z with its diagonal stroke going down to the left: "fFF" either way she faces.
+    const hasZ = (frames: { rows: string[] }[]) =>
+      frames.some((f) => f.rows.some((row) => row.includes('fFF')))
+    expect(hasZ(framesOf('doze', 'right'))).toBe(true)
+    expect(hasZ(framesOf('doze', 'left'))).toBe(true)
+    // Otherwise facing left is still the mirror image.
+    expect(framesOf('doze', 'left')[0]!.rows).toEqual(mirror(framesOf('doze', 'right')[0]!.rows))
   })
 
   it('are drawn once, then kept', () => {
@@ -217,6 +231,31 @@ describe('the rig', () => {
     expect(frames.filter((f) => lookingUp(f.rows)).length).toBeGreaterThan(frames.length / 2)
     expect(lookingUp(frames[0]!.rows)).toBe(false)
     expect(lookingUp(frames.at(-1)!.rows)).toBe(false)
+  })
+
+  it('draws the new habits’ things only when asked: a crystal ball, a butterfly, z’s, a flared robe', () => {
+    const plain = draw({ view: 'front' })
+    // The crystal ball, teal, between her hands in front of her waist.
+    const holding: Pose['arms'] = [
+      { shoulder: 0.25, elbow: -1.55 },
+      { shoulder: 0.25, elbow: -1.55 },
+    ]
+    const withOrb = draw({ view: 'front', prop: 'orb', arms: holding })
+    expect(withOrb.slice(44, 56).join('')).toMatch(/G{5}/)
+    expect(draw({ view: 'front', arms: holding }).slice(44, 56).join('')).not.toMatch(/G{5}/)
+    // The butterfly on her raised hand, part way through its visit, and not before it comes.
+    const raised: Pose['arms'] = [{ shoulder: 1.55, elbow: 0.95 }, DOWN_ARM]
+    const resting = draw({ view: 'front', arms: raised, butterfly: 0.5 }).join('')
+    expect(resting).not.toBe(draw({ view: 'front', arms: raised }).join(''))
+    expect(draw({ view: 'front', arms: raised, butterfly: 0.02 }).join('')).toBe(
+      draw({ view: 'front', arms: raised }).join(''),
+    )
+    // Z's above her head while she dozes.
+    const dozing = draw({ view: 'front', zzz: 0.5 })
+    expect(dozing.slice(0, 20).join('')).not.toBe(plain.slice(0, 20).join(''))
+    // A flared robe is wider at the hem.
+    const width = (rows: string[]) => rows[80]!.replace(/\./g, '').length
+    expect(width(draw({ view: 'front', spread: 6 }))).toBeGreaterThan(width(plain) + 8)
   })
 
   it('puts her face on: eyes, blush and mouth', () => {

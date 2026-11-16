@@ -27,6 +27,7 @@ const RAMPS: Record<string, Ramp> = {
   stocking: { line: 'u', shade: 'Q', base: 'o', form: 0.35 },
   boot: { line: 'u', shade: 'B', base: 'b', light: 'y', form: 0.35 },
   cup: { line: 'u', shade: 'F', base: 'f', light: 'w' },
+  orb: { line: 'O', shade: 'G', base: 'G', light: 'w' },
   book: { line: 'u', shade: 'N', base: 'n', light: 'g' },
   shadow: { line: 'x', shade: 'x', base: 'x' },
 }
@@ -69,16 +70,26 @@ export interface Pose {
   wind?: number
   /** Her hair lifted (pixels at the tips), as when she's falling or carried up. */
   lift?: number
-  /** Something in her hands: a teacup or her spellbook. */
-  prop?: 'cup' | 'book'
+  /** Something in her hands: a teacup, her spellbook or a crystal ball (held in both hands). */
+  prop?: 'cup' | 'book' | 'orb'
   /** Sparkles round her near hand, 0 to 1 (a little spell). */
   sparkle?: number
   /** Sitting on the taskbar with her knees up under her robe. */
   sitting?: boolean
+  /** Her shadow on the taskbar (true unless said otherwise; not while she's carried). */
+  shadow?: boolean
   /** A magic circle on the ground under her, 0 (none) to 1 (full size), as she levitates. */
   rune?: number
   /** How far its runes have turned (whole turns), and how far its sparks have risen. */
   spin?: number
+  /** Her robe's hem held or flung out, this many pixels wider each side (a curtsy, a twirl). */
+  spread?: number
+  /** A little butterfly's flight, 0 to 1: coming to her raised hand, resting on it, flying off. */
+  butterfly?: number
+  /** Z's floating up from her as she dozes, 0 to 1 (none at 0). */
+  zzz?: number
+  /** Letters (the z's) drawn back to front, for a frame that will be mirrored to face left. */
+  flipText?: boolean
 }
 
 const DOWN: Arm = { shoulder: 0.08, elbow: 0 }
@@ -136,11 +147,12 @@ const EYES = {
     ],
   },
   side: {
-    open: [['ee...', '.eeee', '..iw.', '..II.', '..jj.']],
+    // A thin lid with its lashes flicking back, over a round iris with a glint, as from the front.
+    open: [['ee...', '.eeee', '.iiw.', '.iII.', '.Ijj.']],
     blink: [['.....', '.....', 'eeee.', '.ee..']],
     happy: [['.....', '..ee.', '.e..e', '.....']],
     down: [['.....', '.....', '.eeee', '..iI.']],
-    up: [['ee...', '.eeee', '..iw.', '..jj.', '.....']],
+    up: [['ee...', '.eeee', '.iiw.', '.Ijj.', '.....']],
   },
 } as const
 
@@ -159,6 +171,12 @@ const MOUTHS: Record<Face, readonly string[]> = {
 /** A four-pointed sparkle, and a smaller one. */
 const SPARKLE = ['..j..', '..l..', 'jlwlj', '..l..', '..j..']
 const TWINKLE = ['.l.', 'lwl', '.l.']
+/** A little magic butterfly, wings open and shut: teal wings, a white spot on each, a gold body. */
+const BUTTERFLY_OPEN = ['GG.GG', 'GwkwG', '.G.G.']
+const BUTTERFLY_SHUT = ['.GkG.', '..k..']
+/** A dozer's z's: a big one and a small one, each with a darker shadow to the lower right. */
+const Z_BIG = ['ffff.', '..fFF', '.fF..', 'ffffF', '.FFFF']
+const Z_SMALL = ['fff.', '.fF.', 'fffF', '.FFF']
 
 /** Which eyes a face uses. */
 function eyesFor(face: Face): 'open' | 'blink' | 'happy' | 'down' | 'up' {
@@ -341,11 +359,14 @@ export function draw(pose: Pose): string[] {
       canvas.stamp(mouth, DIAGONAL_MOUTH.x + 1 - mouth[0]!.length / 2, DIAGONAL_MOUTH.y + dy)
     }
   } else {
-    // Her shadow on the taskbar, smaller the higher she is.
-    const height = Math.max(0, -(pose.y ?? 0))
-    const shadow = new Layer(GRID)
-    shadow.ellipse({ x: hips.x, y: 95.5 }, Math.max(6, 15 - height / 2), 1.6, 'shadow')
-    ink(shadow, false)
+    // Her shadow on the taskbar, smaller the higher she is; none while she's carried, when she's
+    // nowhere near the taskbar.
+    if (pose.shadow !== false) {
+      const height = Math.max(0, -(pose.y ?? 0))
+      const shadow = new Layer(GRID)
+      shadow.ellipse({ x: hips.x, y: 95.5 }, Math.max(6, 15 - height / 2), 1.6, 'shadow')
+      ink(shadow, false)
+    }
 
     // A magic circle on the ground under her: a teal ring, a dashed silver ring inside it turning,
     // bright runes going round, and sparks rising from it.
@@ -371,6 +392,49 @@ export function draw(pose: Pose): string[] {
       }
     }
 
+    // Her braid, tied with a ribbon: from the front, hanging down behind her left shoulder, drawn
+    // before her body so it peeks out beside her arm and never covers her face or front; side on,
+    // hanging down her back behind the rest of her hair, drawn before it so it only peeks out
+    // behind, and her hair stays one clump with no slivers between outlines.
+    const drawBraid = () => {
+      const braid = new Layer(GRID)
+      const braidPath =
+        view === 'side'
+          ? [
+              [-9, 3],
+              [-10.6, 9],
+              [-11.4, 15],
+              [-11.7, 21],
+              [-11.7, 28],
+            ]
+          : [
+              [8.6, 1],
+              [10, 6],
+              [10.8, 11],
+              [11, 17],
+              [10.8, 23],
+              [10.5, 28],
+            ]
+      const braidPoints = braidPath.map(([x, y]) =>
+        onHead(blown({ x: x! + (y! / 28) * wind * 0.8, y: y! })),
+      )
+      braid.chain(braidPoints, 2.1, 1.6, 'hair')
+      ink(braid)
+      // The plaits: a darker stroke across it every few pixels.
+      for (let i = 0; i < braidPoints.length - 1; i++) {
+        const a = braidPoints[i]!
+        const b = braidPoints[i + 1]!
+        for (let t = 0.25; t < 1; t += 0.5) {
+          const p = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }
+          set({ x: p.x - 1, y: p.y }, 'D', 'hl')
+          set({ x: p.x, y: p.y + 1 }, 'D', 'hl')
+        }
+      }
+      const tie = braidPoints[4]!
+      set(tie, 'v')
+      set({ x: tie.x + 1, y: tie.y }, 'v')
+      set({ x: tie.x - 1, y: tie.y }, 'a')
+    }
     // Her long hair behind her, down past her shoulders.
     const back = new Layer(GRID)
     const backHair =
@@ -416,50 +480,9 @@ export function draw(pose: Pose): string[] {
       shape(backHair, (p) => onHead(blown(p))),
       'hair',
     )
+    if (view === 'side') drawBraid()
     ink(back)
 
-    // Her braid, tied with a ribbon: from the front, hanging down behind her left shoulder, drawn
-    // before her body so it peeks out beside her arm and never covers her face or front; side on,
-    // hanging behind her ear.
-    const drawBraid = () => {
-      const braid = new Layer(GRID)
-      const braidPath =
-        view === 'side'
-          ? [
-              [-5.5, 3],
-              [-6, 9],
-              [-6.4, 15],
-              [-6.8, 21],
-              [-7, 27],
-            ]
-          : [
-              [8.6, 1],
-              [10, 6],
-              [10.8, 11],
-              [11, 17],
-              [10.8, 23],
-              [10.5, 28],
-            ]
-      const braidPoints = braidPath.map(([x, y]) =>
-        onHead(blown({ x: x! + (y! / 28) * wind * 0.8, y: y! })),
-      )
-      braid.chain(braidPoints, 2.1, 1.6, 'hair')
-      ink(braid)
-      // The plaits: a darker stroke across it every few pixels.
-      for (let i = 0; i < braidPoints.length - 1; i++) {
-        const a = braidPoints[i]!
-        const b = braidPoints[i + 1]!
-        for (let t = 0.25; t < 1; t += 0.5) {
-          const p = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }
-          set({ x: p.x - 1, y: p.y }, 'D', 'hl')
-          set({ x: p.x, y: p.y + 1 }, 'D', 'hl')
-        }
-      }
-      const tie = braidPoints[4]!
-      set(tie, 'v')
-      set({ x: tie.x + 1, y: tie.y }, 'v')
-      set({ x: tie.x - 1, y: tie.y }, 'a')
-    }
     if (frontView) drawBraid()
 
     if (!frontView) drawArm(farArm, -1)
@@ -471,7 +494,7 @@ export function draw(pose: Pose): string[] {
     const robe = new Layer(GRID)
     const swing = wind * 0.4
     const hem = sitting ? 11 : 22
-    const flare = sitting ? 15 : 0
+    const flare = sitting ? 15 : (pose.spread ?? 0)
     const skirt = frontView
       ? [
           [-8.5, -2],
@@ -649,8 +672,10 @@ export function draw(pose: Pose): string[] {
       canvas.stamp(mouth, head.x - mouth[0]!.length / 2 + look * 0.5, head.y + 6)
       set(onHead({ x: 0.5 + look * 0.5, y: 5.2 }), 'S', 's')
     } else {
-      canvas.stamp(eyes[0]!, head.x + 1.5, eyeY)
-      canvas.stamp(['cc'], head.x + 1.5, head.y + 4.5)
+      // A pixel higher than from the front: her iris level with the bridge of her nose and the tip
+      // of her nose at the bottom of her eye, as anime profiles have it.
+      canvas.stamp(eyes[0]!, head.x + 1.5, eyeY - 1)
+      canvas.stamp(['cc'], head.x + 0.5, head.y + 4.5)
       // Her mouth: a short line in from the notch of her lips, between nose and chin.
       canvas.stamp(
         mouth.map((r) => r.slice(0, 2)),
@@ -669,13 +694,14 @@ export function draw(pose: Pose): string[] {
             [3, -11.5],
             [6.5, -9],
             [8, -4.5],
-            [7.8, -1],
-            [6.5, -3],
-            [5.5, 0],
-            [4, -2.5],
-            [2.5, -1],
-            [1.5, -4],
-            [-1, -4.5],
+            // Its jagged lower edge, clear of her eye.
+            [7.8, -2],
+            [6.5, -4],
+            [5.5, -1.5],
+            [4, -3.5],
+            [2.5, -2],
+            [1.5, -4.5],
+            [-1, -4.8],
           ]
         : [
             [-9.2, -1.5],
@@ -732,9 +758,8 @@ export function draw(pose: Pose): string[] {
         0.6,
         'hair',
       )
-    if (view === 'side') {
-      lock(-5.5, 12) // behind her ear, clear of her cheek
-    } else {
+    // Side on there's no lock: her hair behind her ear is the back hair and the braid.
+    if (view !== 'side') {
       lock(8.2 + shiftHair, 13)
       lock(-8.2 + shiftHair * 0.5, 13)
     }
@@ -778,8 +803,6 @@ export function draw(pose: Pose): string[] {
       )
     }
     ink(ears)
-
-    if (!frontView) drawBraid()
 
     // Her hat: a wide brim and a tall crooked crown with a silver band.
     const hat = new Layer(GRID)
@@ -830,9 +853,15 @@ export function draw(pose: Pose): string[] {
   } else {
     hand = drawArm(nearArm, 1)
   }
+  let orbAt: Point | null = null
   if (pose.prop) {
     const prop = new Layer(GRID)
-    if (pose.prop === 'cup') {
+    if (pose.prop === 'orb') {
+      // A crystal ball in both hands: from the front, between them in front of her; otherwise on
+      // her near hand.
+      orbAt = frontView ? { x: hips.x, y: hand.y - 4.5 } : add(hand, { x: 0.5, y: -4.5 })
+      prop.ellipse(orbAt, 4.2, 4.2, 'orb')
+    } else if (pose.prop === 'cup') {
       prop.polygon(
         shape(
           [
@@ -872,7 +901,60 @@ export function draw(pose: Pose): string[] {
       set(add(hand, { x: -0.5, y: -5 }), 'w')
       set(add(hand, { x: 0.5, y: -6.5 }), 'w')
     }
-    canvas.stamp(['ss'], hand.x - 1, hand.y)
+    if (orbAt) {
+      // Inside it, a wisp of light turning (`spin`) and a glint; her fingers under it.
+      const turn = (pose.spin ?? 0) * Math.PI * 2
+      for (const k of [0, Math.PI]) {
+        set(
+          { x: orbAt.x + Math.cos(turn + k) * 2, y: orbAt.y + Math.sin(turn + k) * 1.5 },
+          'f',
+          'G',
+        )
+      }
+      set({ x: orbAt.x - 2, y: orbAt.y - 2 }, 'w', 'G')
+      canvas.stamp(['ss.ss'], orbAt.x - 2, orbAt.y + 4)
+    } else {
+      canvas.stamp(['ss'], hand.x - 1, hand.y)
+    }
+  }
+
+  // A little butterfly: it flutters down to just above her raised hand, rests there opening and
+  // shutting its wings, then flies off up and away (out of the frame).
+  const flight = pose.butterfly ?? 0
+  if (flight > 0.06 && flight < 0.92) {
+    const perch = add(hand, { x: 0, y: -3 })
+    const between = (from: Point, to: Point, t: number) => ({
+      x: from.x + (to.x - from.x) * t,
+      y: from.y + (to.y - from.y) * t,
+    })
+    let at: Point
+    let open: boolean
+    if (flight < 0.3) {
+      const t = (flight - 0.06) / 0.24
+      const eased = t * t * (3 - 2 * t)
+      at = between(add(hand, { x: 16, y: -24 }), perch, eased)
+      at = { x: at.x + Math.sin(t * 9) * 2 * (1 - t), y: at.y }
+      open = Math.floor(flight * 80) % 2 === 0
+    } else if (flight < 0.72) {
+      at = perch
+      open = Math.floor((flight - 0.3) / 0.07) % 2 === 0
+    } else {
+      at = between(perch, add(hand, { x: 22, y: -36 }), ((flight - 0.72) / 0.2) ** 1.4)
+      open = Math.floor(flight * 80) % 2 === 0
+    }
+    if (open) canvas.stamp(BUTTERFLY_OPEN, at.x - 2, at.y - 1)
+    else canvas.stamp(BUTTERFLY_SHUT, at.x - 2, at.y)
+  }
+
+  // Dozing: z's float up from above her hat, one after another, growing as they rise.
+  const zzz = pose.zzz ?? 0
+  if (zzz > 0) {
+    for (let k = 0; k < 3; k++) {
+      const life = zzz * 1.6 - k * 0.3
+      if (life <= 0 || life >= 1) continue
+      const at = onHead({ x: 7 + life * 6 + k * 1.5, y: -13 - life * 12 })
+      canvas.stamp(life > 0.45 ? Z_BIG : Z_SMALL, at.x, at.y, pose.flipText)
+    }
   }
 
   // A little spell: sparkles round her raised hand.

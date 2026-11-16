@@ -37,9 +37,10 @@ bubble kept in front, and Check for updates). This is version **1.0.0**, the fir
   gold embroidery, and laced boots, seen from the front, diagonally or side on. Once she's been
   left alone a while she does things of her own now and then: hops, waves, stretches and yawns,
   sips her tea, has a vision (a light shines down from the top of the screen and the company's
-  logo comes down it to hover over her head while she gazes up at it), reads her spellbook, casts
-  a little spell of sparkles, levitates over a glowing magic circle, sits on the taskbar, or
-  glances about.
+  logo comes down it to hover over her head while she gazes up at it), curtsies, gazes into a
+  crystal ball, reads her spellbook, casts a little spell of sparkles, levitates over a glowing
+  magic circle, sits on the taskbar, twirls, has a little magic butterfly land on her finger, dozes
+  off and wakes with a start, or glances about.
 - **Drag it anywhere**, even onto another monitor: it dangles from the pointer. Let go and it drops
   onto that screen's taskbar, and from then on lives near the nearer bottom corner, walking back
   if it was dropped far away (and shrinking if she's too big for that screen). The panel opens
@@ -83,7 +84,8 @@ bubble kept in front, and Check for updates). This is version **1.0.0**, the fir
     signed in as with **Log out**.)
   - **Size** opens a menu to make the character smaller or bigger, from half her usual size to
     six times it (or as big as fits your screen). It's remembered.
-  - **Clones** puts ten clones of her on the taskbar for thirty seconds, walking about. They're only
+  - **Clones** puts ten clones of her on the taskbar for thirty seconds, walking about (and now and
+    then waving). They're only
     pictures: clicks go straight through them.
   - **Close** quits the app.
 - **Attach screenshot** adds the newest screenshot to your next question; click it again to add

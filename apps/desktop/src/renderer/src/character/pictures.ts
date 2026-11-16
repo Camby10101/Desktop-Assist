@@ -126,7 +126,7 @@ export const DIAGONAL_MOUTH = { x: 50, y: 33 }
 
 /**
  * Her face side on, facing right, drawn by hand in the usual anime profile: a forehead under her
- * fringe, a dip at the eye, a small pointed nose, a little notch at her lips, a soft chin, then
+ * fringe, a small nose a pixel out, a little notch at her lips, a soft round chin, then
  * her jaw running back up to her ear, her neck in its shadow below it. It is placed relative to the
  * middle of her head (x and y here are offsets from it); her hair, ear and hat are drawn over it,
  * and her eyes, blush and mouth on it.
@@ -141,12 +141,12 @@ export const SIDE_FACE: Picture = {
     '...ssssssssssK..',
     '...ssssssssssK..',
     '...sssssssssssK.',
-    '.KsssssssssssssK',
-    'SSKsssssssssSKK.',
-    'SSSKsssssssssK..',
-    'SSSSKsssssssK...',
-    'SSSSSKssssssK...',
-    'SSSSSSKKsssSK...',
-    'SSSSSSSSKKKK....',
+    '.KssssssssssssK.',
+    'SKssssssssssSK..',
+    'SSKssssssssssK..',
+    'SSKsssssssssK...',
+    'SSSKssssssssK...',
+    'SSSSKKsssssSK...',
+    'SSSSSSKKKKK.....',
   ],
 }

@@ -9,10 +9,16 @@
  * - `sip`: a sip of tea.
  * - `vision`: a light shines down from above and brings the company's logo down to her; she looks
  *   up at it in wonder for a moment, then it rises away again (see VISION).
+ * - `curtsy`: holds her robe out at the sides and dips in a little curtsy, smiling.
+ * - `orb`: gazes into a crystal ball, which swirls and sparkles, then smiles at what she sees.
  * - `read`: reads her spellbook (and smiles at something in it).
  * - `spell`: a little spell, sparkles circling her hand.
  * - `levitate`: floats up over a glowing magic circle, hovers with her eyes shut, and settles.
  * - `sit`: sits on the taskbar, her robe spread round her, swaying, then gets up.
+ * - `twirl`: spins round three times, her robe flaring out, and lands smiling.
+ * - `butterfly`: holds up a finger; a little magic butterfly flutters down to it, rests, and flies
+ *   off.
+ * - `doze`: nods off where she stands (floating z's), wakes with a start and looks about.
  * - `look`: glances one way and the other.
  */
 export const FIDGETS = [
@@ -21,10 +27,15 @@ export const FIDGETS = [
   'stretch',
   'sip',
   'vision',
+  'curtsy',
+  'orb',
   'read',
   'spell',
   'levitate',
   'sit',
+  'twirl',
+  'butterfly',
+  'doze',
   'look',
 ] as const
 export type Fidget = (typeof FIDGETS)[number]
@@ -44,10 +55,15 @@ export const FIDGET_MS: Record<Fidget, number> = {
   stretch: 2400,
   sip: 3200,
   vision: 8600,
+  curtsy: 2200,
+  orb: 4400,
   read: 4000,
   spell: 2400,
   levitate: 3600,
   sit: 6000,
+  twirl: 2200,
+  butterfly: 4800,
+  doze: 5600,
   look: 2400,
 }
 

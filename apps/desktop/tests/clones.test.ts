@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { CLONES } from '@shared/character'
+import { CLONES, FIDGET_MS } from '@shared/character'
 import { BUBBLE_BOX, type Rect } from '@shared/geometry'
 import { Clones } from '../src/main/bubble/clones'
 import {
@@ -139,6 +139,27 @@ describe('how the clones wander (the page)', () => {
     expect(clone.waitUntil - now).toBeLessThanOrEqual(longest)
     // It waits out its stop before going again.
     expect(stepClone(clone, now + 10, 16, room, rolls(0.5))).toBe(clone)
+  })
+
+  it('now and then waves when it stops, for as long as her wave takes, then walks on', () => {
+    let clone: Clone = { ...spawnClones(1, 1000, 0, room, rolls(0.5))[0]!, waitUntil: 0 }
+    clone = stepClone(clone, 0, 16, room, rolls(0.9, 0.5))
+    expect(clone.walking).toBe(true)
+    let now = 0
+    // A low roll as it arrives: it waves.
+    while (clone.walking) {
+      now += 16
+      clone = stepClone(clone, now, 16, room, rolls(0.1))
+    }
+    expect(clone.waving).toBe(true)
+    expect(clonePose(clone)).toBe('wave')
+    expect(clone.waitUntil - now).toBe(FIDGET_MS.wave)
+    // Setting off again, it stops waving.
+    clone = stepClone(clone, clone.waitUntil, 16, room, rolls(0.9, 0.5))
+    expect(clone.waving).toBe(false)
+    expect(clone.walking).toBe(true)
+    expect(CLONE_WALK.waveChance).toBeGreaterThan(0)
+    expect(CLONE_WALK.waveChance).toBeLessThan(0.5)
   })
 
   it('walks at about her speed for her size, each clone a little differently', () => {

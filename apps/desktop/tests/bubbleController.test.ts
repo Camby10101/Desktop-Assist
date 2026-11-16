@@ -205,7 +205,8 @@ describe('on its own', () => {
       'idle',
       'read',
       'idle',
-      'vision', // still going at 60 s
+      'spell',
+      'idle',
     ])
   })
 
