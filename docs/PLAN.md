@@ -618,7 +618,8 @@ this was merged.)
     her mouth and a contented smile; 3.2 s), **vision** (from the front, a soft light shines down
     from the top of the screen and the company's logo comes down it to hover, glowing, over her
     head; she looks up in wonder, smiles and opens her arms as it arrives, and watches it rise away
-    as the light fades; 5.2 s; the light and the logo are drawn in a click-through window of their
+    as the light fades; it hovers for about five seconds, 8.6 s in all; rare, about a fifth as
+    likely as any other habit; the light and the logo are drawn in a click-through window of their
     own above her, in time with her from a shared timetable), **read** (diagonal, her spellbook open, head down,
     turning pages, a smile at something; 4 s), **spell** (diagonal, her hand raised, sparkles
     circling it; 2.4 s), **levitate** (eyes shut, she floats up over a glowing magic circle,

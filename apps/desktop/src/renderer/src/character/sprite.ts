@@ -396,7 +396,8 @@ function spell(): Key[] {
 /**
  * A vision, from the front, in time with the light and the logo above her (VISION): as the light
  * appears she looks up, wide-eyed, her hands lifting a little; as the logo arrives she smiles and
- * her arms open; she watches it rise away, then settles and blinks.
+ * her arms open, and she gazes up at it while it hovers, blinking once; she watches it rise away,
+ * then settles and blinks.
  */
 function vision(): Key[] {
   const looking = (face: Pose['face'], out: number, i = 0): Pose => {
@@ -418,7 +419,9 @@ function vision(): Key[] {
     ...tween(FRONT, looking('awe', 0.4), 320),
     ...watching('awe', 0.4, 1100),
     ...tween(looking('awe', 0.4), looking('up', 0.7), 400),
-    ...watching('up', 0.7, 1200),
+    ...watching('up', 0.7, 2000),
+    ...hold({ ...looking('up', 0.7), face: 'blink' }, 120),
+    ...watching('up', 0.7, 2480),
     ...tween(looking('up', 0.7), looking('up', 0.3), 1200),
     ...tween(looking('up', 0.3), FRONT, 400),
     ...hold({ ...FRONT, face: 'blink' }, 120),

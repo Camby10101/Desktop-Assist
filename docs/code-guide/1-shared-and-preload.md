@@ -553,7 +553,7 @@ export const FIDGET_MS: Record<Fidget, number> = {
   wave: 2000,
   stretch: 2400,
   sip: 3200,
-  vision: 5200,
+  vision: 8600,
   read: 4000,
   spell: 2400,
   levitate: 3600,
@@ -605,14 +605,14 @@ export const isFidget = (pose: Pose): pose is Fidget =>
 /**
  * The `vision` habit's timetable (ms from its start), shared by her animation (sprite.ts) and the
  * window that draws the light and the logo above her (VisionView), so she looks up as it comes:
- * the light fades in, the logo comes down and hovers over her head, rises away, and the light
- * fades out.
+ * the light fades in, the logo comes down and hovers over her head for five seconds, rises away,
+ * and the light fades out.
  */
 export const VISION = {
   lightIn: [0, 600],
   descend: [300, 1800],
-  ascend: [3400, 4600],
-  lightOut: [4500, 5200],
+  ascend: [6800, 8000],
+  lightOut: [7900, 8600],
 } as const
 ```
 
@@ -626,9 +626,9 @@ pages. Each entry is a `[from, to]` pair:
 
 - `lightIn: [0, 600]`: the light fades in over the first 0.6 seconds.
 - `descend: [300, 1800]`: the logo comes down the light, from 0.3 to 1.8 seconds, and hovers over
-  her head.
-- `ascend: [3400, 4600]`: it rises away again, from 3.4 to 4.6 seconds.
-- `lightOut: [4500, 5200]`: the light fades out, ending at 5.2 seconds, which is the habit's whole
+  her head for five seconds.
+- `ascend: [6800, 8000]`: it rises away again, from 6.8 to 8 seconds.
+- `lightOut: [7900, 8600]`: the light fades out, ending at 8.6 seconds, which is the habit's whole
   length (`FIDGET_MS.vision`). A test checks the logo comes down before it rises, and that the
   light is gone within the habit's time.
 - `as const`: keeps each pair a fixed pair of numbers, so `VisionView` can take one apart as

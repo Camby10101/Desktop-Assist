@@ -10,7 +10,9 @@ $env:TENANT = 'morse-micro'; npm run dev
 A tenant folder contains:
 
 - `tenant.json`: Company and app names, accent colour, the action icons shown above the bubble (listed from the bubble upward), where chats happen, the company's portal, service desk and Atlassian site, and the sign-in settings. Validated at startup and by `npm test`.
-- `logo.png` or `logo.svg`: The logo. `logo.png` is also the tray icon and the `.exe` icon. If both exist, `logo.png` is used. The character's vision habit shows the logo too, coming down a light to hover over her head.
+- `icon.png` (optional): The app's icon: the `.exe`, the installer and uninstaller, and the Start
+  menu shortcut. A square PNG, at least 256×256. Without it, `logo.png` is used.
+- `logo.png` or `logo.svg`: The logo. `logo.png` is also the tray icon, and the `.exe` icon when there's no `icon.png`. If both exist, `logo.png` is used. The character's vision habit shows the logo too, coming down a light to hover over her head.
 
 Available actions: `ask`, `apps`, `jira`, `servicedesk`, `screenshot`, `theme` (light or dark
 mode), `settings`, `size` (a menu to make the character smaller or bigger), `clones` (ten clones
@@ -82,7 +84,8 @@ matches the rest of the panel.
 `morse-micro/logo.png` is the Morse Micro "Mμ" mark, cut to a circle (512×512, transparent
 corners). To change it, replace that file and restart `npm run dev`. No code changes are needed.
 
-The logo is the tray icon and the installed app's icon; the bubble on screen is now an animated
-character, not the logo. A square image of the logo mark (not the full wordmark), already cut to a
+The logo is the tray icon; the installed app's icon is `morse-micro/icon.png`, the logo wearing
+the character's hat (without an `icon.png`, the logo is used for that too). The bubble on screen is
+now an animated character, not the logo. A square image of the logo mark (not the full wordmark), already cut to a
 circle with its own background colour and transparent corners, at least 256×256 pixels, looks
 best.

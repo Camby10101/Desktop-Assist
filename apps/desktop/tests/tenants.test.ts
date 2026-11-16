@@ -24,6 +24,17 @@ describe('tenants', () => {
     it('has a logo (logo.png or logo.svg)', () => {
       expect(existsSync(join(dir, 'logo.png')) || existsSync(join(dir, 'logo.svg'))).toBe(true)
     })
+
+    it('has an app icon, if any, that Windows can use: a square PNG at least 256 pixels', () => {
+      const path = join(dir, 'icon.png')
+      if (!existsSync(path)) return
+      const png = readFileSync(path)
+      expect(png.subarray(1, 4).toString()).toBe('PNG')
+      const width = png.readUInt32BE(16)
+      const height = png.readUInt32BE(20)
+      expect(width).toBe(height)
+      expect(width).toBeGreaterThanOrEqual(256)
+    })
   })
 
   const signIn = { issuer: 'https://oauth.id.jumpcloud.com/', clientId: '', redirectPort: 47621 }

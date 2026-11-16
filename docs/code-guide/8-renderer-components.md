@@ -296,7 +296,7 @@ The parts of `ChatBox` itself:
 
 <!-- code: apps/desktop/src/renderer/src/components/ChatBox.tsx#MOUTH_ROW,TAIL_REACH,CARD_RADIUS,SpeechTail -->
 
-[`src/renderer/src/components/ChatBox.tsx`, lines 144–231](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L144-L231)
+[`src/renderer/src/components/ChatBox.tsx`, lines 144–223](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L144-L223)
 
 ```tsx
 /** Her mouth, in sprite pixels down from the top of her window (rig.ts draws it there). */
@@ -311,8 +311,8 @@ const CARD_RADIUS = 16
 /**
  * The speech bubble's tail: from the card's side nearest her to just short of her mouth, at her
  * height and size, so it points at her mouth however big she is (her mouth is at MOUTH_ROW of her
- * 96-pixel grid, scaled with her). Its sides curve out of the card's edge and narrow to a small
- * round end, like a drawn speech bubble's. Its base slides along the card's edge to stay level with her
+ * 96-pixel grid, scaled with her). Its sides curve out of the card's edge in rounded joins and
+ * narrow to a sharp point at her mouth, like a drawn speech bubble's. Its base slides along the card's edge to stay level with her
  * mouth, but never into the card's rounded corners, so on a card shorter than her mouth is high
  * (just the text box, at a big size) it slants up to her instead. It's drawn in the card's own
  * colours and border, overlapping the card's edge by a pixel so the two read as one shape, and it
@@ -330,38 +330,30 @@ function SpeechTail(props: {
   // bottom corner) to the tip.
   const out = Math.max(8, layout.chatX - (box / 2 + TAIL_REACH * scale))
   const up = (SPRITE_SIZE - MOUTH_ROW) * scale - layout.chatY
-  // Half the base's width, how far along the card's edge each side curves in from, and the tip's
-  // roundness, all growing with her (the tip never more than a quarter of the tail's length).
-  // Half the base's width, how far along the card's edge each side curves in from, and the
-  // radius of the round end, all growing with her (the end never more than a fifth of its length).
+  // Half the base's width, and how far along the card's edge, beyond it, each side curves in
+  // from, so the tail grows out of the card in a rounded join; both grow with her.
   const half = 9 + 2 * scale
   const curve = half * 0.7
-  const round = Math.min(2.5 + 1.2 * scale, out / 5)
   const lowest = CARD_RADIUS + half + curve
   const highest = Math.max(lowest, props.cardHeight - CARD_RADIUS - half - curve)
   const base = Math.min(Math.max(up, lowest), highest)
   const width = out + 2
-  const height = Math.max(up + round, base + half + curve) + 2
+  const height = Math.max(up, base + half + curve) + 2
   // A point `x` out from the card's edge and `u` up from its near edge, in the drawing's terms.
   const at = (x: number, u: number) => `${x.toFixed(1)} ${(height - u).toFixed(1)}`
-  // Along the tail (from the middle of its base towards her mouth) and across it.
-  const length = Math.hypot(out, up - base)
-  const along = { x: out / length, u: (up - base) / length }
-  const across = { x: -along.u, u: along.x }
-  // The round end: a circle `round` across, its far side at the tip. The sides run into it, one
-  // on each side of its middle, arriving along the tail.
-  const end = { x: out - along.x * round, u: up - along.u * round }
-  const upperEnd = { x: end.x + across.x * round, u: end.u + across.u * round }
-  const lowerEnd = { x: end.x - across.x * round, u: end.u - across.u * round }
-  const pull = length * 0.45
+  // Each side's direction from its end of the base to the tip, and how far that is.
+  const toTip = (from: number) => {
+    const length = Math.hypot(out, up - from)
+    return { x: out / length, u: (up - from) / length, pull: length * 0.45 }
+  }
+  const upper = toTip(base + half)
+  const lower = toTip(base - half)
   const sides = [
     `M${at(0, base + half + curve)}`,
-    // Out of the card's edge: leaving it along the edge, arriving along the tail.
-    `C${at(0, base + half)} ${at(upperEnd.x - along.x * pull, upperEnd.u - along.u * pull)} ${at(upperEnd.x, upperEnd.u)}`,
-    // Round the end, the far way, past the tip.
-    `A${round.toFixed(1)} ${round.toFixed(1)} 0 0 1 ${at(lowerEnd.x, lowerEnd.u)}`,
-    // Back to the card's edge, joining it along the edge.
-    `C${at(lowerEnd.x - along.x * pull, lowerEnd.u - along.u * pull)} ${at(0, base - half)} ${at(0, base - half - curve)}`,
+    // Out of the card's edge, leaving it along the edge, to the tip, arriving straight at it.
+    `C${at(0, base + half)} ${at(out - upper.x * upper.pull, up - upper.u * upper.pull)} ${at(out, up)}`,
+    // From the tip back to the card's edge, the same way round: the two sides meet in a point.
+    `C${at(out - lower.x * lower.pull, up - lower.u * lower.pull)} ${at(0, base - half)} ${at(0, base - half - curve)}`,
   ].join(' ')
   const left = isLeftCorner(props.corner)
   const top = isTopCorner(props.corner)
@@ -405,8 +397,8 @@ The speech bubble's tail.
 
 As the comment on `SpeechTail` says, the tail runs from the card's side nearest her to just short
 of her mouth, at her height and size, so it points at her mouth however big she is. Its sides curve
-out of the card's edge and narrow to a small round end, the way a speech bubble's tail is drawn by
-hand, rather than meeting in a sharp point. Its base slides along the card's edge to stay level with her mouth, but never past the card's rounded
+out of the card's edge in rounded joins, the way a speech bubble's tail is drawn by hand, and
+narrow to a sharp point at her mouth. Its base slides along the card's edge to stay level with her mouth, but never past the card's rounded
 corners: on a card shorter than her mouth is high (just the text box, when she's big), it slants
 up to her instead. It's drawn in the card's own colours and border, a pixel over the card's edge so
 the two read as one shape, and it ignores the mouse.
@@ -426,42 +418,32 @@ The measurements, all in DIPs, as for the bottom-right corner (the others are mi
 - `half = 9 + 2 * scale`: half the width of the tail's base, 11 at her usual size (a base of 22),
   a little wider when she's bigger.
 - `curve = half * 0.7`: how far along the card's edge, beyond each end of the base, each side
-  starts curving away from it, so the tail grows out of the card smoothly instead of meeting it at
-  a corner.
-- `round = Math.min(2.5 + 1.2 * scale, out / 5)`: the radius of the round end: 3.7 at her usual
-  size (an end about 7 DIPs across), more when she's bigger, but never more than a fifth of the
-  tail's length, so a short tail is still a tail.
+  starts curving away from it, so the tail grows out of the card in a rounded join instead of
+  meeting it at a corner.
 - `lowest`, `highest`: how near to the card's bottom and top edges the middle of the base may go
-  while the whole base, curves included, stays clear of the rounded corners. On a card too short
+  while the whole base, joins included, stays clear of the rounded corners. On a card too short
   for both, `highest` is no lower than `lowest`.
 - `base = Math.min(Math.max(up, lowest), highest)`: the middle of the base: level with her mouth
   when that fits on the card, otherwise as near as it can be. Then the tail runs straight across;
   otherwise it slants up (or down) to her mouth.
-- `width = out + 2`, `height = Math.max(up + round, base + half + curve) + 2`: the size of the
-  drawing, tall enough for the round end and the base with its curves, with 2 DIPs to spare for
-  the outline.
+- `width = out + 2`, `height = Math.max(up, base + half + curve) + 2`: the size of the drawing,
+  tall enough for the tip and the base with its joins, with 2 DIPs to spare for the outline.
 - `at(x, u)`: a point `x` out from the card's edge and `u` up from its near edge, written as SVG
   wants it: SVG measures `y` down from the top, so `u` becomes `height - u`. `toFixed(1)` keeps the
   path short.
-- `length`, `along`, `across`: the tail's length from the middle of its base to the tip, a step of
-  1 along it (towards her mouth) and a step of 1 across it (at right angles, upwards for a tail
-  pointing right).
-- `end`: the middle of the round end, `round` back from the tip along the tail, so the far side of
-  its circle is the tip. `upperEnd` and `lowerEnd`: where the two sides meet the circle, `round`
-  either side of its middle, across the tail.
-- `pull = length * 0.45`: how far back along the tail each side's second control point is, which
-  sets how gently the side curves.
+- `toTip(from)`: for a side starting at height `from` on the card's edge, a step of 1 in the
+  direction of the tip (`x`, `u`), and `pull`, 45% of the way there: how far back from the tip the
+  side's last control point is, which sets how gently it curves.
+- `upper`, `lower`: the two sides, from the base's upper and lower ends.
 - `sides`: the outline that sticks out of the card, as an SVG path:
   - `M`: starts on the card's edge, `curve` above the base's upper end.
-  - `C`: a curve (a _cubic Bézier_, steered by two control points) to `upperEnd`. Its first control
-    point is the base's upper end on the card's edge, so it leaves the card along the edge; its
-    second is `pull` back along the tail from `upperEnd`, so it arrives running along the tail.
-    Between the two it bends out from the card and in towards the tail's line, like a drawn
-    speech bubble's tail.
-  - `A`: an arc of radius `round` to `lowerEnd`, the far way round (the `1` is SVG's _sweep_ flag:
-    clockwise on screen), passing through the tip: the round end.
-  - `C`: the lower side, the same curve the other way, back to the card's edge `curve` below the
-    base's lower end, arriving along the edge.
+  - `C`: a curve (a _cubic Bézier_, steered by two control points) to the tip. Its first control
+    point is the base's upper end on the card's edge, so it leaves the card along the edge (the
+    rounded join); its second is `pull` back from the tip, straight towards the base's upper end,
+    so it arrives at the tip on that side's straight line.
+  - `C`: the lower side, the same curve the other way, from the tip back to the card's edge
+    `curve` below the base's lower end. The two sides arrive at the tip from different directions,
+    so they meet in a sharp point there.
 
 The JSX:
 
@@ -480,14 +462,14 @@ The JSX:
   a pixel over the card's border, it hides the border where the tail joins, so the card and the
   tail read as one shape.
 - The second `<path>`: `sides` alone, unfilled (`fill="none"`), in the card's border colour: the
-  outline along the curved sides and the round end, but not along the card's edge, which the
+  outline along the curved sides to the point, but not along the card's edge, which the
   card's own border already has.
 
 ### `Composer`
 
 <!-- code: apps/desktop/src/renderer/src/components/ChatBox.tsx#Composer -->
 
-[`src/renderer/src/components/ChatBox.tsx`, lines 233–374](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L233-L374)
+[`src/renderer/src/components/ChatBox.tsx`, lines 225–366](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L225-L366)
 
 ```tsx
 /** The text box: attached screenshots, the text, and the attach / send / stop buttons. */
@@ -725,7 +707,7 @@ first appears. Effects are for work outside drawing the UI, such as moving the k
 
 <!-- code: apps/desktop/src/renderer/src/components/ChatBox.tsx#Banner -->
 
-[`src/renderer/src/components/ChatBox.tsx`, lines 376–385](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L376-L385)
+[`src/renderer/src/components/ChatBox.tsx`, lines 368–377](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L368-L377)
 
 ```tsx
 /** A one-line status above the text box, with an optional action. */
@@ -4960,13 +4942,14 @@ As the comment says, a little spell, seen diagonally.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#vision -->
 
-[`src/renderer/src/character/sprite.ts`, lines 396–427](../../apps/desktop/src/renderer/src/character/sprite.ts#L396-L427)
+[`src/renderer/src/character/sprite.ts`, lines 396–430](../../apps/desktop/src/renderer/src/character/sprite.ts#L396-L430)
 
 ```ts
 /**
  * A vision, from the front, in time with the light and the logo above her (VISION): as the light
  * appears she looks up, wide-eyed, her hands lifting a little; as the logo arrives she smiles and
- * her arms open; she watches it rise away, then settles and blinks.
+ * her arms open, and she gazes up at it while it hovers, blinking once; she watches it rise away,
+ * then settles and blinks.
  */
 function vision(): Key[] {
   const looking = (face: Pose['face'], out: number, i = 0): Pose => {
@@ -4988,7 +4971,9 @@ function vision(): Key[] {
     ...tween(FRONT, looking('awe', 0.4), 320),
     ...watching('awe', 0.4, 1100),
     ...tween(looking('awe', 0.4), looking('up', 0.7), 400),
-    ...watching('up', 0.7, 1200),
+    ...watching('up', 0.7, 2000),
+    ...hold({ ...looking('up', 0.7), face: 'blink' }, 120),
+    ...watching('up', 0.7, 2480),
     ...tween(looking('up', 0.7), looking('up', 0.3), 1200),
     ...tween(looking('up', 0.3), FRONT, 400),
     ...hold({ ...FRONT, face: 'blink' }, 120),
@@ -5002,8 +4987,8 @@ function vision(): Key[] {
 As the comment says, a vision, from the front, in time with the light and the logo that another
 window draws above her (`VISION` in `src/shared/character.ts`, and `VisionView` in
 [The pages](7-renderer-pages.md)): as the light appears she looks up, wide-eyed, her hands lifting a
-little; as the logo arrives she smiles and her arms open; she watches it rise away, then settles
-and blinks.
+little; as the logo arrives she smiles and her arms open, and she gazes up at it while it hovers,
+blinking once; she watches it rise away, then settles and blinks.
 
 - `looking(face, out, i)`: a pose for each moment: from the front, her face, and both arms alike,
   lifted out by `out` (0 to 1: the shoulder from 0.1 up to 0.45, with the elbow bent up to 0.5; from
@@ -5017,15 +5002,16 @@ and blinks.
 - The keys, against `VISION`'s timetable: she stands for 0.4 s, then turns her face up in `awe`, her
   arms a little out (0.4), over 0.32 s, as the light fades in and the logo starts down; she watches
   it come down for 1.1 s; as it arrives (at 1.8 s) she smiles (`up`) and opens her arms wider (0.7)
-  over 0.4 s, and watches it hover for 1.2 s; as it rises away (from 3.4 s) she lowers her arms
+  over 0.4 s, and gazes up at it while it hovers for 4.6 s, blinking once two seconds in (a single
+  frame of `blink`, her arms where they are); as it rises away (from 6.8 s) she lowers her arms
   slowly (to 0.3) over 1.2 s, still looking up; then she comes back to standing over 0.4 s, blinks
-  and stands. 5200 ms, `FIDGET_MS.vision`.
+  and stands. 8600 ms, `FIDGET_MS.vision`.
 
 ### `levitate()`
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#levitate -->
 
-[`src/renderer/src/character/sprite.ts`, lines 429–479](../../apps/desktop/src/renderer/src/character/sprite.ts#L429-L479)
+[`src/renderer/src/character/sprite.ts`, lines 432–482](../../apps/desktop/src/renderer/src/character/sprite.ts#L432-L482)
 
 ```ts
 /**
@@ -5102,7 +5088,7 @@ As the comment says, she levitates, from the front.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#sit -->
 
-[`src/renderer/src/character/sprite.ts`, lines 481–521](../../apps/desktop/src/renderer/src/character/sprite.ts#L481-L521)
+[`src/renderer/src/character/sprite.ts`, lines 484–524](../../apps/desktop/src/renderer/src/character/sprite.ts#L484-L524)
 
 ```ts
 /** Sitting on the taskbar, her robe spread round her, swaying gently, looking about, then up again. */
@@ -5166,7 +5152,7 @@ As the comment says, sitting on the taskbar with her robe spread round her, the 
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#look -->
 
-[`src/renderer/src/character/sprite.ts`, lines 523–545](../../apps/desktop/src/renderer/src/character/sprite.ts#L523-L545)
+[`src/renderer/src/character/sprite.ts`, lines 526–548](../../apps/desktop/src/renderer/src/character/sprite.ts#L526-L548)
 
 ```ts
 /**
@@ -5211,7 +5197,7 @@ used again.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#dragged -->
 
-[`src/renderer/src/character/sprite.ts`, lines 547–573](../../apps/desktop/src/renderer/src/character/sprite.ts#L547-L573)
+[`src/renderer/src/character/sprite.ts`, lines 550–576](../../apps/desktop/src/renderer/src/character/sprite.ts#L550-L576)
 
 ```ts
 /** Carried by her collar: off the ground, arms up, legs kicking, swaying, hair lifted. */
@@ -5259,7 +5245,7 @@ Twelve frames of 55 ms, round and round.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#drawn,MAKERS,LOOPS -->
 
-[`src/renderer/src/character/sprite.ts`, lines 575–613](../../apps/desktop/src/renderer/src/character/sprite.ts#L575-L613)
+[`src/renderer/src/character/sprite.ts`, lines 578–616](../../apps/desktop/src/renderer/src/character/sprite.ts#L578-L616)
 
 ```ts
 // ------------------------------------------------------------------------------------- frames
@@ -5319,7 +5305,7 @@ export const LOOPS: Record<Name, boolean> = {
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#Facing,made,framesOf -->
 
-[`src/renderer/src/character/sprite.ts`, lines 615–634](../../apps/desktop/src/renderer/src/character/sprite.ts#L615-L634)
+[`src/renderer/src/character/sprite.ts`, lines 618–637](../../apps/desktop/src/renderer/src/character/sprite.ts#L618-L637)
 
 ```ts
 export type Facing = 'left' | 'right'
@@ -5358,7 +5344,7 @@ export function framesOf(pose: Name, facing: Facing): Frame[] {
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#animationLength,mirror -->
 
-[`src/renderer/src/character/sprite.ts`, lines 636–643](../../apps/desktop/src/renderer/src/character/sprite.ts#L636-L643)
+[`src/renderer/src/character/sprite.ts`, lines 639–646](../../apps/desktop/src/renderer/src/character/sprite.ts#L639-L646)
 
 ```ts
 /** How long a pose's frames last altogether (a fidget's must match FIDGET_MS). */
@@ -5384,7 +5370,7 @@ export function mirror(rows: string[]): string[] {
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#framePaths -->
 
-[`src/renderer/src/character/sprite.ts`, lines 645–669](../../apps/desktop/src/renderer/src/character/sprite.ts#L645-L669)
+[`src/renderer/src/character/sprite.ts`, lines 648–672](../../apps/desktop/src/renderer/src/character/sprite.ts#L648-L672)
 
 ```ts
 /**

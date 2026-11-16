@@ -24,6 +24,12 @@ export const WANDER = {
 
 export type Activity = { kind: 'walk'; to: number } | { kind: 'fidget'; pose: Fidget }
 
+/**
+ * How often a fidget comes up compared with the others, which count 1 each: the vision (the
+ * company's logo coming down to her) is a rare treat, about a fifth as likely as any other.
+ */
+export const FIDGET_WEIGHT: Partial<Record<Fidget, number>> = { vision: 0.2 }
+
 /** How long until the next thing the character does on its own (ms). */
 export function activityDelay(random: () => number, first: boolean): number {
   const [from, to] = first ? WANDER.firstDelay : WANDER.delay
@@ -34,7 +40,8 @@ export function activityDelay(random: () => number, first: boolean): number {
  * What to do next, after being left alone for `idleMs`, standing `inset` from her corner with
  * room to wander up to `zone` (WANDER.zone, or less on a narrow screen). Until she's been alone a
  * while she only strolls about; after that, more often than not she does one of her fidgets
- * instead, any but the one she did last (`last`), so she doesn't repeat herself.
+ * instead, any but the one she did last (`last`), so she doesn't repeat herself, picked at random
+ * by FIDGET_WEIGHT (so the vision is rare).
  */
 export function nextActivity(
   idleMs: number,
@@ -45,7 +52,14 @@ export function nextActivity(
 ): Activity {
   if (idleMs >= WANDER.fidgetAfter && random() < 0.6) {
     const choices = FIDGETS.filter((fidget) => fidget !== last)
-    return { kind: 'fidget', pose: choices[Math.floor(random() * choices.length)]! }
+    const weights = choices.map((fidget) => FIDGET_WEIGHT[fidget] ?? 1)
+    // A point along all the weights laid end to end; the fidget whose stretch it falls in.
+    let roll = random() * weights.reduce((total, weight) => total + weight, 0)
+    for (const [i, fidget] of choices.entries()) {
+      roll -= weights[i]!
+      if (roll < 0) return { kind: 'fidget', pose: fidget }
+    }
+    return { kind: 'fidget', pose: choices.at(-1)! }
   }
   return { kind: 'walk', to: walkTarget(inset, zone, random()) }
 }

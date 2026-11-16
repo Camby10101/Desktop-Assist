@@ -2004,27 +2004,37 @@ tune. `as const` makes them read-only, and keeps each pair a fixed pair of numbe
 - `gravity: 2500`: how fast a dropped character speeds up as it falls, in DIPs per second per
   second. A drop of 800 DIPs (most of a 1080-pixel screen) takes 0.8 seconds.
 
-### `Activity`
+### `Activity` and `FIDGET_WEIGHT`
 
-<!-- code: apps/desktop/src/main/bubble/wander.ts#Activity -->
+<!-- code: apps/desktop/src/main/bubble/wander.ts#Activity,FIDGET_WEIGHT -->
 
-[`src/main/bubble/wander.ts`, line 25](../../apps/desktop/src/main/bubble/wander.ts#L25)
+[`src/main/bubble/wander.ts`, lines 25–31](../../apps/desktop/src/main/bubble/wander.ts#L25-L31)
 
 ```ts
 export type Activity = { kind: 'walk'; to: number } | { kind: 'fidget'; pose: Fidget }
+
+/**
+ * How often a fidget comes up compared with the others, which count 1 each: the vision (the
+ * company's logo coming down to her) is a rare treat, about a fifth as likely as any other.
+ */
+export const FIDGET_WEIGHT: Partial<Record<Fidget, number>> = { vision: 0.2 }
 ```
 
 <!-- /code -->
 
-What `nextActivity()` decides: a walk to an inset (`to`), or a fidget (`pose`). A
-tagged union, like several types in `src/shared/types.ts`: checking `kind` tells TypeScript which
-of the two other fields there is. `Fidget` is from `src/shared/character.ts`.
+- `Activity`: what `nextActivity()` decides: a walk to an inset (`to`), or a fidget (`pose`). A
+  tagged union, like several types in `src/shared/types.ts`: checking `kind` tells TypeScript which
+  of the two other fields there is. `Fidget` is from `src/shared/character.ts`.
+- `FIDGET_WEIGHT`: as its comment says, how often each fidget comes up compared with the others,
+  which count 1 each. Only the vision is listed, at 0.2: the company's logo coming down to her is
+  meant to be a rare treat, about a fifth as likely as any other fidget. `Partial<Record<...>>`
+  lets it list only the fidgets that aren't 1.
 
 ### `activityDelay()`
 
 <!-- code: apps/desktop/src/main/bubble/wander.ts#activityDelay -->
 
-[`src/main/bubble/wander.ts`, lines 27–31](../../apps/desktop/src/main/bubble/wander.ts#L27-L31)
+[`src/main/bubble/wander.ts`, lines 33–37](../../apps/desktop/src/main/bubble/wander.ts#L33-L37)
 
 ```ts
 /** How long until the next thing the character does on its own (ms). */
@@ -2048,14 +2058,15 @@ How long the character waits before doing something on its own, in milliseconds.
 
 <!-- code: apps/desktop/src/main/bubble/wander.ts#nextActivity -->
 
-[`src/main/bubble/wander.ts`, lines 33–51](../../apps/desktop/src/main/bubble/wander.ts#L33-L51)
+[`src/main/bubble/wander.ts`, lines 39–65](../../apps/desktop/src/main/bubble/wander.ts#L39-L65)
 
 ```ts
 /**
  * What to do next, after being left alone for `idleMs`, standing `inset` from her corner with
  * room to wander up to `zone` (WANDER.zone, or less on a narrow screen). Until she's been alone a
  * while she only strolls about; after that, more often than not she does one of her fidgets
- * instead, any but the one she did last (`last`), so she doesn't repeat herself.
+ * instead, any but the one she did last (`last`), so she doesn't repeat herself, picked at random
+ * by FIDGET_WEIGHT (so the vision is rare).
  */
 export function nextActivity(
   idleMs: number,
@@ -2066,7 +2077,14 @@ export function nextActivity(
 ): Activity {
   if (idleMs >= WANDER.fidgetAfter && random() < 0.6) {
     const choices = FIDGETS.filter((fidget) => fidget !== last)
-    return { kind: 'fidget', pose: choices[Math.floor(random() * choices.length)]! }
+    const weights = choices.map((fidget) => FIDGET_WEIGHT[fidget] ?? 1)
+    // A point along all the weights laid end to end; the fidget whose stretch it falls in.
+    let roll = random() * weights.reduce((total, weight) => total + weight, 0)
+    for (const [i, fidget] of choices.entries()) {
+      roll -= weights[i]!
+      if (roll < 0) return { kind: 'fidget', pose: fidget }
+    }
+    return { kind: 'fidget', pose: choices.at(-1)! }
   }
   return { kind: 'walk', to: walkTarget(inset, zone, random()) }
 }
@@ -2086,10 +2104,17 @@ they wait for a quiet spell rather than starting up while someone has just been 
   hasn't done one yet. The `?` makes the parameter optional.
 - `FIDGETS.filter((fidget) => fidget !== last)`: every fidget but that one, so it never does the
   same one twice in a row. With no `last`, all ten are choices.
-- `choices[Math.floor(random() * choices.length)]!`: a second roll picks one, each equally likely.
-  `random() * choices.length` is somewhere from 0 to just under the number of choices, and
-  `Math.floor()` rounds it down to a whole number, an index into the list. The `!` tells
-  TypeScript there's an item there, which it can't work out from an index.
+- `weights`: how likely each choice is, from `FIDGET_WEIGHT` (above): 1 for every fidget but the
+  vision, which is 0.2, so it's rare. `?? 1` gives 1 to any fidget the list leaves out.
+- `let roll = random() * ...`: a second roll, as a point along all the weights laid end to end
+  (`reduce()` adds them up): 9.2 long with all ten fidgets as choices.
+- The loop walks along the choices, taking each one's weight off the roll; the first that takes it
+  below 0 is the one the point fell in. So each fidget is picked in proportion to its weight: the
+  vision about one time in 46 (0.2 of 9.2), each of the others about one in 9. `choices.entries()`
+  gives each choice with its index, for its weight.
+- `choices.at(-1)!`: the last choice, if rounding ever leaves the roll at exactly the end (it
+  can't with `Math.random()`, but this keeps TypeScript and odd `random`s happy). The `!` tells
+  TypeScript there's an item there.
 - `walkTarget(inset, zone, random())`: a fresh `random()` picks where to walk, so the choices
   don't depend on each other.
 
@@ -2097,7 +2122,7 @@ they wait for a quiet spell rather than starting up while someone has just been 
 
 <!-- code: apps/desktop/src/main/bubble/wander.ts#walkTarget -->
 
-[`src/main/bubble/wander.ts`, lines 53–65](../../apps/desktop/src/main/bubble/wander.ts#L53-L65)
+[`src/main/bubble/wander.ts`, lines 67–79](../../apps/desktop/src/main/bubble/wander.ts#L67-L79)
 
 ```ts
 /**
@@ -2139,7 +2164,7 @@ toward its corner or away from it, with `roll` choosing the spot.
 
 <!-- code: apps/desktop/src/main/bubble/wander.ts#walkStep -->
 
-[`src/main/bubble/wander.ts`, lines 67–79](../../apps/desktop/src/main/bubble/wander.ts#L67-L79)
+[`src/main/bubble/wander.ts`, lines 81–93](../../apps/desktop/src/main/bubble/wander.ts#L81-L93)
 
 ```ts
 /**
@@ -2174,7 +2199,7 @@ One frame of a walk: the new inset, `dtMs` milliseconds of walking closer to `to
 
 <!-- code: apps/desktop/src/main/bubble/wander.ts#fallDuration -->
 
-[`src/main/bubble/wander.ts`, lines 81–89](../../apps/desktop/src/main/bubble/wander.ts#L81-L89)
+[`src/main/bubble/wander.ts`, lines 95–103](../../apps/desktop/src/main/bubble/wander.ts#L95-L103)
 
 ```ts
 /**
@@ -2203,7 +2228,7 @@ How long the fall after a drop takes, in milliseconds.
 
 <!-- code: apps/desktop/src/main/bubble/wander.ts#fallPosition -->
 
-[`src/main/bubble/wander.ts`, lines 91–97](../../apps/desktop/src/main/bubble/wander.ts#L91-L97)
+[`src/main/bubble/wander.ts`, lines 105–111](../../apps/desktop/src/main/bubble/wander.ts#L105-L111)
 
 ```ts
 /** Position at progress `t` (0–1) of the fall: speeding up as it falls, like a dropped thing. */
@@ -2634,7 +2659,7 @@ and adapts the bubble's and the panel's to the controller's `Surface` interface.
 `createOverlayWindow()` twice at startup, once for the bubble and once for the panel, and wraps the
 results with `bubbleSurface()` and `panelSurface()` before handing them to `BubbleController`. It
 calls it again for each lot of clones, for a window that lasts their thirty seconds, and for each
-of her visions, for a window that lasts the habit's 5.2 seconds (see `clones.ts` and `vision.ts`
+of her visions, for a window that lasts the habit's 8.6 seconds (see `clones.ts` and `vision.ts`
 above).
 
 Key ideas:

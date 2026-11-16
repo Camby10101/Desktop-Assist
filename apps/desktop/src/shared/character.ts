@@ -43,7 +43,7 @@ export const FIDGET_MS: Record<Fidget, number> = {
   wave: 2000,
   stretch: 2400,
   sip: 3200,
-  vision: 5200,
+  vision: 8600,
   read: 4000,
   spell: 2400,
   levitate: 3600,
@@ -57,14 +57,14 @@ export const isFidget = (pose: Pose): pose is Fidget =>
 /**
  * The `vision` habit's timetable (ms from its start), shared by her animation (sprite.ts) and the
  * window that draws the light and the logo above her (VisionView), so she looks up as it comes:
- * the light fades in, the logo comes down and hovers over her head, rises away, and the light
- * fades out.
+ * the light fades in, the logo comes down and hovers over her head for five seconds, rises away,
+ * and the light fades out.
  */
 export const VISION = {
   lightIn: [0, 600],
   descend: [300, 1800],
-  ascend: [3400, 4600],
-  lightOut: [4500, 5200],
+  ascend: [6800, 8000],
+  lightOut: [7900, 8600],
 } as const
 
 /**

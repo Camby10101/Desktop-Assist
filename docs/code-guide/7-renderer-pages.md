@@ -1797,7 +1797,7 @@ The effect:
 - `requestAnimationFrame(function tick() {`: each frame, `now` is updated, so the page redraws with
   the light and the logo where they should be at that moment.
 - `if (Date.now() - starts < FIDGET_MS.vision) frame = requestAnimationFrame(tick)`: it keeps going
-  until the habit's 5.2 seconds are up, when the main process closes the window anyway.
+  until the habit's 8.6 seconds are up, when the main process closes the window anyway.
 - The cleanup cancels the next frame.
 
 Working out the frame:

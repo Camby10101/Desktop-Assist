@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { FIDGETS } from '@shared/character'
 import {
+  FIDGET_WEIGHT,
   WANDER,
   activityDelay,
   fallDuration,
@@ -36,6 +37,19 @@ describe('nextActivity', () => {
     expect(nextActivity(alone, 0, 240, rolls(0.1, 0))).toEqual({ kind: 'fidget', pose: 'hop' })
     expect(nextActivity(alone, 0, 240, rolls(0.1, 0.99))).toEqual({ kind: 'fidget', pose: 'look' })
     expect(nextActivity(alone, 0, 240, rolls(0.8, 0.5)).kind).toBe('walk')
+  })
+
+  it('rarely has the vision: about a fifth as often as any other fidget', () => {
+    const alone = WANDER.fidgetAfter
+    const counts = new Map<string, number>()
+    const steps = 10_000
+    for (let i = 0; i < steps; i++) {
+      const next = nextActivity(alone, 0, 240, rolls(0.1, (i + 0.5) / steps))
+      if (next.kind === 'fidget') counts.set(next.pose, (counts.get(next.pose) ?? 0) + 1)
+    }
+    const vision = counts.get('vision')!
+    expect(vision / steps).toBeCloseTo(FIDGET_WEIGHT.vision! / (FIDGETS.length - 1 + 0.2), 2)
+    expect(vision * 4).toBeLessThan(counts.get('hop')!)
   })
 
   it('never does the same fidget twice in a row', () => {
