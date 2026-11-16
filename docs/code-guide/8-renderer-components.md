@@ -296,7 +296,7 @@ The parts of `ChatBox` itself:
 
 <!-- code: apps/desktop/src/renderer/src/components/ChatBox.tsx#MOUTH_ROW,TAIL_REACH,CARD_RADIUS,SpeechTail -->
 
-[`src/renderer/src/components/ChatBox.tsx`, lines 144–201](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L144-L201)
+[`src/renderer/src/components/ChatBox.tsx`, lines 144–231](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L144-L231)
 
 ```tsx
 /** Her mouth, in sprite pixels down from the top of her window (rig.ts draws it there). */
@@ -309,13 +309,14 @@ const TAIL_REACH = 11
 const CARD_RADIUS = 16
 
 /**
- * The speech bubble's tail: a triangle from the card's side nearest her to just short of her
- * mouth, at her height and size, so it points at her mouth however big she is (her mouth is at
- * MOUTH_ROW of her 96-pixel grid, scaled with her). Its base slides along the card's edge to stay
- * level with her mouth, but never past the card's rounded corners, so on a card shorter than her
- * mouth is high (just the text box, at a big size) it slants up to her instead. It's drawn in
- * the card's own colours and border, overlapping the card's edge by a pixel so the two read as
- * one shape, and it ignores the mouse, so it never gets between the pointer and her.
+ * The speech bubble's tail: from the card's side nearest her to just short of her mouth, at her
+ * height and size, so it points at her mouth however big she is (her mouth is at MOUTH_ROW of her
+ * 96-pixel grid, scaled with her). Its sides curve out of the card's edge and narrow to a small
+ * round end, like a drawn speech bubble's. Its base slides along the card's edge to stay level with her
+ * mouth, but never into the card's rounded corners, so on a card shorter than her mouth is high
+ * (just the text box, at a big size) it slants up to her instead. It's drawn in the card's own
+ * colours and border, overlapping the card's edge by a pixel so the two read as one shape, and it
+ * ignores the mouse, so it never gets between the pointer and her.
  */
 function SpeechTail(props: {
   corner: Corner
@@ -329,14 +330,39 @@ function SpeechTail(props: {
   // bottom corner) to the tip.
   const out = Math.max(8, layout.chatX - (box / 2 + TAIL_REACH * scale))
   const up = (SPRITE_SIZE - MOUTH_ROW) * scale - layout.chatY
+  // Half the base's width, how far along the card's edge each side curves in from, and the tip's
+  // roundness, all growing with her (the tip never more than a quarter of the tail's length).
+  // Half the base's width, how far along the card's edge each side curves in from, and the
+  // radius of the round end, all growing with her (the end never more than a fifth of its length).
   const half = 9 + 2 * scale
-  const lowest = CARD_RADIUS + half
-  const highest = Math.max(lowest, props.cardHeight - CARD_RADIUS - half)
+  const curve = half * 0.7
+  const round = Math.min(2.5 + 1.2 * scale, out / 5)
+  const lowest = CARD_RADIUS + half + curve
+  const highest = Math.max(lowest, props.cardHeight - CARD_RADIUS - half - curve)
   const base = Math.min(Math.max(up, lowest), highest)
   const width = out + 2
-  const height = Math.max(up, base + half) + 2
-  const y = (fromEdge: number) => height - fromEdge
-  const corners = `M0 ${y(base + half)} L${out} ${y(up)} L0 ${y(base - half)}`
+  const height = Math.max(up + round, base + half + curve) + 2
+  // A point `x` out from the card's edge and `u` up from its near edge, in the drawing's terms.
+  const at = (x: number, u: number) => `${x.toFixed(1)} ${(height - u).toFixed(1)}`
+  // Along the tail (from the middle of its base towards her mouth) and across it.
+  const length = Math.hypot(out, up - base)
+  const along = { x: out / length, u: (up - base) / length }
+  const across = { x: -along.u, u: along.x }
+  // The round end: a circle `round` across, its far side at the tip. The sides run into it, one
+  // on each side of its middle, arriving along the tail.
+  const end = { x: out - along.x * round, u: up - along.u * round }
+  const upperEnd = { x: end.x + across.x * round, u: end.u + across.u * round }
+  const lowerEnd = { x: end.x - across.x * round, u: end.u - across.u * round }
+  const pull = length * 0.45
+  const sides = [
+    `M${at(0, base + half + curve)}`,
+    // Out of the card's edge: leaving it along the edge, arriving along the tail.
+    `C${at(0, base + half)} ${at(upperEnd.x - along.x * pull, upperEnd.u - along.u * pull)} ${at(upperEnd.x, upperEnd.u)}`,
+    // Round the end, the far way, past the tip.
+    `A${round.toFixed(1)} ${round.toFixed(1)} 0 0 1 ${at(lowerEnd.x, lowerEnd.u)}`,
+    // Back to the card's edge, joining it along the edge.
+    `C${at(lowerEnd.x - along.x * pull, lowerEnd.u - along.u * pull)} ${at(0, base - half)} ${at(0, base - half - curve)}`,
+  ].join(' ')
   const left = isLeftCorner(props.corner)
   const top = isTopCorner(props.corner)
   return (
@@ -354,8 +380,12 @@ function SpeechTail(props: {
         transform: `scale(${left ? -1 : 1}, ${top ? -1 : 1})`,
       }}
     >
-      <path d={`${corners} Z`} className="fill-white dark:fill-zinc-900" />
-      <path d={corners} fill="none" className="stroke-black/10 dark:stroke-white/10" />
+      {/* Filled up to a pixel inside the card, over its border, so the join doesn't show. */}
+      <path
+        d={`${sides} L${at(-1, base - half - curve)} L${at(-1, base + half + curve)} Z`}
+        className="fill-white dark:fill-zinc-900"
+      />
+      <path d={sides} fill="none" className="stroke-black/10 dark:stroke-white/10" />
     </svg>
   )
 }
@@ -373,9 +403,10 @@ The speech bubble's tail.
 - `CARD_RADIUS = 16`: as its comment says, the card's corner radius (`rounded-2xl` is 16 px). The
   tail's base keeps clear of the rounded corners, where it would leave a gap.
 
-As the comment on `SpeechTail` says, the tail is a triangle from the card's side nearest her to
-just short of her mouth, at her height and size, so it points at her mouth however big she is. Its
-base slides along the card's edge to stay level with her mouth, but never past the card's rounded
+As the comment on `SpeechTail` says, the tail runs from the card's side nearest her to just short
+of her mouth, at her height and size, so it points at her mouth however big she is. Its sides curve
+out of the card's edge and narrow to a small round end, the way a speech bubble's tail is drawn by
+hand, rather than meeting in a sharp point. Its base slides along the card's edge to stay level with her mouth, but never past the card's rounded
 corners: on a card shorter than her mouth is high (just the text box, when she's big), it slants
 up to her instead. It's drawn in the card's own colours and border, a pixel over the card's edge so
 the two read as one shape, and it ignores the mouse.
@@ -394,18 +425,43 @@ The measurements, all in DIPs, as for the bottom-right corner (the others are mi
   card's bottom is `chatY` above that edge. At her usual size, 62.5 − 8 = 54.5.
 - `half = 9 + 2 * scale`: half the width of the tail's base, 11 at her usual size (a base of 22),
   a little wider when she's bigger.
+- `curve = half * 0.7`: how far along the card's edge, beyond each end of the base, each side
+  starts curving away from it, so the tail grows out of the card smoothly instead of meeting it at
+  a corner.
+- `round = Math.min(2.5 + 1.2 * scale, out / 5)`: the radius of the round end: 3.7 at her usual
+  size (an end about 7 DIPs across), more when she's bigger, but never more than a fifth of the
+  tail's length, so a short tail is still a tail.
 - `lowest`, `highest`: how near to the card's bottom and top edges the middle of the base may go
-  while the whole base stays clear of the rounded corners. On a card too short for both, `highest`
-  is no lower than `lowest`.
+  while the whole base, curves included, stays clear of the rounded corners. On a card too short
+  for both, `highest` is no lower than `lowest`.
 - `base = Math.min(Math.max(up, lowest), highest)`: the middle of the base: level with her mouth
   when that fits on the card, otherwise as near as it can be. Then the tail runs straight across;
   otherwise it slants up (or down) to her mouth.
-- `width = out + 2`, `height = Math.max(up, base + half) + 2`: the size of the drawing, tall enough
-  for both the tip and the base, with 2 DIPs to spare for the outline.
-- `y = (fromEdge: number) => height - fromEdge`: SVG measures `y` down from the top; this turns a
-  height above the card's bottom edge into that.
-- `corners`: an SVG path: `M` moves to the base's upper end on the card's edge (`x` 0), `L` draws
-  a line to the tip, and another back to the base's lower end.
+- `width = out + 2`, `height = Math.max(up + round, base + half + curve) + 2`: the size of the
+  drawing, tall enough for the round end and the base with its curves, with 2 DIPs to spare for
+  the outline.
+- `at(x, u)`: a point `x` out from the card's edge and `u` up from its near edge, written as SVG
+  wants it: SVG measures `y` down from the top, so `u` becomes `height - u`. `toFixed(1)` keeps the
+  path short.
+- `length`, `along`, `across`: the tail's length from the middle of its base to the tip, a step of
+  1 along it (towards her mouth) and a step of 1 across it (at right angles, upwards for a tail
+  pointing right).
+- `end`: the middle of the round end, `round` back from the tip along the tail, so the far side of
+  its circle is the tip. `upperEnd` and `lowerEnd`: where the two sides meet the circle, `round`
+  either side of its middle, across the tail.
+- `pull = length * 0.45`: how far back along the tail each side's second control point is, which
+  sets how gently the side curves.
+- `sides`: the outline that sticks out of the card, as an SVG path:
+  - `M`: starts on the card's edge, `curve` above the base's upper end.
+  - `C`: a curve (a _cubic Bézier_, steered by two control points) to `upperEnd`. Its first control
+    point is the base's upper end on the card's edge, so it leaves the card along the edge; its
+    second is `pull` back along the tail from `upperEnd`, so it arrives running along the tail.
+    Between the two it bends out from the card and in towards the tail's line, like a drawn
+    speech bubble's tail.
+  - `A`: an arc of radius `round` to `lowerEnd`, the far way round (the `1` is SVG's _sweep_ flag:
+    clockwise on screen), passing through the tip: the round end.
+  - `C`: the lower side, the same curve the other way, back to the card's edge `curve` below the
+    base's lower end, arriving along the edge.
 
 The JSX:
 
@@ -419,17 +475,19 @@ The JSX:
   edge.
 - `transform: scale(...)`: the path is worked out pointing right from a bottom edge, so in a
   left-hand corner it's flipped across, and in a top corner upside down.
-- `<path d={`${corners} Z`} className="fill-white dark:fill-zinc-900" />`: the triangle filled
-  with the card's colour (`Z` closes the path back to its start).
-- `<path d={corners} fill="none" className="stroke-black/10 dark:stroke-white/10" />`: the outline
-  in the card's border colour, along the two sides that stick out but not the base, which lies
-  over the card.
+- The first `<path>`: as its comment says, the tail filled with the card's colour: `sides`, then
+  two lines a pixel inside the card (`at(-1, ...)`), back to where it started (`Z` closes it). Being
+  a pixel over the card's border, it hides the border where the tail joins, so the card and the
+  tail read as one shape.
+- The second `<path>`: `sides` alone, unfilled (`fill="none"`), in the card's border colour: the
+  outline along the curved sides and the round end, but not along the card's edge, which the
+  card's own border already has.
 
 ### `Composer`
 
 <!-- code: apps/desktop/src/renderer/src/components/ChatBox.tsx#Composer -->
 
-[`src/renderer/src/components/ChatBox.tsx`, lines 203–344](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L203-L344)
+[`src/renderer/src/components/ChatBox.tsx`, lines 233–374](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L233-L374)
 
 ```tsx
 /** The text box: attached screenshots, the text, and the attach / send / stop buttons. */
@@ -667,7 +725,7 @@ first appears. Effects are for work outside drawing the UI, such as moving the k
 
 <!-- code: apps/desktop/src/renderer/src/components/ChatBox.tsx#Banner -->
 
-[`src/renderer/src/components/ChatBox.tsx`, lines 346–355](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L346-L355)
+[`src/renderer/src/components/ChatBox.tsx`, lines 376–385](../../apps/desktop/src/renderer/src/components/ChatBox.tsx#L376-L385)
 
 ```tsx
 /** A one-line status above the text box, with an optional action. */

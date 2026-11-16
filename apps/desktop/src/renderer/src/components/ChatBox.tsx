@@ -149,13 +149,14 @@ const TAIL_REACH = 11
 const CARD_RADIUS = 16
 
 /**
- * The speech bubble's tail: a triangle from the card's side nearest her to just short of her
- * mouth, at her height and size, so it points at her mouth however big she is (her mouth is at
- * MOUTH_ROW of her 96-pixel grid, scaled with her). Its base slides along the card's edge to stay
- * level with her mouth, but never past the card's rounded corners, so on a card shorter than her
- * mouth is high (just the text box, at a big size) it slants up to her instead. It's drawn in
- * the card's own colours and border, overlapping the card's edge by a pixel so the two read as
- * one shape, and it ignores the mouse, so it never gets between the pointer and her.
+ * The speech bubble's tail: from the card's side nearest her to just short of her mouth, at her
+ * height and size, so it points at her mouth however big she is (her mouth is at MOUTH_ROW of her
+ * 96-pixel grid, scaled with her). Its sides curve out of the card's edge and narrow to a small
+ * round end, like a drawn speech bubble's. Its base slides along the card's edge to stay level with her
+ * mouth, but never into the card's rounded corners, so on a card shorter than her mouth is high
+ * (just the text box, at a big size) it slants up to her instead. It's drawn in the card's own
+ * colours and border, overlapping the card's edge by a pixel so the two read as one shape, and it
+ * ignores the mouse, so it never gets between the pointer and her.
  */
 function SpeechTail(props: {
   corner: Corner
@@ -169,14 +170,39 @@ function SpeechTail(props: {
   // bottom corner) to the tip.
   const out = Math.max(8, layout.chatX - (box / 2 + TAIL_REACH * scale))
   const up = (SPRITE_SIZE - MOUTH_ROW) * scale - layout.chatY
+  // Half the base's width, how far along the card's edge each side curves in from, and the tip's
+  // roundness, all growing with her (the tip never more than a quarter of the tail's length).
+  // Half the base's width, how far along the card's edge each side curves in from, and the
+  // radius of the round end, all growing with her (the end never more than a fifth of its length).
   const half = 9 + 2 * scale
-  const lowest = CARD_RADIUS + half
-  const highest = Math.max(lowest, props.cardHeight - CARD_RADIUS - half)
+  const curve = half * 0.7
+  const round = Math.min(2.5 + 1.2 * scale, out / 5)
+  const lowest = CARD_RADIUS + half + curve
+  const highest = Math.max(lowest, props.cardHeight - CARD_RADIUS - half - curve)
   const base = Math.min(Math.max(up, lowest), highest)
   const width = out + 2
-  const height = Math.max(up, base + half) + 2
-  const y = (fromEdge: number) => height - fromEdge
-  const corners = `M0 ${y(base + half)} L${out} ${y(up)} L0 ${y(base - half)}`
+  const height = Math.max(up + round, base + half + curve) + 2
+  // A point `x` out from the card's edge and `u` up from its near edge, in the drawing's terms.
+  const at = (x: number, u: number) => `${x.toFixed(1)} ${(height - u).toFixed(1)}`
+  // Along the tail (from the middle of its base towards her mouth) and across it.
+  const length = Math.hypot(out, up - base)
+  const along = { x: out / length, u: (up - base) / length }
+  const across = { x: -along.u, u: along.x }
+  // The round end: a circle `round` across, its far side at the tip. The sides run into it, one
+  // on each side of its middle, arriving along the tail.
+  const end = { x: out - along.x * round, u: up - along.u * round }
+  const upperEnd = { x: end.x + across.x * round, u: end.u + across.u * round }
+  const lowerEnd = { x: end.x - across.x * round, u: end.u - across.u * round }
+  const pull = length * 0.45
+  const sides = [
+    `M${at(0, base + half + curve)}`,
+    // Out of the card's edge: leaving it along the edge, arriving along the tail.
+    `C${at(0, base + half)} ${at(upperEnd.x - along.x * pull, upperEnd.u - along.u * pull)} ${at(upperEnd.x, upperEnd.u)}`,
+    // Round the end, the far way, past the tip.
+    `A${round.toFixed(1)} ${round.toFixed(1)} 0 0 1 ${at(lowerEnd.x, lowerEnd.u)}`,
+    // Back to the card's edge, joining it along the edge.
+    `C${at(lowerEnd.x - along.x * pull, lowerEnd.u - along.u * pull)} ${at(0, base - half)} ${at(0, base - half - curve)}`,
+  ].join(' ')
   const left = isLeftCorner(props.corner)
   const top = isTopCorner(props.corner)
   return (
@@ -194,8 +220,12 @@ function SpeechTail(props: {
         transform: `scale(${left ? -1 : 1}, ${top ? -1 : 1})`,
       }}
     >
-      <path d={`${corners} Z`} className="fill-white dark:fill-zinc-900" />
-      <path d={corners} fill="none" className="stroke-black/10 dark:stroke-white/10" />
+      {/* Filled up to a pixel inside the card, over its border, so the join doesn't show. */}
+      <path
+        d={`${sides} L${at(-1, base - half - curve)} L${at(-1, base + half + curve)} Z`}
+        className="fill-white dark:fill-zinc-900"
+      />
+      <path d={sides} fill="none" className="stroke-black/10 dark:stroke-white/10" />
     </svg>
   )
 }
