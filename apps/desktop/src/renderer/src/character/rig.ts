@@ -401,11 +401,11 @@ export function draw(pose: Pose): string[] {
       const braidPath =
         view === 'side'
           ? [
-              [-9, 3],
-              [-10.6, 9],
-              [-11.4, 15],
-              [-11.7, 21],
-              [-11.7, 28],
+              [-10.5, 3],
+              [-12.3, 9],
+              [-13, 15],
+              [-13.3, 21],
+              [-13.3, 28],
             ]
           : [
               [8.6, 1],
@@ -440,8 +440,8 @@ export function draw(pose: Pose): string[] {
     const backHair =
       view === 'side'
         ? [
-            [-6, -4],
-            [-4.5, -9],
+            [-10.5, -5],
+            [-7.5, -9.5],
             [-1, -11.5],
             [3, -11.5],
             [6.5, -9],
@@ -453,9 +453,9 @@ export function draw(pose: Pose): string[] {
             [-6.5, 28],
             [-8.5, 24],
             [-10.5, 27],
-            [-11, 16],
-            [-10, 6],
-            [-8, 0],
+            [-11.3, 16],
+            [-11.5, 6],
+            [-11.5, 0],
           ]
         : [
             [-9.5, -2],
@@ -728,14 +728,18 @@ export function draw(pose: Pose): string[] {
       'hair',
     )
     if (view === 'side') {
-      // The back of her head, its front edge behind her ear, so her cheek and jaw show.
+      // Full and round at the back, bulging out behind and above her ear up under her hat (so it
+      // reads as hair, not the shape of her head), its front edge behind her ear, so her cheek and
+      // jaw show.
       const crown = [
         [1.5, -11.6],
-        [-3, -11],
-        [-6.5, -8],
-        [-7.8, -3],
-        [-7.5, 3],
-        [-6.5, 7],
+        [-3, -11.2],
+        [-7, -10],
+        [-10, -7.5],
+        [-11.3, -3.5],
+        [-11.2, 1],
+        [-10, 5.5],
+        [-7.5, 7.5],
         [-4.5, 7.5],
         [-3, 2],
         [-1.5, -2.5],
