@@ -174,7 +174,7 @@ function idle(): Key[] {
 /**
  * Walking, side on, facing right: twelve frames, two steps. Each leg swings forward with its knee
  * bent, plants and pushes back; the arms swing against the legs; her body rises as her legs pass;
- * her hair trails behind her.
+ * her hair trails behind her, a ripple running down it once a stride, so it flows.
  */
 function walk(): Key[] {
   return Array.from({ length: 12 }, (_, i) => {
@@ -186,7 +186,8 @@ function walk(): Key[] {
         view: 'side',
         y: Math.round(-1.5 * forward ** 2),
         lean: 0.07,
-        wind: -2 + Math.sin(phase - 0.8) * 0.8,
+        wind: -2 + Math.sin(phase - 0.8) * 0.4,
+        flow: phase,
         legs: [
           { hip: 0.45 * swing, knee: 0.12 + 0.65 * Math.max(0, forward) ** 1.5 },
           { hip: -0.45 * swing, knee: 0.12 + 0.65 * Math.max(0, -forward) ** 1.5 },

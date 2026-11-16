@@ -2899,9 +2899,9 @@ How she's drawn follows common practice in anime-style pixel art:
 
 ### `GRID`
 
-<!-- code: apps/desktop/src/renderer/src/character/rig.ts#GRID,HEADROOM -->
+<!-- code: apps/desktop/src/renderer/src/character/rig.ts#GRID,HEADROOM,RIPPLE -->
 
-[`src/renderer/src/character/rig.ts`, lines 5–24](../../apps/desktop/src/renderer/src/character/rig.ts#L5-L24)
+[`src/renderer/src/character/rig.ts`, lines 5–32](../../apps/desktop/src/renderer/src/character/rig.ts#L5-L32)
 
 ```ts
 // The character's rig: her skeleton and the shapes that hang on it, drawn as pixel art for one
@@ -2925,6 +2925,14 @@ export const GRID = 96
  * levitating, being carried. Her window has the same room above her (UI.bubbleHeadroom).
  */
 export const HEADROOM = UI.bubbleHeadroom
+
+/**
+ * Her hair's ripple as she walks (see Pose.flow): its wave number (radians a pixel down her hair,
+ * so a wave is about 30 pixels long, as long as her hair), how far it sways at the length of her
+ * hair below her head (pixels; less above, more at the tips), and how close together the points
+ * are that let it bend.
+ */
+const RIPPLE = { k: 0.2, size: 1.2, step: 2 }
 ```
 
 <!-- /code -->
@@ -2944,11 +2952,19 @@ and still fills her window, one pixel a DIP. `draw()` makes its canvas and every
 (`new Canvas(GRID, HEADROOM)`, `new Layer(GRID, HEADROOM)`). Because the extra rows have negative y,
 the grid's own rows keep their numbers, so none of the coordinates below had to change.
 
+`RIPPLE` sets the wave that runs down her hair as she walks (`flow` in the pose, below). As its
+comment says, `k` is its wave number: 0.2 radians for each pixel down her hair, so one wave is about
+31 pixels long (2π ÷ 0.2), as long as her hair, and her hair bends in one S rather than wiggling.
+`size` is how far it sways, in pixels, at 20 pixels below the top of her head; it's scaled the same
+way as the wind (`t`, in `blown()`), so the roots hardly move and the tips sway most, a little under
+two pixels. `step` is the most distance between the points of a rippling shape (`supple()`, below):
+2 pixels, close enough that its edges curve smoothly.
+
 ### `RAMPS` and `LIGHT`
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#RAMPS,LIGHT -->
 
-[`src/renderer/src/character/rig.ts`, lines 26–43](../../apps/desktop/src/renderer/src/character/rig.ts#L26-L43)
+[`src/renderer/src/character/rig.ts`, lines 34–51](../../apps/desktop/src/renderer/src/character/rig.ts#L34-L51)
 
 ```ts
 /** Each material's shades, as palette letters (see PALETTE in sprite.ts). */
@@ -2996,7 +3012,7 @@ const LIGHT: Point = { x: -1, y: -1 }
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#View,Face,Arm,Leg,Pose,DOWN,STAND,LEG_LENGTH -->
 
-[`src/renderer/src/character/rig.ts`, lines 45–106](../../apps/desktop/src/renderer/src/character/rig.ts#L45-L106)
+[`src/renderer/src/character/rig.ts`, lines 53–119](../../apps/desktop/src/renderer/src/character/rig.ts#L53-L119)
 
 ```ts
 export type View = 'front' | 'diagonal' | 'side'
@@ -3034,6 +3050,11 @@ export interface Pose {
   look?: number
   /** Her hair and robe pushed sideways (pixels at the tips; negative is behind her). */
   wind?: number
+  /**
+   * A ripple running down her hair from her head to its tips (as she walks), this far through
+   * its cycle (radians, one cycle 2π). Left out, her hair doesn't ripple.
+   */
+  flow?: number
   /** Her hair lifted (pixels at the tips), as when she's falling or carried up. */
   lift?: number
   /** Something in her hands: a teacup, her spellbook or a crystal ball (held in both hands). */
@@ -3093,6 +3114,9 @@ What a pose is made of.
   - `look`: where her eyes look from the front, a pixel left or right.
   - `wind` pushes her hair and robe sideways (negative is behind her, as when she walks), and
     `lift` raises her hair (falling, or carried up).
+  - `flow`: as the comment says, a ripple running down her hair from her head to its tips, as she
+    walks: how far through its cycle it is, in radians (one cycle is 2π, a full turn). Left out,
+    her hair doesn't ripple.
   - `prop`: as the comment says, something in her hands: a teacup or her spellbook in her near
     hand, or a crystal ball (`orb`) held in both.
   - `sparkle`: sparkles circling her near hand, for a little spell: how far round they've gone,
@@ -3121,7 +3145,7 @@ What a pose is made of.
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#EYES,MOUTHS,SPARKLE,TWINKLE,BUTTERFLY_OPEN,BUTTERFLY_SHUT,Z_BIG,Z_SMALL,eyesFor -->
 
-[`src/renderer/src/character/rig.ts`, lines 108–195](../../apps/desktop/src/renderer/src/character/rig.ts#L108-L195)
+[`src/renderer/src/character/rig.ts`, lines 121–209](../../apps/desktop/src/renderer/src/character/rig.ts#L121-L209)
 
 ```ts
 // Face pictures, facing right; `.` is see-through. Eyes have a thick upper lid, a dark-to-light
@@ -3173,12 +3197,13 @@ const EYES = {
     ],
   },
   side: {
-    // A thin lid with its lashes flicking back, over a round iris with a glint, as from the front.
-    open: [['ee...', '.eeee', '.iiw.', '.iII.', '.Ijj.']],
-    blink: [['.....', '.....', 'eeee.', '.ee..']],
-    happy: [['.....', '..ee.', '.e..e', '.....']],
-    down: [['.....', '.....', '.eeee', '..iI.']],
-    up: [['ee...', '.eeee', '.iiw.', '.Ijj.', '.....']],
+    // A thin lid with its lashes flicking back, over a tall round iris with a tall glint, wide
+    // open; looking up, the iris right under the lid. Closed, a line across the middle.
+    open: [['ee...', '.eeee', '.iiw.', '.iIw.', '.iII.', '.Ijj.']],
+    blink: [['.....', '.....', '.....', 'eeee.', '.ee..']],
+    happy: [['.....', '.....', '..ee.', '.e..e', '.....']],
+    down: [['.....', '.....', '.....', '.eeee', '..iI.']],
+    up: [['ee...', '.eeee', '.iIw.', '.iII.', '.Ijj.', '.....']],
   },
 } as const
 
@@ -3239,9 +3264,13 @@ As the comment says, they face right; frames facing left are mirrored with every
     bottom row bare, so the eye seems to roll upward. Every view has one, side on included.
   - Seen diagonally, the far eye is a pixel narrower, because it's turned away.
   - Side on, as the comment says, a thin lid with its lashes flicking back at the outer corner
-    (`ee...`, `.eeee`), over a round iris with a glint, as from the front: dark with the white
-    glint at the top (`.iiw.`), then mid and light (`.iII.`, `.Ijj.`). Looking up (`up`), the
-    same iris rides right under the lid.
+    (`ee...`, `.eeee`), over a tall round iris with a tall glint, wide open: dark with the white
+    glint at the top (`.iiw.`, `.iIw.`, a glint two pixels tall), then mid and light (`.iII.`,
+    `.Ijj.`). Its iris is four pixels tall, one more than it was, which makes her look more awake
+    and a little cuter: big eyes are most of what makes an anime face cute. Looking up (`up`), the
+    iris rides right under the lid with the bottom row bare. Closed (`blink`, `happy`, `down`),
+    each starts with a blank row more, so its line falls across the middle of the taller eye, where
+    it was before.
   - `as const` keeps the object's exact shape, so TypeScript knows every view has every kind of
     eye.
 - `MOUTHS`: small on purpose: two pixels (`mm`) for most faces, a little U for `happy`, two by two
@@ -3263,7 +3292,7 @@ As the comment says, they face right; frames facing left are mirrored with every
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#draw -->
 
-[`src/renderer/src/character/rig.ts`, lines 197–1010](../../apps/desktop/src/renderer/src/character/rig.ts#L197-L1010)
+[`src/renderer/src/character/rig.ts`, lines 211–1042](../../apps/desktop/src/renderer/src/character/rig.ts#L211-L1042)
 
 ```ts
 /** Draws one pose as rows of palette letters. */
@@ -3277,6 +3306,7 @@ export function draw(pose: Pose): string[] {
   const head = add(neck, rotate({ x: 0, y: -11 }, lean + (pose.tilt ?? 0)))
   const headAngle = lean + (pose.tilt ?? 0)
   const wind = pose.wind ?? 0
+  const flow = pose.flow
   const lift = pose.lift ?? 0
   const [nearArm, farArm] = pose.arms ?? [DOWN, DOWN]
   const [nearLeg, farLeg] = pose.legs ?? [STAND, STAND]
@@ -3304,11 +3334,28 @@ export function draw(pose: Pose): string[] {
   const onHips = at(hips, lean * 0.5)
   const shape = (points: number[][], frame: (p: Point) => Point) =>
     points.map(([x, y]) => frame({ x: x!, y: y! }))
-  /** Hair below the top of the head is blown by the wind and lifted by a fall. */
+  /**
+   * Hair below the top of the head is blown by the wind, lifted by a fall and rippled as she walks
+   * (`flow`): a wave running down it, so it sways more the further down it is, and bends.
+   */
   const blown = (p: Point): Point => {
     const t = Math.max(0, (p.y + 2) / 20)
-    return { x: p.x + wind * t, y: p.y - lift * t }
+    const ripple = flow === undefined ? 0 : Math.sin(flow - p.y * RIPPLE.k) * RIPPLE.size * t
+    return { x: p.x + wind * t + ripple, y: p.y - lift * t }
   }
+  /**
+   * A shape's points with more between them, one at least every RIPPLE.step pixels along each
+   * edge, so a ripple bends its long edges into curves rather than just moving their ends.
+   */
+  const supple = (points: number[][]): number[][] =>
+    points.flatMap(([x, y], i) => {
+      const [nx, ny] = points[(i + 1) % points.length]!
+      const pieces = Math.max(1, Math.ceil(Math.hypot(nx! - x!, ny! - y!) / RIPPLE.step))
+      return Array.from({ length: pieces }, (_, j) => [
+        x! + ((nx! - x!) * j) / pieces,
+        y! + ((ny! - y!) * j) / pieces,
+      ])
+    })
   const set = (p: Point, letter: string, only?: string) => {
     const x = Math.floor(p.x)
     const y = Math.floor(p.y)
@@ -3538,7 +3585,7 @@ export function draw(pose: Pose): string[] {
             [-9, 8],
           ]
     back.polygon(
-      shape(backHair, (p) => onHead(blown(p))),
+      shape(supple(backHair), (p) => onHead(blown(p))),
       'hair',
     )
     ink(back)
@@ -3744,9 +3791,9 @@ export function draw(pose: Pose): string[] {
       canvas.stamp(mouth, head.x - mouth[0]!.length / 2 + look * 0.5, head.y + 6)
       set(onHead({ x: 0.5 + look * 0.5, y: 5.2 }), 'S', 's')
     } else {
-      // A pixel higher than from the front: her iris level with the bridge of her nose and the tip
-      // of her nose at the bottom of her eye, as anime profiles have it.
-      canvas.stamp(eyes[0]!, head.x + 1.5, eyeY - 1)
+      // Higher than from the front, and taller: her iris level with the bridge of her nose and the
+      // tip of her nose at the bottom of her eye, as anime profiles have it.
+      canvas.stamp(eyes[0]!, head.x + 1.5, eyeY - 2)
       canvas.stamp(['cc'], head.x + 0.5, head.y + 4.5)
       // Her mouth: a short line in from the notch of her lips, between nose and chin.
       canvas.stamp(
@@ -3773,10 +3820,10 @@ export function draw(pose: Pose): string[] {
             // ...then its jagged lower edge, clear of her eye.
             [7.6, -3.2],
             [6.5, -4],
-            [5.5, -1.5],
-            [4, -3.5],
-            [2.5, -2],
-            [1.5, -4.5],
+            [5.5, -2.6],
+            [4, -4],
+            [2.5, -3.4],
+            [1.5, -4.8],
             [-1, -4.8],
           ]
         : [
@@ -3819,7 +3866,7 @@ export function draw(pose: Pose): string[] {
         [1, -5],
       ]
       hair.polygon(
-        shape(crown, (p) => onHead(blown(p))),
+        shape(supple(crown), (p) => onHead(blown(p))),
         'hair',
       )
     }
@@ -3847,7 +3894,7 @@ export function draw(pose: Pose): string[] {
       const tuft = new Layer(GRID, HEADROOM)
       tuft.polygon(
         shape(
-          [
+          supple([
             [-2.8, -0.5],
             [-1.3, 2.6],
             [-0.3, 5],
@@ -3858,7 +3905,7 @@ export function draw(pose: Pose): string[] {
             [-5.8, 7.4],
             [-5.6, 4],
             [-4.4, 1],
-          ],
+          ]),
           (p) => onHead(blown(p)),
         ),
         'hair',
@@ -4123,9 +4170,23 @@ just below them. In order:
   the body (`lean * 0.5`), so she bends at the waist.
 - `shape(points, frame)`: turns a list of `[x, y]` pairs, the way the shapes below are written,
   into points placed in one of those frames.
+- `flow = pose.flow`: the ripple's place in its cycle, or `undefined` when there's none.
 - `blown(p)`: a hair point pushed sideways by `wind` and raised by `lift`, more the further down
   her hair it is (`t` is 0 near the top of her head and 1 twenty pixels lower), so the roots stay
-  put and the ends swing.
+  put and the ends swing. As the comment says, it's also rippled as she walks:
+  - `ripple`: none without a `flow`. Otherwise `Math.sin(flow - p.y * RIPPLE.k)`, a wave down her
+    hair, times `RIPPLE.size` and `t`, so it grows toward the tips. Points further down are further
+    behind in the wave (`- p.y * RIPPLE.k`), so as `flow` goes up from frame to frame each crest
+    moves down her hair: a wave running from her head to the end of her braid, the way hair flows,
+    rather than all of it swinging at once.
+- `supple(points)`: as its comment says, a shape's points with more in between, so the ripple can
+  bend its long edges. For each point it takes the next (`points[(i + 1) % points.length]`, the
+  last joining back to the first), cuts the edge between them into `pieces`, enough that none is
+  longer than `RIPPLE.step`, and puts a point at the start of each. The shape's outline is the same
+  (the new points lie on its edges) until `blown()` moves each point by its own amount: her braid's
+  straight back edge, one edge from the ribbon to her head, becomes a curve. The back hair, the back
+  of her head (`crown`) and the tuft go through it; so they ripple together, and the crown's back
+  edge stays in line with the back hair's.
 - `set(p, letter, only)`: sets one pixel, but only where it's currently one of the letters in
   `only`, so a detail (the trim, the plaits, the hat's band) is only drawn on the part it belongs
   to.
@@ -4270,9 +4331,9 @@ Math.PI) % 2`), which turn with `spin`. Six white runes (`w`) go round the outer
   stamped over it, placed by the middle of her head.
 - The face is stamped on. From the front: two eyes, moved by `look`, blush (`cc`, pink) under each,
   the mouth in the middle, and just above it a single pixel of the skin's shade (`S`), all there is
-  of her nose. Side on: one eye, a pixel higher than from the front (`eyeY - 1`), as the comment
-  says, so her iris is level with the bridge of her nose and the tip of her nose at the bottom of
-  her eye, as anime profiles have it; blush on her cheek (`head.x + 0.5`, 4.5 pixels below the
+  of her nose. Side on: one eye, higher than from the front and taller (its top at `eyeY - 2`, the
+  extra row of the taller eye on top), as the comment says, so her iris is level with the bridge
+  of her nose and the tip of her nose at the bottom of her eye, as anime profiles have it; blush on her cheek (`head.x + 0.5`, 4.5 pixels below the
   middle of her head); and, as the comment says, a short
   line of mouth in from the notch of her lips: the first two pixels of each row of the
   expression's mouth (`r.slice(0, 2)`), 4.5 pixels in front of the middle of her head.
@@ -4282,7 +4343,8 @@ Math.PI) % 2`), which turn with `spin`. Six white runes (`w`) go round the outer
   her head) to 9.5, so it stands off her face rather than lying on it, its tip hanging a pixel in
   front of her brow (`[7, -9.8], [9, -6.5], [9.5, -3.5], [9.2, -1.5]`): anime profiles draw the
   fringe in curved clumps that stand proud of the forehead. Then its jagged lower edge sits higher,
-  clear of her eye (`[7.6, -3.2], [6.5, -4], [5.5, -1.5], ...`), and a `crown` covers the back of
+  clear of her eye, its tips over her eye stopping above her lashes (`[7.6, -3.2], [6.5, -4],
+[5.5, -2.6], ...`), and a `crown` covers the back of
   her head too. As its comment says, the crown's back edge is in line with the back hair behind it
   (`[-8.1, -3], [-8.9, 2.5], [-9.6, 7]`, along the back hair's straight back edge), so they read
   as one, and its front edge runs behind her ear, so her cheek (from `SIDE_FACE`) shows. The
@@ -4383,7 +4445,7 @@ Math.PI) % 2`), which turn with `spin`. Six white runes (`w`) go round the outer
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#HAT,HAIR,ROBE,castShadows -->
 
-[`src/renderer/src/character/rig.ts`, lines 1012–1044](../../apps/desktop/src/renderer/src/character/rig.ts#L1012-L1044)
+[`src/renderer/src/character/rig.ts`, lines 1044–1076](../../apps/desktop/src/renderer/src/character/rig.ts#L1044-L1076)
 
 ```ts
 /** Letters by part, for castShadows. */
@@ -4868,13 +4930,13 @@ function idle(): Key[] {
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#walk -->
 
-[`src/renderer/src/character/sprite.ts`, lines 174–202](../../apps/desktop/src/renderer/src/character/sprite.ts#L174-L202)
+[`src/renderer/src/character/sprite.ts`, lines 174–203](../../apps/desktop/src/renderer/src/character/sprite.ts#L174-L203)
 
 ```ts
 /**
  * Walking, side on, facing right: twelve frames, two steps. Each leg swings forward with its knee
  * bent, plants and pushes back; the arms swing against the legs; her body rises as her legs pass;
- * her hair trails behind her.
+ * her hair trails behind her, a ripple running down it once a stride, so it flows.
  */
 function walk(): Key[] {
   return Array.from({ length: 12 }, (_, i) => {
@@ -4886,7 +4948,8 @@ function walk(): Key[] {
         view: 'side',
         y: Math.round(-1.5 * forward ** 2),
         lean: 0.07,
-        wind: -2 + Math.sin(phase - 0.8) * 0.8,
+        wind: -2 + Math.sin(phase - 0.8) * 0.4,
+        flow: phase,
         legs: [
           { hip: 0.45 * swing, knee: 0.12 + 0.65 * Math.max(0, forward) ** 1.5 },
           { hip: -0.45 * swing, knee: 0.12 + 0.65 * Math.max(0, -forward) ** 1.5 },
@@ -4922,6 +4985,9 @@ a cycle ahead: positive while that leg swings forward, negative while it pushes 
 - `lean: 0.07`: leaning a little into the walk.
 - `wind: -2 + ...`: her hair and robe trailing two pixels behind her, swaying a little with each
   step.
+- `flow: phase`: as the comment says, a ripple running down her hair once a stride, so it flows
+  rather than swinging stiffly. `phase` goes once round (0 to 2π) over the twelve frames, so the
+  ripple joins up from the last frame back to the first, as the walk does.
 - At walking speed (80 DIPs a second, `WANDER.walkSpeed` in `src/main/bubble/wander.ts`), 0.66
   seconds covers about 53 DIPs, two steps, so her feet roughly keep pace with the window moving
   under them.
@@ -4930,7 +4996,7 @@ a cycle ahead: positive while that leg swings forward, negative while it pushes 
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#hop -->
 
-[`src/renderer/src/character/sprite.ts`, lines 204–262](../../apps/desktop/src/renderer/src/character/sprite.ts#L204-L262)
+[`src/renderer/src/character/sprite.ts`, lines 205–263](../../apps/desktop/src/renderer/src/character/sprite.ts#L205-L263)
 
 ```ts
 /** A hop: crouch, spring up with her arms flung up, float, fall, land with a bounce. */
@@ -5019,7 +5085,7 @@ named, and `tween()` eases from each to the next, about 30 frames altogether.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#wave -->
 
-[`src/renderer/src/character/sprite.ts`, lines 264–284](../../apps/desktop/src/renderer/src/character/sprite.ts#L264-L284)
+[`src/renderer/src/character/sprite.ts`, lines 265–285](../../apps/desktop/src/renderer/src/character/sprite.ts#L265-L285)
 
 ```ts
 /** A wave, seen diagonally: her hand up, waving to and fro, head tilted, smiling. */
@@ -5062,7 +5128,7 @@ As the comment says, a wave, seen diagonally, smiling, with her head tilted.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#stretch -->
 
-[`src/renderer/src/character/sprite.ts`, lines 286–309](../../apps/desktop/src/renderer/src/character/sprite.ts#L286-L309)
+[`src/renderer/src/character/sprite.ts`, lines 287–310](../../apps/desktop/src/renderer/src/character/sprite.ts#L287-L310)
 
 ```ts
 /** A stretch: arms up, a yawn, a lean one way and the other, arms down. */
@@ -5104,7 +5170,7 @@ As the comment says, a stretch, from the front.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#sip -->
 
-[`src/renderer/src/character/sprite.ts`, lines 311–343](../../apps/desktop/src/renderer/src/character/sprite.ts#L311-L343)
+[`src/renderer/src/character/sprite.ts`, lines 312–344](../../apps/desktop/src/renderer/src/character/sprite.ts#L312-L344)
 
 ```ts
 /** A sip of tea, seen diagonally: the cup up to her mouth, a sip, down, a contented smile. */
@@ -5159,7 +5225,7 @@ As the comment says, a sip of tea, seen diagonally.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#read -->
 
-[`src/renderer/src/character/sprite.ts`, lines 345–375](../../apps/desktop/src/renderer/src/character/sprite.ts#L345-L375)
+[`src/renderer/src/character/sprite.ts`, lines 346–376](../../apps/desktop/src/renderer/src/character/sprite.ts#L346-L376)
 
 ```ts
 /** Reading her spellbook, seen diagonally: head down, turning a page, a smile at something. */
@@ -5212,7 +5278,7 @@ As the comment says, reading her spellbook, seen diagonally.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#spell -->
 
-[`src/renderer/src/character/sprite.ts`, lines 377–400](../../apps/desktop/src/renderer/src/character/sprite.ts#L377-L400)
+[`src/renderer/src/character/sprite.ts`, lines 378–401](../../apps/desktop/src/renderer/src/character/sprite.ts#L378-L401)
 
 ```ts
 /** A little spell: her hand up, sparkles circling it, then gone with a smile. */
@@ -5257,7 +5323,7 @@ As the comment says, a little spell, seen diagonally.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#vision -->
 
-[`src/renderer/src/character/sprite.ts`, lines 402–436](../../apps/desktop/src/renderer/src/character/sprite.ts#L402-L436)
+[`src/renderer/src/character/sprite.ts`, lines 403–437](../../apps/desktop/src/renderer/src/character/sprite.ts#L403-L437)
 
 ```ts
 /**
@@ -5326,7 +5392,7 @@ blinking once; she watches it rise away, then settles and blinks.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#levitate -->
 
-[`src/renderer/src/character/sprite.ts`, lines 438–488](../../apps/desktop/src/renderer/src/character/sprite.ts#L438-L488)
+[`src/renderer/src/character/sprite.ts`, lines 439–489](../../apps/desktop/src/renderer/src/character/sprite.ts#L439-L489)
 
 ```ts
 /**
@@ -5403,7 +5469,7 @@ As the comment says, she levitates, from the front.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#sit -->
 
-[`src/renderer/src/character/sprite.ts`, lines 490–530](../../apps/desktop/src/renderer/src/character/sprite.ts#L490-L530)
+[`src/renderer/src/character/sprite.ts`, lines 491–531](../../apps/desktop/src/renderer/src/character/sprite.ts#L491-L531)
 
 ```ts
 /** Sitting on the taskbar, her robe spread round her, swaying gently, looking about, then up again. */
@@ -5467,7 +5533,7 @@ As the comment says, sitting on the taskbar with her robe spread round her, the 
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#curtsy -->
 
-[`src/renderer/src/character/sprite.ts`, lines 532–557](../../apps/desktop/src/renderer/src/character/sprite.ts#L532-L557)
+[`src/renderer/src/character/sprite.ts`, lines 533–558](../../apps/desktop/src/renderer/src/character/sprite.ts#L533-L558)
 
 ```ts
 /** A curtsy, from the front: her robe held out at the sides, a dip with her head tilted, smiling. */
@@ -5518,7 +5584,7 @@ tilted, smiling.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#orb -->
 
-[`src/renderer/src/character/sprite.ts`, lines 559–592](../../apps/desktop/src/renderer/src/character/sprite.ts#L559-L592)
+[`src/renderer/src/character/sprite.ts`, lines 560–593](../../apps/desktop/src/renderer/src/character/sprite.ts#L560-L593)
 
 ```ts
 /**
@@ -5578,7 +5644,7 @@ sees and puts it away.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#twirl -->
 
-[`src/renderer/src/character/sprite.ts`, lines 594–630](../../apps/desktop/src/renderer/src/character/sprite.ts#L594-L630)
+[`src/renderer/src/character/sprite.ts`, lines 595–631](../../apps/desktop/src/renderer/src/character/sprite.ts#L595-L631)
 
 ```ts
 /**
@@ -5646,7 +5712,7 @@ frame, and it reuses a few drawings.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#butterfly -->
 
-[`src/renderer/src/character/sprite.ts`, lines 632–656](../../apps/desktop/src/renderer/src/character/sprite.ts#L632-L656)
+[`src/renderer/src/character/sprite.ts`, lines 633–657](../../apps/desktop/src/renderer/src/character/sprite.ts#L633-L657)
 
 ```ts
 /**
@@ -5699,7 +5765,7 @@ every frame is its own pose, rather than key poses with in-betweens.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#doze -->
 
-[`src/renderer/src/character/sprite.ts`, lines 658–709](../../apps/desktop/src/renderer/src/character/sprite.ts#L658-L709)
+[`src/renderer/src/character/sprite.ts`, lines 659–710](../../apps/desktop/src/renderer/src/character/sprite.ts#L659-L710)
 
 ```ts
 /**
@@ -5784,7 +5850,7 @@ one way and the other, and blinks. Like `butterfly()`, every frame is its own po
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#look -->
 
-[`src/renderer/src/character/sprite.ts`, lines 711–733](../../apps/desktop/src/renderer/src/character/sprite.ts#L711-L733)
+[`src/renderer/src/character/sprite.ts`, lines 712–734](../../apps/desktop/src/renderer/src/character/sprite.ts#L712-L734)
 
 ```ts
 /**
@@ -5829,7 +5895,7 @@ used again.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#dragged -->
 
-[`src/renderer/src/character/sprite.ts`, lines 735–765](../../apps/desktop/src/renderer/src/character/sprite.ts#L735-L765)
+[`src/renderer/src/character/sprite.ts`, lines 736–766](../../apps/desktop/src/renderer/src/character/sprite.ts#L736-L766)
 
 ```ts
 /**
@@ -5882,7 +5948,7 @@ Twelve frames of 55 ms, round and round.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#drawn,MAKERS,LEFT_MAKERS,LOOPS -->
 
-[`src/renderer/src/character/sprite.ts`, lines 767–823](../../apps/desktop/src/renderer/src/character/sprite.ts#L767-L823)
+[`src/renderer/src/character/sprite.ts`, lines 768–824](../../apps/desktop/src/renderer/src/character/sprite.ts#L768-L824)
 
 ```ts
 // ------------------------------------------------------------------------------------- frames
@@ -5964,7 +6030,7 @@ export const LOOPS: Record<Name, boolean> = {
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#Facing,made,framesOf -->
 
-[`src/renderer/src/character/sprite.ts`, lines 825–847](../../apps/desktop/src/renderer/src/character/sprite.ts#L825-L847)
+[`src/renderer/src/character/sprite.ts`, lines 826–848](../../apps/desktop/src/renderer/src/character/sprite.ts#L826-L848)
 
 ```ts
 export type Facing = 'left' | 'right'
@@ -6008,7 +6074,7 @@ export function framesOf(pose: Name, facing: Facing): Frame[] {
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#animationLength,mirror -->
 
-[`src/renderer/src/character/sprite.ts`, lines 849–856](../../apps/desktop/src/renderer/src/character/sprite.ts#L849-L856)
+[`src/renderer/src/character/sprite.ts`, lines 850–857](../../apps/desktop/src/renderer/src/character/sprite.ts#L850-L857)
 
 ```ts
 /** How long a pose's frames last altogether (a fidget's must match FIDGET_MS). */
@@ -6034,7 +6100,7 @@ export function mirror(rows: string[]): string[] {
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#framePaths -->
 
-[`src/renderer/src/character/sprite.ts`, lines 858–882](../../apps/desktop/src/renderer/src/character/sprite.ts#L858-L882)
+[`src/renderer/src/character/sprite.ts`, lines 859–883](../../apps/desktop/src/renderer/src/character/sprite.ts#L859-L883)
 
 ```ts
 /**

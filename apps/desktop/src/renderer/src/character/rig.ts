@@ -23,6 +23,14 @@ export const GRID = 96
  */
 export const HEADROOM = UI.bubbleHeadroom
 
+/**
+ * Her hair's ripple as she walks (see Pose.flow): its wave number (radians a pixel down her hair,
+ * so a wave is about 30 pixels long, as long as her hair), how far it sways at the length of her
+ * hair below her head (pixels; less above, more at the tips), and how close together the points
+ * are that let it bend.
+ */
+const RIPPLE = { k: 0.2, size: 1.2, step: 2 }
+
 /** Each material's shades, as palette letters (see PALETTE in sprite.ts). */
 const RAMPS: Record<string, Ramp> = {
   // A broad shadow across the side of each away from the light (`form`), less on her face.
@@ -75,6 +83,11 @@ export interface Pose {
   look?: number
   /** Her hair and robe pushed sideways (pixels at the tips; negative is behind her). */
   wind?: number
+  /**
+   * A ripple running down her hair from her head to its tips (as she walks), this far through
+   * its cycle (radians, one cycle 2π). Left out, her hair doesn't ripple.
+   */
+  flow?: number
   /** Her hair lifted (pixels at the tips), as when she's falling or carried up. */
   lift?: number
   /** Something in her hands: a teacup, her spellbook or a crystal ball (held in both hands). */
@@ -154,12 +167,13 @@ const EYES = {
     ],
   },
   side: {
-    // A thin lid with its lashes flicking back, over a round iris with a glint, as from the front.
-    open: [['ee...', '.eeee', '.iiw.', '.iII.', '.Ijj.']],
-    blink: [['.....', '.....', 'eeee.', '.ee..']],
-    happy: [['.....', '..ee.', '.e..e', '.....']],
-    down: [['.....', '.....', '.eeee', '..iI.']],
-    up: [['ee...', '.eeee', '.iiw.', '.Ijj.', '.....']],
+    // A thin lid with its lashes flicking back, over a tall round iris with a tall glint, wide
+    // open; looking up, the iris right under the lid. Closed, a line across the middle.
+    open: [['ee...', '.eeee', '.iiw.', '.iIw.', '.iII.', '.Ijj.']],
+    blink: [['.....', '.....', '.....', 'eeee.', '.ee..']],
+    happy: [['.....', '.....', '..ee.', '.e..e', '.....']],
+    down: [['.....', '.....', '.....', '.eeee', '..iI.']],
+    up: [['ee...', '.eeee', '.iIw.', '.iII.', '.Ijj.', '.....']],
   },
 } as const
 
@@ -205,6 +219,7 @@ export function draw(pose: Pose): string[] {
   const head = add(neck, rotate({ x: 0, y: -11 }, lean + (pose.tilt ?? 0)))
   const headAngle = lean + (pose.tilt ?? 0)
   const wind = pose.wind ?? 0
+  const flow = pose.flow
   const lift = pose.lift ?? 0
   const [nearArm, farArm] = pose.arms ?? [DOWN, DOWN]
   const [nearLeg, farLeg] = pose.legs ?? [STAND, STAND]
@@ -232,11 +247,28 @@ export function draw(pose: Pose): string[] {
   const onHips = at(hips, lean * 0.5)
   const shape = (points: number[][], frame: (p: Point) => Point) =>
     points.map(([x, y]) => frame({ x: x!, y: y! }))
-  /** Hair below the top of the head is blown by the wind and lifted by a fall. */
+  /**
+   * Hair below the top of the head is blown by the wind, lifted by a fall and rippled as she walks
+   * (`flow`): a wave running down it, so it sways more the further down it is, and bends.
+   */
   const blown = (p: Point): Point => {
     const t = Math.max(0, (p.y + 2) / 20)
-    return { x: p.x + wind * t, y: p.y - lift * t }
+    const ripple = flow === undefined ? 0 : Math.sin(flow - p.y * RIPPLE.k) * RIPPLE.size * t
+    return { x: p.x + wind * t + ripple, y: p.y - lift * t }
   }
+  /**
+   * A shape's points with more between them, one at least every RIPPLE.step pixels along each
+   * edge, so a ripple bends its long edges into curves rather than just moving their ends.
+   */
+  const supple = (points: number[][]): number[][] =>
+    points.flatMap(([x, y], i) => {
+      const [nx, ny] = points[(i + 1) % points.length]!
+      const pieces = Math.max(1, Math.ceil(Math.hypot(nx! - x!, ny! - y!) / RIPPLE.step))
+      return Array.from({ length: pieces }, (_, j) => [
+        x! + ((nx! - x!) * j) / pieces,
+        y! + ((ny! - y!) * j) / pieces,
+      ])
+    })
   const set = (p: Point, letter: string, only?: string) => {
     const x = Math.floor(p.x)
     const y = Math.floor(p.y)
@@ -466,7 +498,7 @@ export function draw(pose: Pose): string[] {
             [-9, 8],
           ]
     back.polygon(
-      shape(backHair, (p) => onHead(blown(p))),
+      shape(supple(backHair), (p) => onHead(blown(p))),
       'hair',
     )
     ink(back)
@@ -672,9 +704,9 @@ export function draw(pose: Pose): string[] {
       canvas.stamp(mouth, head.x - mouth[0]!.length / 2 + look * 0.5, head.y + 6)
       set(onHead({ x: 0.5 + look * 0.5, y: 5.2 }), 'S', 's')
     } else {
-      // A pixel higher than from the front: her iris level with the bridge of her nose and the tip
-      // of her nose at the bottom of her eye, as anime profiles have it.
-      canvas.stamp(eyes[0]!, head.x + 1.5, eyeY - 1)
+      // Higher than from the front, and taller: her iris level with the bridge of her nose and the
+      // tip of her nose at the bottom of her eye, as anime profiles have it.
+      canvas.stamp(eyes[0]!, head.x + 1.5, eyeY - 2)
       canvas.stamp(['cc'], head.x + 0.5, head.y + 4.5)
       // Her mouth: a short line in from the notch of her lips, between nose and chin.
       canvas.stamp(
@@ -701,10 +733,10 @@ export function draw(pose: Pose): string[] {
             // ...then its jagged lower edge, clear of her eye.
             [7.6, -3.2],
             [6.5, -4],
-            [5.5, -1.5],
-            [4, -3.5],
-            [2.5, -2],
-            [1.5, -4.5],
+            [5.5, -2.6],
+            [4, -4],
+            [2.5, -3.4],
+            [1.5, -4.8],
             [-1, -4.8],
           ]
         : [
@@ -747,7 +779,7 @@ export function draw(pose: Pose): string[] {
         [1, -5],
       ]
       hair.polygon(
-        shape(crown, (p) => onHead(blown(p))),
+        shape(supple(crown), (p) => onHead(blown(p))),
         'hair',
       )
     }
@@ -775,7 +807,7 @@ export function draw(pose: Pose): string[] {
       const tuft = new Layer(GRID, HEADROOM)
       tuft.polygon(
         shape(
-          [
+          supple([
             [-2.8, -0.5],
             [-1.3, 2.6],
             [-0.3, 5],
@@ -786,7 +818,7 @@ export function draw(pose: Pose): string[] {
             [-5.8, 7.4],
             [-5.6, 4],
             [-4.4, 1],
-          ],
+          ]),
           (p) => onHead(blown(p)),
         ),
         'hair',

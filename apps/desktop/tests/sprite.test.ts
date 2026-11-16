@@ -248,6 +248,26 @@ describe('the rig', () => {
     for (const letter of ['e', 'I', 'c', 'm']) expect(rows.slice(26, 36).join('')).toContain(letter)
     // The tuft: hair under her ear, over the back of her jaw.
     for (const row of rows.slice(30, 34)) expect(row.slice(44, 48)).toMatch(/[hlD]/)
+    // Her eye wide open: its iris four pixels tall, under her lid.
+    const iris = rows.slice(24, 34).filter((row) => /[iIj]/.test(row.slice(49, 56)))
+    expect(iris.length).toBe(4)
+  })
+
+  it('ripples her hair as she walks: a wave running down it, her head and hat still', () => {
+    const at = (flow: number) => drawn({ view: 'side', flow })
+    // Through a ripple, the end of her braid sways back and forth...
+    const tail = [0, 1, 2, 3, 4, 5].map((i) => at((i * Math.PI) / 3)[52]!.search(/[ODhlL]/))
+    expect(new Set(tail).size).toBeGreaterThan(2)
+    // ...while her hat and the top of her head stay as they are.
+    expect(at(0).slice(0, 22)).toEqual(at(Math.PI).slice(0, 22))
+    // Walking, her hair (behind her) is a different shape in most of the frames.
+    const hair = framesOf('walk-right', 'right').map(({ rows }) =>
+      rows
+        .slice(HEADROOM + 34, HEADROOM + 60)
+        .map((row) => row.slice(20, 41))
+        .join(''),
+    )
+    expect(new Set(hair).size).toBeGreaterThan(hair.length / 2)
   })
 
   it('looks up, from every side, with her irises right under her lids', () => {
