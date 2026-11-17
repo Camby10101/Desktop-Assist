@@ -22,6 +22,12 @@ module.exports = {
   // name, "@desktop-assist/desktop", which becomes "@desktop-assistdesktop".
   extraMetadata: { name: 'desktop-assist' },
   npmRebuild: false,
+  // Only English for Chromium's own words (its menus and messages): Desktop Wizard is in English,
+  // and the other 53 languages would make the installer some 10 MB bigger. With the strongest
+  // compression too, it stays under the 100 MB GitHub takes for a file in the repository (see
+  // scripts/publish-installer.mjs).
+  electronLanguages: ['en-US', 'en-GB'],
+  compression: 'maximum',
   // Electron's built-in switches, set in the .exe, as Electron's security checklist recommends.
   // They stop the .exe being used to run other code: as plain Node (ELECTRON_RUN_AS_NODE), with
   // NODE_OPTIONS or with Node's debugger (--inspect); or with a changed app.asar (its checksum

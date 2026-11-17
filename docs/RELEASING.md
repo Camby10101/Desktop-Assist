@@ -96,6 +96,15 @@ If the key isn't on the PC, the build stops at signing and says so. The installe
 but copies won't take it as an update until it's signed; put the key in place and run
 `node scripts/release-signing.mjs sign`.
 
+Last, it copies the installer and its signature into `installer/` at the top of the repository
+(`scripts/publish-installer.mjs`), removing the previous version's, so the newest can be
+downloaded from the repository's main page on GitHub: **commit `installer/`** with the release. GitHub
+won't take a file over 100 MB, so the installer is built with only English for Chromium's own words
+and the strongest compression (`electron-builder.cjs`), which keeps it at about 98 MB; if a later
+version is over 100 MB, the script says so and copies nothing (run it again with
+`node scripts/publish-installer.mjs` once it's smaller). Each version kept in the repository's
+history makes a fresh clone that much bigger.
+
 Install it once yourself to check it.
 
 ## 3. Publish the release on GitHub
