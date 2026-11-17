@@ -4,6 +4,11 @@ A Windows desktop assistant: a small character that stands on the taskbar near t
 corner of the screen and opens a panel when clicked. Built for Morse Micro first. Branding lives in
 [`tenants/`](tenants/README.md), so another business can use it later.
 
+**Download:** the newest installer is in [`installer/`](installer/)
+([Desktop Wizard-Setup-2.3.0.exe](installer/Desktop%20Wizard-Setup-2.3.0.exe), with its signature
+beside it). Run it to install Desktop Wizard for yourself (no admin needed); an installed copy
+updates itself from Settings → Check for updates.
+
 - [docs/PLAN.md](docs/PLAN.md): the plan, architecture, milestones and decisions.
 - [docs/code-guide/CODE_GUIDE.md](docs/code-guide/CODE_GUIDE.md): how the code fits together, with the code of every
   function shown and explained.
@@ -24,9 +29,10 @@ sign-in) and 4 (logos, favourites, service desk, light/dark mode, bubble-click f
 3.1 (questions open in Claude Desktop) and 3.2 (Apps list, Uninstall) are complete, as are
 Milestone 5 (the app-opening spinner; Jira and the service desk) and its fixes 5.1 and 5.2 (the
 bubble kept in front, and Check for updates). Version **1.0.0** was the first release (see
-[PLAN.md](docs/PLAN.md) §7h and [RELEASING.md](docs/RELEASING.md)); this is version **2.2.0**, with
-the animated character, her spells, the screen saver, and Stand still and No idle animations in
-Settings (PLAN.md §7i).
+[PLAN.md](docs/PLAN.md) §7h and [RELEASING.md](docs/RELEASING.md)); this is version **2.3.0**, with
+the animated character (thirty habits, ten of them magic; throw her and she tumbles), her spells,
+the screen saver, and Robe colour, Stand still and No idle animations in Settings
+(PLAN.md §7i).
 
 **Formerly Desktop Assist.** The app was called Desktop Assist up to version 1.0.0. Updating from
 then (from Settings, or with the new installer) installs over it and keeps everything: on its first
