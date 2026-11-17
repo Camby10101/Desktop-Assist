@@ -54,7 +54,8 @@ export const FIDGETS = [
 export type Fidget = (typeof FIDGETS)[number]
 
 /**
- * What she does for her spells (src/shared/spells.ts), only when one is cast:
+ * Poses of her own for her spells (src/shared/spells.ts), only when one is cast (for most, she
+ * plays one of her habits instead: see CAST_POSE):
  * - `chant`: arms raised, eyes shut, a magic circle under her and her hair and robe lifting, as she
  *   chants (round and round, for as long as the explosion's chant lasts).
  * - `vanish`: she dissolves into white motes that drift up and fade (teleporting; and when the app

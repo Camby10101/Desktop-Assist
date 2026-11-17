@@ -6,11 +6,12 @@ and method with an explanation of what it does and why. Covers Milestones 0 (Fou
 to Claude Desktop) and 3.2 (the Apps list, Uninstall in Settings, and fixes), and Milestone 4
 (app logos fixed, favourite apps, the IT service desk icon, light or dark mode, and a fix for
 clicks on the bubble), and Milestone 5 so far (a spinner while an app opens, Jira and the IT
-service desk in the panel, and Check for updates, from version 1.0.0, the first release), and, on
-trial on the `character` branch, the bubble as an animated character standing on the taskbar, who
-comes in several sizes, casts four spells from a Spells menu (ten clones of herself, a starfall, a
-teleport and an explosion), and forms out of white motes as the app starts and dissolves into them
-when it's closed.
+service desk in the panel, and Check for updates, from version 1.0.0, the first release), and,
+from version 2.0.0, the bubble as an animated character standing on the taskbar, who comes in
+several sizes, casts spells from a Spells menu, and forms out of white motes as the app starts and
+dissolves into them when it's closed. Version 2.0.0 had four spells (ten clones of herself, a
+teleport, a starfall and an explosion); 2.1.0 adds six more (butterflies, fireworks, a blizzard, a
+thunderstorm, a phoenix and a vortex).
 
 Desktop Wizard was called Desktop Assist up to version 1.0.0. A copy updated from then keeps its
 settings and sign-ins: `src/main/formerName.ts` moves its data across on its first start. A few
@@ -62,7 +63,8 @@ flicker), and only a small window (96×104 at the character's usual size) moves 
 or a walk. (The bubble is now a small animated character standing on the taskbar, but the code
 still calls it the bubble.) Three more kinds of window come and go: `?view=clones`, for thirty
 seconds when her Clones spell is cast, `?view=vision`, for the few seconds of one of the
-character's habits, and `?view=spell`, for her Starfall and Explosion spells.
+character's habits, and `?view=spell`, for the eight of her spells drawn over the screen (all but
+Clones and Teleport).
 
 **Click-through.** The panel window is a large rectangle, but most of it is transparent. So
 that you can still click whatever is underneath those empty areas, the panel window starts out
@@ -312,7 +314,7 @@ clipboard and pasted into Claude).
 **Spells**
 
 1. The wand icon → `Panel.runAction('spells')` opens the spells menu (`SpellsMenu`) beside it, with
-   her four spells (`SPELLS` in `src/shared/spells.ts`). Picking one closes the menu →
+   her ten spells (`SPELLS` in `src/shared/spells.ts`). Picking one closes the menu →
    `window.assist.character.castSpell()` → IPC `assist:character-cast-spell` → `castSpell` in
    `src/main/index.ts`, which closes the panel, so the spell can be seen, and casts it:
    - **Clones**: `Clones.start()` with where she stands (`BubbleController.standing`), while she
@@ -324,19 +326,26 @@ clipboard and pasted into Claude).
      the taskbar and stopping now and then, sometimes to wave (`lib/clones.ts`). They fade in, and
      out just before `Clones` closes the window thirty seconds later. Casting it again before then
      starts a new lot.
-   - **Starfall**: `SpellEffects.start('starfall')` (`src/main/bubble/spellEffects.ts`) opens a
-     see-through window over her display's work area (`?view=spell&…`), and she does her `spell`
-     fidget. Its page, `SpellView`, draws shooting stars streaking down the screen for ten seconds,
-     as pixel art on a canvas (`lib/spellArt.ts`, from `lib/spellMotion.ts`).
    - **Teleport**: `BubbleController.teleport()`: she dissolves into white motes (`vanish`), her
      window moves somewhere else along the taskbar near her corner (`wander.walkTarget()`), and she
      forms out of the motes there (`appear`).
-   - **Explosion**: `BubbleController.act('chant')`: she chants for fifteen seconds. When her pose
-     becomes `chant`, `index.ts` opens the spell's window (`SpellEffects.start('explosion')`), where
-     a pillar of magic circles rises above her, one after another, with a column of light and
-     sparks; then the explosion goes off in the middle of the screen (a flash, a fireball, a shock
-     wave and sparks). If someone clicks her or picks her up before the chant is done, it stops and
-     so does the explosion (`SpellEffects.chanting`).
+   - **The other eight** (Butterflies, Starfall, Fireworks, Blizzard, Thunderstorm, Phoenix, Vortex
+     and Explosion): `SpellEffects.start(spell)` (`src/main/bubble/spellEffects.ts`) opens a
+     see-through window over her display's work area (`?view=spell&…`), and she plays the pose that
+     goes with the spell (`CAST_POSE` in `src/shared/spells.ts`, through
+     `BubbleController.act()`): her little `spell` fidget, a twirl, levitating, a butterfly coming
+     to her finger, or her chant. Its page, `SpellView`, draws the spell as pixel art on a canvas,
+     with the drawing function `SPELL_ART` picks: starfall's and the explosion's in
+     `lib/spellArt.ts` (from `lib/spellMotion.ts`), the rest a file each in `lib/spells/`, all a
+     pixel at a time through `lib/pixels.ts`. So shooting stars streak down the screen for ten
+     seconds, rockets burst over it, snow blows and frost creeps in, a storm rolls over with
+     lightning, a bird of fire loops across, a portal swirls and implodes, or a swarm of butterflies
+     flutters away.
+   - **Explosion**, in particular: she chants for fifteen seconds while a pillar of magic circles
+     rises above her, one after another, with a column of light and sparks; then the explosion goes
+     off in the middle of the screen (a flash, a fireball, a shock wave and sparks). If someone
+     clicks her or picks her up before the chant is done, it stops, and `onPoseChange` in
+     `index.ts` calls the explosion off too (`SpellEffects.chanting`).
 2. Anything the user does (a click, a drag) stops a spell's pose as it stops a fidget, and each
    effects window closes itself when its spell is over (`SPELL_EFFECT_MS`).
 
@@ -443,7 +452,7 @@ with notes on the lines that need them. Read them in order the first time; after
 the area you're working on.
 
 1. [Shared code and the preload bridge](1-shared-and-preload.md):
-   `src/shared` (sizes and layout constants, the character's sizes and where things sit at each, the character's poses, the timetable of her vision and the numbers for her clones, her spells and their timings, the action list, data types, the IPC contract, chip labels and "how long ago", the Claude Desktop download link, the Apps list's order, Jira issue keys) and `src/preload` (the `window.assist` bridge between the pages and the main process).
+   `src/shared` (sizes and layout constants, the character's sizes and where things sit at each, the character's poses, the timetable of her vision and the numbers for her clones, her spells, their timings and the pose she casts each with, the action list, data types, the IPC contract, chip labels and "how long ago", the Claude Desktop download link, the Apps list's order, Jira issue keys) and `src/preload` (the `window.assist` bridge between the pages and the main process).
 2. [Main process: startup, IPC and app plumbing](2-main-startup.md):
    `index.ts` (startup and shutdown, choosing the built-in chat or Claude Desktop, and casting her spells), `formerName.ts` (carrying the data folder and "Start with Windows" over from the app's old name, Desktop Assist), `ipc.ts` (handling requests from the pages), `actions.ts`, `uninstall.ts`, `updates.ts` (Check for updates: the latest GitHub release, downloaded, checked against its signature and installed) with `scripts/release-signing.mjs` (signing releases), `debugging.ts` (no debugging in an installed copy), `tenant.ts`, `settings.ts`, the tray icon.
 3. [JumpCloud sign-in](3-sign-in.md):
@@ -461,7 +470,7 @@ the area you're working on.
 7. [The pages: entry points, styles, hooks and views](7-renderer-pages.md):
    `src/renderer`: `index.html`, `main.tsx`, `styles.css`, `lib/` (including how her clones wander), `hooks/`, `BubbleView` (the character's page, where she forms out of white motes as the app starts), `ClonesView` (her clones' page), `VisionView` (the light and the logo of her vision), `SpellView` (her spells' effects, drawn on a canvas), `PanelView`.
 8. [The UI components](8-renderer-components.md):
-   `src/renderer/src/components`: the chat box (a speech bubble with its tail pointing at her mouth, with its Open buttons for issue keys and Report to IT), messages, Markdown, sign-in panel, settings menu (with Light mode, and her size: `SizeControl.tsx` and `lib/sizes.ts`), spells menu, action icons, screenshot chips, and the character, an original elf mage in pixel art drawn by code: `character/raster.ts` (a tiny rasteriser: shapes drawn straight onto the pixel grid, cel-shaded, with a broad shadow across the side away from the light, and outlined), `character/rig.ts` (her skeleton and the shapes on it, drawing one pose as a frame, with the shadows things cast on what is below them, and dissolving her into white motes), `character/pictures.ts` (the parts drawn by hand: her whole self seen diagonally, and her face side on), `character/sprite.ts` (her animations: key poses and the in-betweens eased between them, about 25 frames a second), `Character.tsx` (playing a pose's frames at a given size, facing a given way, for the bubble and the clones) and `character.css` (the colours); then her spells' effects in pixel art: `lib/spellMotion.ts` (where the shooting stars, the magic circles and the blast are, moment by moment) and `lib/spellArt.ts` (drawing them a pixel at a time).
+   `src/renderer/src/components`: the chat box (a speech bubble with its tail pointing at her mouth, with its Open buttons for issue keys and Report to IT), messages, Markdown, sign-in panel, settings menu (with Light mode, and her size: `SizeControl.tsx` and `lib/sizes.ts`), spells menu, action icons, screenshot chips, and the character, an original elf mage in pixel art drawn by code: `character/raster.ts` (a tiny rasteriser: shapes drawn straight onto the pixel grid, cel-shaded, with a broad shadow across the side away from the light, and outlined), `character/rig.ts` (her skeleton and the shapes on it, drawing one pose as a frame, with the shadows things cast on what is below them, and dissolving her into white motes), `character/pictures.ts` (the parts drawn by hand: her whole self seen diagonally, and her face side on), `character/sprite.ts` (her animations: key poses and the in-betweens eased between them, about 25 frames a second), `Character.tsx` (playing a pose's frames at a given size, facing a given way, for the bubble and the clones) and `character.css` (the colours); then her spells' effects in pixel art: `lib/spellMotion.ts` (where the shooting stars, the magic circles and the blast are, moment by moment), `lib/pixels.ts` (drawing a pixel at a time on a `Painter`, so the effects can be drawn and tested away from a page), `lib/spellArt.ts` (drawing starfall and the explosion, and which spell draws what) and `lib/spells/` (the six newer spells, a file each: fireworks, the thunderstorm, the blizzard, the vortex, the butterflies and the phoenix).
 9. [Claude Desktop: handing questions over](9-claude-desktop.md):
    `claudeDesktop.ts` (feature 3.1: opening a question in the Claude Desktop app with a link, the screenshots on the clipboard, the notifications, checking it's installed), `sendInClaude.ts` (sending the question there: a hidden PowerShell helper that uses Windows UI Automation to find Claude's text box, then presses Ctrl+V and Enter) and what's tested.
 10. [Your apps: the JumpCloud apps list](10-apps.md):
@@ -491,6 +500,7 @@ Run with `npm test`. Each file tests code that doesn't need a real window or a r
 - `clones.test.ts`: Her clones. `Clones` in the main process, with a fake window and fake timers: one window along the taskbar (the whole width of the work area, as tall as her window), told where she stands, her size, the accent colour and when they end; closing it once their time is up; starting a new lot when asked again, closing the old one and giving the new one a full thirty seconds; and ten of her for thirty seconds. How they wander, in the page: all starting where she stands and setting off one after another, kept inside the window, walking somewhere at least a little way off and then stopping a while (and waiting that out), now and then waving when it stops, for as long as her wave takes, and stopping waving when it walks on, walking at about her speed for her size, each clone a little differently, and picking places either side far enough away (or staying put in a window too narrow to walk in).
 - `spellEffects.test.ts`: Her spells' effects. `SpellEffects`, with a fake window and fake timers: one window over her display's work area, told the spell, her size, where she stands and how far down her feet are, when it was cast and the accent colour; closing once the spell is over; one spell at a time (a new one closes the old one); and knowing when the explosion is still at its chant, so stopping then calls it off, and when it's past it, so the bang goes ahead.
 - `spellMotion.test.ts`: Her spells' pixel art, without a page: the seeded random numbers the same every time, and the noise between 0 and 1; shooting stars falling down to the left all through starfall, each within its life, and none after it; the pillar's magic circles above her hat and on the screen, each above the last and coming after it, all before 70% of the chant, and moved in from the edge when she's in a corner so most of each is on the screen; and the explosion bursting out fast, then growing slowly as it cools, with its shock wave racing out beyond it.
+- `moreSpells.test.ts`: The six newer spells, without a page, drawn on a `Painter` that counts what it's asked to draw: each draws plenty on the screen half way through, moving or still (reduced motion), and nothing at all at its end. The fireworks: twenty rockets, the first from beside her, each bursting over the top half of the screen in time to be seen, the finale after its start. The thunderstorm: the clouds rolling in and away, and each bolt from the clouds to the ground while they're in, its branches heading down, one striking beside her. The blizzard building up and melting away, its frost never past a fifth of the screen, and the wind blowing one way. The vortex opening, holding, shrinking as it collapses and gone at the implosion. The butterflies coming out of her one after another, from her middle, climbing and flapping. The phoenix starting at her, leaving off the side away from her, flying only while it should, and heading back the way it came at the top of its loop.
 - `sizes.test.ts`: Her size in Settings: saying it as people do ("½×", "¾×", "1.5×", "6×"), and stepping a size at a time, no bigger than fits the screen, stopping at either end.
 - `vision.test.ts`: Her vision's window. `visionBounds()`: a column from the top of the screen down to her feet, centred on her, kept on the work area when she stands in a corner, and growing with her. `Vision`, with a fake window and fake timers: one window over her, told her size, where her middle is and when the vision started; closing when stopped (the habit ends, or someone clicks her); and closing itself once the habit is over. And `VISION`'s timetable: inside the habit's time, with the logo coming down before it rises.
 - `sprite.test.ts`: The character's pixel art. The animations: every pose (her spells' three included) has frames, each a full 96 × 96 grid of palette colours, with the 8 rows of headroom above it, shown for some time; she stands on the bottom rows (her feet leave them only at the top of the hop, with her shadow still on the ground, while she's carried (with no shadow under her then), and while she levitates, with the magic circle's teal ring on the ground under her and gone once she lands); every fidget lasts exactly its `FIDGET_MS` and plays once, while idle, walking and dangling go round; vanishing and appearing last exactly their `SPELL_POSE_MS` and play once, while the chant goes round; vanishing dissolves her into white motes, from all of her to nothing, and appearing forms her out of them, ending exactly as she stands; facing left is the mirror image of facing right (but the dozer's z's still read the right way round), and a walk faces the way it goes; idle has at least three different frames (breathing and a blink) and the walk twelve; in a hop and while she levitates, her hat rises into the headroom but never out of the top of the frame; easing between poses comes in many small steps (a frame about every 40 ms, so every fidget but the glance has at least one frame per 160 ms of its length, and idle has 32 frames); and frames are drawn once, then kept. The rig: three different views (front, diagonal, side); a teacup, a spellbook and sparkles drawn only when asked for, and the newer habits' things too (a crystal ball between her hands, a butterfly on her raised hand part way through its visit but not before it arrives, z's above her head, a robe flared wider at the hem), and the newest habits' things only when asked (three orbs between her hands while she juggles, but none before or after; bubbles and the wand ring blown from in front of her mouth, seen diagonally; the will-o'-wisp, which beside her shows only on empty pixels, in front of her chest is drawn over her, and right behind her is hidden; and a sneeze's sparkles only while they fly); her hat as the highest thing in the picture and her long ears reaching out well past her face; her clothes patterned from every side (gold and a gem on the hat, gold embroidery on the robe, light cuffs and laces and gold buckles on the boots); from the front, her hair behind her, clear of her face and the middle of her robe, her fringe and locks reaching as far out on one side as the other, and none of it beside her sleeves below her locks; side on, her long hair down her back as one mass with a single outline, a full head of hair thick behind her shoulders and reaching the small of her back, as from the front, its ends in clumps of different lengths; her shading from every side (a broad band of shade across the side of her skirt away from the light, no lit hair under her hat and no lit skin under her hair); her face side on, with her cheek clear of hair, a tuft of hair under her ear, over the back of her jaw, and her eye wide open, its iris four pixels tall and at the front of her eye (so she looks the way she faces), with her chin no lower than five rows below the tip of her nose; her hat's crown at least two pixels wide below its tip and widening steadily down from it, with no notch, from the front and side on; a trail of sparkles on the ground behind her as she walks (in most of the walk's frames, none standing still), only ever on empty ground or her shadow; her hair rippling side on, the ends of her hair swaying back and forth through a ripple while her hat and the top of her head stay still, and a different shape in most of the walk's frames; looking up from every side, her irises right under her lids, as she does for most of the vision (but not in its first or last frame); her face (eyes, glint, blush and mouth); and sitting with her hips down near the taskbar. The rasteriser: filling a shape, shading the side away from the light (and a broad band across that side, for materials with a form shadow), lighting the edge toward it and outlining it; lines, polygons and stamps (mirrored too) in the right place; and limbs swinging forward with positive angles. And `framePaths` drawing exactly the frame, one path per colour.

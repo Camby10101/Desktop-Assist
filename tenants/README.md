@@ -15,11 +15,22 @@ A tenant folder contains:
 - `logo.png` or `logo.svg`: The logo. `logo.png` is also the tray icon, and the `.exe` icon when there's no `icon.png`. If both exist, `logo.png` is used. The character's vision habit shows the logo too, coming down a light to hover over her head.
 
 Available actions: `ask`, `apps`, `jira`, `servicedesk`, `screenshot`, `settings` (the settings
-menu, which also has light or dark mode and the character's size), `spells` (a menu of her
-spells: ten clones of her walking about the taskbar for thirty seconds, a starfall across the
-screen, a teleport along the taskbar, and an explosion after a long chant), `close` (she dissolves
-into white motes, then the app quits). Morse Micro's, from the bubble upward: `ask`, `jira`,
-`servicedesk`, `screenshot`, `settings`, `spells`, `close`.
+menu, which also has light or dark mode and the character's size), `spells` (a menu of her ten
+spells, listed below), `close` (she dissolves into white motes, then the app quits). Morse Micro's,
+from the bubble upward: `ask`, `jira`, `servicedesk`, `screenshot`, `settings`, `spells`, `close`.
+
+Her spells, in the menu's order:
+
+- Clones: ten of her walking about the taskbar for thirty seconds.
+- Teleport: she vanishes and pops up elsewhere along the taskbar.
+- Butterflies: a swarm of magic butterflies bursting out of her and fluttering away.
+- Starfall: shooting stars across the screen.
+- Fireworks: rockets bursting over the screen, then a finale.
+- Blizzard: snow blowing across the screen, frost in the corners, a drift along the taskbar.
+- Thunderstorm: clouds, rain and lightning, one bolt striking beside her.
+- Phoenix: a bird of fire flying out of her, round a loop and away.
+- Vortex: a portal in the middle of the screen pulling everything in, then imploding.
+- Explosion: a long chant under a pillar of magic circles, then a bang in the middle of the screen.
 
 `servicedesk` needs `serviceDesk`: `{ "url": "https://…" }`, the company's IT service desk (Morse
 Micro's Jira Service Management help centre), opened in the browser. With `serviceDesk.requests`

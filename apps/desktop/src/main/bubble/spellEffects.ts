@@ -7,7 +7,7 @@ export interface SpellWindow {
 }
 
 export interface SpellEffectsDeps {
-  /** The tenant's accent colour, for the magic circles. */
+  /** The tenant's accent colour, for the magic circles and the vortex. */
   accentColor: string
   /**
    * Opens the effects' window over `bounds`, its page told (in its query string) which spell, her
@@ -23,10 +23,9 @@ export interface SpellEffectsDeps {
 export const CHANT_SLACK_MS = 250
 
 /**
- * The window her spells' effects are drawn in (starfall, and the explosion's pillar of magic
- * circles and its bang): over the whole of her display's work area, since the stars fall across
- * all of it and the explosion goes off in the middle of it, and never taking the mouse or the
- * focus. One at a time; each closes itself once its spell is over (SPELL_EFFECT_MS).
+ * The window her spells' effects are drawn in (all but her clones and her teleport): over the
+ * whole of her display's work area, since they fill the sky, fall across the screen or go off in
+ * the middle of it, and never taking the mouse or the focus. One at a time; each closes itself once its spell is over (SPELL_EFFECT_MS).
  */
 export class SpellEffects {
   private current: {

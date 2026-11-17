@@ -99,13 +99,19 @@ GitHub repository (`Camby10101/Desktop-Assist`) keep it too, since nobody using 
     new version) and **Uninstall Desktop Wizard**. (With the
     built-in chat: Response style (Fast / Balanced / Thorough), New conversation, and who you're
     signed in as with **Log out**.)
-  - **Spells** (a wand) opens a menu of her spells; the panel closes and she casts the one you
-    pick. **Clones** puts ten of her on the taskbar for thirty seconds, walking about (and now and
-    then waving). **Starfall** sends shooting stars across the screen for ten seconds.
-    **Teleport**: she vanishes into white motes and pops up elsewhere along the taskbar.
-    **Explosion**: she chants for fifteen seconds under a rising pillar of magic circles, then it
-    goes off in the middle of the screen. They're only pictures: clicks go straight through them,
-    and clicking her stops a spell.
+  - **Spells** (a wand) opens a menu of her ten spells; the panel closes and she casts the one you
+    pick. They're only pictures: clicks go straight through them, and clicking her stops a spell.
+    - **Clones**: ten of her walk about the taskbar for thirty seconds, now and then waving.
+    - **Teleport**: she vanishes into white motes and pops up elsewhere along the taskbar.
+    - **Butterflies**: a swarm of little magic butterflies bursts out of her and flutters away.
+    - **Starfall**: shooting stars streak across the screen for ten seconds.
+    - **Fireworks**: rockets burst high over the screen, ending in a finale.
+    - **Blizzard**: snow blows across the screen, frost creeps in and a drift piles up.
+    - **Thunderstorm**: clouds roll in, rain pours and lightning strikes, once right beside her.
+    - **Phoenix**: a bird of fire flies out of her, loops the loop and flies away.
+    - **Vortex**: a portal swirls open mid-screen, pulls everything in and implodes.
+    - **Explosion**: she chants for fifteen seconds under a rising pillar of magic circles, then it
+      goes off in the middle of the screen.
   - **Close**: she dissolves into white motes, and the app quits.
 - **Attach screenshot** adds the newest screenshot to your next question; click it again to add
   the one before, and so on (it says when there are no more). **Report to IT** turns
@@ -129,7 +135,7 @@ GitHub repository (`Camby10101/Desktop-Assist`) keep it too, since nobody using 
 
 **Install it like a normal app:**
 
-1. Run `npm run dist`. This builds `apps/desktop/dist/Desktop Wizard-Setup-2.0.0.exe` (named
+1. Run `npm run dist`. This builds `apps/desktop/dist/Desktop Wizard-Setup-2.1.0.exe` (named
    after the version in `apps/desktop/package.json`; up to 1.0.0 it was
    `Desktop Assist-Setup-<version>.exe`). Its last step signs the installer for Check for updates;
    on a PC without the release key it stops there with a message, and the installer is still built

@@ -4,10 +4,12 @@ Status: **Milestones 0 (Foundation), 1 (Chat with Claude), 2.1 (bubble fixes), 3
 sign-in), 4 (logos, favourites, service desk, light/dark, the bubble-click fix) and 5 (the
 app-opening spinner; Jira and the service desk), its fixes 5.1 and 5.2 (the bubble kept in front;
 Check for updates), and features 3.1 (questions open in Claude Desktop) and 3.2 (Apps list,
-Uninstall, fixes) complete**. Version 1.0.0 is the first release (§7h). Version 2.0.0 (the
-`character` branch, merged into `main`): the bubble as an animated character, in a choice of sizes,
-with a Spells menu (Clones, Starfall, Teleport, Explosion) in place of Bounce, and the app's new
-name, Desktop Wizard: it was Desktop Assist up to 1.0.0 (§7i). Last updated 2026-11-17.
+Uninstall, fixes) complete**. Version 1.0.0 is the first release (§7h). Version 2.0.0 is on
+`main` (the `character` branch, merged): the bubble as an animated character, in a choice of
+sizes, with a Spells menu (Clones, Starfall, Teleport, Explosion) in place of Bounce, and the app's
+new name, Desktop Wizard: it was Desktop Assist up to 1.0.0 (§7i). Version 2.1.0 is on branch
+`2.1.0`, with six more spells: Butterflies, Fireworks, Blizzard, Thunderstorm, Phoenix and Vortex
+(§7i). Last updated 2026-11-17.
 
 A Windows desktop assistant that runs in the background, shows a small circular company logo
 in the bottom-right corner of the screen, and opens a panel when clicked. It's built for Morse
@@ -686,24 +688,26 @@ this was merged.)
   panel, with all its icons, fit her screen, so Settings can always be reached; on a smaller screen
   she shrinks to fit, and grows back once there's room. The bigger she is, the further she strolls
   and the faster she walks. **Light mode** is in Settings too, above Size, in place of its own icon.
-- **Spells** (a wand icon, in place of Bounce, which has been removed): a menu of four spells; the
-  panel closes and she casts the one picked (`castSpell` in `src/main/index.ts`).
-  - **Clones**: ten of her, at her size, walk about the taskbar of her display for thirty seconds,
-    each on its own timetable, stopping now and then and sometimes waving when it does (one stop in
-    five), then fade away, while she does her little spell. They're in one window along the bottom
-    of the screen that never takes the mouse or the focus, so clicks go straight through them;
-    casting it again starts a new lot.
+- **Spells** (a wand icon, in place of Bounce, which has been removed): a menu of ten spells (four
+  in 2.0.0, six more in 2.1.0); the panel closes and she casts the one picked (`castSpell` in
+  `src/main/index.ts`).
+  - **Clones**: ten of her walk about the taskbar for thirty seconds, now and then waving.
+  - **Teleport**: she vanishes into white motes and forms out of them elsewhere along the taskbar.
+  - **Butterflies** (2.1.0): a swarm of magic butterflies bursts out of her and flutters away.
   - **Starfall**: shooting stars streak down her screen for ten seconds, under twinkling stars.
-  - **Teleport**: she vanishes into white motes, her window moves somewhere else along the taskbar
-    near her corner, and she forms out of them there.
-  - **Explosion**: she chants for fifteen seconds while a pillar of seven magic circles in her
-    colour rises above her, one after another, with a column of light and sparks streaming up it;
-    then it goes off in the middle of the screen: a white flash, a fireball with churning edges that
-    cools from white through yellow, orange and red to smoke as it rises, a shock wave and sparks.
-    Clicking her or picking her up during the chant calls it off.
-  - Starfall and the explosion are pixel art too (their pixels twice the size of hers), drawn on a
-    canvas in a click-through window over her display (`SpellEffects`, `SpellView`); with Windows'
-    reduced-motion setting they show still.
+  - **Fireworks** (2.1.0): rockets burst over the screen in four kinds, then a finale.
+  - **Blizzard** (2.1.0): snow blows across in gusts, frost creeps in, and a drift piles up.
+  - **Thunderstorm** (2.1.0): clouds roll in, rain pours and lightning strikes, once beside her.
+  - **Phoenix** (2.1.0): a bird of fire flies out of her, loops the loop and flies off.
+  - **Vortex** (2.1.0): a portal swirls open mid-screen, pulls everything in and implodes.
+  - **Explosion**: a fifteen-second chant under a rising pillar of magic circles, then a big bang.
+  - The clones are in one window along the bottom of the screen that never takes the mouse or the
+    focus (casting again starts a new lot), each wandering on its own timetable while she does her
+    little spell. The other eight are pixel art too (their pixels twice the size of hers), drawn on
+    a canvas in a click-through window over her display (`SpellEffects`, `SpellView`) while she
+    acts them out; with Windows' reduced-motion setting they show still. The explosion's fireball
+    cools from white through yellow, orange and red to smoke, and clicking her or picking her up
+    during the chant calls it off.
 - **Coming and going**: as the app starts she forms out of white motes, and when it's closed (the
   Close icon, or Quit in the tray) she dissolves into them, and only then does the app quit.
 - With Windows' reduced-motion setting it still walks, but holds still otherwise (the first frame
@@ -770,6 +774,25 @@ Tested with unit tests: the data folder moved the first time and left alone afte
 a PC that never had the old one, the old folder kept in use when it can't be moved, and "Start with
 Windows" moved only when Windows still starts the old `.exe`.
 
+### Six more spells (2.1.0)
+
+On branch `2.1.0`, version 2.1.0 adds six spells, for ten in all: Butterflies, Fireworks, Blizzard,
+Thunderstorm, Phoenix and Vortex (above). The menu lists her own tricks first, then the sky, then
+the biggest. Each is drawn over the screen like starfall, in the same window, while she plays one
+of her habits (`CAST_POSE` in `src/shared/spells.ts`): her little spell, a twirl, levitating, or a
+butterfly coming to her finger.
+
+- Each new spell has a file of its own in `src/renderer/src/lib/spells/`, and draws on a `Painter`
+  (`lib/pixels.ts`), the one thing a spell needs from a canvas, so it can be drawn and tested away
+  from a page. `SPELL_ART` in `spellArt.ts` says which spell draws what.
+- `castSpell` is simpler: every spell but the clones and the teleport opens its window and plays
+  its pose. The explosion's window now opens with her chant rather than following her pose, and is
+  still called off if the chant is cut short.
+
+Tested with unit tests (`moreSpells.test.ts`): each new spell draws plenty half way through,
+moving or still, and nothing at its end; the fireworks' rockets, the storm's bolts and clouds, the
+blizzard's build-up and frost, the vortex's size, the butterflies' flight and the phoenix's path.
+
 ## 8. Milestones
 
 - **0** ✅ **Foundation**: Everything in §7 works in `npm run dev` and in the unsigned installer. Unit tests and lint pass.
@@ -782,7 +805,7 @@ Windows" moved only when Windows still starts the old `.exe`.
 - **5** ✅ **Jira and the service desk**: The app-opening spinner, and Atlassian ideas 1 to 9. See §7h.
 - **5.1** ✅ **The bubble on top after starting**: always-on-top that survives a full-screen app. See §7h.
 - **5.2** ✅ **The bubble kept in front, and Check for updates**: the startup front check; updating from GitHub releases, signed with a release key; the `.exe` locked down; version 1.0.0, the first release. See §7h.
-- **6** 🧪 **The character** (on trial, branch `character`): the bubble as an animated character on the taskbar near a bottom corner, in a choice of sizes, with a Spells menu (Clones, Starfall, Teleport, Explosion) in place of Bounce; light or dark mode and her size in Settings; forming out of white motes at start-up and dissolving into them on Close. See §7i.
+- **6** 🧪 **The character** (on trial, branch `character`): the bubble as an animated character on the taskbar near a bottom corner, in a choice of sizes, with a Spells menu (Clones, Starfall, Teleport, Explosion) in place of Bounce; light or dark mode and her size in Settings; forming out of white motes at start-up and dissolving into them on Close. Six more spells in 2.1.0 (branch `2.1.0`). See §7i.
 - 7 (next): To be chosen. Candidates:
   - Shipping: code signing (no "unrecognised app" warning), silent deployment through JumpCloud (with Claude Desktop), CI on GitHub Actions (tests and the installer on every pull request, and building the release), a "What's new" note after an update
   - Bubble and screenshots: a keyboard shortcut to open the panel and to take a screenshot, snipping a region or a window, pasting an image into the text box, hiding during full-screen apps and presentations, a first-run tour

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { DEFAULT_SIZE, snapSize } from '@shared/geometry'
 import { SPELL_EFFECT_MS, type SpellEffect } from '@shared/spells'
-import { drawExplosion, drawStarfall } from '../lib/spellArt'
+import { SPELL_ART } from '../lib/spellArt'
 
 /**
  * How many DIPs one pixel of the effects is, per her size: twice one of her sprite's pixels. Never
@@ -20,7 +20,10 @@ const PIXEL = 2
  */
 export function SpellView() {
   const [params] = useState(() => new URLSearchParams(window.location.search))
-  const spell: SpellEffect = params.get('spell') === 'explosion' ? 'explosion' : 'starfall'
+  const asked = params.get('spell') ?? ''
+  const spell: SpellEffect = Object.hasOwn(SPELL_EFFECT_MS, asked)
+    ? (asked as SpellEffect)
+    : 'starfall'
   const scale = snapSize(Number(params.get('scale')) || DEFAULT_SIZE)
   const accent = /^#[0-9a-f]{6}$/i.test(params.get('accent') ?? '')
     ? params.get('accent')!
@@ -41,7 +44,7 @@ export function SpellView() {
     const x = (Number(params.get('x')) || window.innerWidth / 2) / pixel
     const feet = (Number(params.get('feet')) || window.innerHeight) / pixel
     const starts = Number(params.get('starts')) || Date.now()
-    const draw = spell === 'explosion' ? drawExplosion : drawStarfall
+    const draw = SPELL_ART[spell]
     let frame = requestAnimationFrame(function tick() {
       const t = Date.now() - starts
       g.clearRect(0, 0, w, h)

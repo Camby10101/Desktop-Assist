@@ -1,4 +1,16 @@
-import { Flame, Orbit, Sparkles, UsersRound, type LucideIcon } from 'lucide-react'
+import {
+  Bird,
+  CloudLightning,
+  Flame,
+  Flower,
+  Orbit,
+  Rocket,
+  Snowflake,
+  Sparkles,
+  Tornado,
+  UsersRound,
+  type LucideIcon,
+} from 'lucide-react'
 import { useRef } from 'react'
 import { type Corner, type PanelLayout } from '@shared/geometry'
 import { SPELL_LABELS, SPELLS, type Spell } from '@shared/spells'
@@ -10,8 +22,14 @@ const MENU_WIDTH = 176
 
 const ICONS: Record<Spell, LucideIcon> = {
   clones: UsersRound,
-  starfall: Sparkles,
   teleport: Orbit,
+  butterflies: Flower,
+  starfall: Sparkles,
+  fireworks: Rocket,
+  blizzard: Snowflake,
+  thunderstorm: CloudLightning,
+  phoenix: Bird,
+  vortex: Tornado,
   explosion: Flame,
 }
 

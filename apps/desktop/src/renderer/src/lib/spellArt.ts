@@ -1,4 +1,11 @@
-import { EXPLOSION, STARFALL } from '@shared/spells'
+import { EXPLOSION, STARFALL, type SpellEffect } from '@shared/spells'
+import { line, plot, ring, twinkle, type Painter } from './pixels'
+import { drawBlizzard } from './spells/blizzard'
+import { drawButterflies } from './spells/butterflies'
+import { drawFireworks } from './spells/fireworks'
+import { drawPhoenix } from './spells/phoenix'
+import { drawThunderstorm } from './spells/thunderstorm'
+import { drawVortex } from './spells/vortex'
 import {
   between,
   blastAt,
@@ -12,89 +19,27 @@ import {
   type Scene,
 } from './spellMotion'
 
-// The pixel art of her spells' effects (see SpellView): starfall's shooting stars, and the
-// explosion's pillar of magic circles and its bang. Everything is drawn a pixel at a time on a
-// small canvas that the page stretches over its window without smoothing, so it's crisp pixel art
-// like her. Where things are, moment by moment, comes from lib/spellMotion.ts.
+// The pixel art of her spells' effects (see SpellView): which spell draws what (SPELL_ART), and
+// here starfall's shooting stars and the explosion's pillar of magic circles and its bang (the
+// others each have a file of their own in lib/spells/). Everything is drawn a pixel at a time
+// (lib/pixels.ts) on a small canvas that the page stretches over its window without smoothing, so
+// it's crisp pixel art like her. Where things are, moment by moment, comes from lib/spellMotion.ts.
 
-/** Sets one pixel, if it's on the canvas. */
-function plot(g: CanvasRenderingContext2D, x: number, y: number, colour: string, alpha = 1) {
-  if (alpha <= 0) return
-  g.globalAlpha = Math.min(1, alpha)
-  g.fillStyle = colour
-  g.fillRect(Math.round(x), Math.round(y), 1, 1)
-}
-
-/** A plus-shaped twinkle: a pixel and its four neighbours, the middle brighter. */
-function twinkle(g: CanvasRenderingContext2D, x: number, y: number, colour: string, alpha = 1) {
-  plot(g, x, y, '#ffffff', alpha)
-  for (const [dx, dy] of [
-    [1, 0],
-    [-1, 0],
-    [0, 1],
-    [0, -1],
-  ] as const) {
-    plot(g, x + dx, y + dy, colour, alpha * 0.8)
-  }
-}
-
-/** A straight line of pixels (Bresenham's). */
-function line(
-  g: CanvasRenderingContext2D,
-  from: { x: number; y: number },
-  to: { x: number; y: number },
-  colour: string,
-  alpha = 1,
-) {
-  let x = Math.round(from.x)
-  let y = Math.round(from.y)
-  const x1 = Math.round(to.x)
-  const y1 = Math.round(to.y)
-  const dx = Math.abs(x1 - x)
-  const dy = -Math.abs(y1 - y)
-  const sx = x < x1 ? 1 : -1
-  const sy = y < y1 ? 1 : -1
-  let error = dx + dy
-  for (let i = 0; i < 2000; i++) {
-    plot(g, x, y, colour, alpha)
-    if (x === x1 && y === y1) return
-    const e2 = 2 * error
-    if (e2 >= dy) {
-      error += dy
-      x += sx
-    }
-    if (e2 <= dx) {
-      error += dx
-      y += sy
-    }
-  }
-}
-
-/** An ellipse's outline, a pixel at a time; `gap` leaves every other `gap` radians out (dashes). */
-function ring(
-  g: CanvasRenderingContext2D,
-  cx: number,
-  cy: number,
-  rx: number,
-  ry: number,
-  colour: string,
-  alpha = 1,
-  turn = 0,
-  gap = 0,
-) {
-  if (rx < 0.5) return
-  const steps = Math.max(8, Math.ceil(Math.PI * 2 * Math.max(rx, ry)))
-  for (let k = 0; k < steps; k++) {
-    const a = (k / steps) * Math.PI * 2
-    if (gap && Math.floor((a + turn) / gap) % 2 === 1) continue
-    plot(g, cx + Math.cos(a) * rx, cy + Math.sin(a) * ry, colour, alpha)
+/** A Painter (lib/pixels.ts) that draws on a canvas's 2D context. */
+export function canvasPainter(g: CanvasRenderingContext2D): Painter {
+  return {
+    rect(x, y, width, height, colour, alpha) {
+      g.globalAlpha = alpha
+      g.fillStyle = colour
+      g.fillRect(x, y, width, height)
+    },
   }
 }
 
 // --------------------------------------------------------------------------------- starfall
 
 /** Starfall: twinkling stars over the top of the screen, and shooting stars streaking down it. */
-export function drawStarfall(g: CanvasRenderingContext2D, scene: Scene): void {
+export function drawStarfall(g: Painter, scene: Scene): void {
   const { t, w, h, still } = scene
   const shown = still ? 1 : Math.min(1, t / 600, (STARFALL.durationMs - t) / 1000)
   // Twinkles, over the top two thirds of the screen, each brightening and dimming in its time.
@@ -129,13 +74,7 @@ export function drawStarfall(g: CanvasRenderingContext2D, scene: Scene): void {
 // --------------------------------------------------------------------------------- explosion
 
 /** One magic circle at `t`: rings, a turning ring of runes, a six-pointed star, a bright heart. */
-function magicCircle(
-  g: CanvasRenderingContext2D,
-  c: Circle,
-  t: number,
-  power: number,
-  accent: string,
-) {
+function magicCircle(g: Painter, c: Circle, t: number, power: number, accent: string) {
   const age = t - c.born
   if (age < 0) return
   const grown = easeOut(age / 450)
@@ -145,11 +84,16 @@ function magicCircle(
   const spin = (c.turn * age * (0.0008 + power * 0.004)) % (Math.PI * 2)
   const bright = 0.75 + power * 0.25
   // A soft glow filling it, in her colour.
-  g.globalAlpha = 0.1 + power * 0.12
-  g.fillStyle = accent
   for (let dy = -Math.floor(ry); dy <= Math.floor(ry); dy++) {
     const half = rx * Math.sqrt(Math.max(0, 1 - (dy / Math.max(1, ry)) ** 2))
-    g.fillRect(Math.round(c.cx - half), Math.round(c.cy + dy), Math.round(half * 2), 1)
+    g.rect(
+      Math.round(c.cx - half),
+      Math.round(c.cy + dy),
+      Math.round(half * 2),
+      1,
+      accent,
+      0.1 + power * 0.12,
+    )
   }
   // Its rings: the outer one in her colour (white as it forms), a dashed one inside it turning.
   ring(g, c.cx, c.cy, rx, ry, flash > 0.3 ? '#ffffff' : accent, bright)
@@ -190,7 +134,7 @@ function magicCircle(
  * brighter, sparks streaming up it, and in the last moments everything brighter and faster, the
  * column white.
  */
-function drawPillar(g: CanvasRenderingContext2D, scene: Scene): void {
+function drawPillar(g: Painter, scene: Scene): void {
   const { feet, accent, still } = scene
   const t = still ? EXPLOSION.chantMs * 0.8 : scene.t
   const circles = pillarCircles(scene)
@@ -209,9 +153,14 @@ function drawPillar(g: CanvasRenderingContext2D, scene: Scene): void {
   for (let dx = -Math.ceil(width); dx <= Math.ceil(width); dx++) {
     const edge = 1 - Math.abs(dx) / width
     if (edge <= 0) continue
-    g.globalAlpha = clamp01(edge * edge * (0.12 + power * 0.5) * flicker)
-    g.fillStyle = surge > 0.7 || Math.abs(dx) < width * 0.25 ? '#ffffff' : '#fde68a'
-    g.fillRect(Math.round(x + dx), Math.round(columnTop), 1, Math.round(feet - columnTop))
+    g.rect(
+      Math.round(x + dx),
+      Math.round(columnTop),
+      1,
+      Math.round(feet - columnTop),
+      surge > 0.7 || Math.abs(dx) < width * 0.25 ? '#ffffff' : '#fde68a',
+      clamp01(edge * edge * (0.12 + power * 0.5) * flicker),
+    )
   }
 
   // The circle under her feet, turning, there from the start.
@@ -244,12 +193,15 @@ function drawPillar(g: CanvasRenderingContext2D, scene: Scene): void {
 
   // At the very end, a white flash up the whole column.
   const flare = between(t, EXPLOSION.chantMs - 200, EXPLOSION.chantMs)
-  if (flare > 0) {
-    g.globalAlpha = flare * 0.9
-    g.fillStyle = '#ffffff'
-    g.fillRect(Math.round(x - width), 0, Math.round(width * 2), Math.round(feet))
-  }
-  g.globalAlpha = 1
+  if (flare > 0)
+    g.rect(
+      Math.round(x - width),
+      0,
+      Math.round(width * 2),
+      Math.round(feet),
+      '#ffffff',
+      flare * 0.9,
+    )
 }
 
 /** The explosion's palette, hottest first: white, yellow, orange, red, deep red, then smoke. */
@@ -270,7 +222,8 @@ let fireCanvas: HTMLCanvasElement | null = null
  * yellow, orange and red to smoke as it rises, a shock wave racing out round it, and sparks
  * thrown out and falling.
  */
-function drawBoom(g: CanvasRenderingContext2D, scene: Scene, b: number): void {
+function drawBoom(canvas: CanvasRenderingContext2D, scene: Scene, b: number): void {
+  const g = canvasPainter(canvas)
   const { w, h, still } = scene
   const at = still ? 700 : b
   const cx = w / 2
@@ -279,11 +232,7 @@ function drawBoom(g: CanvasRenderingContext2D, scene: Scene, b: number): void {
   const gone = 1 - between(at, EXPLOSION.boomMs - 800, EXPLOSION.boomMs)
 
   // The flash.
-  if (!still && b < 220) {
-    g.globalAlpha = 0.75 * (1 - b / 220)
-    g.fillStyle = '#ffffff'
-    g.fillRect(0, 0, w, h)
-  }
+  if (!still && b < 220) g.rect(0, 0, w, h, '#ffffff', 0.75 * (1 - b / 220))
 
   // The fireball, drawn a pixel at a time at half size (chunkier pixels) and stretched on.
   const size = Math.ceil(fire * 1.5) + 2
@@ -313,9 +262,9 @@ function drawBoom(g: CanvasRenderingContext2D, scene: Scene, b: number): void {
       }
     }
     fg.putImageData(image, 0, 0)
-    g.globalAlpha = 1
-    g.imageSmoothingEnabled = false
-    g.drawImage(fireCanvas, Math.round(cx - size), Math.round(cy - size), size * 2, size * 2)
+    canvas.globalAlpha = 1
+    canvas.imageSmoothingEnabled = false
+    canvas.drawImage(fireCanvas, Math.round(cx - size), Math.round(cy - size), size * 2, size * 2)
   }
 
   if (still) return
@@ -350,11 +299,25 @@ function drawBoom(g: CanvasRenderingContext2D, scene: Scene, b: number): void {
       )
     }
   }
-  g.globalAlpha = 1
 }
 
 /** The explosion spell: the pillar while she chants, then the bang. */
 export function drawExplosion(g: CanvasRenderingContext2D, scene: Scene): void {
-  if (scene.t < EXPLOSION.chantMs) drawPillar(g, scene)
+  if (scene.t < EXPLOSION.chantMs) drawPillar(canvasPainter(g), scene)
   else drawBoom(g, scene, scene.t - EXPLOSION.chantMs)
+}
+
+/**
+ * Which spell draws what: on a canvas (the explosion's fireball needs one of its own to stretch),
+ * or, for the rest, on a Painter made of it.
+ */
+export const SPELL_ART: Record<SpellEffect, (g: CanvasRenderingContext2D, scene: Scene) => void> = {
+  starfall: (g, scene) => drawStarfall(canvasPainter(g), scene),
+  explosion: drawExplosion,
+  fireworks: (g, scene) => drawFireworks(canvasPainter(g), scene),
+  thunderstorm: (g, scene) => drawThunderstorm(canvasPainter(g), scene),
+  blizzard: (g, scene) => drawBlizzard(canvasPainter(g), scene),
+  vortex: (g, scene) => drawVortex(canvasPainter(g), scene),
+  butterflies: (g, scene) => drawButterflies(canvasPainter(g), scene),
+  phoenix: (g, scene) => drawPhoenix(canvasPainter(g), scene),
 }

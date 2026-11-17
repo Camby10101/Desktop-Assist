@@ -19,7 +19,7 @@ import { hostname, release, version as osVersion } from 'node:os'
 import { join } from 'node:path'
 import { bubbleMetrics, panelWindowSize, type Rect } from '@shared/geometry'
 import { IPC } from '@shared/ipc'
-import type { Spell } from '@shared/spells'
+import { CAST_POSE, type Spell } from '@shared/spells'
 import type { AppsState, AtlassianState, AuthStatus } from '@shared/types'
 import tenantConfig from '@tenant/tenant.json'
 import { createActionHandlers } from './actions'
@@ -160,7 +160,7 @@ async function start(): Promise<void> {
     }
   // Her vision's light and logo, over her for as long as she's having it.
   const vision = new Vision({ open: openOverlay('vision') })
-  // Her spells' effects (starfall; the explosion's pillar of magic circles, and the bang).
+  // Her spells' effects, drawn over the screen (all but her clones and her teleport).
   const effects = new SpellEffects({ accentColor: tenant.accentColor, open: openOverlay('spell') })
 
   const bubble = new BubbleController({
@@ -176,10 +176,9 @@ async function start(): Promise<void> {
       broadcast(IPC.poseChanged, pose)
       if (pose === 'vision') vision.start(bubble.standing)
       else vision.stop()
-      // The explosion is her chant: it starts with it, and it's called off if she stops chanting
-      // before it's done (someone clicked her, or picked her up).
-      if (pose === 'chant') effects.start('explosion', bubble.standing)
-      else if (effects.chanting) effects.stop()
+      // The explosion is called off if she stops chanting before it's done (someone clicked her,
+      // or picked her up).
+      if (pose !== 'chant' && effects.chanting) effects.stop()
     },
     onSizeChange: (size) => broadcast(IPC.sizeChanged, size),
     onAnchorChange: (anchor) => {
@@ -196,22 +195,16 @@ async function start(): Promise<void> {
   /** The Spells menu: the panel closes, so the spell can be seen, and she casts it. */
   const castSpell = (spell: Spell) => {
     bubble.collapse()
-    switch (spell) {
-      case 'clones':
-        clones.start(bubble.standing)
-        bubble.act('spell')
-        return
-      case 'starfall':
-        effects.start('starfall', bubble.standing)
-        bubble.act('spell')
-        return
-      case 'teleport':
-        bubble.teleport()
-        return
-      case 'explosion':
-        // Her chant brings the effects (onPoseChange, above).
-        bubble.act('chant')
-        return
+    if (spell === 'clones') {
+      clones.start(bubble.standing)
+      bubble.act('spell')
+    } else if (spell === 'teleport') {
+      bubble.teleport()
+    } else {
+      // The rest are drawn over the screen while she acts them out (the explosion while she
+      // chants).
+      effects.start(spell, bubble.standing)
+      bubble.act(CAST_POSE[spell])
     }
   }
 
