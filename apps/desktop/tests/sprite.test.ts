@@ -248,9 +248,27 @@ describe('the rig', () => {
     for (const letter of ['e', 'I', 'c', 'm']) expect(rows.slice(26, 36).join('')).toContain(letter)
     // The tuft: hair under her ear, over the back of her jaw.
     for (const row of rows.slice(30, 34)) expect(row.slice(44, 48)).toMatch(/[hlD]/)
-    // Her eye wide open: its iris four pixels tall, under her lid.
+    // Her eye wide open: its iris four pixels tall, under her lid...
     const iris = rows.slice(24, 34).filter((row) => /[iIj]/.test(row.slice(49, 56)))
     expect(iris.length).toBe(4)
+    // ...and at the front of it, under the front of her lid, so she looks the way she faces.
+    const lid = rows.findIndex((row) => row.includes('eeee'))
+    const front = rows[lid]!.lastIndexOf('e')
+    for (const row of rows.slice(lid + 1, lid + 5)) expect(row[front]).toMatch(/[iIj]/)
+    // Her chin no lower than row 35 (her nose's tip is at 30), so her face isn't long side on.
+    const chin = (rows: string[]) =>
+      rows.slice(30, 40).findLastIndex((row) => /KKKK/.test(row.slice(44, 58))) + 30
+    expect(chin(rows)).toBe(35)
+  })
+
+  it('gives her hat a crown at least two pixels wide below its tip, side on too', () => {
+    for (const view of ['front', 'side'] as const) {
+      const rows = drawn({ view })
+      const top = rows.findIndex((row) => /[^.x]/.test(row))
+      for (const row of rows.slice(top + 3, top + 11)) {
+        expect(row.match(/[nNgYkG]/g)?.length ?? 0).toBeGreaterThanOrEqual(2)
+      }
+    }
   })
 
   it('ripples her hair as she walks: a wave running down it, her head and hat still', () => {

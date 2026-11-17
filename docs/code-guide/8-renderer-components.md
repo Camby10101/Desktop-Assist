@@ -3164,7 +3164,7 @@ What a pose is made of.
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#EYES,MOUTHS,SPARKLE,TWINKLE,BUTTERFLY_OPEN,BUTTERFLY_SHUT,Z_BIG,Z_SMALL,ORBS,BUBBLE_SMALL,BUBBLE_BIG,WAND_RING,WISP -->
 
-[`src/renderer/src/character/rig.ts`, lines 129–221](../../apps/desktop/src/renderer/src/character/rig.ts#L129-L221)
+[`src/renderer/src/character/rig.ts`, lines 129–223](../../apps/desktop/src/renderer/src/character/rig.ts#L129-L223)
 
 ```ts
 // Face pictures, facing right; `.` is see-through. Eyes have a thick upper lid, a dark-to-light
@@ -3216,13 +3216,15 @@ const EYES = {
     ],
   },
   side: {
-    // A thin lid with its lashes flicking back, over a tall round iris with a tall glint, wide
-    // open; looking up, the iris right under the lid. Closed, a line across the middle.
-    open: [['ee...', '.eeee', '.iiw.', '.iIw.', '.iII.', '.Ijj.']],
+    // A thin lid with its lashes flicking back, over a tall round iris, wide open. The iris sits at
+    // the front of the eye, under the front of her lid, so she looks the way she faces; its glint
+    // is at its top back, toward the light. Looking up, the iris right under the lid. Closed, a
+    // line across the middle.
+    open: [['ee...', '.eeee', '..wii', '..wIi', '..iII', '..Ijj']],
     blink: [['.....', '.....', '.....', 'eeee.', '.ee..']],
     happy: [['.....', '.....', '..ee.', '.e..e', '.....']],
     down: [['.....', '.....', '.....', '.eeee', '..iI.']],
-    up: [['ee...', '.eeee', '.iIw.', '.iII.', '.Ijj.', '.....']],
+    up: [['ee...', '.eeee', '..wIi', '..iII', '..Ijj', '.....']],
   },
 } as const
 
@@ -3293,11 +3295,16 @@ As the comment says, they face right; frames facing left are mirrored with every
     bottom row bare, so the eye seems to roll upward. Every view has one, side on included.
   - Seen diagonally, the far eye is a pixel narrower, because it's turned away.
   - Side on, as the comment says, a thin lid with its lashes flicking back at the outer corner
-    (`ee...`, `.eeee`), over a tall round iris with a tall glint, wide open: dark with the white
-    glint at the top (`.iiw.`, `.iIw.`, a glint two pixels tall), then mid and light (`.iII.`,
-    `.Ijj.`). Its iris is four pixels tall, one more than it was, which makes her look more awake
-    and a little cuter: big eyes are most of what makes an anime face cute. Looking up (`up`), the
-    iris rides right under the lid with the bottom row bare. Closed (`blink`, `happy`, `down`),
+    (`ee...`, `.eeee`), over a tall round iris, wide open: dark with a white glint two pixels tall
+    (`..wii`, `..wIi`), then mid and light (`..iII`, `..Ijj`). Its iris is four pixels tall, which
+    makes her look awake and a little cuter: big eyes are most of what makes an anime face cute.
+    The iris sits at the front of the eye, its front column right under the front end of her lid
+    (the `.`s are all at the back): where the iris sits in the eye is what says which way someone
+    is looking, and with skin under the front of the lid instead she seemed to be looking behind
+    her. The glint is at the iris's top back, toward the light (`LIGHT`, up and to the left),
+    which also keeps the white off the front, where it would read as the white of her eye and put
+    the iris back in the middle. Looking up (`up`), the iris rides right under the lid with the
+    bottom row bare. Closed (`blink`, `happy`, `down`),
     each starts with a blank row more, so its line falls across the middle of the taller eye, where
     it was before.
   - `as const` keeps the object's exact shape, so TypeScript knows every view has every kind of
@@ -3329,7 +3336,7 @@ As the comment says, they face right; frames facing left are mirrored with every
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#JUGGLE,BUBBLES,wispAt -->
 
-[`src/renderer/src/character/rig.ts`, lines 223–254](../../apps/desktop/src/renderer/src/character/rig.ts#L223-L254)
+[`src/renderer/src/character/rig.ts`, lines 225–256](../../apps/desktop/src/renderer/src/character/rig.ts#L225-L256)
 
 ```ts
 /**
@@ -3402,7 +3409,7 @@ puff before each bubble, her eyes following the wisp).
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#eyesFor -->
 
-[`src/renderer/src/character/rig.ts`, lines 256–263](../../apps/desktop/src/renderer/src/character/rig.ts#L256-L263)
+[`src/renderer/src/character/rig.ts`, lines 258–265](../../apps/desktop/src/renderer/src/character/rig.ts#L258-L265)
 
 ```ts
 /** Which eyes a face uses. */
@@ -3424,7 +3431,7 @@ and `up` both look up (their mouths are what differ).
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#draw -->
 
-[`src/renderer/src/character/rig.ts`, lines 265–1181](../../apps/desktop/src/renderer/src/character/rig.ts#L265-L1181)
+[`src/renderer/src/character/rig.ts`, lines 267–1187](../../apps/desktop/src/renderer/src/character/rig.ts#L267-L1187)
 
 ```ts
 /** Draws one pose as rows of palette letters. */
@@ -3885,8 +3892,9 @@ export function draw(pose: Pose): string[] {
       'skin',
     )
     if (view === 'side') {
-      // The back of her head; her face is drawn by hand on top of it, below.
-      face.ellipse(head, 7, 8.5, 'skin')
+      // The back of her head; her face is drawn by hand on top of it, below. A pixel shorter than
+      // from the front, as her face is side on.
+      face.ellipse({ x: head.x, y: head.y - 0.5 }, 7, 8, 'skin')
     } else {
       const shift = 0
       face.ellipse(head, 7.5, 8.3, 'skin')
@@ -3930,12 +3938,12 @@ export function draw(pose: Pose): string[] {
       // Higher than from the front, and taller: her iris level with the bridge of her nose and the
       // tip of her nose at the bottom of her eye, as anime profiles have it.
       canvas.stamp(eyes[0]!, head.x + 1.5, eyeY - 2)
-      canvas.stamp(['cc'], head.x + 0.5, head.y + 4.5)
+      canvas.stamp(['cc'], head.x + 0.5, head.y + 3.5)
       // Her mouth: a short line in from the notch of her lips, between nose and chin.
       canvas.stamp(
         mouth.map((r) => r.slice(0, 2)),
         head.x + 4.5,
-        head.y + 5.5,
+        head.y + 4.5,
       )
     }
 
@@ -4104,6 +4112,9 @@ export function draw(pose: Pose): string[] {
           [0.5 * tipLean, -20.5],
           [4.5 * tipLean, -22],
           [3.2 * tipLean, -19.5],
+          // Side on, where the tip bends back over the crown, a pixel fuller, so the crown doesn't
+          // narrow to a single pixel.
+          ...(view === 'side' ? [[0.2, -18.4]] : []),
           [3.4, -16],
           [5, -12.5],
           [6.5, -9.5],
@@ -4549,15 +4560,18 @@ Math.PI) % 2`), which turn with `spin`. Six white runes (`w`) go round the outer
 - The head: her neck (a capsule), then her head, an ellipse, with a chin below it from the front
   (a polygon). Inked as skin, it gets a shaded side and a rose outline. Side on, the ellipse is only
   the back of her head: her face is `SIDE_FACE` (in `pictures.ts`), a profile drawn by hand and
-  stamped over it, placed by the middle of her head.
+  stamped over it, placed by the middle of her head. As the comment says, that ellipse is a pixel
+  shorter side on (8 pixels down from a point half a pixel higher, instead of 8.5), because her
+  face is: its outline under her chin would otherwise show as a second line below it.
 - The face is stamped on. From the front: two eyes, moved by `look`, blush (`cc`, pink) under each,
   the mouth in the middle, and just above it a single pixel of the skin's shade (`S`), all there is
   of her nose. Side on: one eye, higher than from the front and taller (its top at `eyeY - 2`, the
   extra row of the taller eye on top), as the comment says, so her iris is level with the bridge
-  of her nose and the tip of her nose at the bottom of her eye, as anime profiles have it; blush on her cheek (`head.x + 0.5`, 4.5 pixels below the
-  middle of her head); and, as the comment says, a short
-  line of mouth in from the notch of her lips: the first two pixels of each row of the
-  expression's mouth (`r.slice(0, 2)`), 4.5 pixels in front of the middle of her head.
+  of her nose and the tip of her nose at the bottom of her eye, as anime profiles have it; blush on
+  her cheek, just below her eye (`head.x + 0.5`, 3.5 pixels below the middle of her head); and, as
+  the comment says, a short line of mouth in from the notch of her lips: the first two pixels of
+  each row of the expression's mouth (`r.slice(0, 2)`), 4.5 pixels in front of the middle of her
+  head and 4.5 below it, a row under the tip of her nose.
 - The hair in front, as one layer. The fringe is a polygon whose lower edge zigzags
   (`[7.5, -3.6], [6.5, -0.4], [4.5, -3.4], ...`), so it falls over her forehead in clumps. Side on,
   as its comment says, its front curves out past her forehead (8 pixels in front of the middle of
@@ -4602,7 +4616,11 @@ Math.PI) % 2`), which turn with `spin`. Six white runes (`w`) go round the outer
   from the brim to a tip 22 pixels above the middle of her head, which flops over to one side
   (`tipLean`: to the right, or back side on): that's what makes it crooked. `hatCentre` shifts it
   a little side on, and `lift * 0.15` raises it a touch when she's carried or
-  falling.
+  falling. Side on there's one more point, as its comment says (`[0.2, -18.4]`, added with
+  `...(view === 'side' ? ... : [])`): where the tip bends back over the crown, the edge from the
+  tip's underside to the crown's front slanted so far that the crown was a single pixel wide for
+  a row, and looked like a strand; the point pushes that edge out, so the crown is at least two
+  pixels wide all the way up to the tip.
 - The band: two rows across the crown just above the brim, silver (`f`) over its shade (`F`),
   only on the hat's own pixels (`'ngN'`).
 - The stitching: silver dots (`F`) every 2 pixels along the middle of the brim, either side of the
@@ -4725,7 +4743,7 @@ Math.PI) % 2`), which turn with `spin`. Six white runes (`w`) go round the outer
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#HAT,HAIR,ROBE,castShadows -->
 
-[`src/renderer/src/character/rig.ts`, lines 1183–1215](../../apps/desktop/src/renderer/src/character/rig.ts#L1183-L1215)
+[`src/renderer/src/character/rig.ts`, lines 1189–1221](../../apps/desktop/src/renderer/src/character/rig.ts#L1189-L1221)
 
 ```ts
 /** Letters by part, for castShadows. */
@@ -4809,7 +4827,7 @@ rows of palette letters (`PALETTE` in `sprite.ts`; `.` is see-through), facing r
 
 <!-- code: apps/desktop/src/renderer/src/character/pictures.ts#Picture,DIAGONAL_EYES,DIAGONAL_MOUTH,SIDE_FACE -->
 
-[`src/renderer/src/character/pictures.ts`, lines 1–152](../../apps/desktop/src/renderer/src/character/pictures.ts#L1-L152)
+[`src/renderer/src/character/pictures.ts`, lines 1–151](../../apps/desktop/src/renderer/src/character/pictures.ts#L1-L151)
 
 ```ts
 // Hand-drawn pictures of the character, as rows of palette letters (see PALETTE in sprite.ts;
@@ -4848,7 +4866,6 @@ export const SIDE_FACE: Picture = {
     '.KssssssssssssK.',
     'SKssssssssssSK..',
     'SSKssssssssssK..',
-    'SSKsssssssssK...',
     'SSSKssssssssK...',
     'SSSSKKsssssSK...',
     'SSSSSSKKKKK.....',
@@ -4876,7 +4893,8 @@ export const SIDE_FACE: Picture = {
 - `SIDE_FACE`: her face side on, in the usual anime profile, as the comment says, read from the
   top: her forehead under her fringe (`K`, the outline, at the right-hand end of each row); a small
   nose a pixel out (the outline steps out one pixel for two rows, with a pixel of shade, `S`,
-  beside the nostril below it); a little notch at her lips; a soft round chin; then her jaw
+  beside the nostril below it); a little notch at her lips; a soft round chin, only five rows below
+  the tip of her nose, so her face isn't long; then her jaw
   curving back up to her ear (the outline climbing back to the picture's left edge, steeply at
   the end, which makes her cheek and chin round), with her neck in
   its shadow below it (the block of `S` in the bottom-left corner). Its `x` and `y` are offsets

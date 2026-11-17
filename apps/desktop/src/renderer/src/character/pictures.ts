@@ -144,7 +144,6 @@ export const SIDE_FACE: Picture = {
     '.KssssssssssssK.',
     'SKssssssssssSK..',
     'SSKssssssssssK..',
-    'SSKsssssssssK...',
     'SSSKssssssssK...',
     'SSSSKKsssssSK...',
     'SSSSSSKKKKK.....',

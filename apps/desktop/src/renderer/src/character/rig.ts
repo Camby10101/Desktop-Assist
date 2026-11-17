@@ -175,13 +175,15 @@ const EYES = {
     ],
   },
   side: {
-    // A thin lid with its lashes flicking back, over a tall round iris with a tall glint, wide
-    // open; looking up, the iris right under the lid. Closed, a line across the middle.
-    open: [['ee...', '.eeee', '.iiw.', '.iIw.', '.iII.', '.Ijj.']],
+    // A thin lid with its lashes flicking back, over a tall round iris, wide open. The iris sits at
+    // the front of the eye, under the front of her lid, so she looks the way she faces; its glint
+    // is at its top back, toward the light. Looking up, the iris right under the lid. Closed, a
+    // line across the middle.
+    open: [['ee...', '.eeee', '..wii', '..wIi', '..iII', '..Ijj']],
     blink: [['.....', '.....', '.....', 'eeee.', '.ee..']],
     happy: [['.....', '.....', '..ee.', '.e..e', '.....']],
     down: [['.....', '.....', '.....', '.eeee', '..iI.']],
-    up: [['ee...', '.eeee', '.iIw.', '.iII.', '.Ijj.', '.....']],
+    up: [['ee...', '.eeee', '..wIi', '..iII', '..Ijj', '.....']],
   },
 } as const
 
@@ -720,8 +722,9 @@ export function draw(pose: Pose): string[] {
       'skin',
     )
     if (view === 'side') {
-      // The back of her head; her face is drawn by hand on top of it, below.
-      face.ellipse(head, 7, 8.5, 'skin')
+      // The back of her head; her face is drawn by hand on top of it, below. A pixel shorter than
+      // from the front, as her face is side on.
+      face.ellipse({ x: head.x, y: head.y - 0.5 }, 7, 8, 'skin')
     } else {
       const shift = 0
       face.ellipse(head, 7.5, 8.3, 'skin')
@@ -765,12 +768,12 @@ export function draw(pose: Pose): string[] {
       // Higher than from the front, and taller: her iris level with the bridge of her nose and the
       // tip of her nose at the bottom of her eye, as anime profiles have it.
       canvas.stamp(eyes[0]!, head.x + 1.5, eyeY - 2)
-      canvas.stamp(['cc'], head.x + 0.5, head.y + 4.5)
+      canvas.stamp(['cc'], head.x + 0.5, head.y + 3.5)
       // Her mouth: a short line in from the notch of her lips, between nose and chin.
       canvas.stamp(
         mouth.map((r) => r.slice(0, 2)),
         head.x + 4.5,
-        head.y + 5.5,
+        head.y + 4.5,
       )
     }
 
@@ -939,6 +942,9 @@ export function draw(pose: Pose): string[] {
           [0.5 * tipLean, -20.5],
           [4.5 * tipLean, -22],
           [3.2 * tipLean, -19.5],
+          // Side on, where the tip bends back over the crown, a pixel fuller, so the crown doesn't
+          // narrow to a single pixel.
+          ...(view === 'side' ? [[0.2, -18.4]] : []),
           [3.4, -16],
           [5, -12.5],
           [6.5, -9.5],
