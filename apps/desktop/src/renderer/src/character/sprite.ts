@@ -1,14 +1,24 @@
-import { FIDGET_MS, SPELL_POSE_MS, type Pose as Name } from '@shared/character'
+import { FIDGET_MS, LANDING, SPELL_POSE_MS, type Pose as Name } from '@shared/character'
 import {
+  BLOOM,
   BUBBLES,
   draw,
   FADE,
+  FLAME,
+  FROST,
   GRID,
   HEADROOM,
   JUGGLE,
   LEG_LENGTH,
+  POTION,
+  RAIN,
+  RAINBOW,
+  SIGIL,
+  STAR_CATCH,
+  TOME,
   wispAt,
   type Arm,
+  type Face,
   type Leg,
   type Pose,
 } from './rig'
@@ -57,6 +67,9 @@ export const PALETTE: Record<string, string> = {
   f: 'px-trim',
   F: 'px-trim-shade',
   G: 'px-gem',
+  // Leaves and stems (her flower), and their shade.
+  E: 'px-leaf',
+  P: 'px-leaf-shade',
   // Gold embroidery and buckles, and its shade.
   Y: 'px-gold',
   k: 'px-gold-shade',
@@ -1028,6 +1041,389 @@ function gaze(): Key[] {
   })
 }
 
+// ------------------------------------------------------------------------------ magic habits
+
+/** Frames every FRAME_MS through a habit `ms` long, each made from how far through it is (0 to 1). */
+function through(ms: number, pose: (t: number) => Pose): Key[] {
+  const steps = Math.round(ms / FRAME_MS)
+  return Array.from({ length: steps }, (_, i) => ({ pose: pose(i / steps), ms: FRAME_MS }))
+}
+
+/** An arm part of the way (`share`, 0 to 1) from hanging down to `to`. */
+const toward = (to: Arm, share: number): Arm => ({
+  shoulder: lerp(ARM_DOWN.shoulder, to.shoulder, share),
+  elbow: lerp(ARM_DOWN.elbow, to.elbow, share),
+})
+
+/** Her forearms turned in and up, hands cupped together in front of her chest (from the front). */
+const CUPPED: Arm = { shoulder: 0.5, elbow: -1.45 }
+
+/** A blink at `at` (a share of the habit) for a moment, otherwise `face`. */
+const blinking = (t: number, at: number, face: Face): Face =>
+  t >= at && t < at + 0.03 ? 'blink' : face
+
+/**
+ * A flame, seen diagonally: she holds her hand out, palm up, looking down at it; a spark kindles
+ * there (she's delighted) and grows into a flickering flame; she leans in and blows it out, and
+ * smiles as the smoke curls up.
+ */
+function flame(): Key[] {
+  return through(FIDGET_MS.flame, (t) => {
+    const up = between(t, 0, 0.09) * (1 - between(t, 0.88, 0.97))
+    const blowing = t > FLAME.blow[0] - 0.02 && t < FLAME.blow[1] + 0.02
+    const face: Face = blowing
+      ? 'sip'
+      : t > 0.12 && t < 0.22
+        ? 'happy'
+        : t > FLAME.blow[1]
+          ? blinking(t, 0.9, 'happy')
+          : 'down'
+    return {
+      view: 'diagonal',
+      flame: t,
+      tilt: blowing ? 0.06 : 0.03 * up,
+      face,
+      arms: [toward({ shoulder: 0.55, elbow: 1.7 }, up), ARM_DOWN],
+    }
+  })
+}
+
+/**
+ * Frost, from the front: she cups her hands in front of her and looks down into them as a
+ * snowflake grows there; she smiles at it, it bursts into glitter (a start), and she smiles again
+ * as it drifts down.
+ */
+function frost(): Key[] {
+  return through(FIDGET_MS.frost, (t) => {
+    const ready = between(t, 0, 0.1) * (1 - between(t, 0.86, 0.96))
+    const arm = toward(CUPPED, ready)
+    const face: Face =
+      t < FROST.grow[0]
+        ? 'neutral'
+        : t < FROST.grow[1]
+          ? 'down'
+          : t < FROST.burst[0]
+            ? 'happy'
+            : t < FROST.burst[0] + 0.06
+              ? 'surprised'
+              : blinking(t, 0.9, 'happy')
+    return { view: 'front', frost: t, face, arms: [arm, arm] }
+  })
+}
+
+/**
+ * A flower, seen diagonally: she points down at the ground in front of her, head bowed, as
+ * sparkles drip from her finger and a flower comes up and blooms; she smiles at it, lowers her
+ * hand, and watches it scatter into sparkles.
+ */
+function bloom(): Key[] {
+  return through(FIDGET_MS.bloom, (t) => {
+    const point = between(t, 0.02, 0.1) * (1 - between(t, 0.6, 0.7))
+    const face: Face =
+      t < BLOOM.open[0] ? 'down' : t < BLOOM.scatter[0] ? blinking(t, 0.78, 'happy') : 'awe'
+    return {
+      view: 'diagonal',
+      bloom: t,
+      tilt: 0.06 * point,
+      face: t > 0.97 ? 'happy' : face,
+      arms: [toward({ shoulder: 0.85, elbow: 0.05 }, point), ARM_DOWN],
+    }
+  })
+}
+
+/**
+ * A sigil, from the front: she raises her hand and draws a star in the air beside her, her hand
+ * moving with the point of light and her eyes on it; it flashes as it closes (a start), and she
+ * smiles at it as it glows and fades, lowering her hand.
+ */
+function sigil(): Key[] {
+  return through(FIDGET_MS.sigil, (t) => {
+    const raise = between(t, 0, 0.1) * (1 - between(t, 0.82, 0.94))
+    const tracing = between(t, ...SIGIL.trace)
+    const wobble = tracing > 0 && tracing < 1 ? Math.sin(tracing * Math.PI * 10) * 0.12 : 0
+    const face: Face =
+      t < SIGIL.trace[1]
+        ? 'neutral'
+        : t < SIGIL.trace[1] + 0.07
+          ? 'surprised'
+          : blinking(t, 0.9, 'happy')
+    return {
+      view: 'front',
+      sigil: t,
+      look: t > 0.08 && t < 0.84 ? 1 : 0,
+      face,
+      arms: [toward({ shoulder: 2.2 + wobble, elbow: 0.5 }, raise), ARM_DOWN],
+    }
+  })
+}
+
+/**
+ * A rainbow, from the front: she raises both hands together over her head, then sweeps them apart
+ * and down either side, painting the rainbow over her as they go; she lowers them, smiling, and
+ * the rainbow shimmers and fades.
+ */
+function rainbow(): Key[] {
+  return through(FIDGET_MS.rainbow, (t) => {
+    const up = between(t, 0, RAINBOW.paint[0])
+    const sweep = between(t, ...RAINBOW.paint)
+    const down = between(t, 0.5, 0.62)
+    const shoulder =
+      ARM_DOWN.shoulder +
+      (2.9 - ARM_DOWN.shoulder) * up +
+      (1.3 - 2.9) * smooth(sweep) +
+      (ARM_DOWN.shoulder - 1.3) * down
+    const arm: Arm = { shoulder, elbow: lerp(ARM_DOWN.elbow, 0.15, up * (1 - down)) }
+    const face: Face =
+      t < RAINBOW.paint[0] ? 'neutral' : t < 0.45 ? 'up' : blinking(t, 0.85, 'happy')
+    return { view: 'front', rainbow: t, face, arms: [arm, arm] }
+  })
+}
+
+/**
+ * Her hat trick, from the front: her hat lifts off her head by itself (a start), spins round
+ * twice showering sparkles over her while she looks up at it, delighted, her hands clasped, and
+ * settles back on her head.
+ */
+function hat(): Key[] {
+  return through(FIDGET_MS.hat, (t) => {
+    const lifted = smooth(between(t, 0.08, 0.3)) * (1 - smooth(between(t, 0.66, 0.84)))
+    const spin = between(t, 0.26, 0.66)
+    const delight = between(t, 0.28, 0.36) * (1 - between(t, 0.7, 0.8))
+    const hands: Arm = { shoulder: 0.3, elbow: -0.9 }
+    const face: Face =
+      t < 0.06 ? 'neutral' : t < 0.22 ? 'surprised' : t < 0.68 ? 'up' : blinking(t, 0.9, 'happy')
+    return {
+      view: 'front',
+      hatLift: lifted * 10,
+      hatTurn: smooth(spin) * Math.PI * 4,
+      shower: spin > 0 && spin < 1 ? spin : 0,
+      face,
+      arms: [toward(hands, delight), toward(hands, delight)],
+    }
+  })
+}
+
+/**
+ * A falling star, from the front: she looks up as a star falls toward her, cups her hands and
+ * catches it, smiles down at it glowing there, then tosses it back up into the sky, watching it
+ * go, and smiles.
+ */
+function star(): Key[] {
+  return through(FIDGET_MS.star, (t) => {
+    const catching = between(t, 0.2, 0.33) * (1 - between(t, STAR_CATCH.toss[0], 0.76))
+    const toss =
+      t >= STAR_CATCH.toss[0] && t < STAR_CATCH.toss[0] + 0.1
+        ? Math.sin(between(t, STAR_CATCH.toss[0], STAR_CATCH.toss[0] + 0.1) * Math.PI)
+        : 0
+    const arm: Arm = {
+      shoulder: lerp(ARM_DOWN.shoulder, CUPPED.shoulder, catching) + 1.9 * toss,
+      elbow: lerp(ARM_DOWN.elbow, CUPPED.elbow, catching) * (1 - toss),
+    }
+    const face: Face =
+      t < STAR_CATCH.fall[0]
+        ? 'neutral'
+        : t < STAR_CATCH.fall[1]
+          ? 'up'
+          : t < STAR_CATCH.toss[0]
+            ? 'happy'
+            : t < 0.88
+              ? 'up'
+              : blinking(t, 0.93, 'happy')
+    return {
+      view: 'front',
+      star: t,
+      look: t > 0.06 && t < 0.26 ? 1 : 0,
+      face,
+      arms: [arm, arm],
+    }
+  })
+}
+
+/**
+ * A rain cloud, from the front: she looks up as a little cloud gathers over her, and droops as it
+ * rains on her; she shoos it with a wave and it bursts into sparkles, and she smiles.
+ */
+function rain(): Key[] {
+  return through(FIDGET_MS.rain, (t) => {
+    const shoo = between(t, 0.6, 0.63) * (1 - between(t, RAIN.burst[0], RAIN.burst[0] + 0.04))
+    const arm: Arm = {
+      shoulder: lerp(ARM_DOWN.shoulder, 2.6, shoo),
+      elbow: lerp(ARM_DOWN.elbow, 0.6 + 0.4 * Math.sin(t * 90), shoo),
+    }
+    const face: Face =
+      t < RAIN.gather[0]
+        ? 'neutral'
+        : t < RAIN.pour[0] + 0.03
+          ? 'up'
+          : t < 0.6
+            ? 'down'
+            : t < RAIN.burst[0]
+              ? 'neutral'
+              : blinking(t, 0.92, 'happy')
+    return { view: 'front', rain: t, face, arms: [arm, ARM_DOWN] }
+  })
+}
+
+/**
+ * A potion, seen diagonally: she holds up a little flask and gives it a shake, watching it bubble
+ * and change colour; the cork pops (a start), coloured smoke puffs out, and she smiles.
+ */
+function potion(): Key[] {
+  return through(FIDGET_MS.potion, (t) => {
+    const up = between(t, 0, 0.08) * (1 - between(t, 0.88, 0.96))
+    const shaking = t > 0.14 && t < 0.46 ? Math.sin(t * 160) * 0.12 : 0
+    const arm = toward({ shoulder: 0.5, elbow: 2 + shaking }, up)
+    const face: Face =
+      t < 0.12
+        ? 'neutral'
+        : t < POTION.pop
+          ? 'happy'
+          : t < POTION.pop + 0.08
+            ? 'surprised'
+            : blinking(t, 0.9, 'happy')
+    return { view: 'diagonal', potion: t, face, arms: [arm, ARM_DOWN] }
+  })
+}
+
+/**
+ * Her spellbook, from the front: she holds her hands out either side as the book rises open in
+ * front of her, her hair lifting; she looks down at it as its pages turn by themselves, smiles as
+ * the letters rise, and lowers her hands as it closes and vanishes.
+ */
+function tome(): Key[] {
+  return through(FIDGET_MS.tome, (t) => {
+    const open = between(t, 0.02, 0.12) * (1 - between(t, 0.86, 0.96))
+    const arm = toward({ shoulder: 0.85, elbow: -0.5 }, open)
+    const face: Face =
+      t < TOME.appear[1] ? 'neutral' : t < 0.5 ? 'down' : blinking(t, 0.92, 'happy')
+    return { view: 'front', tome: t, lift: open, face, arms: [arm, arm] }
+  })
+}
+
+/**
+ * Thrown, flying through the air: she tumbles round and round (front, side, her back, the other
+ * side), arms and legs flailing, her hair flying up, wide-eyed, and no shadow under her. Round and
+ * round until she lands.
+ */
+function flung(): Frame[] {
+  const frames: Frame[] = []
+  for (let i = 0; i < 12; i++) {
+    const phase = (i / 12) * Math.PI * 4
+    const flail = Math.sin(phase * 1.5)
+    const pose = {
+      face: 'surprised' as const,
+      shadow: false,
+      lift: 3,
+      wind: Math.sin(phase) * 2,
+      arms: [
+        { shoulder: 2.3 + 0.5 * flail, elbow: 0.5 },
+        { shoulder: 2.3 - 0.5 * flail, elbow: 0.5 },
+      ] as [Arm, Arm],
+      legs: [
+        { hip: 0.2 + 0.25 * flail, knee: 0.4 + 0.3 * Math.max(0, flail) },
+        { hip: 0.2 - 0.25 * flail, knee: 0.4 + 0.3 * Math.max(0, -flail) },
+      ] as [Leg, Leg],
+    }
+    // Six turns of her a tumble: front, diagonal, side, her back, then the side and diagonal facing
+    // the other way.
+    const turn = i % 6
+    const rows =
+      turn === 0
+        ? draw({ ...pose, view: 'front' })
+        : turn === 1
+          ? draw({ ...pose, view: 'diagonal' })
+          : turn === 2
+            ? draw({ ...pose, view: 'side' })
+            : turn === 3
+              ? draw({ ...pose, view: 'front', back: true })
+              : turn === 4
+                ? mirror(draw({ ...pose, view: 'side' }))
+                : mirror(draw({ ...pose, view: 'diagonal' }))
+    frames.push({ rows, ms: 70 })
+  }
+  return frames
+}
+
+/**
+ * A hard landing, from the front: she hits the ground flat (crouched, arms flung up, hair and hat
+ * flying up) in a puff of dust, and thumps down on her bottom with her hat knocked down over her
+ * eyes; she sits there dazed, head wobbling, stars going round her head; pushes her hat back up
+ * (a start), shakes her head, gets up, and smiles sheepishly. LANDING.splatMs in all.
+ */
+function splat(): Key[] {
+  const legsOut: [Leg, Leg] = [
+    { hip: 0.5, knee: 0.15 },
+    { hip: 0.5, knee: 0.15 },
+  ]
+  const propped: Arm = { shoulder: 0.95, elbow: 0.1 }
+  const impact: Pose = {
+    view: 'front',
+    face: 'surprised',
+    y: 6,
+    legs: crouch(6),
+    lift: 4,
+    hatLift: 4,
+    dust: 0.04,
+    arms: [
+      { shoulder: 2.6, elbow: 0.3 },
+      { shoulder: 2.6, elbow: 0.3 },
+    ],
+  }
+  const dazed = (i: number, count: number): Pose => ({
+    view: 'front',
+    sitting: true,
+    face: 'blink',
+    hatLift: -9,
+    tilt: Math.sin((i / count) * Math.PI * 4) * 0.08,
+    dizzy: (i / count) * 2.5,
+    dust: 0.12 + (i / count) * 0.88,
+    arms: [propped, propped],
+    legs: legsOut,
+  })
+  const pushing = (hatLift: number, face: Face): Pose => ({
+    view: 'front',
+    sitting: true,
+    face,
+    hatLift,
+    arms: [{ shoulder: 2.75, elbow: 1.3 }, propped],
+    legs: legsOut,
+  })
+  const shaking = (tilt: number): Pose => ({
+    view: 'front',
+    sitting: true,
+    face: 'blink',
+    tilt,
+    arms: [propped, propped],
+    legs: legsOut,
+  })
+  const squat: Pose = {
+    view: 'front',
+    y: 5,
+    legs: crouch(5),
+    arms: [
+      { shoulder: 0.3, elbow: 0.2 },
+      { shoulder: 0.3, elbow: 0.2 },
+    ],
+  }
+  const keys: Key[] = [
+    ...hold(impact, 120),
+    ...hold({ ...dazed(0, 1), face: 'surprised', hatLift: -3, dizzy: undefined, dust: 0.08 }, 80),
+    ...Array.from({ length: 22 }, (_, i) => ({ pose: dazed(i, 22), ms: 60 })),
+    ...tween(pushing(-9, 'blink'), pushing(0, 'surprised'), 280),
+    ...hold(pushing(0, 'surprised'), 160),
+    ...hold(pushing(0, 'blink'), 100),
+    ...[0.12, -0.12, 0.1, -0.08].map((tilt) => ({ pose: shaking(tilt), ms: 70 })),
+    ...hold(squat, 160),
+    ...tween(squat, FRONT, 240),
+  ]
+  const used = keys.reduce((total, key) => total + key.ms, 0)
+  return [
+    ...keys,
+    ...hold({ view: 'front', face: 'happy' }, LANDING.splatMs - used - 120),
+    ...hold({ view: 'front', face: 'blink' }, 120),
+  ]
+}
+
 // ------------------------------------------------------------------------------------- frames
 
 const drawn = (keys: Key[]): Frame[] => keys.map(({ pose, ms }) => ({ rows: draw(pose), ms }))
@@ -1057,10 +1453,22 @@ const MAKERS: Record<Name, () => Frame[]> = {
   wisp: () => drawn(wisp()),
   sneeze: () => drawn(sneeze()),
   dance: () => drawn(dance()),
+  flame: () => drawn(flame()),
+  frost: () => drawn(frost()),
+  bloom: () => drawn(bloom()),
+  sigil: () => drawn(sigil()),
+  rainbow: () => drawn(rainbow()),
+  hat: () => drawn(hat()),
+  star: () => drawn(star()),
+  rain: () => drawn(rain()),
+  potion: () => drawn(potion()),
+  tome: () => drawn(tome()),
   chant: () => drawn(chant()),
   vanish: () => drawn(vanish()),
   appear: () => drawn(appear()),
   dragged: () => drawn(dragged()),
+  flung,
+  splat: () => drawn(splat()),
 }
 
 /**
@@ -1085,6 +1493,9 @@ export const LOOPS: Record<Name, boolean> = {
   'walk-left': true,
   'walk-right': true,
   dragged: true,
+  // Tumbling through the air goes round until she lands; her hard landing plays once.
+  flung: true,
+  splat: false,
   hop: false,
   wave: false,
   stretch: false,
@@ -1105,6 +1516,16 @@ export const LOOPS: Record<Name, boolean> = {
   wisp: false,
   sneeze: false,
   dance: false,
+  flame: false,
+  frost: false,
+  bloom: false,
+  sigil: false,
+  rainbow: false,
+  hat: false,
+  star: false,
+  rain: false,
+  potion: false,
+  tome: false,
   // Her spells': the chant goes round for as long as it lasts; vanishing and appearing play once.
   chant: true,
   vanish: false,

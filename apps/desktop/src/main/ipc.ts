@@ -137,6 +137,7 @@ export function registerIpc(ctx: IpcContext): void {
   )
   on(IPC.bubbleDragStart, NoArgs, () => ctx.controller.startDrag())
   on(IPC.bubbleDragEnd, NoArgs, () => ctx.controller.endDrag())
+  on(IPC.bubbleDragHold, NoArgs, () => ctx.controller.dragHeld())
   on(IPC.collapse, NoArgs, () => ctx.controller.collapse())
   on(IPC.setInteractive, z.boolean(), (interactive, event) => {
     BrowserWindow.fromWebContents(event.sender)?.setIgnoreMouseEvents(!interactive, {
@@ -183,6 +184,21 @@ export function registerIpc(ctx: IpcContext): void {
     async (habits) => {
       const settings = await ctx.settings.setHabits(habits)
       ctx.controller.setHabits(settings)
+      return settings
+    },
+  )
+  // Her robe's colour: saved, and her windows told, so she changes as it's picked.
+  handle(
+    IPC.settingsSetRobeColor,
+    z
+      .string()
+      .regex(/^#[0-9a-f]{6}$/i)
+      .nullable(),
+    async (color) => {
+      const settings = await ctx.settings.setRobeColor(color)
+      for (const window of ctx.windows) {
+        if (!window.isDestroyed()) window.webContents.send(IPC.robeColorChanged, settings.robeColor)
+      }
       return settings
     },
   )

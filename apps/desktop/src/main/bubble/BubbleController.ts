@@ -1,5 +1,7 @@
 import {
+  DRAG_CHECK,
   FIDGET_MS,
+  LANDING,
   SPELL_POSE_MS,
   isFidget,
   isSpellPose,
@@ -14,6 +16,7 @@ import {
   largestSize,
   snapSize,
   DEFAULT_SIZE,
+  UI,
   type CharacterSize,
   type Corner,
   type Point,
@@ -29,10 +32,16 @@ import {
   restPosition,
 } from './layout'
 import {
+  FLING,
   WANDER,
   activityDelay,
   fallDuration,
   fallPosition,
+  flightStep,
+  impactSpeed,
+  isHardLanding,
+  releaseVelocity,
+  type PointerSample,
   nextActivity,
   type Pastimes,
   walkStep,
@@ -166,6 +175,10 @@ export class BubbleController {
   private leaving = false
   /** What she may do on her own (Settings: Stand still, No idle animations). */
   private pastimes: Pastimes
+  /** While she's carried: when her page last said the mouse button is still down (DRAG_CHECK). */
+  private lastHeld = 0
+  /** While she's carried: where the pointer has been lately, for how fast she's thrown. */
+  private pointerTrail: PointerSample[] = []
   /** She's away while the screen saver is on (sleep): hidden, doing nothing, until wake(). */
   private asleep = false
   private sleepTimer: ReturnType<typeof setTimeout> | null = null
@@ -270,6 +283,11 @@ export class BubbleController {
         this.collapse()
         return
       case 'dragging':
+        // A click while she's carried: the button came up without the drag hearing of it (a
+        // release can go missing when the PC is busy). This is the user letting go.
+        this.deps.onDiagnostic?.('Bubble clicked while carried: letting go')
+        this.endDrag()
+        return
       case 'returning':
       case 'capturing':
         this.deps.onDiagnostic?.(`Bubble click ignored while ${this.mode}`)
@@ -324,25 +342,50 @@ export class BubbleController {
   /** The mouse pressed on the character and moved: it dangles from the pointer until released. */
   startDrag(): void {
     if (this.leaving || this.asleep) return
-    if (this.mode !== 'collapsed' && this.mode !== 'expanded') return
+    // Caught in the air too, falling or thrown.
+    if (this.mode !== 'collapsed' && this.mode !== 'expanded' && this.mode !== 'returning') return
+    this.expandAfterReturn = false
     this.cancelHide()
     this.deps.panel.hide()
     this.setMode('dragging')
     const cursor = this.deps.displays.cursor()
     const grab = { x: cursor.x - this.position.x, y: cursor.y - this.position.y }
+    this.lastHeld = this.now()
+    this.pointerTrail = [{ t: this.now(), ...cursor }]
     this.runTicker(() => {
+      // No word for a while that the button's still down (DRAG_CHECK): let her go rather than
+      // leave her stuck to the pointer.
+      if (this.now() - this.lastHeld > DRAG_CHECK.staleMs) {
+        this.deps.onDiagnostic?.('Drag ended: no word that the mouse button is still down')
+        this.endDrag()
+        return
+      }
       const now = this.deps.displays.cursor()
+      this.pointerTrail.push({ t: this.now(), ...now })
+      if (this.pointerTrail.length > 20) this.pointerTrail.shift()
       this.moveBubble({ x: now.x - grab.x, y: now.y - grab.y })
     })
   }
 
+  /** While she's carried, her page says the mouse button is still down (see DRAG_CHECK). */
+  dragHeld(): void {
+    if (this.mode === 'dragging') this.lastHeld = this.now()
+  }
+
   /**
    * Released: the character falls onto the taskbar of the display it was dropped on, and from then
-   * on lives near that display's nearer bottom corner. Dropped far from it, it walks back.
+   * on lives near that display's nearer bottom corner. Dropped far from it, it walks back. Let go
+   * while the pointer's moving, she's thrown instead (see fling).
    */
   endDrag(): void {
     if (this.mode !== 'dragging') return
     this.stopTicker()
+    const velocity = releaseVelocity(this.pointerTrail, this.now())
+    this.pointerTrail = []
+    if (Math.hypot(velocity.x, velocity.y) >= FLING.minSpeed) {
+      this.fling(velocity)
+      return
+    }
     const half = bubbleMetrics(this.scale).size / 2
     const centre = {
       x: Math.round(this.position.x + half),
@@ -363,7 +406,7 @@ export class BubbleController {
    * her day. As with a fidget, anything the user does stops it (and `then` never comes).
    * Collapsed only: casting a spell closes the panel first.
    */
-  act(pose: Fidget | SpellPose, then?: () => void): void {
+  act(pose: Fidget | SpellPose | 'splat', then?: () => void): void {
     if (this.mode !== 'collapsed') return
     this.stopIdling()
     this.setPose(pose)
@@ -374,7 +417,7 @@ export class BubbleController {
         this.setPose('idle')
         this.scheduleActivity(false)
       },
-      isFidget(pose) ? FIDGET_MS[pose] : SPELL_POSE_MS[pose],
+      isFidget(pose) ? FIDGET_MS[pose] : pose === 'splat' ? LANDING.splatMs : SPELL_POSE_MS[pose],
     )
   }
 
@@ -518,6 +561,8 @@ export class BubbleController {
   private fall(): void {
     const from = { ...this.position }
     const duration = fallDuration(from, this.rest())
+    // Dropped from high up, she lands hard.
+    const impact = impactSpeed(this.rest().y - from.y)
     const startedAt = this.now()
     this.setMode('returning')
     this.runTicker(() => {
@@ -527,11 +572,64 @@ export class BubbleController {
         this.moveBubble(fallPosition(from, to, t))
         return
       }
-      this.settle()
-      // ...unless she's to stand still, when she stays where she landed.
+      this.land(impact)
+    })
+  }
+
+  /**
+   * Thrown: she flies on at the pointer's speed (`velocity`, DIP per second), tumbling, under
+   * gravity, turned back by the sides and top of the display she was let go on, until she lands
+   * on its taskbar (flightStep); from then on she lives near its nearer bottom corner.
+   */
+  private fling(velocity: Point): void {
+    const { size, pad } = bubbleMetrics(this.scale)
+    const display = this.deps.displays.nearest({
+      x: Math.round(this.position.x + size / 2),
+      y: Math.round(this.position.y + size / 2),
+    })
+    const area = display.workArea
+    const room = {
+      minX: area.x + UI.edgeMargin,
+      maxX: area.x + area.width - UI.edgeMargin - size,
+      minY: area.y,
+      floor: area.y + area.height - pad - size,
+    }
+    let flight = { ...this.position, vx: velocity.x, vy: velocity.y }
+    this.setMode('returning')
+    this.setPose('flung')
+    this.runTicker((dtMs) => {
+      const step = flightStep(flight, dtMs, room)
+      flight = step.flight
+      this.moveBubble({ x: flight.x, y: flight.y })
+      if (!step.landed) return
+      const corner = nearestCorner(area, this.position, this.scale)
+      this.setAnchor({ displayId: display.id, corner })
+      this.fitScale()
+      this.inset = insetAt(area, corner, this.position.x, this.scale)
+      this.land(step.impact)
+    })
+  }
+
+  /**
+   * Down on the taskbar after a fall or a throw (landing at `impact`, DIP per second): standing,
+   * and opening if that was asked for. A hard landing knocks her flat first (her `splat` pose).
+   * Then, far from her corner, she walks back (unless she's to stand still).
+   */
+  private land(impact: number): void {
+    this.settle()
+    const walkBack = () => {
       const far = this.inset > this.zone()
       if (this.mode === 'collapsed' && far && this.pastimes.walk) this.walkTo(this.zone())
-    })
+    }
+    if (this.mode === 'collapsed' && isHardLanding(impact)) {
+      this.act('splat', () => {
+        this.setPose('idle')
+        this.scheduleActivity(false)
+        walkBack()
+      })
+    } else {
+      walkBack()
+    }
   }
 
   /** The end of a fall: standing, collapsed, and opening if that was asked for. */
@@ -629,7 +727,9 @@ export class BubbleController {
   private stopIdling(): void {
     this.cancelActivity()
     this.stopWalking()
-    if (isFidget(this.pose) || isSpellPose(this.pose)) this.setPose('idle')
+    if (isFidget(this.pose) || isSpellPose(this.pose) || this.pose === 'splat') {
+      this.setPose('idle')
+    }
   }
 
   private cancelActivity(): void {

@@ -1,8 +1,9 @@
 /*
  * The character's colours: one class per letter of character/sprite.ts's PALETTE. Each material
  * is a ramp of shades, cooler (bluer) in shadow and warmer in the light, and each part's outline
- * is a dark shade of its own colour. Her robe and hat are mixed from the tenant's accent colour,
- * so they match the panel.
+ * is a dark shade of its own colour. Her robe and hat are mixed from `--color-robe`, the colour
+ * chosen in Settings (see useRobeColor), or without one the tenant's accent colour, so they match
+ * the panel; the hat is always a darker shade of the robe.
  */
 
 .character {
@@ -66,16 +67,16 @@
 
 /* The robe, from the accent colour: deep indigo in the shadows, a little cream in the light. */
 .px-robe-line {
-  fill: color-mix(in oklab, var(--color-accent) 45%, #140a24);
+  fill: color-mix(in oklab, var(--color-robe, var(--color-accent)) 45%, #140a24);
 }
 .px-robe-shade {
-  fill: color-mix(in oklab, var(--color-accent) 72%, #1e1b4b);
+  fill: color-mix(in oklab, var(--color-robe, var(--color-accent)) 72%, #1e1b4b);
 }
 .px-robe {
-  fill: var(--color-accent);
+  fill: var(--color-robe, var(--color-accent));
 }
 .px-robe-light {
-  fill: color-mix(in oklab, var(--color-accent) 70%, #fff4d6);
+  fill: color-mix(in oklab, var(--color-robe, var(--color-accent)) 70%, #fff4d6);
 }
 
 /* Silver trim, and a teal gem. */
@@ -88,6 +89,13 @@
 .px-gem {
   fill: #3fd0c0;
 }
+/* Leaves and stems (the flower she grows): fresh green, deeper in the shade. */
+.px-leaf {
+  fill: #6cc26a;
+}
+.px-leaf-shade {
+  fill: #2f7d4f;
+}
 
 /* Gold embroidery on her robe and hat, and the buckles on her boots. */
 .px-gold {
@@ -99,13 +107,13 @@
 
 /* Her hat and her spellbook's cover: a deep shade of the accent colour. */
 .px-hat {
-  fill: color-mix(in oklab, var(--color-accent) 55%, #1a1433);
+  fill: color-mix(in oklab, var(--color-robe, var(--color-accent)) 55%, #1a1433);
 }
 .px-hat-shade {
-  fill: color-mix(in oklab, var(--color-accent) 38%, #120d26);
+  fill: color-mix(in oklab, var(--color-robe, var(--color-accent)) 38%, #120d26);
 }
 .px-hat-light {
-  fill: color-mix(in oklab, var(--color-accent) 80%, #1a1433);
+  fill: color-mix(in oklab, var(--color-robe, var(--color-accent)) 80%, #1a1433);
 }
 
 /* Stockings and boots. */

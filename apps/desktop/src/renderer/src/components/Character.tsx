@@ -23,7 +23,16 @@ function pathsOf(frame: Frame): ReturnType<typeof framePaths> {
 }
 
 /** Every pose, for drawing ahead of time. */
-const ALL_POSES: Pose[] = ['idle', 'walk-left', 'walk-right', 'dragged', ...FIDGETS, ...SPELL_POSES]
+const ALL_POSES: Pose[] = [
+  'idle',
+  'walk-left',
+  'walk-right',
+  'dragged',
+  'flung',
+  'splat',
+  ...FIDGETS,
+  ...SPELL_POSES,
+]
 
 /**
  * The character: pixel art (character/sprite.ts) drawn `box` DIPs wide and a little taller, for

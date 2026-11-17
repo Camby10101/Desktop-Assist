@@ -527,9 +527,9 @@ Unit tests: 280 (296 with the updater below).
 
 ### 5.2 also: Check for updates, and version 1.0.0
 
-**Settings → Check for updates** asks GitHub for the repository's latest release (its public
-API; the repository is public, so no token is in the app). If it's a higher version than the copy
-running, it downloads the `…Setup….exe` attached to the release (showing the progress), checks the
+**Settings → Check for updates** asks GitHub for the repository's releases (its public API; the
+repository is public, so no token is in the app) and takes the highest version (from 2.3.0;
+before, GitHub's "latest" release). If it's a higher version than the copy running, it downloads the `…Setup….exe` attached to the release (showing the progress), checks the
 download's size and SHA-256 against what GitHub reports for that file (a mismatch is refused and
 deleted), then runs it as electron-builder's own updater does, `--updated /S --force-run`: silently,
 replacing the app, which quits for it, and starting the new version. A Windows notification says

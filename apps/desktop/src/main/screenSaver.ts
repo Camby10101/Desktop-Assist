@@ -1,5 +1,6 @@
 import type { Rect } from '@shared/geometry'
 import { SCREEN_SAVER, type SaverScene } from '@shared/screenSaver'
+import { robeQuery } from './bubble/clones'
 
 /** One of the screen saver's windows, as ScreenSaver uses it. index.ts makes them. */
 export interface SaverWindow {
@@ -11,8 +12,10 @@ export interface SaverWindow {
 }
 
 export interface ScreenSaverDeps {
-  /** The tenant's accent colour, for her robe and hat. */
+  /** The tenant's accent colour, for her robe and hat... */
   accentColor: string
+  /** ...unless another is chosen for her robe in Settings (`#rrggbb`, or null). */
+  robeColor?: () => string | null
   /** Every display, the whole of it (the taskbar too). */
   displays(): { id: number; bounds: Rect }[]
   /** The display she's on. */
@@ -53,7 +56,12 @@ export class ScreenSaver {
     const starts = String((this.deps.now ?? Date.now)())
     this.windows = this.deps.displays().map((display) => {
       const scene: SaverScene = display.id === her ? 'sunset' : 'stars'
-      const query = { scene, starts, accent: this.deps.accentColor }
+      const query = {
+        scene,
+        starts,
+        accent: this.deps.accentColor,
+        ...robeQuery(this.deps.robeColor?.()),
+      }
       return this.deps.open(display.bounds, query, display.id === her)
     })
     this.deps.onStart()

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { SCREEN_SAVER, type SaverScene } from '@shared/screenSaver'
 import { GRID, HEADROOM } from '../character/rig'
 import { gazeFrames, PALETTE, type Frame } from '../character/sprite'
-import { useAccentColor } from '../hooks/useAssistState'
+import { useAccentColor, useRobeColor } from '../hooks/useAssistState'
 import { backlit, paintHer } from '../lib/screensaver/her'
 import type { SaverFrame } from '../lib/screensaver/scene'
 import { paintNight, paintStarfall } from '../lib/screensaver/stars'
@@ -41,6 +41,8 @@ export function ScreenSaverView() {
     ? params.get('accent')!
     : '#9333ea'
   useAccentColor(accent)
+  // Her robe's colour, if one's chosen in Settings (before her colours are read, below).
+  useRobeColor(params.get('robe'))
   // With Windows' reduced-motion setting, the scene stays still (the fades still happen).
   const [still] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches)
   /** When the main process said it's ending (wall-clock ms), or null: it fades away from then. */

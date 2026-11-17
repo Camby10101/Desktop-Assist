@@ -22,6 +22,97 @@ export const WANDER = {
   gravity: 2500,
 } as const
 
+/**
+ * Throwing her: let go while the pointer's moving, she flies on with its speed (measured over the
+ * last `sampleMs` before letting go; slower than `minSpeed`, DIP per second, she just drops, and
+ * never faster than `maxSpeed`), falling under WANDER.gravity, keeping `bounce` of her speed off
+ * the sides and top of her screen, until she lands on its taskbar. Landing at `splatSpeed` or
+ * faster (as from a fall of a third of a screen or so, or a throw down) is a hard landing: she
+ * goes splat.
+ */
+export const FLING = {
+  sampleMs: 100,
+  minSpeed: 350,
+  maxSpeed: 4200,
+  bounce: 0.55,
+  splatSpeed: 1300,
+} as const
+
+/** Where the pointer was at a moment while she was carried (ms, and DIP). */
+export interface PointerSample {
+  t: number
+  x: number
+  y: number
+}
+
+/**
+ * How fast the pointer was going as she was let go (DIP per second): from the earliest sample in
+ * the last FLING.sampleMs before `now` to the latest, no faster than FLING.maxSpeed. Still if it
+ * hadn't moved in that time, or there's too little to tell.
+ */
+export function releaseVelocity(samples: readonly PointerSample[], now: number): Point {
+  const recent = samples.filter((s) => s.t >= now - FLING.sampleMs)
+  const first = recent[0]
+  const last = recent.at(-1)
+  if (!first || !last || last.t - first.t < 20) return { x: 0, y: 0 }
+  const seconds = (last.t - first.t) / 1000
+  let x = (last.x - first.x) / seconds
+  let y = (last.y - first.y) / seconds
+  const speed = Math.hypot(x, y)
+  if (speed > FLING.maxSpeed) {
+    x *= FLING.maxSpeed / speed
+    y *= FLING.maxSpeed / speed
+  }
+  return { x, y }
+}
+
+/** Where she is in the air (her box's top-left, DIP) and how fast she's going (DIP per second). */
+export interface Flight {
+  x: number
+  y: number
+  vx: number
+  vy: number
+}
+
+/**
+ * One frame of flying (`dtMs`): gravity pulls her down; the sides of her screen (`minX`, `maxX`)
+ * and its top (`minY`) turn her back, keeping FLING.bounce of her speed; at `floor` (where she
+ * stands on the taskbar) she lands, and `impact` is how fast she was falling (DIP per second).
+ */
+export function flightStep(
+  flight: Flight,
+  dtMs: number,
+  room: { minX: number; maxX: number; minY: number; floor: number },
+): { flight: Flight; landed: boolean; impact: number } {
+  const dt = Math.min(Math.max(dtMs, 0), 50) / 1000
+  let { x, y, vx, vy } = flight
+  vy += WANDER.gravity * dt
+  x += vx * dt
+  y += vy * dt
+  if (x < room.minX) {
+    x = room.minX
+    vx = Math.abs(vx) * FLING.bounce
+  } else if (x > room.maxX) {
+    x = room.maxX
+    vx = -Math.abs(vx) * FLING.bounce
+  }
+  if (y < room.minY) {
+    y = room.minY
+    vy = Math.abs(vy) * FLING.bounce
+  }
+  if (y >= room.floor) {
+    return { flight: { x, y: room.floor, vx: 0, vy: 0 }, landed: true, impact: Math.max(0, vy) }
+  }
+  return { flight: { x, y, vx, vy }, landed: false, impact: 0 }
+}
+
+/** How fast she's falling (DIP per second) when she lands after dropping `height` DIP. */
+export const impactSpeed = (height: number): number =>
+  Math.sqrt(2 * WANDER.gravity * Math.max(0, height))
+
+/** Whether landing at `speed` (DIP per second) knocks her flat (see FLING.splatSpeed). */
+export const isHardLanding = (speed: number): boolean => speed >= FLING.splatSpeed
+
 export type Activity =
   | { kind: 'walk'; to: number }
   | { kind: 'fidget'; pose: Fidget }

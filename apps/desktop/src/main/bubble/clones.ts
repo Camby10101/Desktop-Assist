@@ -2,6 +2,10 @@ import { CLONES } from '@shared/character'
 import type { Rect } from '@shared/geometry'
 import { cloneStrip } from './layout'
 
+/** Her robe's colour for a page's query string (`robe`), if one is chosen. */
+export const robeQuery = (color: string | null | undefined): Record<string, string> =>
+  color ? { robe: color } : {}
+
 /** A window of clones, as Clones uses it. index.ts makes them (see createOverlayWindow). */
 export interface CloneWindow {
   close(): void
@@ -13,8 +17,10 @@ export interface ClonesDeps {
    * in it (`from`, DIPs from its left edge), her size, the accent colour and when they end.
    */
   open(bounds: Rect, query: Record<string, string>): CloneWindow
-  /** The tenant's accent colour, for the clones' robes and hats. */
+  /** The tenant's accent colour, for the clones' robes and hats... */
   accentColor: string
+  /** ...unless another is chosen for her robe in Settings (`#rrggbb`, or null). */
+  robeColor?: () => string | null
   /** Wall-clock time (ms), shared with the page, which fades the clones out at the end. */
   now?: () => number
 }
@@ -44,6 +50,7 @@ export class Clones {
       scale: String(standing.scale),
       accent: this.deps.accentColor,
       ends: String((this.deps.now ?? Date.now)() + CLONES.durationMs),
+      ...robeQuery(this.deps.robeColor?.()),
     })
     const timer = setTimeout(() => this.stop(), CLONES.durationMs)
     this.current = { window, timer }

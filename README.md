@@ -65,7 +65,11 @@ name are sent on to it.
 - **Drag it anywhere**, even onto another monitor: it dangles from the pointer. Let go and it drops
   onto that screen's taskbar, and from then on lives near the nearer bottom corner, walking back
   if it was dropped far away (and shrinking if she's too big for that screen). The panel opens
-  toward the middle of the screen. It remembers the corner next time.
+  toward the middle of the screen. It remembers the corner next time. **Throw her**: let go while
+  the pointer's moving and she flies on, tumbling, bouncing off the sides and top of the screen
+  (you can catch her in mid-air). Land her hard, from a throw or dropped from high up, and she
+  thumps down on her bottom with her hat over her eyes and stars going round her head, then gets
+  back up.
 - **Ask Claude**: type a question in the box beside the bubble (a speech bubble pointing at her
   mouth) and press Enter (or **Ask in Claude**). The Claude Desktop app opens a new chat and the question is sent there, with any
   attached screenshots pasted in, and Claude answers. It's your own Claude account, so it counts
@@ -99,7 +103,9 @@ name are sent on to it.
   - **Screenshot** saves the screen the bubble is on to `Pictures\Desktop Wizard`.
   - **Settings**: **Light mode** (switches Desktop Wizard's colours; it starts dark), **Size**
     (makes the character smaller or bigger, from half her usual size to six times it, or as big as
-    fits your screen; it's remembered), **Stand still** (she stays where she is instead of
+    fits your screen; it's remembered), **Robe colour** (her robe and hat, the hat a darker shade
+    of it, in the company's colour, one of the swatches, or any hue from the slider; her trim and
+    patterns stay as they are), **Stand still** (she stays where she is instead of
     wandering about), **No idle animations** (she stops doing her habits on her own; both are off
     to start with), Start with Windows, Send in Claude automatically, Open screenshots folder,
     Clear text box, **Check for updates** (downloads a newer release from GitHub, checks it's

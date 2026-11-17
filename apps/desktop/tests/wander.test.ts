@@ -6,6 +6,11 @@ import {
   activityDelay,
   fallDuration,
   fallPosition,
+  FLING,
+  flightStep,
+  impactSpeed,
+  isHardLanding,
+  releaseVelocity,
   nextActivity,
   walkStep,
   walkTarget,
@@ -91,6 +96,69 @@ describe('nextActivity, as Settings allow', () => {
       })
       expect(neither).toEqual({ kind: 'rest' })
     }
+  })
+})
+
+describe('throwing her', () => {
+  it('measures how fast the pointer was going as she was let go, over the last moment only', () => {
+    const samples = [
+      { t: 0, x: 0, y: 0 },
+      { t: 900, x: 0, y: 0 },
+      { t: 950, x: 50, y: 0 },
+      { t: 1000, x: 100, y: -50 },
+    ]
+    expect(releaseVelocity(samples, 1000)).toEqual({ x: 1000, y: -500 })
+    // Held still for the last moment: still.
+    const held = [...samples, { t: 1100, x: 100, y: -50 }, { t: 1200, x: 100, y: -50 }]
+    expect(releaseVelocity(held, 1200)).toEqual({ x: 0, y: 0 })
+    // Too little to tell, and never faster than the most.
+    expect(releaseVelocity([{ t: 0, x: 0, y: 0 }], 0)).toEqual({ x: 0, y: 0 })
+    const flick = releaseVelocity(
+      [
+        { t: 0, x: 0, y: 0 },
+        { t: 50, x: 5000, y: 0 },
+      ],
+      50,
+    )
+    expect(Math.hypot(flick.x, flick.y)).toBeCloseTo(FLING.maxSpeed)
+  })
+
+  it('flies under gravity, turned back by the sides and top, and lands on the floor', () => {
+    const room = { minX: 0, maxX: 1000, minY: 0, floor: 900 }
+    let flight = { x: 500, y: 500, vx: 600, vy: -800 }
+    const first = flightStep(flight, 16, room)
+    expect(first.flight.vy).toBeGreaterThan(flight.vy) // gravity
+    expect(first.flight.x).toBeGreaterThan(flight.x)
+    expect(first.landed).toBe(false)
+    // Into the right-hand side: back the other way, slower.
+    const side = flightStep({ x: 995, y: 500, vx: 1000, vy: 0 }, 16, room)
+    expect(side.flight.x).toBe(1000)
+    expect(side.flight.vx).toBeCloseTo(-1000 * FLING.bounce)
+    // Into the top: back down.
+    const top = flightStep({ x: 500, y: 2, vx: 0, vy: -1000 }, 16, room)
+    expect(top.flight.y).toBe(0)
+    expect(top.flight.vy).toBeGreaterThan(0)
+    // On and on until it lands, never outside the room.
+    let landed = false
+    for (let i = 0; i < 500 && !landed; i++) {
+      const step = flightStep(flight, 16, room)
+      flight = step.flight
+      landed = step.landed
+      expect(flight.x).toBeGreaterThanOrEqual(0)
+      expect(flight.x).toBeLessThanOrEqual(1000)
+      if (landed) {
+        expect(flight.y).toBe(900)
+        expect(step.impact).toBeGreaterThan(0)
+      }
+    }
+    expect(landed).toBe(true)
+  })
+
+  it('counts a long fall as a hard landing, and a short one as soft', () => {
+    expect(impactSpeed(0)).toBe(0)
+    expect(impactSpeed(100)).toBeCloseTo(Math.sqrt(2 * WANDER.gravity * 100))
+    expect(isHardLanding(impactSpeed(100))).toBe(false)
+    expect(isHardLanding(impactSpeed(500))).toBe(true)
   })
 })
 

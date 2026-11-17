@@ -1,8 +1,8 @@
 # Releasing a new version
 
 Desktop Wizard updates itself from this repository's GitHub releases: **Settings → Check for
-updates** asks GitHub for the latest release and, if it's newer than the copy that's running,
-downloads the installer attached to it, checks it's exactly the file on GitHub and that it's
+updates** asks GitHub for the repository's releases and, if the highest version among them is
+newer than the copy that's running, downloads the installer attached to it, checks it's exactly the file on GitHub and that it's
 signed with the release key, and runs it. The installer replaces Desktop Wizard silently and
 starts it again; the user's data (preferences, the text box, sign-ins) is kept.
 
@@ -73,7 +73,10 @@ npm version 2.0.1 --no-git-tag-version -w apps/desktop
 ```
 
 The version is what Settings shows at the bottom, what the installer is named after, and what
-the app compares with GitHub's latest release: a copy only updates to a **higher** version.
+the app compares with the releases on GitHub: a copy only updates to a **higher** version. The
+release's tag can be `v2.0.1` or `2.0.1`. The order releases are published in doesn't matter, nor
+which one GitHub marks as "latest": the highest version wins (copies before 2.3.0 go by GitHub's
+"latest", so keep the newest version marked as the latest release).
 
 Commit it (with the release's changes) and merge to `main` as usual.
 
@@ -109,12 +112,16 @@ Install it once yourself to check it.
 5. Leave **Set as a pre-release** and **Save as draft** unticked (the app ignores both), and
    **Publish release**.
 
-From then on, **Check for updates** on any older copy finds it.
+From then on, **Check for updates** on any older copy finds it. **Both files must be attached**:
+a release with no installer can't be installed, and Check for updates on 2.3.0 and later says
+"Version … is out, but its installer isn't attached yet" until it is (older copies just say
+they're up to date).
 
 ## How the app checks
 
-- It reads `https://api.github.com/repos/Camby10101/Desktop-Wizard/releases/latest` (from
-  `updates.repo` in `tenant.json`). The repository is public, so no sign-in or token is needed.
+- It reads `https://api.github.com/repos/Camby10101/Desktop-Wizard/releases?per_page=30` (from
+  `updates.repo` in `tenant.json`) and takes the highest version that isn't a draft or a
+  pre-release and has its installer attached. The repository is public, so no sign-in or token is needed.
   GitHub allows each network address 60 such requests an hour, which the occasional click never
   comes near; if it's ever reached, the app says GitHub is busy.
 - It only downloads from the repository's own release files

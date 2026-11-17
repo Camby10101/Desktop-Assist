@@ -860,7 +860,7 @@ copy of the state.
 
 <!-- code: apps/desktop/src/renderer/src/hooks/useAssistState.ts#useAssistState -->
 
-[`src/renderer/src/hooks/useAssistState.ts`, lines 4–40](../../apps/desktop/src/renderer/src/hooks/useAssistState.ts#L4-L40)
+[`src/renderer/src/hooks/useAssistState.ts`, lines 4–43](../../apps/desktop/src/renderer/src/hooks/useAssistState.ts#L4-L43)
 
 ```ts
 /**
@@ -883,6 +883,9 @@ export function useAssistState(): AppState | null {
       window.assist.onPoseChanged((pose) => update((s) => ({ ...s, pose }))),
       window.assist.onCornerChanged((corner) => update((s) => ({ ...s, corner }))),
       window.assist.onSizeChanged((size) => update((s) => ({ ...s, size }))),
+      window.assist.onRobeColorChanged((robeColor) =>
+        update((s) => ({ ...s, settings: { ...s.settings, robeColor } })),
+      ),
       window.assist.onAuthStatus((auth) => update((s) => ({ ...s, auth }))),
       window.assist.onChatMessage((message) =>
         update((s) => ({ ...s, chat: upsert(s.chat, message) })),
@@ -954,7 +957,7 @@ them, so `Panel` tracks their results itself.
 
 <!-- code: apps/desktop/src/renderer/src/hooks/useAssistState.ts#upsert -->
 
-[`src/renderer/src/hooks/useAssistState.ts`, lines 42–48](../../apps/desktop/src/renderer/src/hooks/useAssistState.ts#L42-L48)
+[`src/renderer/src/hooks/useAssistState.ts`, lines 45–51](../../apps/desktop/src/renderer/src/hooks/useAssistState.ts#L45-L51)
 
 ```ts
 function upsert(messages: ChatMessage[], message: ChatMessage): ChatMessage[] {
@@ -975,7 +978,7 @@ copies the array first, so the old array React is holding is left unchanged.
 
 <!-- code: apps/desktop/src/renderer/src/hooks/useAssistState.ts#useAccentColor -->
 
-[`src/renderer/src/hooks/useAssistState.ts`, lines 50–55](../../apps/desktop/src/renderer/src/hooks/useAssistState.ts#L50-L55)
+[`src/renderer/src/hooks/useAssistState.ts`, lines 65–70](../../apps/desktop/src/renderer/src/hooks/useAssistState.ts#L65-L70)
 
 ```ts
 /** Applies the tenant's accent colour to the `accent` Tailwind colour. */
@@ -1335,7 +1338,7 @@ const DRAG_THRESHOLD = 5
 
 <!-- code: apps/desktop/src/renderer/src/views/BubbleView.tsx#BubbleView -->
 
-[`src/renderer/src/views/BubbleView.tsx`, lines 22–121](../../apps/desktop/src/renderer/src/views/BubbleView.tsx#L22-L121)
+[`src/renderer/src/views/BubbleView.tsx`, lines 22–149](../../apps/desktop/src/renderer/src/views/BubbleView.tsx#L22-L149)
 
 ```tsx
 /**
@@ -1348,6 +1351,7 @@ export function BubbleView() {
   // No useClickThrough here: the bubble window always takes the mouse (see bubble/windows.ts).
   const state = useAssistState()
   useAccentColor(state?.branding.accentColor)
+  useRobeColor(state?.settings.robeColor)
   const mode = state?.mode ?? 'collapsed'
   const appName = state?.branding.appName ?? 'Desktop Wizard'
   // Her window, as big as she is (with room above her hat); she faces the middle of the screen,
@@ -1370,6 +1374,33 @@ export function BubbleView() {
     return () => {
       stop()
       clearTimeout(timer)
+    }
+  }, [])
+
+  // Whether the main mouse button is down, as the latest pointer event anywhere in the window
+  // says. While she's carried, a button found up means the release went missing (a busy PC can
+  // lose it): she's let go at once. And every so often the main process is told it's still down;
+  // without that word it lets her go itself (DRAG_CHECK), so she never stays stuck to the pointer.
+  const held = useRef(false)
+  const carried = useRef(false)
+  useEffect(() => {
+    carried.current = mode === 'dragging'
+    if (!carried.current) return
+    const timer = setInterval(() => {
+      if (held.current) window.assist.bubbleDragHold()
+      else window.assist.bubbleDragEnd()
+    }, DRAG_CHECK.everyMs)
+    return () => clearInterval(timer)
+  }, [mode])
+  useEffect(() => {
+    const track = (event: globalThis.PointerEvent) => {
+      held.current = event.type !== 'pointercancel' && (event.buttons & 1) === 1
+      if (!held.current && carried.current) window.assist.bubbleDragEnd()
+    }
+    const kinds = ['pointerdown', 'pointermove', 'pointerup', 'pointercancel'] as const
+    for (const kind of kinds) window.addEventListener(kind, track, true)
+    return () => {
+      for (const kind of kinds) window.removeEventListener(kind, track, true)
     }
   }, [])
 
@@ -1563,7 +1594,7 @@ string, and once the window closes it's gone.
 
 <!-- code: apps/desktop/src/renderer/src/views/ClonesView.tsx#ClonesView -->
 
-[`src/renderer/src/views/ClonesView.tsx`, lines 8–100](../../apps/desktop/src/renderer/src/views/ClonesView.tsx#L8-L100)
+[`src/renderer/src/views/ClonesView.tsx`, lines 8–101](../../apps/desktop/src/renderer/src/views/ClonesView.tsx#L8-L101)
 
 ```tsx
 /**
@@ -1578,6 +1609,7 @@ export function ClonesView() {
   const scale = snapSize(Number(params.get('scale')) || DEFAULT_SIZE)
   const { box } = bubbleMetrics(scale)
   useAccentColor(params.get('accent') ?? undefined)
+  useRobeColor(params.get('robe'))
 
   // With Windows' reduced-motion setting they stand still, spread along the taskbar.
   const [still] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches)
@@ -2191,7 +2223,7 @@ const DRAW_EVERY_MS = 50
 
 <!-- code: apps/desktop/src/renderer/src/views/ScreenSaverView.tsx#ScreenSaverView -->
 
-[`src/renderer/src/views/ScreenSaverView.tsx`, lines 27–143](../../apps/desktop/src/renderer/src/views/ScreenSaverView.tsx#L27-L143)
+[`src/renderer/src/views/ScreenSaverView.tsx`, lines 27–145](../../apps/desktop/src/renderer/src/views/ScreenSaverView.tsx#L27-L145)
 
 ```tsx
 /**
@@ -2211,6 +2243,8 @@ export function ScreenSaverView() {
     ? params.get('accent')!
     : '#9333ea'
   useAccentColor(accent)
+  // Her robe's colour, if one's chosen in Settings (before her colours are read, below).
+  useRobeColor(params.get('robe'))
   // With Windows' reduced-motion setting, the scene stays still (the fades still happen).
   const [still] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches)
   /** When the main process said it's ending (wall-clock ms), or null: it fades away from then. */
@@ -2396,7 +2430,7 @@ The JSX:
 
 <!-- code: apps/desktop/src/renderer/src/views/ScreenSaverView.tsx#layer,herColours,frameAt -->
 
-[`src/renderer/src/views/ScreenSaverView.tsx`, lines 145–188](../../apps/desktop/src/renderer/src/views/ScreenSaverView.tsx#L145-L188)
+[`src/renderer/src/views/ScreenSaverView.tsx`, lines 147–190](../../apps/desktop/src/renderer/src/views/ScreenSaverView.tsx#L147-L190)
 
 ```tsx
 /** A canvas the size of the scene's, painted once by `paint` (for what never changes). */
@@ -2469,7 +2503,7 @@ function frameAt(frames: readonly Frame[], t: number): Frame {
 
 <!-- code: apps/desktop/src/renderer/src/views/ScreenSaverView.tsx#sunsetPainter,starfallPainter -->
 
-[`src/renderer/src/views/ScreenSaverView.tsx`, lines 190–223](../../apps/desktop/src/renderer/src/views/ScreenSaverView.tsx#L190-L223)
+[`src/renderer/src/views/ScreenSaverView.tsx`, lines 192–225](../../apps/desktop/src/renderer/src/views/ScreenSaverView.tsx#L192-L225)
 
 ```tsx
 /** Draws the sunset at `t`: the sky and hills painted once, the rest each time. */
@@ -2662,7 +2696,7 @@ returns. The sections after it take its values and functions one at a time.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 66–593](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L66-L593)
+[`src/renderer/src/views/PanelView.tsx`, lines 66–596](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L66-L596)
 
 ```tsx
 function Panel({ state }: { state: AppState }) {
@@ -3166,6 +3200,9 @@ function Panel({ state }: { state: AppState }) {
           onSetSize={(next) => void window.assist.character.setSize(next)}
           onSetHabits={async (habits) =>
             setSettings(await window.assist.settings.setHabits(habits))
+          }
+          onSetRobeColor={async (color) =>
+            setSettings(await window.assist.settings.setRobeColor(color))
           }
           onToggleAutoStart={async () =>
             setSettings(await window.assist.settings.setAutoStart(!settings.autoStart))

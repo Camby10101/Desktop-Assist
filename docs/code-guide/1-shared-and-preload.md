@@ -537,7 +537,7 @@ timetable of one of her habits, and `CLONES` the numbers for her clones, which b
 
 <!-- code: apps/desktop/src/shared/character.ts#FIDGETS,Fidget,Pose,FIDGET_MS,isFidget -->
 
-[`src/shared/character.ts`, lines 6–111](../../apps/desktop/src/shared/character.ts#L6-L111)
+[`src/shared/character.ts`, lines 6–154](../../apps/desktop/src/shared/character.ts#L6-L154)
 
 ```ts
 /**
@@ -550,6 +550,13 @@ timetable of one of her habits, and `CLONES` the numbers for her clones, which b
  *   up at it in wonder for a moment, then it rises away again (see VISION).
  * - `curtsy`: holds her robe out at the sides and dips in a little curtsy, smiling.
  * - `orb`: gazes into a crystal ball, which swirls and sparkles, then smiles at what she sees.
+ * - `flame`: a flame kindles in her palm, flickers and grows; she blows it out in a curl of smoke.
+ * - `frost`: a snowflake grows over her cupped hands, glinting, then bursts into glitter.
+ * - `bloom`: she points at the ground; sparkles drip down and a flower sprouts, blooms and
+ *   scatters into sparkles.
+ * - `sigil`: she traces a star in the air in gold light; it flares, glows and fades away.
+ * - `rainbow`: her hands sweep apart overhead, painting a rainbow over her, which shimmers and
+ *   fades.
  * - `read`: reads her spellbook (and smiles at something in it).
  * - `spell`: a little spell, sparkles circling her hand.
  * - `levitate`: floats up over a glowing magic circle, hovers with her eyes shut, and settles.
@@ -564,6 +571,14 @@ timetable of one of her habits, and `CLONES` the numbers for her clones, which b
  * - `wisp`: a will-o'-wisp goes round her twice, behind her and in front, her eyes following it,
  *   then flies off; she waves it goodbye.
  * - `sneeze`: "ah... ah... choo!", and the sneeze bursts into sparkles; a sheepish smile.
+ * - `hat`: her hat floats up off her head and spins, showering sparkles, then settles back.
+ * - `star`: a falling star drops into her cupped hands, glows there, and she tosses it back up.
+ * - `rain`: a little cloud gathers over her and rains on her; she shoos it and it bursts into
+ *   sparkles.
+ * - `potion`: a flask in her hand bubbles and changes colour; the cork pops and coloured smoke
+ *   puffs out.
+ * - `tome`: her spellbook floats open in front of her, its pages turning by themselves and glowing
+ *   letters rising out of it, then closes and vanishes.
  * - `dance`: a little jig, stepping side to side, an arm up and a hand on her hip, then the other.
  */
 export const FIDGETS = [
@@ -574,6 +589,11 @@ export const FIDGETS = [
   'vision',
   'curtsy',
   'orb',
+  'flame',
+  'frost',
+  'bloom',
+  'sigil',
+  'rainbow',
   'read',
   'spell',
   'levitate',
@@ -586,6 +606,11 @@ export const FIDGETS = [
   'bubbles',
   'wisp',
   'sneeze',
+  'hat',
+  'star',
+  'rain',
+  'potion',
+  'tome',
   'dance',
 ] as const
 
@@ -595,9 +620,14 @@ export type Fidget = (typeof FIDGETS)[number]
  * - `idle`: standing, breathing, blinking now and then.
  * - `walk-left`, `walk-right`: walking along the taskbar (the window moves with her).
  * - `dragged`: dangling while she's dragged, or falling after a drop.
+ * - `flung`: thrown, flying through the air, tumbling head over heels, arms and legs flailing.
+ * - `splat`: a hard landing: down on her bottom in a puff of dust, her hat knocked down over her
+ *   eyes and stars going round her head; she pushes it back up, shakes her head and gets up, with
+ *   a sheepish smile (for LANDING.splatMs).
  * - one of the FIDGETS, or one of the SPELL_POSES.
  */
-export type Pose = 'idle' | 'walk-left' | 'walk-right' | 'dragged' | Fidget | SpellPose
+export type Pose =
+  'idle' | 'walk-left' | 'walk-right' | 'dragged' | 'flung' | 'splat' | Fidget | SpellPose
 
 /** How long each fidget plays (ms): the main process goes back to idle after it. */
 export const FIDGET_MS: Record<Fidget, number> = {
@@ -608,6 +638,11 @@ export const FIDGET_MS: Record<Fidget, number> = {
   vision: 8600,
   curtsy: 2200,
   orb: 4400,
+  flame: 3600,
+  frost: 4000,
+  bloom: 4400,
+  sigil: 3600,
+  rainbow: 4000,
   read: 4000,
   spell: 2400,
   levitate: 3600,
@@ -620,6 +655,11 @@ export const FIDGET_MS: Record<Fidget, number> = {
   bubbles: 4400,
   wisp: 4800,
   sneeze: 3000,
+  hat: 3600,
+  star: 4400,
+  rain: 4400,
+  potion: 4000,
+  tome: 4800,
   dance: 3200,
 }
 
@@ -629,10 +669,16 @@ export const isFidget = (pose: Pose): pose is Fidget =>
 
 <!-- /code -->
 
-- `FIDGETS`: the twenty things she does now and then once she's been left alone a while, each
-  described in the comment above it. The last five are the newest: `juggle` (three glowing orbs),
-  `bubbles` (blown through a little wand ring), `wisp` (a will-o'-wisp that goes round her, behind
-  her and in front), `sneeze` (a sneeze that bursts into sparkles) and `dance` (a little jig). One,
+- `FIDGETS`: the thirty things she does now and then once she's been left alone a while, each
+  described in the comment above it. Ten are magic tricks added in 2.3.0: `flame` (a flame in her
+  palm, blown out), `frost` (a snowflake over her hands), `bloom` (a flower she grows),
+  `sigil` (a star traced in light), `rainbow`, `hat` (her hat floating off and spinning), `star` (a
+  falling star caught and tossed back), `rain` (a little rain cloud), `potion` and `tome` (her
+  spellbook floating open). They sit in two groups, five before `sit` and five before `dance`, so
+  `sit` stays in the middle of the list (the controller's tests pick from the middle). Before them
+  came `juggle` (three glowing orbs), `bubbles` (blown through a little wand ring), `wisp` (a
+  will-o'-wisp that goes round her, behind her and in front), `sneeze` (a sneeze that bursts into
+  sparkles) and `dance` (a little jig). One,
   `vision`, needs more than her own window: the light and the company's logo are drawn in a window
   of their own above her (see `VISION` below). The others, the butterfly, the dozer's z's, the
   orbs, the bubbles, the wisp and the sneeze's sparkles included, are drawn in her own window, so
@@ -667,7 +713,7 @@ export const isFidget = (pose: Pose): pose is Fidget =>
 
 <!-- code: apps/desktop/src/shared/character.ts#SPELL_POSES,SpellPose,SPELL_POSE_MS,isSpellPose -->
 
-[`src/shared/character.ts`, lines 56–76](../../apps/desktop/src/shared/character.ts#L56-L76)
+[`src/shared/character.ts`, lines 81–101](../../apps/desktop/src/shared/character.ts#L81-L101)
 
 ```ts
 /**
@@ -721,7 +767,7 @@ the main process plays them on purpose (`BubbleController.act()` and `teleport()
 
 <!-- code: apps/desktop/src/shared/character.ts#VISION -->
 
-[`src/shared/character.ts`, lines 113–124](../../apps/desktop/src/shared/character.ts#L113-L124)
+[`src/shared/character.ts`, lines 156–167](../../apps/desktop/src/shared/character.ts#L156-L167)
 
 ```ts
 /**
@@ -760,7 +806,7 @@ pages. Each entry is a `[from, to]` pair:
 
 <!-- code: apps/desktop/src/shared/character.ts#CLONES -->
 
-[`src/shared/character.ts`, lines 126–130](../../apps/desktop/src/shared/character.ts#L126-L130)
+[`src/shared/character.ts`, lines 176–180](../../apps/desktop/src/shared/character.ts#L176-L180)
 
 ```ts
 /**
@@ -1354,7 +1400,7 @@ survives a restart.
 
 <!-- code: apps/desktop/src/shared/types.ts#Effort,Settings,Habits,Theme -->
 
-[`src/shared/types.ts`, lines 30–56](../../apps/desktop/src/shared/types.ts#L30-L56)
+[`src/shared/types.ts`, lines 30–58](../../apps/desktop/src/shared/types.ts#L30-L58)
 
 ```ts
 /** How hard Claude thinks before answering (the API's `effort`), shown as Fast/Balanced/Thorough. */
@@ -1378,6 +1424,8 @@ export interface Settings {
   standStill: boolean
   /** She doesn't do her idle animations, her habits, on her own (off until turned on). */
   noIdles: boolean
+  /** Her robe's colour (`#rrggbb`; her hat is a darker shade of it), or null for the company's. */
+  robeColor: string | null
 }
 
 /** What she does on her own, from Settings: whether she wanders, and her idle animations. */
@@ -1424,7 +1472,7 @@ Thorough. `Settings` is what the settings menu shows; `SettingsService.get()` in
 
 <!-- code: apps/desktop/src/shared/types.ts#ChatApp -->
 
-[`src/shared/types.ts`, lines 58–62](../../apps/desktop/src/shared/types.ts#L58-L62)
+[`src/shared/types.ts`, lines 60–64](../../apps/desktop/src/shared/types.ts#L60-L64)
 
 ```ts
 /**
@@ -1450,7 +1498,7 @@ Where questions are answered, set per tenant (`chatApp` in `tenant.json`, checke
 
 <!-- code: apps/desktop/src/shared/types.ts#Branding,RequestType,StartPage -->
 
-[`src/shared/types.ts`, lines 64–92](../../apps/desktop/src/shared/types.ts#L64-L92)
+[`src/shared/types.ts`, lines 66–94](../../apps/desktop/src/shared/types.ts#L66-L94)
 
 ```ts
 export interface Branding {
@@ -1509,7 +1557,7 @@ also be the Jira page or the service desk page (`View` in `PanelView.tsx`).
 
 <!-- code: apps/desktop/src/shared/types.ts#SignedInUser,AuthStatus -->
 
-[`src/shared/types.ts`, lines 94–113](../../apps/desktop/src/shared/types.ts#L94-L113)
+[`src/shared/types.ts`, lines 96–115](../../apps/desktop/src/shared/types.ts#L96-L115)
 
 ```ts
 export interface SignedInUser {
@@ -1558,7 +1606,7 @@ token ever reaches them. With Claude Desktop there is no `AuthManager` and no st
 
 <!-- code: apps/desktop/src/shared/types.ts#ChatMessage,SendResult -->
 
-[`src/shared/types.ts`, lines 115–131](../../apps/desktop/src/shared/types.ts#L115-L131)
+[`src/shared/types.ts`, lines 117–133](../../apps/desktop/src/shared/types.ts#L117-L133)
 
 ```ts
 /** One message as the chat shows it. */
@@ -1605,7 +1653,7 @@ draft, which the panel shows. The reply itself arrives later, through `onChatMes
 
 <!-- code: apps/desktop/src/shared/types.ts#AskResult -->
 
-[`src/shared/types.ts`, lines 133–139](../../apps/desktop/src/shared/types.ts#L133-L139)
+[`src/shared/types.ts`, lines 135–141](../../apps/desktop/src/shared/types.ts#L135-L141)
 
 ```ts
 /**
@@ -1640,7 +1688,7 @@ Claude Desktop has opened with the question filled in. The failures come from
 
 <!-- code: apps/desktop/src/shared/types.ts#AppState -->
 
-[`src/shared/types.ts`, lines 141–156](../../apps/desktop/src/shared/types.ts#L141-L156)
+[`src/shared/types.ts`, lines 143–158](../../apps/desktop/src/shared/types.ts#L143-L158)
 
 ```ts
 export interface AppState {
@@ -1690,7 +1738,7 @@ asks with `atlassian.get()` and `atlassian.feed()`, and keeps up through `onAtla
 
 <!-- code: apps/desktop/src/shared/types.ts#PortalApp,AppsState -->
 
-[`src/shared/types.ts`, lines 158–177](../../apps/desktop/src/shared/types.ts#L158-L177)
+[`src/shared/types.ts`, lines 160–179](../../apps/desktop/src/shared/types.ts#L160-L179)
 
 ```ts
 /** One app from the user's JumpCloud User Portal, as the Apps list shows it. */
@@ -1737,7 +1785,7 @@ sets the state and broadcasts every change on `assist:apps-state`.
 
 <!-- code: apps/desktop/src/shared/types.ts#UninstallResult -->
 
-[`src/shared/types.ts`, lines 179–181](../../apps/desktop/src/shared/types.ts#L179-L181)
+[`src/shared/types.ts`, lines 181–183](../../apps/desktop/src/shared/types.ts#L181-L183)
 
 ```ts
 /** Settings → Uninstall. On success the app is already quitting. */
@@ -1759,7 +1807,7 @@ quitting, so the page has nothing more to do.
 
 <!-- code: apps/desktop/src/shared/types.ts#AtlassianState -->
 
-[`src/shared/types.ts`, lines 183–193](../../apps/desktop/src/shared/types.ts#L183-L193)
+[`src/shared/types.ts`, lines 185–195](../../apps/desktop/src/shared/types.ts#L185-L195)
 
 ```ts
 /**
@@ -1792,7 +1840,7 @@ The connection to Atlassian, as the comment says, which `Atlassian` in
 
 <!-- code: apps/desktop/src/shared/types.ts#StatusCategory,IssueStatus,JiraNotification,ServiceRequest -->
 
-[`src/shared/types.ts`, lines 195–229](../../apps/desktop/src/shared/types.ts#L195-L229)
+[`src/shared/types.ts`, lines 197–231](../../apps/desktop/src/shared/types.ts#L197-L231)
 
 ```ts
 /** How far along an issue is, by its status's category in Jira (which sets its colour). */
@@ -1846,7 +1894,7 @@ export interface ServiceRequest {
 
 <!-- code: apps/desktop/src/shared/types.ts#FeedList,JiraFeed -->
 
-[`src/shared/types.ts`, lines 231–242](../../apps/desktop/src/shared/types.ts#L231-L242)
+[`src/shared/types.ts`, lines 233–244](../../apps/desktop/src/shared/types.ts#L233-L244)
 
 ```ts
 /** A list the main process keeps up to date in the background. */
@@ -1875,7 +1923,7 @@ export interface JiraFeed {
 
 <!-- code: apps/desktop/src/shared/types.ts#IssueSummary,ConfluencePage,SearchResult -->
 
-[`src/shared/types.ts`, lines 244–264](../../apps/desktop/src/shared/types.ts#L244-L264)
+[`src/shared/types.ts`, lines 246–266](../../apps/desktop/src/shared/types.ts#L246-L266)
 
 ```ts
 /** An issue in a list of search results. */
@@ -1911,7 +1959,7 @@ What the Search tab shows: Jira issues (`IssueSummary`, with the issue's address
 
 <!-- code: apps/desktop/src/shared/types.ts#IssueComment,IssueTransition,IssueDetail,IssueResult -->
 
-[`src/shared/types.ts`, lines 266–297](../../apps/desktop/src/shared/types.ts#L266-L297)
+[`src/shared/types.ts`, lines 268–299](../../apps/desktop/src/shared/types.ts#L268-L299)
 
 ```ts
 export interface IssueComment {
@@ -1966,7 +2014,7 @@ What the issue view shows.
 
 <!-- code: apps/desktop/src/shared/types.ts#IssuePrompt,AskAboutIssueResult -->
 
-[`src/shared/types.ts`, lines 299–303](../../apps/desktop/src/shared/types.ts#L299-L303)
+[`src/shared/types.ts`, lines 301–305](../../apps/desktop/src/shared/types.ts#L301-L305)
 
 ```ts
 /** What to ask Claude about an issue. */
@@ -1986,7 +2034,7 @@ export type AskAboutIssueResult = { ok: true; inChat: boolean } | { ok: false; m
 
 <!-- code: apps/desktop/src/shared/types.ts#NewRequest,RaiseResult -->
 
-[`src/shared/types.ts`, lines 305–316](../../apps/desktop/src/shared/types.ts#L305-L316)
+[`src/shared/types.ts`, lines 307–318](../../apps/desktop/src/shared/types.ts#L307-L318)
 
 ```ts
 /** A request filled in on the panel, to finish on the help centre portal. */
@@ -2019,7 +2067,7 @@ The service desk page's form, and the answer to sending it (see `ServiceDesk.rai
 
 <!-- code: apps/desktop/src/shared/types.ts#UpdateState -->
 
-[`src/shared/types.ts`, lines 318–330](../../apps/desktop/src/shared/types.ts#L318-L330)
+[`src/shared/types.ts`, lines 320–332](../../apps/desktop/src/shared/types.ts#L320-L332)
 
 ```ts
 /**
@@ -2057,7 +2105,7 @@ it.
 
 <!-- code: apps/desktop/src/shared/types.ts#ActionResult,AttachResult -->
 
-[`src/shared/types.ts`, lines 332–339](../../apps/desktop/src/shared/types.ts#L332-L339)
+[`src/shared/types.ts`, lines 334–341](../../apps/desktop/src/shared/types.ts#L334-L341)
 
 ```ts
 export type ActionResult = { ok: true; message?: string } | { ok: false; message: string }
@@ -2105,7 +2153,7 @@ Messages come in three styles:
 
 <!-- code: apps/desktop/src/shared/ipc.ts#IPC -->
 
-[`src/shared/ipc.ts`, lines 33–113](../../apps/desktop/src/shared/ipc.ts#L33-L113)
+[`src/shared/ipc.ts`, lines 33–116](../../apps/desktop/src/shared/ipc.ts#L33-L116)
 
 ```ts
 /** IPC channel names. The preload maps them onto `window.assist`; src/main/ipc.ts handles them. */
@@ -2114,6 +2162,7 @@ export const IPC = {
   bubbleClick: 'assist:bubble-click',
   bubbleDragStart: 'assist:bubble-drag-start',
   bubbleDragEnd: 'assist:bubble-drag-end',
+  bubbleDragHold: 'assist:bubble-drag-hold',
   collapse: 'assist:collapse',
   setInteractive: 'assist:set-interactive',
   invokeAction: 'assist:invoke-action',
@@ -2133,6 +2182,7 @@ export const IPC = {
   settingsSetFavoriteApp: 'assist:settings-set-favorite-app',
   settingsSetTheme: 'assist:settings-set-theme',
   settingsSetHabits: 'assist:settings-set-habits',
+  settingsSetRobeColor: 'assist:settings-set-robe-color',
   characterSetSize: 'assist:character-set-size',
   characterCastSpell: 'assist:character-cast-spell',
   authSignIn: 'assist:auth-sign-in',
@@ -2178,6 +2228,7 @@ export const IPC = {
   poseChanged: 'assist:pose-changed',
   bubbleArrive: 'assist:bubble-arrive',
   screensaverEnd: 'assist:screensaver-end',
+  robeColorChanged: 'assist:robe-color-changed',
   cornerChanged: 'assist:corner-changed',
   sizeChanged: 'assist:size-changed',
   clickThroughReset: 'assist:click-through-reset',
@@ -2238,7 +2289,7 @@ name: a typo is a compile error instead of a message nobody hears.
 
 <!-- code: apps/desktop/src/shared/ipc.ts#AssistApi -->
 
-[`src/shared/ipc.ts`, lines 115–278](../../apps/desktop/src/shared/ipc.ts#L115-L278)
+[`src/shared/ipc.ts`, lines 118–290](../../apps/desktop/src/shared/ipc.ts#L118-L290)
 
 ```ts
 /** The API the preload exposes to renderers as `window.assist`. */
@@ -2250,6 +2301,11 @@ export interface AssistApi {
   bubbleDragStart(): void
   /** Released: the character falls onto the taskbar of the display it's on. */
   bubbleDragEnd(): void
+  /**
+   * While she's carried: the mouse button is still down (every DRAG_CHECK.everyMs). Without word
+   * for DRAG_CHECK.staleMs, the main process lets her go.
+   */
+  bubbleDragHold(): void
   collapse(): void
   /** Tell the main process whether the pointer is over real UI (true) or a see-through area. */
   setInteractive(interactive: boolean): void
@@ -2282,6 +2338,8 @@ export interface AssistApi {
     setTheme(theme: Theme): Promise<Settings>
     /** Whether she stands still, and whether she does her idle animations; saved. */
     setHabits(habits: Partial<Habits>): Promise<Settings>
+    /** Her robe's colour (`#rrggbb`), or null for the company's; saved, and she changes at once. */
+    setRobeColor(color: string | null): Promise<Settings>
   }
   character: {
     /** Makes her `scale` times her usual size (one of CHARACTER_SIZES); saved. */
@@ -2386,6 +2444,8 @@ export interface AssistApi {
   }
   /** The screen saver is ending: time for its scene to fade away (its pages). */
   onScreensaverEnd(callback: () => void): () => void
+  /** Her robe's colour was changed in Settings (null: the company's again). */
+  onRobeColorChanged(callback: (color: string | null) => void): () => void
   onModeChanged(callback: (mode: Mode) => void): () => void
   /** The character's pose changed (walking, fidgeting, dangling...). */
   onPoseChanged(callback: (pose: Pose) => void): () => void
@@ -2751,7 +2811,7 @@ listening. Every `on...` method in `api` uses it.
 
 <!-- code: apps/desktop/src/preload/index.ts#api -->
 
-[`src/preload/index.ts`, lines 12–116](../../apps/desktop/src/preload/index.ts#L12-L116)
+[`src/preload/index.ts`, lines 12–119](../../apps/desktop/src/preload/index.ts#L12-L119)
 
 ```ts
 const api: AssistApi = {
@@ -2759,6 +2819,7 @@ const api: AssistApi = {
   bubbleClick: (pressedAt) => ipcRenderer.send(IPC.bubbleClick, pressedAt),
   bubbleDragStart: () => ipcRenderer.send(IPC.bubbleDragStart),
   bubbleDragEnd: () => ipcRenderer.send(IPC.bubbleDragEnd),
+  bubbleDragHold: () => ipcRenderer.send(IPC.bubbleDragHold),
   collapse: () => ipcRenderer.send(IPC.collapse),
   setInteractive: (interactive) => ipcRenderer.send(IPC.setInteractive, interactive),
   invokeAction: (id) => ipcRenderer.invoke(IPC.invokeAction, id),
@@ -2782,6 +2843,7 @@ const api: AssistApi = {
     setAutoSend: (autoSend) => ipcRenderer.invoke(IPC.settingsSetAutoSend, autoSend),
     setTheme: (theme) => ipcRenderer.invoke(IPC.settingsSetTheme, theme),
     setHabits: (habits) => ipcRenderer.invoke(IPC.settingsSetHabits, habits),
+    setRobeColor: (color) => ipcRenderer.invoke(IPC.settingsSetRobeColor, color),
     setFavoriteApp: (id, favorite) =>
       ipcRenderer.invoke(IPC.settingsSetFavoriteApp, { id, favorite }),
   },
@@ -2845,6 +2907,7 @@ const api: AssistApi = {
     wake: () => ipcRenderer.send(IPC.screensaverWake),
   },
   onScreensaverEnd: (callback) => subscribe(IPC.screensaverEnd, () => callback()),
+  onRobeColorChanged: (callback) => subscribe(IPC.robeColorChanged, callback),
   onModeChanged: (callback) => subscribe(IPC.modeChanged, callback),
   onPoseChanged: (callback) => subscribe(IPC.poseChanged, callback),
   onArrive: (callback) => subscribe(IPC.bubbleArrive, callback),

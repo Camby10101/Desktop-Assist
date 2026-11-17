@@ -14,6 +14,7 @@ const api: AssistApi = {
   bubbleClick: (pressedAt) => ipcRenderer.send(IPC.bubbleClick, pressedAt),
   bubbleDragStart: () => ipcRenderer.send(IPC.bubbleDragStart),
   bubbleDragEnd: () => ipcRenderer.send(IPC.bubbleDragEnd),
+  bubbleDragHold: () => ipcRenderer.send(IPC.bubbleDragHold),
   collapse: () => ipcRenderer.send(IPC.collapse),
   setInteractive: (interactive) => ipcRenderer.send(IPC.setInteractive, interactive),
   invokeAction: (id) => ipcRenderer.invoke(IPC.invokeAction, id),
@@ -37,6 +38,7 @@ const api: AssistApi = {
     setAutoSend: (autoSend) => ipcRenderer.invoke(IPC.settingsSetAutoSend, autoSend),
     setTheme: (theme) => ipcRenderer.invoke(IPC.settingsSetTheme, theme),
     setHabits: (habits) => ipcRenderer.invoke(IPC.settingsSetHabits, habits),
+    setRobeColor: (color) => ipcRenderer.invoke(IPC.settingsSetRobeColor, color),
     setFavoriteApp: (id, favorite) =>
       ipcRenderer.invoke(IPC.settingsSetFavoriteApp, { id, favorite }),
   },
@@ -100,6 +102,7 @@ const api: AssistApi = {
     wake: () => ipcRenderer.send(IPC.screensaverWake),
   },
   onScreensaverEnd: (callback) => subscribe(IPC.screensaverEnd, () => callback()),
+  onRobeColorChanged: (callback) => subscribe(IPC.robeColorChanged, callback),
   onModeChanged: (callback) => subscribe(IPC.modeChanged, callback),
   onPoseChanged: (callback) => subscribe(IPC.poseChanged, callback),
   onArrive: (callback) => subscribe(IPC.bubbleArrive, callback),

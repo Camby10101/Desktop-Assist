@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   FIDGET_MS,
   FIDGETS,
+  LANDING,
   SPELL_POSE_MS,
   SPELL_POSES,
   type Pose as PoseName,
@@ -74,6 +75,33 @@ describe('the animations', { timeout: 30_000 }, () => {
       expect(lowRows(rows)).not.toMatch(FEET)
       expect(rows.join('')).not.toContain('x') // no shadow while she's carried
     }
+  })
+
+  it('tumble her round and round when she’s thrown, front, side and back, with no shadow', () => {
+    const frames = framesOf('flung', 'right')
+    expect(LOOPS.flung).toBe(true)
+    for (const { rows } of frames) expect(rows.join('')).not.toContain('x')
+    // Her face from the front, and none from behind: both turn up as she tumbles.
+    const faces = frames.map(({ rows }) => /[ij]/.test(rows.join('')))
+    expect(faces).toContain(true)
+    expect(faces).toContain(false)
+    expect(new Set(frames.map((f) => f.rows.join(''))).size).toBeGreaterThan(6)
+  })
+
+  it('knock her flat on a hard landing for as long as the main process waits, then stand her up', () => {
+    const frames = framesOf('splat', 'right')
+    expect(LOOPS.splat).toBe(false)
+    expect(animationLength('splat')).toBe(LANDING.splatMs)
+    // Sitting, her hat down over her eyes (no irises showing), stars going round above it.
+    const middle = frames[Math.floor(frames.length / 3)]!.rows
+    expect(middle.join('')).not.toContain('i')
+    const dazed: Pose = { view: 'front', sitting: true, hatLift: -9 }
+    const gold = (rows: string[]) => rows.join('').split('Y').length
+    expect(gold(draw({ ...dazed, dizzy: 0.2 }))).toBeGreaterThan(gold(draw(dazed)))
+    expect(draw({ ...dazed, dust: 0.4 }).join('')).not.toBe(draw(dazed).join(''))
+    // Up again by the end, on her feet.
+    expect(lowRows(frames.at(-1)!.rows)).toMatch(FEET)
+    expect(frames.at(-1)!.rows.join('')).toMatch(/[ij]|e/)
   })
 
   it('float her up over a magic circle while she levitates, and back down', () => {
@@ -419,6 +447,73 @@ describe('the rig', () => {
     // A sneeze's sparkles, only while they fly.
     expect(same({ view: 'front', burst: 0.3 }, { view: 'front' })).toBe(false)
     expect(same({ view: 'front', burst: 1 }, { view: 'front' })).toBe(true)
+  })
+
+  it('draws the magic habits’ things only while they last, each its own', () => {
+    const same = (a: Pose, b: Pose) => draw(a).join('') === draw(b).join('')
+    const cupped: Pose['arms'] = [
+      { shoulder: 0.5, elbow: -1.45 },
+      { shoulder: 0.5, elbow: -1.45 },
+    ]
+    const habits: [keyof Pose, Pose][] = [
+      ['flame', { view: 'diagonal', arms: [{ shoulder: 0.55, elbow: 1.7 }, DOWN_ARM] }],
+      ['frost', { view: 'front', arms: cupped }],
+      ['bloom', { view: 'diagonal' }],
+      ['sigil', { view: 'front' }],
+      ['rainbow', { view: 'front' }],
+      ['shower', { view: 'front', hatLift: 10 }],
+      ['star', { view: 'front', arms: cupped }],
+      ['rain', { view: 'front' }],
+      ['potion', { view: 'diagonal', arms: [{ shoulder: 0.5, elbow: 2 }, DOWN_ARM] }],
+      ['tome', { view: 'front' }],
+    ]
+    for (const [field, base] of habits) {
+      for (const t of [0.2, 0.5, 0.65]) {
+        expect(same({ ...base, [field]: t }, base), `${field} at ${t}`).toBe(false)
+      }
+      expect(same({ ...base, [field]: 0 }, base), `${field} at 0`).toBe(true)
+      expect(same({ ...base, [field]: 1 }, base), `${field} at 1`).toBe(true)
+    }
+    const letters = (pose: Pose) => new Set(draw(pose).join(''))
+    // Fire's red and orange; the flower's leaves; the rainbow's colours, all behind her.
+    expect(letters({ ...habits[0]![1], flame: 0.4 }).has('m')).toBe(true)
+    expect(letters({ view: 'diagonal', bloom: 0.7 }).has('E')).toBe(true)
+    const plain = draw({ view: 'front' })
+    const rainbow = draw({ view: 'front', rainbow: 0.6 })
+    rainbow.forEach((row, y) =>
+      [...row].forEach((p, x) => {
+        if (p !== plain[y]![x]) expect(plain[y]![x]).toBe('.')
+      }),
+    )
+    expect(new Set(rainbow.join('')).has('j')).toBe(true)
+  })
+
+  it('lifts her hat off her head and turns it, its buckle showing only from the front', () => {
+    const top = (rows: string[]) => rows.findIndex((row) => /[nNg]/.test(row))
+    const plain = draw({ view: 'front' })
+    const lifted = draw({ view: 'front', hatLift: 10 })
+    expect(top(plain) - top(lifted)).toBe(10)
+    expect(top(lifted)).toBeGreaterThan(0) // still in the frame
+    // Her hair shows where the hat was.
+    const crown = (rows: string[]) => rows.slice(HEADROOM + 14, HEADROOM + 18).join('')
+    expect(crown(lifted).match(/[hlLD]/g)!.length).toBeGreaterThan(
+      crown(plain).match(/[hlLD]/g)?.length ?? 0,
+    )
+    // Edge on it's narrow; back to us, no gold buckle or moon.
+    const width = (rows: string[]) => {
+      const row = rows[top(rows) + 13]!
+      return row.lastIndexOf('n') - row.indexOf('n')
+    }
+    expect(width(draw({ view: 'front', hatLift: 10, hatTurn: Math.PI / 2 }))).toBeLessThan(
+      width(lifted) / 2,
+    )
+    const gold = (rows: string[]) =>
+      rows
+        .slice(0, top(rows) + 14)
+        .join('')
+        .includes('Y')
+    expect(gold(lifted)).toBe(true)
+    expect(gold(draw({ view: 'front', hatLift: 10, hatTurn: Math.PI }))).toBe(false)
   })
 
   it('puts her face on: eyes, blush and mouth', () => {

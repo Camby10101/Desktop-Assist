@@ -15,6 +15,7 @@ import type { Branding, Effort, Habits, Settings, SignedInUser, UpdateState } fr
 import { useFitInWindow } from '../hooks/useFitInWindow'
 import { anchored } from '../lib/anchor'
 import { cn } from '../lib/cn'
+import { RobeColorControl } from './RobeColorControl'
 import { SizeControl } from './SizeControl'
 
 const CONFIRM_MS = 3000
@@ -48,6 +49,7 @@ export function SettingsMenu(props: {
   onToggleTheme: () => void
   onSetSize: (scale: number) => void
   onSetHabits: (habits: Partial<Habits>) => void
+  onSetRobeColor: (color: string | null) => void
   onToggleAutoStart: () => void
   onSetEffort: (effort: Effort) => void
   onToggleAutoSend: () => void
@@ -105,6 +107,12 @@ export function SettingsMenu(props: {
       />
 
       <SizeControl size={props.size} onSetSize={props.onSetSize} />
+
+      <RobeColorControl
+        color={settings.robeColor}
+        companyColor={branding.accentColor}
+        onSetColor={props.onSetRobeColor}
+      />
 
       <ToggleRow
         label="Stand still"

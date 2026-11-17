@@ -36,6 +36,7 @@ export const IPC = {
   bubbleClick: 'assist:bubble-click',
   bubbleDragStart: 'assist:bubble-drag-start',
   bubbleDragEnd: 'assist:bubble-drag-end',
+  bubbleDragHold: 'assist:bubble-drag-hold',
   collapse: 'assist:collapse',
   setInteractive: 'assist:set-interactive',
   invokeAction: 'assist:invoke-action',
@@ -55,6 +56,7 @@ export const IPC = {
   settingsSetFavoriteApp: 'assist:settings-set-favorite-app',
   settingsSetTheme: 'assist:settings-set-theme',
   settingsSetHabits: 'assist:settings-set-habits',
+  settingsSetRobeColor: 'assist:settings-set-robe-color',
   characterSetSize: 'assist:character-set-size',
   characterCastSpell: 'assist:character-cast-spell',
   authSignIn: 'assist:auth-sign-in',
@@ -100,6 +102,7 @@ export const IPC = {
   poseChanged: 'assist:pose-changed',
   bubbleArrive: 'assist:bubble-arrive',
   screensaverEnd: 'assist:screensaver-end',
+  robeColorChanged: 'assist:robe-color-changed',
   cornerChanged: 'assist:corner-changed',
   sizeChanged: 'assist:size-changed',
   clickThroughReset: 'assist:click-through-reset',
@@ -121,6 +124,11 @@ export interface AssistApi {
   bubbleDragStart(): void
   /** Released: the character falls onto the taskbar of the display it's on. */
   bubbleDragEnd(): void
+  /**
+   * While she's carried: the mouse button is still down (every DRAG_CHECK.everyMs). Without word
+   * for DRAG_CHECK.staleMs, the main process lets her go.
+   */
+  bubbleDragHold(): void
   collapse(): void
   /** Tell the main process whether the pointer is over real UI (true) or a see-through area. */
   setInteractive(interactive: boolean): void
@@ -153,6 +161,8 @@ export interface AssistApi {
     setTheme(theme: Theme): Promise<Settings>
     /** Whether she stands still, and whether she does her idle animations; saved. */
     setHabits(habits: Partial<Habits>): Promise<Settings>
+    /** Her robe's colour (`#rrggbb`), or null for the company's; saved, and she changes at once. */
+    setRobeColor(color: string | null): Promise<Settings>
   }
   character: {
     /** Makes her `scale` times her usual size (one of CHARACTER_SIZES); saved. */
@@ -257,6 +267,8 @@ export interface AssistApi {
   }
   /** The screen saver is ending: time for its scene to fade away (its pages). */
   onScreensaverEnd(callback: () => void): () => void
+  /** Her robe's colour was changed in Settings (null: the company's again). */
+  onRobeColorChanged(callback: (color: string | null) => void): () => void
   onModeChanged(callback: (mode: Mode) => void): () => void
   /** The character's pose changed (walking, fidgeting, dangling...). */
   onPoseChanged(callback: (pose: Pose) => void): () => void
