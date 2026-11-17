@@ -31,7 +31,12 @@ same, but:
   ID, a new version would install beside the old one instead of replacing it. The install folder
   (`extraMetadata.name`, `desktop-assist`) stays as it is too.
 - The release key stays at `%USERPROFILE%\.desktop-assist\release-key.pem` (or the file named in
-  `DESKTOP_ASSIST_RELEASE_KEY`), and the repository is still `Camby10101/Desktop-Assist`.
+  `DESKTOP_ASSIST_RELEASE_KEY`).
+- **Releases are published at `Camby10101/Desktop-Wizard`.** The repository was renamed from
+  `Camby10101/Desktop-Assist` for 2.1.1, and `updates.repo` in `tenant.json` names the new one.
+  Copies from before then still ask GitHub about the old name; GitHub answers for the renamed
+  repository, and the app follows its release's own page to the new name for the files
+  (`ownDownloads()` in `apps/desktop/src/main/updates.ts`), so they still update.
 
 ## The release key
 
@@ -108,12 +113,13 @@ From then on, **Check for updates** on any older copy finds it.
 
 ## How the app checks
 
-- It reads `https://api.github.com/repos/Camby10101/Desktop-Assist/releases/latest` (from
+- It reads `https://api.github.com/repos/Camby10101/Desktop-Wizard/releases/latest` (from
   `updates.repo` in `tenant.json`). The repository is public, so no sign-in or token is needed.
   GitHub allows each network address 60 such requests an hour, which the occasional click never
   comes near; if it's ever reached, the app says GitHub is busy.
 - It only downloads from the repository's own release files
-  (`https://github.com/Camby10101/Desktop-Assist/releases/download/…`).
+  (`https://github.com/Camby10101/Desktop-Wizard/releases/download/…`), or, for a copy that asked
+  by an old name, from wherever the release's own page on GitHub says the repository now is.
 - It checks the download's size and its SHA-256 against what GitHub reports for the attached file.
 - It checks the `.sig` is the release key's signature of this version and the installer's
   SHA-256. Signing the version too means an old, genuine installer can't be passed off as a newer

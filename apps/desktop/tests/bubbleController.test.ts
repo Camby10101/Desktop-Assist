@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { FIDGET_MS, SPELL_POSE_MS, type Pose } from '@shared/character'
 import { UI, type CharacterSize, type Corner, type Point, type Rect } from '@shared/geometry'
-import type { Mode } from '@shared/types'
+import type { Habits, Mode } from '@shared/types'
 import {
   BLUR_CLICK_GRACE_MS,
   BubbleController,
@@ -61,7 +61,11 @@ let anchors: BubbleAnchor[]
 let sizes: CharacterSize[]
 let controller: BubbleController
 
-function makeController(initialAnchor: BubbleAnchor | null = null, initialScale?: number) {
+function makeController(
+  initialAnchor: BubbleAnchor | null = null,
+  initialScale?: number,
+  initialHabits?: Habits,
+) {
   return new BubbleController({
     bubble,
     panel,
@@ -78,6 +82,7 @@ function makeController(initialAnchor: BubbleAnchor | null = null, initialScale?
     actionCount: 4,
     initialAnchor,
     initialScale,
+    initialHabits,
     onModeChange: (mode) => modes.push(mode),
     onAnchorChange: (anchor) => anchors.push(anchor),
     onPoseChange: (pose) => poses.push(pose),
@@ -256,6 +261,112 @@ describe('on its own', () => {
     vi.advanceTimersByTime(FIDGET_MS.sit + 100)
     expect(controller.currentPose).toBe('dragged') // the fidget's end doesn't interrupt
     controller.endDrag()
+  })
+})
+
+describe('as Settings say', () => {
+  /** Starts her again with these Settings. */
+  function startWith(habits: Habits) {
+    controller.dispose()
+    controller = makeController(null, undefined, habits)
+    controller.start()
+  }
+
+  it('stands still: never walks, but still does her idle animations once left alone', () => {
+    startWith({ standStill: true, noIdles: false })
+    vi.advanceTimersByTime(46_000)
+    // Resting at 8.5 s and 22.5 s; alone for 30 s at 36.5 s.
+    expect(poses).toEqual(['sit', 'idle'])
+    expect(bubble.bounds).toEqual(home())
+  })
+
+  it('without idle animations: only ever strolls about', () => {
+    startWith({ standStill: false, noIdles: true })
+    vi.advanceTimersByTime(120_000)
+    expect(poses.length).toBeGreaterThan(4)
+    for (const pose of poses) expect(pose).toMatch(/^(walk-left|walk-right|idle)$/)
+  })
+
+  it('with both: does nothing on her own at all', () => {
+    startWith({ standStill: true, noIdles: true })
+    vi.advanceTimersByTime(120_000)
+    expect(poses).toEqual([])
+    expect(bubble.bounds).toEqual(home())
+  })
+
+  it('turned on mid-walk, stops where she is; turned off again, gets on with her day', () => {
+    advanceUntil(() => controller.currentPose === 'walk-left')
+    vi.advanceTimersByTime(500)
+    controller.setHabits({ standStill: true, noIdles: true })
+    expect(controller.currentPose).toBe('idle')
+    const where = bubble.bounds
+    vi.advanceTimersByTime(120_000)
+    expect(bubble.bounds).toEqual(where)
+    const before = poses.length
+    controller.setHabits({ standStill: false, noIdles: false })
+    vi.advanceTimersByTime(WANDER.delay[1] + 100)
+    expect(poses.slice(before).some((pose) => pose !== 'idle')).toBe(true)
+  })
+
+  it('stays where she was dropped, however far from her corner, when she’s to stand still', () => {
+    startWith({ standStill: true, noIdles: false })
+    drag({ x: 900, y: 300 })
+    vi.advanceTimersByTime(1000)
+    expect(controller.currentMode).toBe('collapsed')
+    expect(controller.currentPose).toBe('idle')
+    const landed = bubble.bounds
+    vi.advanceTimersByTime(10_000)
+    expect(bubble.bounds).toEqual(landed)
+  })
+})
+
+describe('the screen saver', () => {
+  it('sleeps: the panel closes, she vanishes, her window hides, and she does nothing meanwhile', () => {
+    controller.clickBubble()
+    controller.sleep()
+    expect(controller.currentMode).toBe('collapsed')
+    expect(controller.currentPose).toBe('vanish')
+    expect(bubble.visible).toBe(true)
+    vi.advanceTimersByTime(SPELL_POSE_MS.vanish + 10)
+    expect(bubble.visible).toBe(false)
+    const before = poses.length
+    controller.clickBubble()
+    controller.expand()
+    controller.startDrag()
+    vi.advanceTimersByTime(120_000)
+    expect(controller.currentMode).toBe('collapsed')
+    expect(poses.slice(before)).toEqual([])
+  })
+
+  it('wakes: her window shows, she forms out of white motes, then gets on with her day', () => {
+    controller.sleep()
+    vi.advanceTimersByTime(SPELL_POSE_MS.vanish + 10)
+    controller.wake()
+    expect(bubble.visible).toBe(true)
+    expect(bubble.bounds).toEqual(home())
+    expect(controller.currentPose).toBe('appear')
+    vi.advanceTimersByTime(SPELL_POSE_MS.appear + 10)
+    expect(controller.currentPose).toBe('idle')
+    vi.advanceTimersByTime(WANDER.delay[1] + 100)
+    expect(poses.at(-1)).not.toBe('appear')
+    expect(poses.slice(poses.lastIndexOf('appear') + 1).some((p) => p !== 'idle')).toBe(true)
+  })
+
+  it('stays gone when the screens change while she sleeps', () => {
+    controller.sleep()
+    vi.advanceTimersByTime(200)
+    controller.displayChanged()
+    expect(controller.currentPose).toBe('vanish')
+    vi.advanceTimersByTime(SPELL_POSE_MS.vanish)
+    expect(bubble.visible).toBe(false)
+  })
+
+  it('woken before she’s gone, she comes straight back', () => {
+    controller.sleep()
+    vi.advanceTimersByTime(200)
+    controller.wake()
+    vi.advanceTimersByTime(SPELL_POSE_MS.vanish)
+    expect(bubble.visible).toBe(true)
   })
 })
 

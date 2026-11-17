@@ -19,7 +19,7 @@ import {
   type Point,
   type Rect,
 } from '@shared/geometry'
-import type { Mode } from '@shared/types'
+import type { Habits, Mode } from '@shared/types'
 import {
   bubbleWindowBounds,
   insetAt,
@@ -34,6 +34,7 @@ import {
   fallDuration,
   fallPosition,
   nextActivity,
+  type Pastimes,
   walkStep,
   walkTarget,
 } from './wander'
@@ -81,6 +82,8 @@ export interface BubbleControllerDeps {
   initialAnchor?: BubbleAnchor | null
   /** Her size last time (see CHARACTER_SIZES), if saved. */
   initialScale?: number | null
+  /** Whether she stands still, and does her idle animations (Settings); she does both if not. */
+  initialHabits?: Habits
   onModeChange(mode: Mode): void
   /** The character settled near the other bottom corner or on another display. */
   onAnchorChange(anchor: BubbleAnchor): void
@@ -92,6 +95,11 @@ export interface BubbleControllerDeps {
   random?: () => number
   /** Things worth a line in the log, such as a click on the bubble that didn't open it. */
   onDiagnostic?: (message: string) => void
+}
+
+/** What she may do on her own, from the Settings (both, unless they say otherwise). */
+function pastimesOf(habits?: Habits): Pastimes {
+  return { walk: !habits?.standStill, fidget: !habits?.noIdles }
 }
 
 const FRAME_MS = 16
@@ -156,6 +164,11 @@ export class BubbleController {
   private expandAfterReturn = false
   /** She's vanishing as the app closes (farewell): she does nothing more, whatever's clicked. */
   private leaving = false
+  /** What she may do on her own (Settings: Stand still, No idle animations). */
+  private pastimes: Pastimes
+  /** She's away while the screen saver is on (sleep): hidden, doing nothing, until wake(). */
+  private asleep = false
+  private sleepTimer: ReturnType<typeof setTimeout> | null = null
   private readonly now: () => number
   private readonly random: () => number
 
@@ -172,6 +185,7 @@ export class BubbleController {
       saved && deps.displays.byId(saved.displayId)
         ? { displayId: saved.displayId, corner }
         : { displayId: deps.displays.primary().id, corner }
+    this.pastimes = pastimesOf(deps.initialHabits)
     this.chosenScale = snapSize(deps.initialScale ?? DEFAULT_SIZE)
     this.scale = Math.min(this.chosenScale, this.largestScale())
   }
@@ -220,6 +234,17 @@ export class BubbleController {
     return this.size
   }
 
+  /**
+   * Whether she wanders about and does her idle animations on her own (Settings). A walk of her
+   * own that's no longer allowed stops where she is; a fidget plays out.
+   */
+  setHabits(habits: Habits): void {
+    this.pastimes = pastimesOf(habits)
+    if (this.mode !== 'collapsed' || this.leaving || this.asleep) return
+    if (this.walking && !this.pastimes.walk) this.stopWalking()
+    if (this.pose === 'idle') this.scheduleActivity(false)
+  }
+
   /** Stands the character in its saved corner (or bottom-right of the main display) and shows it. */
   start(): void {
     this.position = this.rest()
@@ -230,7 +255,7 @@ export class BubbleController {
 
   /** A click on the bubble. `pressedAt` is when its mouse button went down (wall-clock ms). */
   clickBubble(pressedAt?: number): void {
-    if (this.leaving) return
+    if (this.leaving || this.asleep) return
     switch (this.mode) {
       case 'collapsed': {
         const closedByThisPress =
@@ -254,7 +279,7 @@ export class BubbleController {
 
   /** Opens the panel where the character stands. While she's falling, once she lands. */
   expand(): void {
-    if (this.leaving) return
+    if (this.leaving || this.asleep) return
     switch (this.mode) {
       case 'expanded':
         this.deps.panel.focus()
@@ -298,7 +323,8 @@ export class BubbleController {
 
   /** The mouse pressed on the character and moved: it dangles from the pointer until released. */
   startDrag(): void {
-    if (this.leaving || (this.mode !== 'collapsed' && this.mode !== 'expanded')) return
+    if (this.leaving || this.asleep) return
+    if (this.mode !== 'collapsed' && this.mode !== 'expanded') return
     this.cancelHide()
     this.deps.panel.hide()
     this.setMode('dragging')
@@ -380,6 +406,36 @@ export class BubbleController {
     setTimeout(done, SPELL_POSE_MS.vanish)
   }
 
+  /**
+   * The screen saver's starting: the panel closes and she vanishes into white motes as the screens
+   * whiten (her `vanish` pose), then her window hides. She does nothing more until wake().
+   */
+  sleep(): void {
+    if (this.leaving || this.asleep) return
+    this.collapse()
+    this.asleep = true
+    this.stopIdling()
+    this.stopTicker()
+    this.walking = false
+    this.setPose('vanish')
+    this.sleepTimer = setTimeout(() => {
+      this.sleepTimer = null
+      this.deps.bubble.hide()
+    }, SPELL_POSE_MS.vanish)
+  }
+
+  /** The screen saver's over: her window shows again, she forms out of white motes, and carries on. */
+  wake(): void {
+    if (!this.asleep) return
+    this.asleep = false
+    if (this.sleepTimer) clearTimeout(this.sleepTimer)
+    this.sleepTimer = null
+    this.position = this.rest()
+    this.placeWindows()
+    this.deps.bubble.show()
+    this.act('appear')
+  }
+
   /** Hides both windows, runs `task` (a screenshot), then reopens the panel. */
   async whileHidden<T>(task: () => Promise<T>): Promise<T> {
     if (this.mode !== 'expanded') throw new Error(`Can't hide the windows while ${this.mode}`)
@@ -410,7 +466,8 @@ export class BubbleController {
     }
     this.fitScale()
     if (this.mode === 'returning' || this.mode === 'dragging') return
-    this.stopIdling()
+    // Asleep (the screen saver), she stays gone: she's placed afresh as she wakes.
+    if (!this.asleep) this.stopIdling()
     this.inset = Math.min(this.inset, maxInset(this.display().workArea, this.scale))
     this.position = this.rest()
     this.placeWindows()
@@ -421,6 +478,7 @@ export class BubbleController {
     this.stopTicker()
     this.cancelHide()
     this.cancelActivity()
+    if (this.sleepTimer) clearTimeout(this.sleepTimer)
   }
 
   /** The anchor's display, or the main display if it's gone. */
@@ -470,7 +528,9 @@ export class BubbleController {
         return
       }
       this.settle()
-      if (this.mode === 'collapsed' && this.inset > this.zone()) this.walkTo(this.zone())
+      // ...unless she's to stand still, when she stays where she landed.
+      const far = this.inset > this.zone()
+      if (this.mode === 'collapsed' && far && this.pastimes.walk) this.walkTo(this.zone())
     })
   }
 
@@ -492,10 +552,14 @@ export class BubbleController {
     return Math.min(zone, maxInset(this.display().workArea, this.scale))
   }
 
-  /** Waits a while, then does something on its own (see doActivity). Collapsed only. */
+  /**
+   * Waits a while, then does something on its own (see doActivity). Collapsed only, and never if
+   * she's neither to walk nor to fidget.
+   */
   private scheduleActivity(first: boolean): void {
     this.cancelActivity()
-    if (this.mode !== 'collapsed' || this.leaving) return
+    if (this.mode !== 'collapsed' || this.leaving || this.asleep) return
+    if (!this.pastimes.walk && !this.pastimes.fidget) return
     this.idleTimer = setTimeout(() => this.doActivity(), activityDelay(this.random, first))
   }
 
@@ -503,7 +567,18 @@ export class BubbleController {
     this.idleTimer = null
     if (this.mode !== 'collapsed') return
     const idleMs = this.now() - this.lastInteraction
-    const activity = nextActivity(idleMs, this.inset, this.zone(), this.random, this.lastFidget)
+    const activity = nextActivity(
+      idleMs,
+      this.inset,
+      this.zone(),
+      this.random,
+      this.lastFidget,
+      this.pastimes,
+    )
+    if (activity.kind === 'rest') {
+      this.scheduleActivity(false)
+      return
+    }
     if (activity.kind === 'walk') {
       this.walkTo(activity.to)
       return

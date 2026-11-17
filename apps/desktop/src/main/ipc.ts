@@ -62,6 +62,8 @@ export interface IpcContext {
   actions: ActionHandlers
   /** The Spells menu: casts one of her spells. */
   castSpell(spell: Spell): void
+  /** The screen saver, which its own windows' pages wake (they aren't among `windows`). */
+  screenSaver: { wakeFrom(senderId: number): void }
   /** Settings → Uninstall. */
   uninstall(): UninstallResult
   getState(): AppState
@@ -125,6 +127,11 @@ export function registerIpc(ctx: IpcContext): void {
 
   handle(IPC.getState, NoArgs, () => ctx.getState())
 
+  // From the screen saver's pages, which aren't among `windows`: it listens only to its own.
+  ipcMain.on(IPC.screensaverWake, (event: IpcMainEvent) =>
+    ctx.screenSaver.wakeFrom(event.sender.id),
+  )
+
   on(IPC.bubbleClick, z.number().finite().optional(), (pressedAt) =>
     ctx.controller.clickBubble(pressedAt),
   )
@@ -170,6 +177,15 @@ export function registerIpc(ctx: IpcContext): void {
   )
   handle(IPC.settingsSetAutoSend, z.boolean(), (autoSend) => ctx.settings.setAutoSend(autoSend))
   handle(IPC.settingsSetTheme, z.enum(['dark', 'light']), (theme) => ctx.settings.setTheme(theme))
+  handle(
+    IPC.settingsSetHabits,
+    z.object({ standStill: z.boolean().optional(), noIdles: z.boolean().optional() }).strict(),
+    async (habits) => {
+      const settings = await ctx.settings.setHabits(habits)
+      ctx.controller.setHabits(settings)
+      return settings
+    },
+  )
   handle(
     IPC.characterSetSize,
     z.number().refine((scale) => (CHARACTER_SIZES as readonly number[]).includes(scale)),
@@ -230,7 +246,9 @@ export function registerIpc(ctx: IpcContext): void {
     handle(IPC.atlassianSignOut, NoArgs, () => atlassian.signOut())
     handle(IPC.atlassianRetry, NoArgs, () => void atlassian.retry())
     handle(IPC.atlassianFeed, z.boolean(), (refresh) => atlassian.feed(refresh))
-    handle(IPC.atlassianMarkNotificationsRead, NoArgs, () => atlassian.markNotificationsRead())
+    handle(IPC.atlassianMarkNotificationsRead, z.string().min(1).max(200).optional(), (id) =>
+      atlassian.markNotificationsRead(id),
+    )
     handle(IPC.atlassianMarkRequestsRead, IssueKey.optional(), (key) =>
       atlassian.markRequestsRead(key),
     )

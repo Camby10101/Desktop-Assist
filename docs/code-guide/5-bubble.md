@@ -9,10 +9,11 @@ the modes and the IPC channels all kept the name. The character and the panel ea
 own transparent, frameless _overlay window_, created in `windows.ts`. `BubbleController` decides
 what the character is doing, and how big she is, and moves, sizes, shows and hides the two windows
 to match, using the pure maths in `layout.ts` (where things go) and `wander.ts` (what the
-character does on its own, and how it falls). Three more overlay windows come and go: `clones.ts`
+character does on its own, and how it falls). Three more overlay windows come and go with her: `clones.ts`
 opens and closes one for her clones (her Clones spell), `vision.ts` one for the light and the logo
 of her `vision` habit, and `spellEffects.ts` one for her spells' effects (every spell but the
-clones and the teleport). The bubble's page draws the figure and animates it
+clones and the teleport). The screen saver (`src/main/screenSaver.ts`, at the end of this page)
+opens one over the whole of every display. The bubble's page draws the figure and animates it
 (`Character.tsx`, with pixel art drawn by code in `src/renderer/src/character/`; see
 [The UI components](8-renderer-components.md)).
 
@@ -90,6 +91,15 @@ casts them and the teleport, is the controller's (`act()` and `teleport()`).
 tray's Quit), `farewell()` plays her dissolving into them (`vanish`) and only then lets the app
 quit.
 
+**The screen saver.** The screen saver icon (`src/shared/screenSaver.ts`) whitens every screen,
+then shows a pixel sunset on hers, with her watching it from a hill, her back to us, and stars
+falling on the others. She isn't in her own window meanwhile: her figure in the sunset is drawn by
+the screen saver's page. So as the screens whiten, `sleep()` plays her dissolving into white motes
+and hides her window, and when the user is back `wake()` shows it again and she forms out of them
+where she stands. While she's asleep, nothing can open the panel or pick her up, and she does
+nothing on her own. `ScreenSaver`, at the end of this page, opens and closes the screen saver's
+windows; the controller only sleeps and wakes.
+
 **Left alone.** While `collapsed`, the character has a life of its own. Every 8 to 20 seconds it
 walks somewhere else in its zone (the pose `walk-left` or `walk-right`, while the controller moves
 its window along the taskbar a frame at a time). Once nobody has done anything with it for 30
@@ -102,7 +112,10 @@ shines down from the top of the screen and the company's logo comes down it to h
 while she looks up at it; the light and the logo are drawn in a window of their own above her
 (`vision.ts`, below). None of this changes the mode, and every change of mode counts as the user doing something: it stops whatever the
 character was doing on its own, right where it is, and starts the 30 seconds again (see
-`setMode()`).
+`setMode()`). Two settings, both off unless the user turns them on, cut this down: with **Stand
+still** she never walks on her own (not even back to her corner after a drop), and with **No idle
+animations** she never fidgets; with both, she just stands there, breathing and blinking (see
+`setHabits()` and `nextActivity()`).
 
 ---
 
@@ -123,14 +136,17 @@ Who calls it:
   tray's Quit to `farewell()`, and quitting to `dispose()`. When the pose becomes `vision`, it
   reads `standing` to open the vision's window over her (see `vision.ts` below). Its `castSpell`,
   for the Spells menu, calls `collapse()`, then `act()` or `teleport()`, reading `standing` for the
-  clones and for the window of any spell drawn over the screen (`spellEffects.ts`).
+  clones and for the window of any spell drawn over the screen (`spellEffects.ts`). The screen
+  saver it creates calls `sleep()` as it starts and `wake()` once it's over.
 - `src/main/ipc.ts` forwards the pages' requests: the bubble's click and drag (`clickBubble()`,
-  `startDrag()`, `endDrag()`), the panel's Esc (`collapse()`) and the Smaller and Bigger buttons
-  under Size in the settings menu (`setScale()`). It also calls `collapse()` after handing a question to Claude Desktop
+  `startDrag()`, `endDrag()`), the panel's Esc (`collapse()`), the Smaller and Bigger buttons
+  under Size in the settings menu (`setScale()`), and the menu's Stand still and No idle
+  animations switches (`setHabits()`). It also calls `collapse()` after handing a question to Claude Desktop
   (from the text box, or about a Jira issue), opening an app from the Apps list, and opening an IT
   request's form or the user's requests on the service desk portal.
 - `src/main/actions.ts` calls `whileHidden()` for the screenshot icon, `collapse()` once the IT
-  service desk has opened in the browser, and `farewell()` for the Close icon.
+  service desk has opened in the browser and before starting the screen saver, and `farewell()`
+  for the Close icon.
 
 The controller never imports Electron. It drives windows through the `Surface` interface and asks
 about screens through the `Displays` interface. `index.ts` passes real ones: the adapters from
@@ -144,7 +160,7 @@ a window.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#Surface,PanelSurface -->
 
-[`src/main/bubble/BubbleController.ts`, lines 41–50](../../apps/desktop/src/main/bubble/BubbleController.ts#L41-L50)
+[`src/main/bubble/BubbleController.ts`, lines 42–51](../../apps/desktop/src/main/bubble/BubbleController.ts#L42-L51)
 
 ```ts
 /** The parts of a window the controller drives. Electron windows are adapted in windows.ts. */
@@ -174,7 +190,7 @@ What the controller needs from a window, and nothing more.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#DisplayArea,Displays -->
 
-[`src/main/bubble/BubbleController.ts`, lines 52–67](../../apps/desktop/src/main/bubble/BubbleController.ts#L52-L67)
+[`src/main/bubble/BubbleController.ts`, lines 53–68](../../apps/desktop/src/main/bubble/BubbleController.ts#L53-L68)
 
 ```ts
 /** One display: its id, its whole screen, and its work area (the screen minus the taskbar). */
@@ -227,7 +243,7 @@ In `index.ts`, `electronDisplays` implements these four with Electron's `screen`
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleAnchor -->
 
-[`src/main/bubble/BubbleController.ts`, lines 69–73](../../apps/desktop/src/main/bubble/BubbleController.ts#L69-L73)
+[`src/main/bubble/BubbleController.ts`, lines 70–74](../../apps/desktop/src/main/bubble/BubbleController.ts#L70-L74)
 
 ```ts
 /** Where the character lives: near a bottom corner of a particular display. */
@@ -253,7 +269,7 @@ not saved, so after a restart it starts right in its corner.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleControllerDeps -->
 
-[`src/main/bubble/BubbleController.ts`, lines 75–95](../../apps/desktop/src/main/bubble/BubbleController.ts#L75-L95)
+[`src/main/bubble/BubbleController.ts`, lines 76–98](../../apps/desktop/src/main/bubble/BubbleController.ts#L76-L98)
 
 ```ts
 export interface BubbleControllerDeps {
@@ -265,6 +281,8 @@ export interface BubbleControllerDeps {
   initialAnchor?: BubbleAnchor | null
   /** Her size last time (see CHARACTER_SIZES), if saved. */
   initialScale?: number | null
+  /** Whether she stands still, and does her idle animations (Settings); she does both if not. */
+  initialHabits?: Habits
   onModeChange(mode: Mode): void
   /** The character settled near the other bottom corner or on another display. */
   onAnchorChange(anchor: BubbleAnchor): void
@@ -290,6 +308,10 @@ Everything the constructor needs, passed as one object (its _dependencies_).
 - `initialScale?: number | null`: as the comment says, her size last time, if saved
   (`SettingsService.characterScale` in `index.ts`). Left out or `null`, she starts at her usual
   size.
+- `initialHabits?: Habits`: as the comment says, whether she stands still and whether she does her
+  idle animations, from the settings (`Habits` in `src/shared/types.ts`: `standStill` and
+  `noIdles`). `index.ts` passes the whole of `settings.get()`, which has both. Left out, she does
+  both, as the tests mostly want.
 - `onModeChange(mode: Mode): void`: `index.ts` broadcasts the new mode to both pages
   (`IPC.modeChanged`). That's how the panel knows to animate open or closed, and the character's
   shadow knows to take the accent colour while the panel is open.
@@ -313,11 +335,35 @@ Everything the constructor needs, passed as one object (its _dependencies_).
   didn't close it. `index.ts` passes the log. Such reports ("I clicked the bubble and nothing
   happened") are otherwise impossible to look into on someone else's PC.
 
+### `pastimesOf()`
+
+<!-- code: apps/desktop/src/main/bubble/BubbleController.ts#pastimesOf -->
+
+[`src/main/bubble/BubbleController.ts`, lines 100–103](../../apps/desktop/src/main/bubble/BubbleController.ts#L100-L103)
+
+```ts
+/** What she may do on her own, from the Settings (both, unless they say otherwise). */
+function pastimesOf(habits?: Habits): Pastimes {
+  return { walk: !habits?.standStill, fidget: !habits?.noIdles }
+}
+```
+
+<!-- /code -->
+
+As its comment says, what she may do on her own, from the settings: a `Pastimes` (from
+`wander.ts`, below), which says whether she may `walk` and whether she may `fidget`. The settings
+say what she _doesn't_ do (stand still, no idle animations), so each is turned round with `!`.
+
+- `habits?: Habits`: optional, and `habits?.standStill` is `undefined` when there are none. `!`
+  turns `undefined` into `true`, so with no settings she may do both, as the comment says.
+- It's a plain function after the interfaces rather than a method, because it needs nothing from
+  the controller. The constructor and `setHabits()` both use it, so the two can't disagree.
+
 ### Constants
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#FRAME_MS,DEFAULT_CORNER,PANEL_FADE_MS,BLUR_CLICK_GRACE_MS,PRESS_SLACK_MS,OPEN_BLUR_GRACE_MS,HIDE_SETTLE_MS -->
 
-[`src/main/bubble/BubbleController.ts`, lines 97–117](../../apps/desktop/src/main/bubble/BubbleController.ts#L97-L117)
+[`src/main/bubble/BubbleController.ts`, lines 105–125](../../apps/desktop/src/main/bubble/BubbleController.ts#L105-L125)
 
 ```ts
 const FRAME_MS = 16
@@ -371,7 +417,7 @@ The class, with the comment that describes it:
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.class -->
 
-[`src/main/bubble/BubbleController.ts`, lines 119–135](../../apps/desktop/src/main/bubble/BubbleController.ts#L119-L135)
+[`src/main/bubble/BubbleController.ts`, lines 127–143](../../apps/desktop/src/main/bubble/BubbleController.ts#L127-L143)
 
 ```ts
 /**
@@ -401,9 +447,9 @@ The comment sums up the state machine in three lines, then what the character do
 then her size; the lists at the top of this page are the long version. These are the class's
 fields:
 
-<!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.mode,pose,position,anchor,inset,chosenScale,scale,ticker,hideTimer,idleTimer,walking,lastFidget,lastInteraction,lastBlurCollapse,expandedAt,expandAfterReturn,leaving,now,random -->
+<!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.mode,pose,position,anchor,inset,chosenScale,scale,ticker,hideTimer,idleTimer,walking,lastFidget,lastInteraction,lastBlurCollapse,expandedAt,expandAfterReturn,leaving,pastimes,asleep,sleepTimer,now,random -->
 
-[`src/main/bubble/BubbleController.ts`, lines 136–160](../../apps/desktop/src/main/bubble/BubbleController.ts#L136-L160)
+[`src/main/bubble/BubbleController.ts`, lines 144–173](../../apps/desktop/src/main/bubble/BubbleController.ts#L144-L173)
 
 ```ts
 private mode: Mode = 'collapsed'
@@ -445,6 +491,14 @@ private expandAfterReturn = false
 
 /** She's vanishing as the app closes (farewell): she does nothing more, whatever's clicked. */
 private leaving = false
+
+/** What she may do on her own (Settings: Stand still, No idle animations). */
+private pastimes: Pastimes
+
+/** She's away while the screen saver is on (sleep): hidden, doing nothing, until wake(). */
+private asleep = false
+
+private sleepTimer: ReturnType<typeof setTimeout> | null = null
 
 private readonly now: () => number
 
@@ -496,6 +550,14 @@ private readonly random: () => number
 - `private leaving = false`: as its comment says, set by `farewell()` as the app closes, while she
   vanishes. From then on clicking, opening the panel, dragging and her doing things on her own are
   all refused, so nothing can interrupt her going. It's never set back: the app is quitting.
+- `private pastimes: Pastimes`: as its comment says, what she may do on her own, from the settings
+  Stand still and No idle animations (see `pastimesOf()` above). The constructor sets it, and
+  `setHabits()` changes it.
+- `private asleep = false`: as its comment says, she's away while the screen saver is on: set by
+  `sleep()` and cleared by `wake()`. Like `leaving`, it makes clicking, opening the panel, dragging
+  and her doing things on her own all refused; unlike `leaving`, it's set back.
+- `private sleepTimer`: the pending "hide her window once she's vanished" timer from `sleep()`, so
+  `wake()` (or `dispose()`) can cancel it if the screen saver ends before she's gone.
 - `private readonly now: () => number`: `readonly` means it's set once, in the constructor, and
   never reassigned. The same goes for `random`.
 
@@ -503,7 +565,7 @@ private readonly random: () => number
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.constructor -->
 
-[`src/main/bubble/BubbleController.ts`, lines 162–177](../../apps/desktop/src/main/bubble/BubbleController.ts#L162-L177)
+[`src/main/bubble/BubbleController.ts`, lines 175–191](../../apps/desktop/src/main/bubble/BubbleController.ts#L175-L191)
 
 ```ts
 constructor(private readonly deps: BubbleControllerDeps) {
@@ -519,6 +581,7 @@ constructor(private readonly deps: BubbleControllerDeps) {
     saved && deps.displays.byId(saved.displayId)
       ? { displayId: saved.displayId, corner }
       : { displayId: deps.displays.primary().id, corner }
+  this.pastimes = pastimesOf(deps.initialHabits)
   this.chosenScale = snapSize(deps.initialScale ?? DEFAULT_SIZE)
   this.scale = Math.min(this.chosenScale, this.largestScale())
 }
@@ -556,6 +619,8 @@ Nothing appears on screen until `start()`.
 - `this.anchor =`: sets the field directly rather than through `setAnchor()`, so `onAnchorChange`
   doesn't fire, and a fallback anchor or a corrected corner isn't saved. The pages get the corner
   from `getState()`.
+- `this.pastimes = pastimesOf(deps.initialHabits)`: whether she may walk and fidget on her own,
+  from the saved settings (both, without any).
 - `this.chosenScale = snapSize(deps.initialScale ?? DEFAULT_SIZE)`: the size saved last time, or
   her usual size (`DEFAULT_SIZE`, 1) if there isn't one. `snapSize()` (from `geometry.ts`) turns
   any number into the nearest of `CHARACTER_SIZES`, so a saved number that isn't one of them (from
@@ -569,7 +634,7 @@ Nothing appears on screen until `start()`.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.currentMode,currentPose,bubblePosition,corner -->
 
-[`src/main/bubble/BubbleController.ts`, lines 179–193](../../apps/desktop/src/main/bubble/BubbleController.ts#L179-L193)
+[`src/main/bubble/BubbleController.ts`, lines 193–207](../../apps/desktop/src/main/bubble/BubbleController.ts#L193-L207)
 
 ```ts
 get currentMode(): Mode {
@@ -603,7 +668,7 @@ can't assign to it. `index.ts` reads `currentMode`, `currentPose` and `corner` i
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.size,standing -->
 
-[`src/main/bubble/BubbleController.ts`, lines 195–210](../../apps/desktop/src/main/bubble/BubbleController.ts#L195-L210)
+[`src/main/bubble/BubbleController.ts`, lines 209–224](../../apps/desktop/src/main/bubble/BubbleController.ts#L209-L224)
 
 ```ts
 /** How big she is, and the biggest she can be on her display. */
@@ -647,7 +712,7 @@ Two more read-only properties, both about her size.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.setScale -->
 
-[`src/main/bubble/BubbleController.ts`, lines 212–221](../../apps/desktop/src/main/bubble/BubbleController.ts#L212-L221)
+[`src/main/bubble/BubbleController.ts`, lines 226–235](../../apps/desktop/src/main/bubble/BubbleController.ts#L226-L235)
 
 ```ts
 /**
@@ -677,11 +742,50 @@ sends the result back to the page.
 - `return this.size`: her size now, and the biggest she can be, so the caller can tell whether she
   got the size asked for.
 
+### `BubbleController.setHabits()`
+
+<!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.setHabits -->
+
+[`src/main/bubble/BubbleController.ts`, lines 237–246](../../apps/desktop/src/main/bubble/BubbleController.ts#L237-L246)
+
+```ts
+/**
+ * Whether she wanders about and does her idle animations on her own (Settings). A walk of her
+ * own that's no longer allowed stops where she is; a fidget plays out.
+ */
+setHabits(habits: Habits): void {
+  this.pastimes = pastimesOf(habits)
+  if (this.mode !== 'collapsed' || this.leaving || this.asleep) return
+  if (this.walking && !this.pastimes.walk) this.stopWalking()
+  if (this.pose === 'idle') this.scheduleActivity(false)
+}
+```
+
+<!-- /code -->
+
+The settings menu's **Stand still** and **No idle animations** switches. `ipc.ts` calls it once
+`SettingsService.setHabits()` has saved the change, with the settings as they now are, so it takes
+effect at once, without a restart.
+
+- `this.pastimes = pastimesOf(habits)`: what she may do on her own from now on.
+- `if (this.mode !== 'collapsed' || this.leaving || this.asleep) return`: with the panel open (the
+  switches are in it), while she's moved about, leaving or asleep, she isn't doing anything on her
+  own anyway. The next time she's collapsed, `setMode()` starts her wait for the next thing to do,
+  which goes by the new settings.
+- `if (this.walking && !this.pastimes.walk) this.stopWalking()`: as the comment says, a walk of
+  her own that's no longer allowed stops where she is. (The panel closes as soon as the user
+  clicks elsewhere, so this only happens when the switch is flipped some other way, as the tests
+  do.)
+- `if (this.pose === 'idle') this.scheduleActivity(false)`: standing idle, she starts her wait
+  afresh under the new settings: none at all if she's now to do neither, or a wait again if one of
+  them has just been turned back on. A fidget under way isn't cut short: as the comment says, it
+  plays out, and its own end starts the next wait.
+
 ### `BubbleController.start()`
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.start -->
 
-[`src/main/bubble/BubbleController.ts`, lines 223–229](../../apps/desktop/src/main/bubble/BubbleController.ts#L223-L229)
+[`src/main/bubble/BubbleController.ts`, lines 248–254](../../apps/desktop/src/main/bubble/BubbleController.ts#L248-L254)
 
 ```ts
 /** Stands the character in its saved corner (or bottom-right of the main display) and shows it. */
@@ -713,12 +817,12 @@ anchor was already chosen in the constructor; this just puts the windows there.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.clickBubble -->
 
-[`src/main/bubble/BubbleController.ts`, lines 231–253](../../apps/desktop/src/main/bubble/BubbleController.ts#L231-L253)
+[`src/main/bubble/BubbleController.ts`, lines 256–278](../../apps/desktop/src/main/bubble/BubbleController.ts#L256-L278)
 
 ```ts
 /** A click on the bubble. `pressedAt` is when its mouse button went down (wall-clock ms). */
 clickBubble(pressedAt?: number): void {
-  if (this.leaving) return
+  if (this.leaving || this.asleep) return
   switch (this.mode) {
     case 'collapsed': {
       const closedByThisPress =
@@ -749,8 +853,8 @@ which knows the mode and when the panel last closed.
 
 - `clickBubble(pressedAt?: number)`: `?` makes the press time optional; the tests, and anything
   older, can leave it out.
-- `if (this.leaving) return`: while she vanishes as the app closes (`farewell()`), a click does
-  nothing at all.
+- `if (this.leaving || this.asleep) return`: while she vanishes as the app closes (`farewell()`),
+  or while she's away for the screen saver (`sleep()`), a click does nothing at all.
 - `case 'collapsed': {`: the braces give this `case` a block of its own, so `closedByThisPress`
   can be declared inside it.
 - `closedByThisPress`: with the panel open, pressing on the bubble takes the keyboard focus from
@@ -781,12 +885,12 @@ which knows the mode and when the panel last closed.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.expand -->
 
-[`src/main/bubble/BubbleController.ts`, lines 255–277](../../apps/desktop/src/main/bubble/BubbleController.ts#L255-L277)
+[`src/main/bubble/BubbleController.ts`, lines 280–302](../../apps/desktop/src/main/bubble/BubbleController.ts#L280-L302)
 
 ```ts
 /** Opens the panel where the character stands. While she's falling, once she lands. */
 expand(): void {
-  if (this.leaving) return
+  if (this.leaving || this.asleep) return
   switch (this.mode) {
     case 'expanded':
       this.deps.panel.focus()
@@ -815,8 +919,9 @@ Opens the panel. Unlike `clickBubble()` it never closes it, so it's what "open" 
 outside use: the tray icon, launching the app again while it's running, finishing a sign-in in
 the browser, and clicking one of the app's Windows notifications (all in `index.ts`).
 
-- `if (this.leaving) return`: nothing opens the panel while she vanishes as the app closes, not
-  even the tray icon or a second launch.
+- `if (this.leaving || this.asleep) return`: nothing opens the panel while she vanishes as the app
+  closes, or while the screen saver is on, not even the tray icon or a second launch. (The screen
+  saver's windows cover every screen anyway, so the tray can't be reached.)
 - `this.deps.panel.focus()`: already open, so just give it the keyboard again.
 - `this.expandAfterReturn = true`: as the comment says, while she's falling, the panel opens once
   she lands. It opens beside the character, so it can't open while she's still in the air. The
@@ -837,7 +942,7 @@ the browser, and clicking one of the app's Windows notifications (all in `index.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.collapse -->
 
-[`src/main/bubble/BubbleController.ts`, lines 279–287](../../apps/desktop/src/main/bubble/BubbleController.ts#L279-L287)
+[`src/main/bubble/BubbleController.ts`, lines 304–312](../../apps/desktop/src/main/bubble/BubbleController.ts#L304-L312)
 
 ```ts
 collapse(): void {
@@ -870,7 +975,7 @@ a spell, and `farewell()` as the app closes.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.panelBlurred -->
 
-[`src/main/bubble/BubbleController.ts`, lines 289–297](../../apps/desktop/src/main/bubble/BubbleController.ts#L289-L297)
+[`src/main/bubble/BubbleController.ts`, lines 314–322](../../apps/desktop/src/main/bubble/BubbleController.ts#L314-L322)
 
 ```ts
 panelBlurred(): void {
@@ -903,12 +1008,13 @@ behaves like a popup and closes.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.startDrag -->
 
-[`src/main/bubble/BubbleController.ts`, lines 299–311](../../apps/desktop/src/main/bubble/BubbleController.ts#L299-L311)
+[`src/main/bubble/BubbleController.ts`, lines 324–337](../../apps/desktop/src/main/bubble/BubbleController.ts#L324-L337)
 
 ```ts
 /** The mouse pressed on the character and moved: it dangles from the pointer until released. */
 startDrag(): void {
-  if (this.leaving || (this.mode !== 'collapsed' && this.mode !== 'expanded')) return
+  if (this.leaving || this.asleep) return
+  if (this.mode !== 'collapsed' && this.mode !== 'expanded') return
   this.cancelHide()
   this.deps.panel.hide()
   this.setMode('dragging')
@@ -927,9 +1033,10 @@ The bubble page decides a press has become a drag once the pointer moves more th
 (`DRAG_THRESHOLD` in `BubbleView.tsx`), and sends `IPC.bubbleDragStart`. From then on the main
 process moves the window and the page just waits for the release.
 
-- `if (this.leaving || (this.mode !== 'collapsed' && this.mode !== 'expanded')) return`: a drag
-  can only start from standing (walking counts, being `collapsed`), not mid-fall or during a
-  screenshot, and never while she vanishes as the app closes.
+- `if (this.leaving || this.asleep) return`: never while she vanishes as the app closes, or while
+  she's away for the screen saver.
+- `if (this.mode !== 'collapsed' && this.mode !== 'expanded') return`: a drag can only start from
+  standing (walking counts, being `collapsed`), not mid-fall or during a screenshot.
 - `this.deps.panel.hide()`: the panel can't follow the character, so it's hidden at once, without
   the fade. `cancelHide()` drops any fade timer that was still pending.
 - `this.setMode('dragging')`: comes before the grab is measured. Changing the mode stops a walk
@@ -950,7 +1057,7 @@ it.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.endDrag -->
 
-[`src/main/bubble/BubbleController.ts`, lines 313–332](../../apps/desktop/src/main/bubble/BubbleController.ts#L313-L332)
+[`src/main/bubble/BubbleController.ts`, lines 339–358](../../apps/desktop/src/main/bubble/BubbleController.ts#L339-L358)
 
 ```ts
 /**
@@ -1010,7 +1117,7 @@ walks back once it has landed.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.act -->
 
-[`src/main/bubble/BubbleController.ts`, lines 334–353](../../apps/desktop/src/main/bubble/BubbleController.ts#L334-L353)
+[`src/main/bubble/BubbleController.ts`, lines 360–379](../../apps/desktop/src/main/bubble/BubbleController.ts#L360-L379)
 
 ```ts
 /**
@@ -1071,7 +1178,7 @@ appearing.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.teleport -->
 
-[`src/main/bubble/BubbleController.ts`, lines 355–366](../../apps/desktop/src/main/bubble/BubbleController.ts#L355-L366)
+[`src/main/bubble/BubbleController.ts`, lines 381–392](../../apps/desktop/src/main/bubble/BubbleController.ts#L381-L392)
 
 ```ts
 /**
@@ -1110,7 +1217,7 @@ there's room, with the panel moved to open from there.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.farewell -->
 
-[`src/main/bubble/BubbleController.ts`, lines 368–381](../../apps/desktop/src/main/bubble/BubbleController.ts#L368-L381)
+[`src/main/bubble/BubbleController.ts`, lines 394–407](../../apps/desktop/src/main/bubble/BubbleController.ts#L394-L407)
 
 ```ts
 /**
@@ -1139,8 +1246,8 @@ panel closes, she vanishes into white motes where she is (her `vanish` pose), an
   another goodbye.
 - `this.collapse()`: closes the panel, with its usual fade, if it's open (the Close icon is in it).
 - `this.leaving = true`: from now on, as the comment says, she does nothing more, and clicking or
-  dragging her does nothing: `clickBubble()`, `expand()`, `startDrag()` and `scheduleActivity()`
-  all check it.
+  dragging her does nothing: `clickBubble()`, `expand()`, `startDrag()`, `scheduleActivity()`,
+  `setHabits()` and `sleep()` all check it.
 - `this.stopIdling()`: stops anything she was doing on her own, and the wait for her next activity,
   which closing the panel has just started.
 - `this.stopTicker()`: stops her window's frame timer, whatever it was moving her for, so she
@@ -1150,11 +1257,87 @@ panel closes, she vanishes into white motes where she is (her `vanish` pose), an
 - `setTimeout(done, SPELL_POSE_MS.vanish)`: once she's gone, 0.9 seconds later, `done`: the app
   quits, through `before-quit`, which saves the draft.
 
+### `BubbleController.sleep()` and `wake()`
+
+<!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.sleep,wake -->
+
+[`src/main/bubble/BubbleController.ts`, lines 409–437](../../apps/desktop/src/main/bubble/BubbleController.ts#L409-L437)
+
+```ts
+/**
+ * The screen saver's starting: the panel closes and she vanishes into white motes as the screens
+ * whiten (her `vanish` pose), then her window hides. She does nothing more until wake().
+ */
+sleep(): void {
+  if (this.leaving || this.asleep) return
+  this.collapse()
+  this.asleep = true
+  this.stopIdling()
+  this.stopTicker()
+  this.walking = false
+  this.setPose('vanish')
+  this.sleepTimer = setTimeout(() => {
+    this.sleepTimer = null
+    this.deps.bubble.hide()
+  }, SPELL_POSE_MS.vanish)
+}
+
+/** The screen saver's over: her window shows again, she forms out of white motes, and carries on. */
+wake(): void {
+  if (!this.asleep) return
+  this.asleep = false
+  if (this.sleepTimer) clearTimeout(this.sleepTimer)
+  this.sleepTimer = null
+  this.position = this.rest()
+  this.placeWindows()
+  this.deps.bubble.show()
+  this.act('appear')
+}
+```
+
+<!-- /code -->
+
+Her side of the screen saver. `index.ts` gives the `ScreenSaver` (at the end of this page)
+`onStart: () => bubble.sleep()` and `onEnd: () => bubble.wake()`. While it's on, she's drawn in
+the sunset by the screen saver's own page, so her own window has nothing to do, and would only sit
+in front of the scene if it stayed.
+
+`sleep()` is built like `farewell()`, except that she comes back:
+
+- `if (this.leaving || this.asleep) return`: not while the app is closing, and only once.
+- `this.collapse()`: as the comment says, the panel closes. (The screen saver icon's handler in
+  `actions.ts` has already closed it, so this is only a safety net.)
+- `this.asleep = true`: from now on clicks, drags, opening the panel and anything she'd do on her
+  own are refused, as while she's leaving.
+- `this.stopIdling()`, `this.stopTicker()`, `this.walking = false`: anything she was doing stops
+  where she is: the wait for her next activity (which closing the panel has just started), a walk
+  or a fidget, and whatever her window's frame timer was moving her for.
+- `this.setPose('vanish')`: as the comment says, she vanishes into white motes, which takes 0.9
+  seconds, while the screens take 1.5 to whiten (`SCREEN_SAVER.whiteMs`), so she's gone into the
+  white before it's complete.
+- `this.sleepTimer = setTimeout(() => {`: once she's gone, `this.deps.bubble.hide()` hides her
+  window. The timer is kept so that `wake()` can cancel it.
+
+`wake()`, as its comment says: her window shows again, she forms out of white motes, and carries
+on.
+
+- `if (!this.asleep) return`: only after `sleep()`. The screen saver calls `onEnd` once it has
+  really started and stopped, so this is a safety net too.
+- `if (this.sleepTimer) clearTimeout(this.sleepTimer)`: woken before she'd finished vanishing (the
+  user moved the mouse straight away), her window is never hidden, and she comes straight back.
+- `this.position = this.rest()`, `this.placeWindows()`: she stands where she stood, at her inset
+  from her corner, on the taskbar as it is now. If the screens changed while she was away (which
+  ends the screen saver, see `index.ts`), `displayChanged()` has already moved her anchor and size
+  to suit, and this puts her windows there.
+- `this.deps.bubble.show()`: her window shows again, without taking the focus.
+- `this.act('appear')`: she forms out of the motes over 0.9 seconds and, with no `then`, stands
+  idle and gets on with her day (`act()`).
+
 ### `BubbleController.whileHidden()`
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.whileHidden -->
 
-[`src/main/bubble/BubbleController.ts`, lines 383–399](../../apps/desktop/src/main/bubble/BubbleController.ts#L383-L399)
+[`src/main/bubble/BubbleController.ts`, lines 439–455](../../apps/desktop/src/main/bubble/BubbleController.ts#L439-L455)
 
 ```ts
 /** Hides both windows, runs `task` (a screenshot), then reopens the panel. */
@@ -1201,7 +1384,7 @@ hidden first and brought back afterwards.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.displayChanged -->
 
-[`src/main/bubble/BubbleController.ts`, lines 401–418](../../apps/desktop/src/main/bubble/BubbleController.ts#L401-L418)
+[`src/main/bubble/BubbleController.ts`, lines 457–475](../../apps/desktop/src/main/bubble/BubbleController.ts#L457-L475)
 
 ```ts
 /**
@@ -1216,7 +1399,8 @@ displayChanged(): void {
   }
   this.fitScale()
   if (this.mode === 'returning' || this.mode === 'dragging') return
-  this.stopIdling()
+  // Asleep (the screen saver), she stays gone: she's placed afresh as she wakes.
+  if (!this.asleep) this.stopIdling()
   this.inset = Math.min(this.inset, maxInset(this.display().workArea, this.scale))
   this.position = this.rest()
   this.placeWindows()
@@ -1241,10 +1425,13 @@ taskbar moving or resizing (which changes the work area).
 - `this.mode === 'returning' || this.mode === 'dragging'`: moving characters adapt by themselves.
   The fall re-reads the display every frame, and a drag follows the pointer. Moving the windows
   here would make the character jump.
-- `this.stopIdling()`: as the comment says, a strolling character is put back on the taskbar too;
-  a walk or a fidget stops, standing idle.
-  Its walk stops where it is, standing idle, and the last line below starts the wait for its next
-  activity afresh.
+- `if (!this.asleep) this.stopIdling()`: as the doc comment says, a strolling character is put back
+  on the taskbar too; a walk or a fidget stops, standing idle, and the last line below starts the
+  wait for its next activity afresh. Not while she's asleep for the screen saver, as the comment
+  above it says: her `vanish` is one of her spell poses, which `stopIdling()` would turn back to
+  `idle`, and she'd stand there again, whole, while the screens whiten (the screen saver ends on a
+  change of displays, but its scenes take a moment to fade). She stays gone instead, and `wake()`
+  places her afresh. (`scheduleActivity()` does nothing while she's asleep either.)
 - `this.inset = Math.min(this.inset, maxInset(this.display().workArea, this.scale))`: on a
   narrower screen, as far from its corner as still fits at her size. `restPosition()` would keep it
   on screen anyway, but storing the shorter inset means later walks start from where it really
@@ -1259,27 +1446,29 @@ taskbar moving or resizing (which changes the work area).
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.dispose -->
 
-[`src/main/bubble/BubbleController.ts`, lines 420–424](../../apps/desktop/src/main/bubble/BubbleController.ts#L420-L424)
+[`src/main/bubble/BubbleController.ts`, lines 477–482](../../apps/desktop/src/main/bubble/BubbleController.ts#L477-L482)
 
 ```ts
 dispose(): void {
   this.stopTicker()
   this.cancelHide()
   this.cancelActivity()
+  if (this.sleepTimer) clearTimeout(this.sleepTimer)
 }
 ```
 
 <!-- /code -->
 
-Stops every timer: the animation ticker, the panel's hide timer and the timer for what the
-character does next on its own. `index.ts` calls it while quitting (in `before-quit`), so no timer
+Stops every timer: the animation ticker, the panel's hide timer, the timer for what the
+character does next on its own, and the one that hides her window as the screen saver starts.
+`index.ts` calls it while quitting (in `before-quit`), so no timer
 fires against a window that is being destroyed. The tests call it after each test.
 
 ### `BubbleController.display()`, `rest()`
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.display,rest -->
 
-[`src/main/bubble/BubbleController.ts`, lines 426–434](../../apps/desktop/src/main/bubble/BubbleController.ts#L426-L434)
+[`src/main/bubble/BubbleController.ts`, lines 484–492](../../apps/desktop/src/main/bubble/BubbleController.ts#L484-L492)
 
 ```ts
 /** The anchor's display, or the main display if it's gone. */
@@ -1307,7 +1496,7 @@ private rest(): Point {
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.largestScale,fitScale -->
 
-[`src/main/bubble/BubbleController.ts`, lines 436–457](../../apps/desktop/src/main/bubble/BubbleController.ts#L436-L457)
+[`src/main/bubble/BubbleController.ts`, lines 494–515](../../apps/desktop/src/main/bubble/BubbleController.ts#L494-L515)
 
 ```ts
 /** The biggest she can be on her display (see largestSize). */
@@ -1365,7 +1554,7 @@ call it when her display may have changed.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.fall -->
 
-[`src/main/bubble/BubbleController.ts`, lines 459–475](../../apps/desktop/src/main/bubble/BubbleController.ts#L459-L475)
+[`src/main/bubble/BubbleController.ts`, lines 517–535](../../apps/desktop/src/main/bubble/BubbleController.ts#L517-L535)
 
 ```ts
 /** After a drop: falls onto the taskbar, then walks back toward its corner if it's far off. */
@@ -1382,7 +1571,9 @@ private fall(): void {
       return
     }
     this.settle()
-    if (this.mode === 'collapsed' && this.inset > this.zone()) this.walkTo(this.zone())
+    // ...unless she's to stand still, when she stays where she landed.
+    const far = this.inset > this.zone()
+    if (this.mode === 'collapsed' && far && this.pastimes.walk) this.walkTo(this.zone())
   })
 }
 ```
@@ -1403,18 +1594,20 @@ anchor and the inset, so `rest()` is where it lands: straight below where it was
 - `this.moveBubble(fallPosition(from, to, t))`: only the bubble window moves during the fall.
 - `this.settle()`: when `t` reaches 1: standing on the taskbar, `collapsed`, and opening the panel
   if that was asked for on the way down.
-- `if (this.mode === 'collapsed' && this.inset > this.zone()) this.walkTo(this.zone())`: dropped
+- `const far = this.inset > this.zone()`, then
+  `if (this.mode === 'collapsed' && far && this.pastimes.walk) this.walkTo(this.zone())`: dropped
   further from its corner than its zone reaches, it walks back to the zone's edge.
   `this.mode === 'collapsed'` is checked because `settle()` may have opened the panel instead
-  (`expandAfterReturn`); then it stays where it landed. Dropped inside the zone, it stays where it
-  landed too, and `settle()`'s change to `collapsed` has already started the wait for its next
-  activity.
+  (`expandAfterReturn`); then it stays where it landed. As the comment says, with **Stand still**
+  on (`this.pastimes.walk` false) she stays where she landed too, however far from her corner: the
+  user put her there. Dropped inside the zone, it stays where it landed as well, and `settle()`'s
+  change to `collapsed` has already started the wait for its next activity.
 
 ### `BubbleController.settle()`
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.settle -->
 
-[`src/main/bubble/BubbleController.ts`, lines 477–487](../../apps/desktop/src/main/bubble/BubbleController.ts#L477-L487)
+[`src/main/bubble/BubbleController.ts`, lines 537–547](../../apps/desktop/src/main/bubble/BubbleController.ts#L537-L547)
 
 ```ts
 /** The end of a fall: standing, collapsed, and opening if that was asked for. */
@@ -1446,7 +1639,7 @@ As its comment says, the end of a fall. `fall()` calls it when the character lan
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.zone -->
 
-[`src/main/bubble/BubbleController.ts`, lines 489–493](../../apps/desktop/src/main/bubble/BubbleController.ts#L489-L493)
+[`src/main/bubble/BubbleController.ts`, lines 549–553](../../apps/desktop/src/main/bubble/BubbleController.ts#L549-L553)
 
 ```ts
 /** How far from its corner it wanders on its display: further when she's bigger. */
@@ -1471,13 +1664,17 @@ choose where to walk.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.scheduleActivity -->
 
-[`src/main/bubble/BubbleController.ts`, lines 495–500](../../apps/desktop/src/main/bubble/BubbleController.ts#L495-L500)
+[`src/main/bubble/BubbleController.ts`, lines 555–564](../../apps/desktop/src/main/bubble/BubbleController.ts#L555-L564)
 
 ```ts
-/** Waits a while, then does something on its own (see doActivity). Collapsed only. */
+/**
+ * Waits a while, then does something on its own (see doActivity). Collapsed only, and never if
+ * she's neither to walk nor to fidget.
+ */
 private scheduleActivity(first: boolean): void {
   this.cancelActivity()
-  if (this.mode !== 'collapsed' || this.leaving) return
+  if (this.mode !== 'collapsed' || this.leaving || this.asleep) return
+  if (!this.pastimes.walk && !this.pastimes.fidget) return
   this.idleTimer = setTimeout(() => this.doActivity(), activityDelay(this.random, first))
 }
 ```
@@ -1490,9 +1687,13 @@ of a spell's pose, from `act()`), and by `displayChanged()`.
 
 - `this.cancelActivity()`: never two waits at once; an earlier one (or the end of a fidget) is
   dropped.
-- `if (this.mode !== 'collapsed' || this.leaving) return`: as the comment says, collapsed only.
-  While the panel is open, or the character is being moved about, it does nothing on its own; nor
-  once she's leaving, as the app closes (`farewell()`).
+- `if (this.mode !== 'collapsed' || this.leaving || this.asleep) return`: as the comment says,
+  collapsed only. While the panel is open, or the character is being moved about, it does nothing
+  on its own; nor once she's leaving, as the app closes (`farewell()`), or while she's away for the
+  screen saver (`sleep()`).
+- `if (!this.pastimes.walk && !this.pastimes.fidget) return`: as the comment says, never if she's
+  neither to walk nor to fidget (both Stand still and No idle animations on). There's nothing to
+  wait for, so no timer runs at all; `setHabits()` starts one again if either is turned back on.
 - `activityDelay(this.random, first)`: a random wait, 5 to 12 seconds the first time after
   `start()` and 8 to 20 seconds after that (`wander.ts`).
 - `setTimeout(() => this.doActivity(), ...)`: the timer is kept in `idleTimer`, so anything that
@@ -1502,14 +1703,25 @@ of a spell's pose, from `act()`), and by `displayChanged()`.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.doActivity -->
 
-[`src/main/bubble/BubbleController.ts`, lines 502–518](../../apps/desktop/src/main/bubble/BubbleController.ts#L502-L518)
+[`src/main/bubble/BubbleController.ts`, lines 566–593](../../apps/desktop/src/main/bubble/BubbleController.ts#L566-L593)
 
 ```ts
 private doActivity(): void {
   this.idleTimer = null
   if (this.mode !== 'collapsed') return
   const idleMs = this.now() - this.lastInteraction
-  const activity = nextActivity(idleMs, this.inset, this.zone(), this.random, this.lastFidget)
+  const activity = nextActivity(
+    idleMs,
+    this.inset,
+    this.zone(),
+    this.random,
+    this.lastFidget,
+    this.pastimes,
+  )
+  if (activity.kind === 'rest') {
+    this.scheduleActivity(false)
+    return
+  }
   if (activity.kind === 'walk') {
     this.walkTo(activity.to)
     return
@@ -1536,8 +1748,12 @@ done, waits for the next.
   (the last change of mode). `nextActivity()` in `wander.ts` only offers a fidget once this is 30
   seconds or more; before that it always walks. A fidget is livelier than a stroll, so it's kept
   for a quiet spell: just after someone has used the character, it only strolls.
-- `nextActivity(idleMs, this.inset, this.zone(), this.random, this.lastFidget)`: what to do next,
-  from where it stands and how far it may wander, and never the fidget it did last.
+- `nextActivity(idleMs, this.inset, this.zone(), this.random, this.lastFidget, this.pastimes)`:
+  what to do next, from where it stands and how far it may wander, never the fidget it did last,
+  and only what the settings allow (`this.pastimes`).
+- `if (activity.kind === 'rest')`: with Stand still on, a turn that would have been a walk is a
+  rest instead: she does nothing this time, and waits for the next turn (`scheduleActivity(false)`),
+  which may be a fidget once she's been left alone long enough.
 - `this.walkTo(activity.to)`: a walk, to the inset `nextActivity()` chose. The walk waits for the
   next activity itself when it arrives.
 - `this.lastFidget = activity.pose`: a fidget, remembered so the next one is different.
@@ -1555,7 +1771,7 @@ done, waits for the next.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.walkTo -->
 
-[`src/main/bubble/BubbleController.ts`, lines 520–541](../../apps/desktop/src/main/bubble/BubbleController.ts#L520-L541)
+[`src/main/bubble/BubbleController.ts`, lines 595–616](../../apps/desktop/src/main/bubble/BubbleController.ts#L595-L616)
 
 ```ts
 /** Walks along the taskbar to `target` (an inset), then waits for the next thing to do. */
@@ -1616,7 +1832,7 @@ panel, a press and move picks it up.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.stopWalking -->
 
-[`src/main/bubble/BubbleController.ts`, lines 543–551](../../apps/desktop/src/main/bubble/BubbleController.ts#L543-L551)
+[`src/main/bubble/BubbleController.ts`, lines 618–626](../../apps/desktop/src/main/bubble/BubbleController.ts#L618-L626)
 
 ```ts
 /** Stops a walk where it is, standing idle, with the panel moved to open from there. */
@@ -1650,7 +1866,7 @@ Ends a walk cleanly, wherever the character has got to. This is how a walk is in
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.stopIdling,cancelActivity -->
 
-[`src/main/bubble/BubbleController.ts`, lines 553–563](../../apps/desktop/src/main/bubble/BubbleController.ts#L553-L563)
+[`src/main/bubble/BubbleController.ts`, lines 628–638](../../apps/desktop/src/main/bubble/BubbleController.ts#L628-L638)
 
 ```ts
 /** Stops whatever it was doing on its own: the next activity, a fidget or a spell, a walk. */
@@ -1673,14 +1889,15 @@ private cancelActivity(): void {
   spell's pose (`act()`), so a fidget's or a spell's pose is put back to `idle` here (`isFidget()`
   and `isSpellPose()` from `src/shared/character.ts`); a walk is stopped by `stopWalking()`, which
   does the same. `setMode()` calls it whenever the mode leaves `collapsed` (and then sets the pose
-  for the new mode), and so do `displayChanged()`, `act()` before a new pose, and `farewell()`.
+  for the new mode), and so do `displayChanged()` (unless she's asleep), `act()` before a new pose,
+  `farewell()` and `sleep()`.
 - `cancelActivity`: like `cancelHide()`, safe to call when nothing is pending.
 
 ### `BubbleController.runTicker()`, `stopTicker()`
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.runTicker,stopTicker -->
 
-[`src/main/bubble/BubbleController.ts`, lines 565–578](../../apps/desktop/src/main/bubble/BubbleController.ts#L565-L578)
+[`src/main/bubble/BubbleController.ts`, lines 640–653](../../apps/desktop/src/main/bubble/BubbleController.ts#L640-L653)
 
 ```ts
 private runTicker(onFrame: (dtMs: number) => void): void {
@@ -1717,7 +1934,7 @@ The 60 fps ticker. It drives every animation (drag, fall and walk), but only one
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.moveBubble,placeWindows -->
 
-[`src/main/bubble/BubbleController.ts`, lines 580–590](../../apps/desktop/src/main/bubble/BubbleController.ts#L580-L590)
+[`src/main/bubble/BubbleController.ts`, lines 655–665](../../apps/desktop/src/main/bubble/BubbleController.ts#L655-L665)
 
 ```ts
 private moveBubble(position: Point): void {
@@ -1752,7 +1969,7 @@ private placeWindows(): void {
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.setAnchor,cancelHide,setMode,setPose -->
 
-[`src/main/bubble/BubbleController.ts`, lines 592–622](../../apps/desktop/src/main/bubble/BubbleController.ts#L592-L622)
+[`src/main/bubble/BubbleController.ts`, lines 667–697](../../apps/desktop/src/main/bubble/BubbleController.ts#L667-L697)
 
 ```ts
 private setAnchor(anchor: BubbleAnchor): void {
@@ -1817,7 +2034,7 @@ Small helpers, though `setMode()` does more than it used to.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#bottomOf -->
 
-[`src/main/bubble/BubbleController.ts`, lines 625–629](../../apps/desktop/src/main/bubble/BubbleController.ts#L625-L629)
+[`src/main/bubble/BubbleController.ts`, lines 700–704](../../apps/desktop/src/main/bubble/BubbleController.ts#L700-L704)
 
 ```ts
 /** The bottom corner on the same side: the character always stands at the bottom. */
@@ -2205,14 +2422,24 @@ tune. `as const` makes them read-only, and keeps each pair a fixed pair of numbe
 - `gravity: 2500`: how fast a dropped character speeds up as it falls, in DIPs per second per
   second. A drop of 800 DIPs (most of a 1080-pixel screen) takes 0.8 seconds.
 
-### `Activity` and `FIDGET_WEIGHT`
+### `Activity`, `Pastimes` and `FIDGET_WEIGHT`
 
-<!-- code: apps/desktop/src/main/bubble/wander.ts#Activity,FIDGET_WEIGHT -->
+<!-- code: apps/desktop/src/main/bubble/wander.ts#Activity,Pastimes,FIDGET_WEIGHT -->
 
-[`src/main/bubble/wander.ts`, lines 25–31](../../apps/desktop/src/main/bubble/wander.ts#L25-L31)
+[`src/main/bubble/wander.ts`, lines 25–41](../../apps/desktop/src/main/bubble/wander.ts#L25-L41)
 
 ```ts
-export type Activity = { kind: 'walk'; to: number } | { kind: 'fidget'; pose: Fidget }
+export type Activity =
+  | { kind: 'walk'; to: number }
+  | { kind: 'fidget'; pose: Fidget }
+  /** Nothing this time (she stands still, as asked in Settings). */
+  | { kind: 'rest' }
+
+/** What she may do on her own (Settings can turn either off): walk about, and fidget. */
+export interface Pastimes {
+  walk: boolean
+  fidget: boolean
+}
 
 /**
  * How often a fidget comes up compared with the others, which count 1 each: the vision (the
@@ -2223,9 +2450,13 @@ export const FIDGET_WEIGHT: Partial<Record<Fidget, number>> = { vision: 0.2 }
 
 <!-- /code -->
 
-- `Activity`: what `nextActivity()` decides: a walk to an inset (`to`), or a fidget (`pose`). A
-  tagged union, like several types in `src/shared/types.ts`: checking `kind` tells TypeScript which
-  of the two other fields there is. `Fidget` is from `src/shared/character.ts`.
+- `Activity`: what `nextActivity()` decides: a walk to an inset (`to`), a fidget (`pose`), or, as
+  its comment says, nothing this time (`rest`), when she's to stand still. A tagged union, like
+  several types in `src/shared/types.ts`: checking `kind` tells TypeScript which other field there
+  is, if any. `Fidget` is from `src/shared/character.ts`.
+- `Pastimes`: as its comment says, what she may do on her own: `walk` about, and `fidget`. Settings
+  can turn either off (Stand still, No idle animations); `pastimesOf()` in `BubbleController.ts`
+  makes one from them.
 - `FIDGET_WEIGHT`: as its comment says, how often each fidget comes up compared with the others,
   which count 1 each. Only the vision is listed, at 0.2: the company's logo coming down to her is
   meant to be a rare treat, about a fifth as likely as any other fidget. `Partial<Record<...>>`
@@ -2235,7 +2466,7 @@ export const FIDGET_WEIGHT: Partial<Record<Fidget, number>> = { vision: 0.2 }
 
 <!-- code: apps/desktop/src/main/bubble/wander.ts#activityDelay -->
 
-[`src/main/bubble/wander.ts`, lines 33–37](../../apps/desktop/src/main/bubble/wander.ts#L33-L37)
+[`src/main/bubble/wander.ts`, lines 43–47](../../apps/desktop/src/main/bubble/wander.ts#L43-L47)
 
 ```ts
 /** How long until the next thing the character does on its own (ms). */
@@ -2259,7 +2490,7 @@ How long the character waits before doing something on its own, in milliseconds.
 
 <!-- code: apps/desktop/src/main/bubble/wander.ts#nextActivity -->
 
-[`src/main/bubble/wander.ts`, lines 39–65](../../apps/desktop/src/main/bubble/wander.ts#L39-L65)
+[`src/main/bubble/wander.ts`, lines 49–78](../../apps/desktop/src/main/bubble/wander.ts#L49-L78)
 
 ```ts
 /**
@@ -2267,7 +2498,8 @@ How long the character waits before doing something on its own, in milliseconds.
  * room to wander up to `zone` (WANDER.zone, or less on a narrow screen). Until she's been alone a
  * while she only strolls about; after that, more often than not she does one of her fidgets
  * instead, any but the one she did last (`last`), so she doesn't repeat herself, picked at random
- * by FIDGET_WEIGHT (so the vision is rare).
+ * by FIDGET_WEIGHT (so the vision is rare). Without walking (`allowed`), the walks become rests;
+ * without fidgets, she only ever walks.
  */
 export function nextActivity(
   idleMs: number,
@@ -2275,8 +2507,9 @@ export function nextActivity(
   zone: number,
   random: () => number,
   last?: Fidget,
+  allowed: Pastimes = { walk: true, fidget: true },
 ): Activity {
-  if (idleMs >= WANDER.fidgetAfter && random() < 0.6) {
+  if (allowed.fidget && idleMs >= WANDER.fidgetAfter && random() < 0.6) {
     const choices = FIDGETS.filter((fidget) => fidget !== last)
     const weights = choices.map((fidget) => FIDGET_WEIGHT[fidget] ?? 1)
     // A point along all the weights laid end to end; the fidget whose stretch it falls in.
@@ -2287,6 +2520,7 @@ export function nextActivity(
     }
     return { kind: 'fidget', pose: choices.at(-1)! }
   }
+  if (!allowed.walk) return { kind: 'rest' }
   return { kind: 'walk', to: walkTarget(inset, zone, random()) }
 }
 ```
@@ -2298,9 +2532,13 @@ while it only strolls about. After that, six times in ten it does one of its fid
 one it did last, and otherwise it still strolls. The fidgets are the livelier things it does, so
 they wait for a quiet spell rather than starting up while someone has just been using it.
 
-- `idleMs >= WANDER.fidgetAfter && random() < 0.6`: `idleMs` is the time since the last change of
-  mode (`BubbleController.lastInteraction`). Once that's long enough, one roll decides between a
-  fidget (below 0.6) and a walk. `&&` stops at a false left side, so until then there's no roll.
+- `allowed: Pastimes = { walk: true, fidget: true }`: what the settings allow, both unless said
+  otherwise (so the tests that came before the settings needn't pass it). As the comment says,
+  without walking the walks become rests, and without fidgets she only ever walks.
+- `allowed.fidget && idleMs >= WANDER.fidgetAfter && random() < 0.6`: `idleMs` is the time since
+  the last change of mode (`BubbleController.lastInteraction`). Once that's long enough, and
+  fidgets are allowed, one roll decides between a fidget (below 0.6) and a walk. `&&` stops at a
+  false left side, so until then there's no roll.
 - `last?: Fidget`: the fidget it did last (`BubbleController.lastFidget`), or `undefined` if it
   hasn't done one yet. The `?` makes the parameter optional.
 - `FIDGETS.filter((fidget) => fidget !== last)`: every fidget but that one, so it never does the
@@ -2316,6 +2554,9 @@ they wait for a quiet spell rather than starting up while someone has just been 
 - `choices.at(-1)!`: the last choice, if rounding ever leaves the roll at exactly the end (it
   can't with `Math.random()`, but this keeps TypeScript and odd `random`s happy). The `!` tells
   TypeScript there's an item there.
+- `if (!allowed.walk) return { kind: 'rest' }`: a turn that would have been a walk, with Stand
+  still on, is a rest. It's a rest rather than another try at a fidget, so a fidget still comes
+  only about as often as it would otherwise.
 - `walkTarget(inset, zone, random())`: a fresh `random()` picks where to walk, so the choices
   don't depend on each other.
 
@@ -2323,7 +2564,7 @@ they wait for a quiet spell rather than starting up while someone has just been 
 
 <!-- code: apps/desktop/src/main/bubble/wander.ts#walkTarget -->
 
-[`src/main/bubble/wander.ts`, lines 67–79](../../apps/desktop/src/main/bubble/wander.ts#L67-L79)
+[`src/main/bubble/wander.ts`, lines 80–92](../../apps/desktop/src/main/bubble/wander.ts#L80-L92)
 
 ```ts
 /**
@@ -2365,7 +2606,7 @@ toward its corner or away from it, with `roll` choosing the spot.
 
 <!-- code: apps/desktop/src/main/bubble/wander.ts#walkStep -->
 
-[`src/main/bubble/wander.ts`, lines 81–93](../../apps/desktop/src/main/bubble/wander.ts#L81-L93)
+[`src/main/bubble/wander.ts`, lines 94–106](../../apps/desktop/src/main/bubble/wander.ts#L94-L106)
 
 ```ts
 /**
@@ -2400,7 +2641,7 @@ One frame of a walk: the new inset, `dtMs` milliseconds of walking closer to `to
 
 <!-- code: apps/desktop/src/main/bubble/wander.ts#fallDuration -->
 
-[`src/main/bubble/wander.ts`, lines 95–103](../../apps/desktop/src/main/bubble/wander.ts#L95-L103)
+[`src/main/bubble/wander.ts`, lines 108–116](../../apps/desktop/src/main/bubble/wander.ts#L108-L116)
 
 ```ts
 /**
@@ -2429,7 +2670,7 @@ How long the fall after a drop takes, in milliseconds.
 
 <!-- code: apps/desktop/src/main/bubble/wander.ts#fallPosition -->
 
-[`src/main/bubble/wander.ts`, lines 105–111](../../apps/desktop/src/main/bubble/wander.ts#L105-L111)
+[`src/main/bubble/wander.ts`, lines 118–124](../../apps/desktop/src/main/bubble/wander.ts#L118-L124)
 
 ```ts
 /** Position at progress `t` (0–1) of the fall: speeding up as it falls, like a dropped thing. */
@@ -3077,6 +3318,258 @@ private now(): number {
 
 ---
 
+## `src/main/screenSaver.ts`: the screen saver's windows
+
+The screen saver icon (the `screensaver` action; see `src/shared/screenSaver.ts` in
+[Shared code and the preload bridge](1-shared-and-preload.md)) covers every screen: each fades to
+white, then a scene fades in out of the white. On her display it's a pixel sunset over rolling
+hills, with her on the nearest, her back to us, watching it; on any others, shooting stars falling
+through the night sky. Moving the mouse, clicking or pressing a key ends it: the scenes fade away,
+the windows close, and she forms again on the taskbar. This file opens and closes those windows.
+It lives beside `index.ts` rather than in `bubble/`, but it's built like `clones.ts`,
+`vision.ts` and `spellEffects.ts` above: it never touches Electron, and asks for each window
+through an `open` function. The pages in the windows (`ScreenSaverView.tsx`; see
+[The pages](7-renderer-pages.md)) do all the drawing, and the fades.
+
+It differs from those three in two ways. Its windows are meant to be touched: they take the mouse
+and, on her display, the keyboard focus, since any input is what ends it. And they cover the whole
+of each display, the taskbar too, in front of everything.
+
+Who uses it:
+
+- `src/main/index.ts` creates the one `ScreenSaver` in `start()` with the tenant's accent colour,
+  the displays, which one she's on, an `open` that makes each window, and `onStart` and `onEnd`,
+  which call `BubbleController.sleep()` and `wake()`. The screen saver icon's handler
+  (`actions.ts`) calls `start()`. A change of displays calls `stop()`, and quitting `dispose()`.
+- `src/main/ipc.ts` passes `wakeFrom()` the id of the page that says the user is back
+  (`IPC.screensaverWake`).
+
+`tests/screenSaver.test.ts` checks it with a fake `open`, two pretend displays and fake timers.
+
+### `SaverWindow` and `ScreenSaverDeps`
+
+<!-- code: apps/desktop/src/main/screenSaver.ts#SaverWindow,ScreenSaverDeps -->
+
+[`src/main/screenSaver.ts`, lines 4–32](../../apps/desktop/src/main/screenSaver.ts#L4-L32)
+
+```ts
+/** One of the screen saver's windows, as ScreenSaver uses it. index.ts makes them. */
+export interface SaverWindow {
+  /** Its page's id, to know its messages from anyone else's. */
+  readonly id: number
+  /** Tells its page to fade away. */
+  end(): void
+  close(): void
+}
+
+export interface ScreenSaverDeps {
+  /** The tenant's accent colour, for her robe and hat. */
+  accentColor: string
+  /** Every display, the whole of it (the taskbar too). */
+  displays(): { id: number; bounds: Rect }[]
+  /** The display she's on. */
+  herDisplay(): number
+  /**
+   * Opens a window over `bounds`, in front of everything, the taskbar included, its page told
+   * (in its query string) which scene, when it started and the accent colour. The window on her
+   * display takes the focus (`focus`), for the keyboard.
+   */
+  open(bounds: Rect, query: Record<string, string>, focus: boolean): SaverWindow
+  /** It's starting: she vanishes, as the screens whiten. */
+  onStart(): void
+  /** It's over, the screens clear again: she comes back. */
+  onEnd(): void
+  /** Wall-clock time (ms), shared with the pages, which keep in time from it. */
+  now?: () => number
+}
+```
+
+<!-- /code -->
+
+What `ScreenSaver` needs from each window, and from the rest of the app.
+
+- `SaverWindow`: as its comment says, one of its windows, as `ScreenSaver` uses it.
+  - `id`: its page's id (the `webContents` id in `index.ts`), to know its messages from anyone
+    else's (see `wakeFrom()`). `readonly`, since it never changes.
+  - `end()`: tells its page to fade away (`IPC.screensaverEnd`).
+  - `close()`: closes the window.
+- `accentColor`: as its comment says, the tenant's accent colour, for her robe and hat in the
+  sunset. It's passed on to the pages, which have no app state of their own.
+- `displays()`: as its comment says, every display, the whole of it: `bounds`, not the work area,
+  so the taskbar is covered too.
+- `herDisplay()`: as its comment says, the display she's on, which gets the sunset.
+- `open(bounds, query, focus)`: as the comment says, opens a window over `bounds`, in front of
+  everything, the taskbar included, its page told in its query string which scene, when it started
+  and the accent colour. The window on her display takes the focus (`focus`), so it hears the
+  keyboard; the others are shown without it.
+- `onStart()`, `onEnd()`: as their comments say, it's starting (she vanishes as the screens
+  whiten), and it's over (she comes back).
+- `now?: () => number`: as its comment says, the wall-clock time, shared with the pages, which keep
+  in time from it, so every screen fades in together however long each took to load. The tests
+  pass the fake timers' clock.
+
+### `ScreenSaver`
+
+<!-- code: apps/desktop/src/main/screenSaver.ts#ScreenSaver.class -->
+
+[`src/main/screenSaver.ts`, lines 34–39](../../apps/desktop/src/main/screenSaver.ts#L34-L39)
+
+```ts
+/**
+ * The screen saver (see shared/screenSaver.ts): a window over every display, the sunset on hers and
+ * the starfall on the rest. Their pages say when the user's back (wakeFrom); then they fade away,
+ * close, and she returns.
+ */
+export class ScreenSaver {
+  // …
+}
+```
+
+<!-- /code -->
+
+As the comment says: a window over every display, the sunset on hers and the starfall on the
+rest. Their pages say when the user's back; then they fade away, close, and she returns. Its
+fields, constructor and one getter:
+
+<!-- code: apps/desktop/src/main/screenSaver.ts#ScreenSaver.windows,ending,constructor,running -->
+
+[`src/main/screenSaver.ts`, lines 40–47](../../apps/desktop/src/main/screenSaver.ts#L40-L47)
+
+```ts
+private windows: SaverWindow[] = []
+
+private ending: ReturnType<typeof setTimeout> | null = null
+
+constructor(private readonly deps: ScreenSaverDeps) {}
+
+get running(): boolean {
+  return this.windows.length > 0
+}
+```
+
+<!-- /code -->
+
+- `private windows: SaverWindow[] = []`: its windows while it's on, one per display; empty
+  otherwise.
+- `private ending`: the timer that closes the windows once their pages have faded away, while
+  they're fading; `null` otherwise.
+- `constructor(private readonly deps: ScreenSaverDeps) {}`: stores the argument in a field called
+  `deps`.
+- `get running()`: whether it's on: whether it has any windows. Fading out still counts.
+
+### `ScreenSaver.start()`
+
+<!-- code: apps/desktop/src/main/screenSaver.ts#ScreenSaver.start -->
+
+[`src/main/screenSaver.ts`, lines 49–60](../../apps/desktop/src/main/screenSaver.ts#L49-L60)
+
+```ts
+/** Covers every screen. Once is enough: starting it again while it's running does nothing. */
+start(): void {
+  if (this.running) return
+  const her = this.deps.herDisplay()
+  const starts = String((this.deps.now ?? Date.now)())
+  this.windows = this.deps.displays().map((display) => {
+    const scene: SaverScene = display.id === her ? 'sunset' : 'stars'
+    const query = { scene, starts, accent: this.deps.accentColor }
+    return this.deps.open(display.bounds, query, display.id === her)
+  })
+  this.deps.onStart()
+}
+```
+
+<!-- /code -->
+
+As its comment says, covers every screen; starting it again while it's running does nothing.
+
+- `if (this.running) return`: once is enough. The icon can't be clicked again while the windows
+  cover the screens, but a second start would otherwise stack a second set of windows on the first.
+- `const her = this.deps.herDisplay()`: which display gets the sunset.
+- `const starts = String((this.deps.now ?? Date.now)())`: when it started, on the wall clock, the
+  same for every window, so the screens whiten and their scenes appear together.
+- `this.deps.displays().map((display) => {`: a window for each display, over its whole `bounds`.
+  Its page is told its `scene` (`'sunset'` on hers, `'stars'` elsewhere; a `SaverScene`), `starts`
+  and the `accent` colour, and the one on her display takes the focus (`display.id === her`).
+- `this.deps.onStart()`: then she vanishes (`BubbleController.sleep()`), while the screens whiten.
+
+### `ScreenSaver.wakeFrom()` and `stop()`
+
+<!-- code: apps/desktop/src/main/screenSaver.ts#ScreenSaver.wakeFrom,stop -->
+
+[`src/main/screenSaver.ts`, lines 62–75](../../apps/desktop/src/main/screenSaver.ts#L62-L75)
+
+```ts
+/**
+ * Word from a page (by its id) that the user's back: the mouse moved, a click or a key. Only its
+ * own windows' pages are listened to.
+ */
+wakeFrom(senderId: number): void {
+  if (this.windows.some((window) => window.id === senderId)) this.stop()
+}
+
+/** Fades the scenes away, then closes their windows, and she comes back. */
+stop(): void {
+  if (!this.running || this.ending) return
+  for (const window of this.windows) window.end()
+  this.ending = setTimeout(() => this.close(true), SCREEN_SAVER.fadeOutMs)
+}
+```
+
+<!-- /code -->
+
+- `wakeFrom(senderId)`: as its comment says, word from a page that the user's back: the mouse
+  moved, a click or a key. Only its own windows' pages are listened to: `ipc.ts` answers
+  `IPC.screensaverWake` from any page, since these windows aren't among the app's own two (see
+  `registerIpc()`), so this checks the sender's id against its windows' before stopping. A message
+  from any other page, or after it's over, does nothing.
+- `stop()`: as its comment says, fades the scenes away, then closes their windows, and she comes
+  back.
+  - `if (!this.running || this.ending) return`: nothing to stop, or already stopping (every page
+    can say the user's back, and a busy mouse says it many times).
+  - `for (const window of this.windows) window.end()`: every page starts fading its scene out, at
+    once.
+  - `setTimeout(() => this.close(true), SCREEN_SAVER.fadeOutMs)`: once they've faded (0.8
+    seconds), the windows close and she comes back (`close(true)`, below). `index.ts` also calls
+    `stop()` when the displays change, as the windows no longer fit the screens.
+
+### `ScreenSaver.dispose()` and `close()`
+
+<!-- code: apps/desktop/src/main/screenSaver.ts#ScreenSaver.dispose,close -->
+
+[`src/main/screenSaver.ts`, lines 77–89](../../apps/desktop/src/main/screenSaver.ts#L77-L89)
+
+```ts
+/** Closes its windows at once (the app is quitting). */
+dispose(): void {
+  this.close(false)
+}
+
+private close(comeBack: boolean): void {
+  if (this.ending) clearTimeout(this.ending)
+  this.ending = null
+  const wasRunning = this.running
+  for (const window of this.windows) window.close()
+  this.windows = []
+  if (wasRunning && comeBack) this.deps.onEnd()
+}
+```
+
+<!-- /code -->
+
+- `dispose()`: as its comment says, closes its windows at once, without the fade, because the app
+  is quitting. `index.ts` calls it from the tray's Quit and in `before-quit`.
+- `close(comeBack)`: the end, either way.
+  - `if (this.ending) clearTimeout(this.ending)`: a fade under way is cut short (quitting during
+    it), so its timer can't close anything later.
+  - `const wasRunning = this.running`: noted before the list is emptied.
+  - `for (const window of this.windows) window.close()`, `this.windows = []`: every window closes,
+    and it's ready to start again.
+  - `if (wasRunning && comeBack) this.deps.onEnd()`: after the fade, she comes back
+    (`BubbleController.wake()`). Not when the app is quitting (`comeBack` false): there's no point
+    bringing her back just as it closes.
+
+---
+
 ## `src/main/bubble/windows.ts`: creating the Electron windows
 
 The only file in this folder that uses Electron. It creates the overlay windows, locks them down,
@@ -3084,15 +3577,15 @@ and adapts the bubble's and the panel's to the controller's `Surface` interface.
 `createOverlayWindow()` twice at startup, once for the bubble and once for the panel, and wraps the
 results with `bubbleSurface()` and `panelSurface()` before handing them to `BubbleController`. It
 calls it again for each lot of clones, for a window that lasts their thirty seconds, for each of
-her visions, for a window that lasts the habit's 8.6 seconds, and for each spell drawn over the
-screen, for a window that lasts the spell (see `clones.ts`, `vision.ts` and `spellEffects.ts`
-above).
+her visions, for a window that lasts the habit's 8.6 seconds, for each spell drawn over the
+screen, for a window that lasts the spell, and for each display while the screen saver is on (see
+`clones.ts`, `vision.ts`, `spellEffects.ts` and `screenSaver.ts` above).
 
 Key ideas:
 
-- **Five kinds of window, one page.** Every overlay window loads the same renderer page;
-  `?view=bubble`, `?view=panel`, `?view=clones`, `?view=vision` or `?view=spell` in its address
-  tells `main.tsx` which UI to draw.
+- **Six kinds of window, one page.** Every overlay window loads the same renderer page;
+  `?view=bubble`, `?view=panel`, `?view=clones`, `?view=vision`, `?view=spell` or
+  `?view=screensaver` in its address tells `main.tsx` which UI to draw.
   The bubble has its own tiny window so it never resizes when the panel opens, and only a window
   her size (96×104 at her usual size) moves during a drag, a fall or a walk.
 - **Always on top, and kept there.** Both windows stay in front of other apps' windows. They use
@@ -3107,7 +3600,8 @@ Key ideas:
   bubble, and relying on Windows' mouse forwarding there made clicks occasionally fall through the
   bubble to the window behind it. The clones', the vision's and the spells' windows are the
   opposite: they only show something, so they ignore the mouse altogether, all the time, and can't take the focus
-  (`passive()`).
+  (`passive()`). The screen saver's windows aren't passive: any movement of the mouse, click or key
+  over them is what ends it, so, like the bubble's, they take the mouse and can take the focus.
 
 ### `View`, `passive()`
 
@@ -3116,7 +3610,7 @@ Key ideas:
 [`src/main/bubble/windows.ts`, lines 7–10](../../apps/desktop/src/main/bubble/windows.ts#L7-L10)
 
 ```ts
-export type View = 'bubble' | 'panel' | 'clones' | 'vision' | 'spell'
+export type View = 'bubble' | 'panel' | 'clones' | 'vision' | 'spell' | 'screensaver'
 
 /** Windows that only show something: they never take the mouse or the focus. */
 const passive = (view: View) => view === 'clones' || view === 'vision' || view === 'spell'
@@ -3125,10 +3619,11 @@ const passive = (view: View) => view === 'clones' || view === 'vision' || view =
 <!-- /code -->
 
 - `View`: a _union type_: a `View` can only be the string `'bubble'`, `'panel'`, `'clones'`,
-  `'vision'` or `'spell'`, and TypeScript rejects anything else.
+  `'vision'`, `'spell'` or `'screensaver'`, and TypeScript rejects anything else.
 - `passive`: as its comment says, the windows that only show something, the clones', the vision's
   and the spells', which never take the mouse or the focus. `createOverlayWindow()` asks it twice, so
-  the two rules can't drift apart.
+  the two rules can't drift apart. The screen saver's windows are left out on purpose: they must
+  hear the mouse and the keyboard, to know when the user is back.
 
 ### `ON_TOP_LEVEL`, `ON_TOP_CHECK_MS`
 
@@ -3260,18 +3755,23 @@ spells' windows, which the comment doesn't mention (`passive()` covers all three
   for her size when it first places them, and again whenever her size changes. For the clones, the
   vision and the spells, `index.ts` passes the size of the area asked for (the strip the clones walk
   in, from `cloneStrip()`, the column over her, from `visionBounds()`, or her display's work area
-  for a spell), and sets the window's bounds straight after.
+  for a spell), and sets the window's bounds straight after. For the screen saver it passes a
+  display's whole bounds: a `Rect` has a `width` and `height` too, so it serves as a `Size`, and
+  spread into the options, its `x` and `y` place the window as well.
 - `query: Record<string, string> = {}`: more for the page's query string, beside `view`. Only the
-  clones', the vision's and the spells' windows have any (for the clones, where she stands, her
-  size, the accent colour and when they end; for the vision, her size, where her middle is and when
-  it started; for a spell, which one, her size, where she stands, when it was cast and the accent
-  colour; see `Clones.start()`, `Vision.start()` and `SpellEffects.start()`): their pages don't ask
-  for the app state as the other two do.
+  clones', the vision's, the spells' and the screen saver's windows have any (for the clones, where
+  she stands, her size, the accent colour and when they end; for the vision, her size, where her
+  middle is and when it started; for a spell, which one, her size, where she stands, when it was
+  cast and the accent colour; for the screen saver, which scene, when it started and the accent
+  colour; see `Clones.start()`, `Vision.start()`, `SpellEffects.start()` and `ScreenSaver.start()`):
+  their pages don't ask for the app state as the other two do.
 - `show: false`: created hidden. The controller decides when the bubble and the panel appear, and
   `index.ts` shows the other windows once their pages have drawn.
 - No `alwaysOnTop: true`: the comment explains that would use Electron's default level, which
   loses it while a full-screen app is in front. `win.setAlwaysOnTop(true, ON_TOP_LEVEL)` straight
-  after creating the window makes it always on top at a level that keeps it there.
+  after creating the window makes it always on top at a level that keeps it there. (`index.ts`
+  raises the screen saver's windows higher still, to `'screen-saver'`, so they cover the taskbar
+  and her own window too.)
 - `transparent: true`: together with `frame: false` (no title bar or border) and a fully
   transparent `backgroundColor` (in `'#00000000'` the last two hex digits are the alpha), only what
   the page draws is visible.
@@ -3280,9 +3780,10 @@ spells' windows, which the comment doesn't mention (`passive()` covers all three
   page draws its own.
 - `type: 'toolbar'`: on Windows, a toolbar window is left out of Alt+Tab. `skipTaskbar: true` keeps
   it off the taskbar too.
-- `focusable: !passive(view)`: the bubble and the panel can take the keyboard focus; as the
-  comment says, the clones never need it, and nor do the vision and the spells, so their windows
-  can't, and never take the focus from the app you're working in. The panel must, since you type in it. The bubble used to be unable to
+- `focusable: !passive(view)`: the bubble and the panel can take the keyboard focus (and the screen
+  saver's windows, so a key press can end it); as the comment says, the clones never need it, and
+  nor do the vision and the spells, so their windows can't, and never take the focus from the app
+  you're working in. The panel must, since you type in it. The bubble used to be unable to
   (`focusable: false`), so that clicking it wouldn't take the
   focus from the panel or from the app you were working in. But, as the comment says, in some
   states (after clicking somewhere else) Windows and Chromium dropped the mouse _press_ on that
@@ -3305,7 +3806,7 @@ spells' windows, which the comment doesn't mention (`passive()` covers all three
   `forward` option (Windows and macOS only) keeps sending mouse moves to the page, which is what
   lets `useClickThrough` notice the pointer arriving over real UI.
 - `if (passive(view)) win.setIgnoreMouseEvents(true)`: the clones', the vision's and the spells'
-  windows are click-through for good: clicks go straight through them to whatever is underneath, so they never
+  windows (not the screen saver's) are click-through for good: clicks go straight through them to whatever is underneath, so they never
   get in the way (a click on her, through the vision's light, still reaches her own window in front
   of it). Without `forward`, their pages aren't told about the mouse at all, which they have no use
   for.

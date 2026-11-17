@@ -4,6 +4,7 @@ import './styles.css'
 import { BubbleView } from './views/BubbleView'
 import { ClonesView } from './views/ClonesView'
 import { PanelView } from './views/PanelView'
+import { ScreenSaverView } from './views/ScreenSaverView'
 import { SpellView } from './views/SpellView'
 import { VisionView } from './views/VisionView'
 
@@ -20,6 +21,8 @@ createRoot(document.getElementById('root')!).render(
       <VisionView />
     ) : view === 'spell' ? (
       <SpellView />
+    ) : view === 'screensaver' ? (
+      <ScreenSaverView />
     ) : (
       <PanelView />
     )}

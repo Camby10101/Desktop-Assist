@@ -11,7 +11,7 @@ import {
 } from 'lucide-react'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { UI, type CharacterSize, type Corner, type PanelLayout } from '@shared/geometry'
-import type { Branding, Effort, Settings, SignedInUser, UpdateState } from '@shared/types'
+import type { Branding, Effort, Habits, Settings, SignedInUser, UpdateState } from '@shared/types'
 import { useFitInWindow } from '../hooks/useFitInWindow'
 import { anchored } from '../lib/anchor'
 import { cn } from '../lib/cn'
@@ -47,6 +47,7 @@ export function SettingsMenu(props: {
   onCheckForUpdates: () => void
   onToggleTheme: () => void
   onSetSize: (scale: number) => void
+  onSetHabits: (habits: Partial<Habits>) => void
   onToggleAutoStart: () => void
   onSetEffort: (effort: Effort) => void
   onToggleAutoSend: () => void
@@ -96,23 +97,27 @@ export function SettingsMenu(props: {
         overflowY: 'auto',
       }}
     >
-      <button
-        type="button"
-        role="menuitemcheckbox"
-        aria-checked={settings.theme === 'light'}
-        onClick={props.onToggleTheme}
-        className="flex w-full items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800"
-      >
-        <span>
-          Light mode
-          <span className="block text-[11px] text-zinc-500">
-            {settings.theme === 'light' ? 'Light windows' : 'Dark windows'}
-          </span>
-        </span>
-        <Switch on={settings.theme === 'light'} />
-      </button>
+      <ToggleRow
+        label="Light mode"
+        hint={settings.theme === 'light' ? 'Light windows' : 'Dark windows'}
+        on={settings.theme === 'light'}
+        onToggle={props.onToggleTheme}
+      />
 
       <SizeControl size={props.size} onSetSize={props.onSetSize} />
+
+      <ToggleRow
+        label="Stand still"
+        hint={settings.standStill ? 'She stays where she is' : 'She wanders about'}
+        on={settings.standStill}
+        onToggle={() => props.onSetHabits({ standStill: !settings.standStill })}
+      />
+      <ToggleRow
+        label="No idle animations"
+        hint={settings.noIdles ? 'She just stands' : 'She keeps herself busy'}
+        on={settings.noIdles}
+        onToggle={() => props.onSetHabits({ noIdles: !settings.noIdles })}
+      />
 
       <div className="my-1 border-t border-black/10 dark:border-white/10" />
 
@@ -139,21 +144,12 @@ export function SettingsMenu(props: {
       </button>
 
       {!builtInChat && (
-        <button
-          type="button"
-          role="menuitemcheckbox"
-          aria-checked={settings.autoSend}
-          onClick={props.onToggleAutoSend}
-          className="flex w-full items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800"
-        >
-          <span>
-            Send in Claude automatically
-            <span className="block text-[11px] text-zinc-500">
-              {settings.autoSend ? 'Questions are sent for you' : 'You press Enter in Claude'}
-            </span>
-          </span>
-          <Switch on={settings.autoSend} />
-        </button>
+        <ToggleRow
+          label="Send in Claude automatically"
+          hint={settings.autoSend ? 'Questions are sent for you' : 'You press Enter in Claude'}
+          on={settings.autoSend}
+          onToggle={props.onToggleAutoSend}
+        />
       )}
 
       {builtInChat && (
@@ -334,6 +330,25 @@ function MenuItem(props: {
     >
       <Icon size={16} className={cn('shrink-0', props.spin && 'animate-spin')} aria-hidden />
       {props.children}
+    </button>
+  )
+}
+
+/** A setting that's on or off: its name, a line saying what it does now, and its switch. */
+function ToggleRow(props: { label: string; hint: string; on: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      role="menuitemcheckbox"
+      aria-checked={props.on}
+      onClick={props.onToggle}
+      className="flex w-full items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800"
+    >
+      <span>
+        {props.label}
+        <span className="block text-[11px] text-zinc-500">{props.hint}</span>
+      </span>
+      <Switch on={props.on} />
     </button>
   )
 }

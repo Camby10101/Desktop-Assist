@@ -22,7 +22,17 @@ export const WANDER = {
   gravity: 2500,
 } as const
 
-export type Activity = { kind: 'walk'; to: number } | { kind: 'fidget'; pose: Fidget }
+export type Activity =
+  | { kind: 'walk'; to: number }
+  | { kind: 'fidget'; pose: Fidget }
+  /** Nothing this time (she stands still, as asked in Settings). */
+  | { kind: 'rest' }
+
+/** What she may do on her own (Settings can turn either off): walk about, and fidget. */
+export interface Pastimes {
+  walk: boolean
+  fidget: boolean
+}
 
 /**
  * How often a fidget comes up compared with the others, which count 1 each: the vision (the
@@ -41,7 +51,8 @@ export function activityDelay(random: () => number, first: boolean): number {
  * room to wander up to `zone` (WANDER.zone, or less on a narrow screen). Until she's been alone a
  * while she only strolls about; after that, more often than not she does one of her fidgets
  * instead, any but the one she did last (`last`), so she doesn't repeat herself, picked at random
- * by FIDGET_WEIGHT (so the vision is rare).
+ * by FIDGET_WEIGHT (so the vision is rare). Without walking (`allowed`), the walks become rests;
+ * without fidgets, she only ever walks.
  */
 export function nextActivity(
   idleMs: number,
@@ -49,8 +60,9 @@ export function nextActivity(
   zone: number,
   random: () => number,
   last?: Fidget,
+  allowed: Pastimes = { walk: true, fidget: true },
 ): Activity {
-  if (idleMs >= WANDER.fidgetAfter && random() < 0.6) {
+  if (allowed.fidget && idleMs >= WANDER.fidgetAfter && random() < 0.6) {
     const choices = FIDGETS.filter((fidget) => fidget !== last)
     const weights = choices.map((fidget) => FIDGET_WEIGHT[fidget] ?? 1)
     // A point along all the weights laid end to end; the fidget whose stretch it falls in.
@@ -61,6 +73,7 @@ export function nextActivity(
     }
     return { kind: 'fidget', pose: choices.at(-1)! }
   }
+  if (!allowed.walk) return { kind: 'rest' }
   return { kind: 'walk', to: walkTarget(inset, zone, random()) }
 }
 

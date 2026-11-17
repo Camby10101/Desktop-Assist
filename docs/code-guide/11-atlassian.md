@@ -49,7 +49,9 @@ see `AtlassianSchema` and `ServiceDeskSchema` in
    the user and issues that may mention them, reads each one's history and comments to see who
    did it (`jiraData.ts`), and checks the user's service desk requests. The result, a `JiraFeed`,
    is broadcast on `assist:jira-feed`, and `PanelView` puts dots on the icons from it. What the
-   user has already seen is remembered in `atlassian.json`.
+   user has already seen is remembered in `atlassian.json`: a notification counts as seen once
+   it's opened, and the rest once the Jira page closes; a request's news once the request is
+   opened, and the rest once the service desk page closes.
 3. **Working on an issue**: clicking an issue → `PanelView.openIssue()` → `IssueView` →
    `window.assist.atlassian.issue(key)` → `Atlassian.issue()`. Moving, commenting and logging time
    each make one tool call, then answer with the issue as it is now. **Ask Claude** →
@@ -1078,11 +1080,11 @@ export const TOOLS = {
 The names of the Atlassian MCP server's tools that are used, in one place. `as const` makes
 TypeScript treat each name as that exact text, and the object as read-only.
 
-### `FEED_INTERVAL_MS`, `STALE_MS`, `DAY_MS`, `MAX_NOTIFICATIONS` and `PARALLEL`
+### `FEED_INTERVAL_MS`, `STALE_MS`, `DAY_MS`, `MAX_NOTIFICATIONS`, `PARALLEL` and `MAX_READ_IDS`
 
-<!-- code: apps/desktop/src/main/atlassian/Atlassian.ts#FEED_INTERVAL_MS,STALE_MS,DAY_MS,MAX_NOTIFICATIONS,PARALLEL -->
+<!-- code: apps/desktop/src/main/atlassian/Atlassian.ts#FEED_INTERVAL_MS,STALE_MS,DAY_MS,MAX_NOTIFICATIONS,PARALLEL,MAX_READ_IDS -->
 
-[`src/main/atlassian/Atlassian.ts`, lines 64–71](../../apps/desktop/src/main/atlassian/Atlassian.ts#L64-L71)
+[`src/main/atlassian/Atlassian.ts`, lines 64–73](../../apps/desktop/src/main/atlassian/Atlassian.ts#L64-L73)
 
 ```ts
 /** How often notifications and requests are checked in the background. */
@@ -1097,6 +1099,9 @@ const MAX_NOTIFICATIONS = 30
 
 /** How many issues are looked at in parallel (each is one request to Atlassian). */
 const PARALLEL = 4
+
+/** How many notifications opened one at a time are remembered (the newest). */
+const MAX_READ_IDS = 200
 ```
 
 <!-- /code -->
@@ -1107,18 +1112,23 @@ const PARALLEL = 4
 - `MAX_NOTIFICATIONS = 30`: the most the tab lists.
 - `PARALLEL = 4`: finding out who assigned each issue takes one request per issue; as the comment
   says, at most four run at once, so a long list doesn't flood Atlassian.
+- `MAX_READ_IDS = 200`: as the comment says, how many notifications opened one at a time are
+  remembered, the newest (`notificationsRead`, below). The tab never lists more than 30, so 200 is
+  plenty, and the list can't grow for ever in a user's `atlassian.json`.
 
 ### `AtlassianMemorySchema` and `AtlassianMemory`
 
 <!-- code: apps/desktop/src/main/atlassian/Atlassian.ts#AtlassianMemorySchema,AtlassianMemory -->
 
-[`src/main/atlassian/Atlassian.ts`, lines 73–84](../../apps/desktop/src/main/atlassian/Atlassian.ts#L73-L84)
+[`src/main/atlassian/Atlassian.ts`, lines 75–88](../../apps/desktop/src/main/atlassian/Atlassian.ts#L75-L88)
 
 ```ts
 /** What the app remembers between runs (atlassian.json): what the user has already seen. */
 export const AtlassianMemorySchema = z.object({
   /** Notifications up to this ISO time have been seen. */
   notificationsReadAt: z.string().nullable().optional(),
+  /** Later notifications that have been opened one at a time, by id. */
+  notificationsRead: z.array(z.string()).optional(),
   /**
    * For each of the user's requests, as "status|latest reply": what they've seen in the panel,
    * and what they've had a Windows notification about.
@@ -1136,6 +1146,11 @@ holds issue keys, times and statuses, no secrets). `index.ts` reads it through t
 damaged file just means starting afresh.
 
 - `notificationsReadAt`: notifications up to this time have been seen; newer ones get a dot.
+- `notificationsRead`: as its comment says, later notifications that have been opened one at a
+  time, by id (such as `assigned:ISD-12:10234`). Opening one notification mustn't count the others
+  as seen, so a time alone can't say it: a notification is new if it's after `notificationsReadAt`
+  and not in this list. Closing the Jira page counts everything up to the newest as seen, and
+  empties it.
 - `requests`: for each of the user's requests, by key, its state written as `"status|latest reply"`,
   twice: what the user has `seen` in the panel, and what they've been `notified` about with a
   Windows notification. Keeping the two apart means a change gives one notification, but stays
@@ -1146,7 +1161,7 @@ damaged file just means starting afresh.
 
 <!-- code: apps/desktop/src/main/atlassian/Atlassian.ts#AtlassianDeps,loading -->
 
-[`src/main/atlassian/Atlassian.ts`, lines 86–109](../../apps/desktop/src/main/atlassian/Atlassian.ts#L86-L109)
+[`src/main/atlassian/Atlassian.ts`, lines 90–113](../../apps/desktop/src/main/atlassian/Atlassian.ts#L90-L113)
 
 ```ts
 export interface AtlassianDeps {
@@ -1198,7 +1213,7 @@ real ones.
 
 <!-- code: apps/desktop/src/main/atlassian/Atlassian.ts#Atlassian.class -->
 
-[`src/main/atlassian/Atlassian.ts`, lines 111–116](../../apps/desktop/src/main/atlassian/Atlassian.ts#L111-L116)
+[`src/main/atlassian/Atlassian.ts`, lines 115–120](../../apps/desktop/src/main/atlassian/Atlassian.ts#L115-L120)
 
 ```ts
 /**
@@ -1219,7 +1234,7 @@ The class `index.ts` and `ipc.ts` use, with the comment that sums it up.
 
 <!-- code: apps/desktop/src/main/atlassian/Atlassian.ts#Atlassian.state,feedState,account,user,cloudId,memory,memoryLoaded,refreshing,lastRefresh,timer,assignments,requestSignatures,projectKeyList,constructor,current,currentFeed -->
 
-[`src/main/atlassian/Atlassian.ts`, lines 117–157](../../apps/desktop/src/main/atlassian/Atlassian.ts#L117-L157)
+[`src/main/atlassian/Atlassian.ts`, lines 121–161](../../apps/desktop/src/main/atlassian/Atlassian.ts#L121-L161)
 
 ```ts
 private state: AtlassianState = { status: 'loading' }
@@ -1301,7 +1316,7 @@ get currentFeed(): JiraFeed {
 
 <!-- code: apps/desktop/src/main/atlassian/Atlassian.ts#Atlassian.init -->
 
-[`src/main/atlassian/Atlassian.ts`, lines 159–173](../../apps/desktop/src/main/atlassian/Atlassian.ts#L159-L173)
+[`src/main/atlassian/Atlassian.ts`, lines 163–177](../../apps/desktop/src/main/atlassian/Atlassian.ts#L163-L177)
 
 ```ts
 /** Uses the saved connection, if there is one (never opens the browser), and starts checking. */
@@ -1338,7 +1353,7 @@ opens the browser.
 
 <!-- code: apps/desktop/src/main/atlassian/Atlassian.ts#Atlassian.signIn,cancelSignIn,signOut,retry -->
 
-[`src/main/atlassian/Atlassian.ts`, lines 175–213](../../apps/desktop/src/main/atlassian/Atlassian.ts#L175-L213)
+[`src/main/atlassian/Atlassian.ts`, lines 179–217](../../apps/desktop/src/main/atlassian/Atlassian.ts#L179-L217)
 
 ```ts
 /** Connects in the browser (through the company's sign-in), then loads the feed. */
@@ -1398,7 +1413,7 @@ retry(): Promise<AtlassianState> {
 
 <!-- code: apps/desktop/src/main/atlassian/Atlassian.ts#Atlassian.feed -->
 
-[`src/main/atlassian/Atlassian.ts`, lines 215–220](../../apps/desktop/src/main/atlassian/Atlassian.ts#L215-L220)
+[`src/main/atlassian/Atlassian.ts`, lines 219–224](../../apps/desktop/src/main/atlassian/Atlassian.ts#L219-L224)
 
 ```ts
 /** Notifications and requests, checked again first if asked or if the last check is old. */
@@ -1417,25 +1432,41 @@ What the Jira page and My requests ask for when they show, and on Refresh (`refr
 - `this.now() - this.lastRefresh > STALE_MS`: checks again first if the last check is over a
   minute old; otherwise the lists as they are.
 
-### `Atlassian.markNotificationsRead()` and `Atlassian.markRequestsRead()`
+### `Atlassian.markNotificationsRead()`, `setNotifications()` and `markRequestsRead()`
 
-<!-- code: apps/desktop/src/main/atlassian/Atlassian.ts#Atlassian.markNotificationsRead,markRequestsRead -->
+<!-- code: apps/desktop/src/main/atlassian/Atlassian.ts#Atlassian.markNotificationsRead,setNotifications,markRequestsRead -->
 
-[`src/main/atlassian/Atlassian.ts`, lines 222–253](../../apps/desktop/src/main/atlassian/Atlassian.ts#L222-L253)
+[`src/main/atlassian/Atlassian.ts`, lines 226–273](../../apps/desktop/src/main/atlassian/Atlassian.ts#L226-L273)
 
 ```ts
-/** The user has looked at the Notifications tab. */
-async markNotificationsRead(): Promise<JiraFeed> {
+/**
+ * The user has opened a notification (by its id), or closed the Jira page, which counts all of
+ * them as seen.
+ */
+async markNotificationsRead(id?: string): Promise<JiraFeed> {
   const { items } = this.feedState.notifications
-  if (!items.some((n) => n.unread)) return this.feedState
-  const newest = items.reduce((latest, n) => (n.at > latest ? n.at : latest), '')
-  this.memory.notificationsReadAt = newest || new Date(this.now()).toISOString()
-  this.setFeed({
-    ...this.feedState,
-    notifications: { ...this.feedState.notifications, items: items.map(read) },
-  })
+  if (id !== undefined) {
+    if (!items.some((n) => n.id === id && n.unread)) return this.feedState
+    const opened = (this.memory.notificationsRead ?? []).filter((other) => other !== id)
+    this.memory.notificationsRead = [...opened, id].slice(-MAX_READ_IDS)
+    this.setNotifications(items.map((n) => (n.id === id ? read(n) : n)))
+  } else {
+    if (!items.some((n) => n.unread)) return this.feedState
+    const newest = items.reduce((latest, n) => (n.at > latest ? n.at : latest), '')
+    this.memory.notificationsReadAt = newest || new Date(this.now()).toISOString()
+    // Everything up to the newest is seen now, the ones opened one at a time included.
+    this.memory.notificationsRead = []
+    this.setNotifications(items.map(read))
+  }
   await this.saveMemory()
   return this.feedState
+}
+
+private setNotifications(items: JiraNotification[]): void {
+  this.setFeed({
+    ...this.feedState,
+    notifications: { ...this.feedState.notifications, items },
+  })
 }
 
 /** The user has seen what's new on a request (or on all of them, without a key). */
@@ -1460,12 +1491,25 @@ async markRequestsRead(key?: string): Promise<JiraFeed> {
 
 <!-- /code -->
 
-- `markNotificationsRead()`: the Jira page calls this two seconds after the Notifications tab
-  shows. `items.reduce(...)` finds the newest notification's time (ISO times compare correctly as
-  text), which becomes `notificationsReadAt`; every notification loses its dot (`read`, at the end
-  of the file), and the memory is saved.
-- `markRequestsRead(key?)`: the user has seen what's new on one request (opening it in the card),
-  or on all of them without a key. Its current signature becomes both `seen` and `notified`, and
+- `markNotificationsRead(id?)`: as its comment says, the user has opened a notification (by its
+  id), or closed the Jira page, which counts all of them as seen. A notification's dot stays until
+  then, so the user can see what's new for as long as the page is open.
+  - With an `id` (the Jira page, as a notification is clicked): if that notification isn't listed
+    or already has no dot, nothing changes. Otherwise its id goes on the end of `notificationsRead`
+    (taken out first, so it's never there twice), keeping only the newest `MAX_READ_IDS`
+    (`.slice(-MAX_READ_IDS)` keeps the last ones), and only that notification loses its dot.
+  - Without one (`PanelView`, as the Jira page closes): if nothing has a dot, nothing changes.
+    Otherwise `items.reduce(...)` finds the newest notification's time (ISO times compare correctly
+    as text), which becomes `notificationsReadAt`, or now if there are none. As the comment says,
+    everything up to the newest is seen now, the ones opened one at a time included, so
+    `notificationsRead` is emptied; and every notification loses its dot (`read`, at the end of
+    the file).
+  - Either way the memory is saved, and the feed returned.
+- `setNotifications(items)`: reports the feed with these notifications in place of the old, the
+  requests as they were. Both ways of marking use it.
+- `markRequestsRead(key?)`: the user has seen what's new on one request (opening it in the card,
+  through `issue()`, below), or on all of them without a key (`PanelView`, as the service desk page
+  closes). Its current signature becomes both `seen` and `notified`, and
   its `news` is cleared. `changed` makes sure nothing is reported or saved if there was nothing
   new.
 
@@ -1473,7 +1517,7 @@ async markRequestsRead(key?: string): Promise<JiraFeed> {
 
 <!-- code: apps/desktop/src/main/atlassian/Atlassian.ts#Atlassian.search -->
 
-[`src/main/atlassian/Atlassian.ts`, lines 255–273](../../apps/desktop/src/main/atlassian/Atlassian.ts#L255-L273)
+[`src/main/atlassian/Atlassian.ts`, lines 275–293](../../apps/desktop/src/main/atlassian/Atlassian.ts#L275-L293)
 
 ```ts
 /** Jira issues and Confluence pages matching the words (an issue key finds that issue). */
@@ -1510,7 +1554,7 @@ The Search tab: Jira issues and Confluence pages, asked for at the same time (`P
 
 <!-- code: apps/desktop/src/main/atlassian/Atlassian.ts#Atlassian.issue -->
 
-[`src/main/atlassian/Atlassian.ts`, lines 275–312](../../apps/desktop/src/main/atlassian/Atlassian.ts#L275-L312)
+[`src/main/atlassian/Atlassian.ts`, lines 295–332](../../apps/desktop/src/main/atlassian/Atlassian.ts#L295-L332)
 
 ```ts
 /** An issue with its latest comments and the statuses it can move to. */
@@ -1572,7 +1616,7 @@ An issue for `IssueView`, with its latest comments and the statuses it can move 
 
 <!-- code: apps/desktop/src/main/atlassian/Atlassian.ts#Atlassian.transition,comment,logWork -->
 
-[`src/main/atlassian/Atlassian.ts`, lines 314–329](../../apps/desktop/src/main/atlassian/Atlassian.ts#L314-L329)
+[`src/main/atlassian/Atlassian.ts`, lines 334–349](../../apps/desktop/src/main/atlassian/Atlassian.ts#L334-L349)
 
 ```ts
 /** Moves the issue to another status, then answers with it as it is now. */
@@ -1606,7 +1650,7 @@ The three changes **Move**, **Comment** and **Log time** make. Each goes through
 
 <!-- code: apps/desktop/src/main/atlassian/Atlassian.ts#Atlassian.articles,projectKeys,prompt,dispose -->
 
-[`src/main/atlassian/Atlassian.ts`, lines 331–364](../../apps/desktop/src/main/atlassian/Atlassian.ts#L331-L364)
+[`src/main/atlassian/Atlassian.ts`, lines 351–384](../../apps/desktop/src/main/atlassian/Atlassian.ts#L351-L384)
 
 ```ts
 /** How-to pages from the knowledge spaces about what the user is typing (up to three). */
@@ -1662,7 +1706,7 @@ dispose(): void {
 
 <!-- code: apps/desktop/src/main/atlassian/Atlassian.ts#Atlassian.now,identify,connected,forget -->
 
-[`src/main/atlassian/Atlassian.ts`, lines 366–396](../../apps/desktop/src/main/atlassian/Atlassian.ts#L366-L396)
+[`src/main/atlassian/Atlassian.ts`, lines 386–416](../../apps/desktop/src/main/atlassian/Atlassian.ts#L386-L416)
 
 ```ts
 // ------------------------------------------------------------------------------------- inner
@@ -1717,7 +1761,7 @@ private forget(): void {
 
 <!-- code: apps/desktop/src/main/atlassian/Atlassian.ts#Atlassian.startChecking,stopChecking -->
 
-[`src/main/atlassian/Atlassian.ts`, lines 398–410](../../apps/desktop/src/main/atlassian/Atlassian.ts#L398-L410)
+[`src/main/atlassian/Atlassian.ts`, lines 418–430](../../apps/desktop/src/main/atlassian/Atlassian.ts#L418-L430)
 
 ```ts
 private startChecking(): void {
@@ -1746,7 +1790,7 @@ private stopChecking(): void {
 
 <!-- code: apps/desktop/src/main/atlassian/Atlassian.ts#Atlassian.call,change -->
 
-[`src/main/atlassian/Atlassian.ts`, lines 412–442](../../apps/desktop/src/main/atlassian/Atlassian.ts#L412-L442)
+[`src/main/atlassian/Atlassian.ts`, lines 432–462](../../apps/desktop/src/main/atlassian/Atlassian.ts#L432-L462)
 
 ```ts
 /** A tool call on the user's site. A connection that has ended takes the page back to Connect. */
@@ -1797,7 +1841,7 @@ private async change(
 
 <!-- code: apps/desktop/src/main/atlassian/Atlassian.ts#Atlassian.refresh,loadFeed,failedList -->
 
-[`src/main/atlassian/Atlassian.ts`, lines 444–475](../../apps/desktop/src/main/atlassian/Atlassian.ts#L444-L475)
+[`src/main/atlassian/Atlassian.ts`, lines 464–495](../../apps/desktop/src/main/atlassian/Atlassian.ts#L464-L495)
 
 ```ts
 private refresh(): Promise<JiraFeed> {
@@ -1854,7 +1898,7 @@ One check of notifications and requests.
 
 <!-- code: apps/desktop/src/main/atlassian/Atlassian.ts#Atlassian.loadNotifications -->
 
-[`src/main/atlassian/Atlassian.ts`, lines 477–490](../../apps/desktop/src/main/atlassian/Atlassian.ts#L477-L490)
+[`src/main/atlassian/Atlassian.ts`, lines 497–511](../../apps/desktop/src/main/atlassian/Atlassian.ts#L497-L511)
 
 ```ts
 private async loadNotifications(user: AtlassianUser): Promise<FeedList<JiraNotification>> {
@@ -1864,11 +1908,12 @@ private async loadNotifications(user: AtlassianUser): Promise<FeedList<JiraNotif
     this.mentionedNotifications(user, since),
   ])
   const readAt = this.memory.notificationsReadAt ?? null
+  const opened = new Set(this.memory.notificationsRead ?? [])
   const items = [...assigned, ...mentioned]
     .filter((n) => Date.parse(n.at) >= since)
     .sort((a, b) => b.at.localeCompare(a.at))
     .slice(0, MAX_NOTIFICATIONS)
-    .map((n) => ({ ...n, unread: readAt === null || n.at > readAt }))
+    .map((n) => ({ ...n, unread: (readAt === null || n.at > readAt) && !opened.has(n.id) }))
   return { status: 'ready', items }
 }
 ```
@@ -1880,14 +1925,17 @@ private async loadNotifications(user: AtlassianUser): Promise<FeedList<JiraNotif
   `.filter(...)` keeps the last two weeks, `.sort(...)` puts the newest first (ISO times sort as
   text, and `b.at.localeCompare(a.at)` is the reverse order), and `.slice(0, MAX_NOTIFICATIONS)`
   keeps 30.
-- `unread: readAt === null || n.at > readAt`: newer than the last time the tab was looked at.
-  Before the tab has ever been opened, everything is new.
+- `opened`: the notifications opened one at a time since (`notificationsRead`), as a `Set`, so
+  looking one up is quick.
+- `unread: (readAt === null || n.at > readAt) && !opened.has(n.id)`: newer than the last time the
+  Jira page closed, and not opened since. Before the page has ever been closed, everything is new
+  that hasn't been opened.
 
 ### `Atlassian.assignedNotifications()`
 
 <!-- code: apps/desktop/src/main/atlassian/Atlassian.ts#Atlassian.assignedNotifications -->
 
-[`src/main/atlassian/Atlassian.ts`, lines 492–520](../../apps/desktop/src/main/atlassian/Atlassian.ts#L492-L520)
+[`src/main/atlassian/Atlassian.ts`, lines 513–541](../../apps/desktop/src/main/atlassian/Atlassian.ts#L513-L541)
 
 ```ts
 private async assignedNotifications(
@@ -1941,7 +1989,7 @@ Who assigned the user each issue found by `ASSIGNED_JQL`.
 
 <!-- code: apps/desktop/src/main/atlassian/Atlassian.ts#Atlassian.mentionedNotifications -->
 
-[`src/main/atlassian/Atlassian.ts`, lines 522–534](../../apps/desktop/src/main/atlassian/Atlassian.ts#L522-L534)
+[`src/main/atlassian/Atlassian.ts`, lines 543–555](../../apps/desktop/src/main/atlassian/Atlassian.ts#L543-L555)
 
 ```ts
 private async mentionedNotifications(
@@ -1970,7 +2018,7 @@ list.
 
 <!-- code: apps/desktop/src/main/atlassian/Atlassian.ts#Atlassian.loadRequests -->
 
-[`src/main/atlassian/Atlassian.ts`, lines 536–576](../../apps/desktop/src/main/atlassian/Atlassian.ts#L536-L576)
+[`src/main/atlassian/Atlassian.ts`, lines 557–597](../../apps/desktop/src/main/atlassian/Atlassian.ts#L557-L597)
 
 ```ts
 private async loadRequests(user: AtlassianUser): Promise<FeedList<ServiceRequest>> {
@@ -2040,7 +2088,7 @@ My requests, and what's new on them.
 
 <!-- code: apps/desktop/src/main/atlassian/Atlassian.ts#Atlassian.searchIssues,searchPages,loadProjectKeys -->
 
-[`src/main/atlassian/Atlassian.ts`, lines 578–625](../../apps/desktop/src/main/atlassian/Atlassian.ts#L578-L625)
+[`src/main/atlassian/Atlassian.ts`, lines 599–646](../../apps/desktop/src/main/atlassian/Atlassian.ts#L599-L646)
 
 ```ts
 private async searchIssues(query: string): Promise<IssueSummary[]> {
@@ -2108,7 +2156,7 @@ private async loadProjectKeys(): Promise<string[]> {
 
 <!-- code: apps/desktop/src/main/atlassian/Atlassian.ts#Atlassian.problem,saveMemory,setState,setFeed -->
 
-[`src/main/atlassian/Atlassian.ts`, lines 627–652](../../apps/desktop/src/main/atlassian/Atlassian.ts#L627-L652)
+[`src/main/atlassian/Atlassian.ts`, lines 648–673](../../apps/desktop/src/main/atlassian/Atlassian.ts#L648-L673)
 
 ```ts
 /** A plain-English reason for the panel. */
@@ -2152,7 +2200,7 @@ private setFeed(feed: JiraFeed): void {
 
 <!-- code: apps/desktop/src/main/atlassian/Atlassian.ts#read,newsOf -->
 
-[`src/main/atlassian/Atlassian.ts`, lines 655–669](../../apps/desktop/src/main/atlassian/Atlassian.ts#L655-L669)
+[`src/main/atlassian/Atlassian.ts`, lines 676–690](../../apps/desktop/src/main/atlassian/Atlassian.ts#L676-L690)
 
 ```ts
 const read = (notification: JiraNotification): JiraNotification =>
@@ -2185,7 +2233,7 @@ function newsOf(before: string, info: RequestInfo): string | null {
 
 <!-- code: apps/desktop/src/main/atlassian/Atlassian.ts#mapLimit -->
 
-[`src/main/atlassian/Atlassian.ts`, lines 671–687](../../apps/desktop/src/main/atlassian/Atlassian.ts#L671-L687)
+[`src/main/atlassian/Atlassian.ts`, lines 692–708](../../apps/desktop/src/main/atlassian/Atlassian.ts#L692-L708)
 
 ```ts
 /** Runs `run` over the items, at most `limit` at a time, keeping their order. */
@@ -2508,7 +2556,8 @@ in-memory store and memory; and a fixed clock.
   prompt to Claude kept under the limit, dropping the oldest comments first.
 - `Atlassian`: asking to connect when nobody has, without opening the browser; connecting in the
   browser, then showing who assigned or mentioned the user; remembering which notifications have
-  been seen, and not asking about unchanged issues again; telling the user once when IT replies
+  been seen, and not asking about unchanged issues again; marking a notification seen when it's
+  opened, remembering it, and the rest when the page closes; telling the user once when IT replies
   to their request, and marking it until they look; opening an issue with its comments, the
   statuses it can move to and its portal page; moving, commenting and logging time, each
   answering with the issue; searching Jira and Confluence, and finding an issue by its key; asking

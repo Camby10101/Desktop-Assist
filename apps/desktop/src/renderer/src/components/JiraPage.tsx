@@ -15,8 +15,6 @@ import {
 
 type Tab = 'notifications' | 'search'
 
-/** How long the unread dots stay after the Notifications tab opens, before they're marked seen. */
-const MARK_READ_AFTER_MS = 2000
 /** Typing pauses this long before searching. */
 const SEARCH_DELAY_MS = 350
 
@@ -42,16 +40,6 @@ export function JiraPage(props: {
   useEffect(() => {
     if (props.open && connected) void window.assist.atlassian.feed()
   }, [props.open, connected])
-
-  // The dots show what's new for a moment, then it all counts as seen.
-  useEffect(() => {
-    if (!props.open || tab !== 'notifications' || unread === 0) return
-    const timer = setTimeout(
-      () => void window.assist.atlassian.markNotificationsRead(),
-      MARK_READ_AFTER_MS,
-    )
-    return () => clearTimeout(timer)
-  }, [props.open, tab, unread])
 
   async function refresh() {
     setRefreshing(true)
@@ -139,7 +127,14 @@ function NotificationList(props: {
         <ul className="min-h-0 overflow-y-auto px-1.5 pb-1.5" aria-label="Notifications">
           {list.items.map((n) => (
             <li key={n.id}>
-              <NotificationRow notification={n} onOpen={() => props.onOpenIssue(n.key)} />
+              <NotificationRow
+                notification={n}
+                onOpen={() => {
+                  // Opening one is seeing it (the rest are seen when the page closes).
+                  if (n.unread) void window.assist.atlassian.markNotificationsRead(n.id)
+                  props.onOpenIssue(n.key)
+                }}
+              />
             </li>
           ))}
         </ul>

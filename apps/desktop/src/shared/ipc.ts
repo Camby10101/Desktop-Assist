@@ -14,6 +14,7 @@ import type {
   ChatMessage,
   ConfluencePage,
   Effort,
+  Habits,
   IssuePrompt,
   IssueResult,
   JiraFeed,
@@ -53,6 +54,7 @@ export const IPC = {
   settingsSetAutoSend: 'assist:settings-set-auto-send',
   settingsSetFavoriteApp: 'assist:settings-set-favorite-app',
   settingsSetTheme: 'assist:settings-set-theme',
+  settingsSetHabits: 'assist:settings-set-habits',
   characterSetSize: 'assist:character-set-size',
   characterCastSpell: 'assist:character-cast-spell',
   authSignIn: 'assist:auth-sign-in',
@@ -92,10 +94,12 @@ export const IPC = {
   serviceDeskOpenMyRequests: 'assist:service-desk-open-my-requests',
   updatesGet: 'assist:updates-get',
   updatesCheck: 'assist:updates-check',
+  screensaverWake: 'assist:screensaver-wake',
   // main → renderer
   modeChanged: 'assist:mode-changed',
   poseChanged: 'assist:pose-changed',
   bubbleArrive: 'assist:bubble-arrive',
+  screensaverEnd: 'assist:screensaver-end',
   cornerChanged: 'assist:corner-changed',
   sizeChanged: 'assist:size-changed',
   clickThroughReset: 'assist:click-through-reset',
@@ -147,6 +151,8 @@ export interface AssistApi {
     setFavoriteApp(id: string, favorite: boolean): Promise<Settings>
     /** Light or dark mode for all of Desktop Wizard; saved. */
     setTheme(theme: Theme): Promise<Settings>
+    /** Whether she stands still, and whether she does her idle animations; saved. */
+    setHabits(habits: Partial<Habits>): Promise<Settings>
   }
   character: {
     /** Makes her `scale` times her usual size (one of CHARACTER_SIZES); saved. */
@@ -203,7 +209,8 @@ export interface AssistApi {
     retry(): Promise<void>
     /** Notifications and the user's IT requests; checked again first with `refresh`. */
     feed(refresh?: boolean): Promise<JiraFeed>
-    markNotificationsRead(): Promise<JiraFeed>
+    /** Marks one notification (by its id), or all of them, as seen. */
+    markNotificationsRead(id?: string): Promise<JiraFeed>
     /** Marks what's new on one request (or all of them) as seen. */
     markRequestsRead(key?: string): Promise<JiraFeed>
     search(query: string): Promise<SearchResult>
@@ -244,6 +251,12 @@ export interface AssistApi {
   }
   /** Starts Desktop Wizard's uninstaller and quits (installed copies only). */
   uninstall(): Promise<UninstallResult>
+  screensaver: {
+    /** The user's back (the mouse moved, a click, a key): the screen saver's pages. */
+    wake(): void
+  }
+  /** The screen saver is ending: time for its scene to fade away (its pages). */
+  onScreensaverEnd(callback: () => void): () => void
   onModeChanged(callback: (mode: Mode) => void): () => void
   /** The character's pose changed (walking, fidgeting, dangling...). */
   onPoseChanged(callback: (pose: Pose) => void): () => void

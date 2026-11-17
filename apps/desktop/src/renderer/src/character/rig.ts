@@ -125,6 +125,12 @@ export interface Pose {
    * gone): see FADE. Played backwards, she forms out of them.
    */
   fade?: number
+  /**
+   * From the front only: turned round, her back to us (watching the sunset in the screen saver).
+   * Her long hair falls over her back from the crown of her head, her ears through it, and nothing
+   * on her front shows: no face, collar, brooch, buttons or buckles, nor the hat's buckle and moon.
+   */
+  back?: boolean
 }
 
 const DOWN: Arm = { shoulder: 0.08, elbow: 0 }
@@ -303,6 +309,8 @@ function eyesFor(face: Face): 'open' | 'blink' | 'happy' | 'down' | 'up' {
 export function draw(pose: Pose): string[] {
   const view = pose.view
   const frontView = view === 'front'
+  /** Her back to us (from the front only): see Pose.back. */
+  const fromBehind = frontView && pose.back === true
   const sitting = pose.sitting ?? false
   const hips: Point = { x: 48 + (pose.x ?? 0), y: (sitting ? 85 : 59) + (pose.y ?? 0) }
   const lean = pose.lean ?? 0
@@ -674,20 +682,26 @@ export function draw(pose: Pose): string[] {
       })
       set(p, 'f', 'aAv')
     }
-    if (view !== 'side' && !sitting) {
+    if (view !== 'side' && !sitting && !fromBehind) {
       for (let t = -1; t < hem - 1; t += 0.5) {
         set(onHips({ x: (swing * t) / hem, y: t }), 'f', 'aAv')
       }
     }
     // The collar: a V of trim, the gem brooch at its point; a darker sash at her waist.
     const off = view === 'side' ? 3 : 0
-    if (view !== 'side') {
+    if (view !== 'side' && !fromBehind) {
       for (let t = 0; t <= 5; t += 0.5) {
         set(onBody({ x: -3 + t * 0.6 + off, y: t - 0.5 }), 'f', 'aAv')
         set(onBody({ x: 3 - t * 0.6 + off, y: t - 0.5 }), 'f', 'aAv')
       }
     }
-    canvas.stamp(['.G.', 'GGG', '.G.'], onBody({ x: off - 1, y: 4 }).x, onBody({ x: off, y: 4 }).y)
+    if (!fromBehind) {
+      canvas.stamp(
+        ['.G.', 'GGG', '.G.'],
+        onBody({ x: off - 1, y: 4 }).x,
+        onBody({ x: off, y: 4 }).y,
+      )
+    }
     for (let t = -9; t <= 9; t += 0.5) {
       set(onBody({ x: t, y: 18 }), 'A', 'av')
       set(onBody({ x: t, y: 19 }), 'q', 'av')
@@ -742,10 +756,10 @@ export function draw(pose: Pose): string[] {
       }
     }
     // Gold buttons down the bodice from the brooch (from the front), and the sash's gold buckle.
-    if (frontView) {
+    if (frontView && !fromBehind) {
       for (const y of [7.5, 10.5, 13.5]) motif(onBody({ x: 0, y }), ['Y'], 'aAv')
     }
-    motif(onBody({ x: off, y: 18.5 }), ['YYY', 'YkY'], 'Aqav')
+    if (!fromBehind) motif(onBody({ x: off, y: 18.5 }), ['YYY', 'YkY'], 'Aqav')
 
     // Her head: neck, face and chin.
     const face = new Layer(GRID, HEADROOM)
@@ -792,7 +806,9 @@ export function draw(pose: Pose): string[] {
     const look = Math.round(pose.look ?? 0)
     const eyeY = head.y - 0.5
     const mouth = MOUTHS[expression]
-    if (frontView) {
+    if (fromBehind) {
+      // No face: the back of her head (her hair, below).
+    } else if (frontView) {
       canvas.stamp(eyes[0]!, head.x + 1 + look, eyeY)
       canvas.stamp(eyes[1]!, head.x - 6 + look, eyeY)
       canvas.stamp(['cc'], head.x + 3 + look, head.y + 5)
@@ -855,10 +871,43 @@ export function draw(pose: Pose): string[] {
             [-7.6, -1],
           ]
     const shiftHair = 0
-    hair.polygon(
-      shape(fringe, (p) => onHead(blown({ x: p.x + shiftHair, y: p.y }))),
-      'hair',
-    )
+    if (fromBehind) {
+      // All of it, from the crown of her head down over her back: as wide as her shoulders, and a
+      // little longer than it shows from the front, its ends in points of different lengths.
+      const fall = [
+        [-9.5, -2],
+        [-8.5, -7.5],
+        [-5, -10.8],
+        [0, -11.8],
+        [5, -10.8],
+        [8.5, -7.5],
+        [9.5, -2],
+        [9.1, 8],
+        [8.9, 18],
+        [8.6, 27],
+        [7.4, 29.6],
+        [5.8, 27.6],
+        [3.9, 31],
+        [2, 28.8],
+        [0, 32.2],
+        [-2, 28.8],
+        [-3.9, 31],
+        [-5.8, 27.6],
+        [-7.4, 29.6],
+        [-8.6, 27],
+        [-8.9, 18],
+        [-9.1, 8],
+      ]
+      hair.polygon(
+        shape(supple(fall), (p) => onHead(blown(p))),
+        'hair',
+      )
+    } else {
+      hair.polygon(
+        shape(fringe, (p) => onHead(blown({ x: p.x + shiftHair, y: p.y }))),
+        'hair',
+      )
+    }
     if (view === 'side') {
       // The back of her head: its back edge in line with her hair behind it, so they read as one,
       // and its front edge behind her ear, so her cheek shows.
@@ -891,8 +940,9 @@ export function draw(pose: Pose): string[] {
         0.6,
         'hair',
       )
-    // Side on there's no lock: her hair behind her ear is the back hair.
-    if (view !== 'side') {
+    // Side on there's no lock: her hair behind her ear is the back hair. Nor from behind, where
+    // it's all one fall of hair.
+    if (view !== 'side' && !fromBehind) {
       lock(8.2 + shiftHair, 13)
       lock(-8.2 + shiftHair * 0.5, 13)
     }
@@ -922,6 +972,38 @@ export function draw(pose: Pose): string[] {
       inkOverHair(tuft)
     } else {
       ink(hair)
+    }
+    if (fromBehind) {
+      // Strands down her back, from under her hat to the gaps between the points of its ends,
+      // curving out a little as it widens, so it reads as long hair rather than a flat shape: a
+      // line of shade where it's lit, and of light where it's in shade (each pixel once).
+      const done = new Set<number>()
+      for (const [top, end] of [
+        [-1, -1],
+        [2.8, 2.9],
+        [-4.6, -4.9],
+        [6, 6.4],
+        [-7.3, -7.5],
+      ] as const) {
+        for (let y = 1; y <= 28; y += 0.5) {
+          const t = (y - 1) / 27
+          const p = onHead(
+            blown({ x: top + (end - top) * t + Math.sin(t * Math.PI) * 0.5 * Math.sign(top), y }),
+          )
+          const [x, row] = [Math.floor(p.x), Math.floor(p.y)]
+          if (done.has(row * GRID + x)) continue
+          done.add(row * GRID + x)
+          const was = canvas.get(x, row)
+          if (was === 'h' || was === 'l') canvas.set(x, row, 'D')
+          else if (was === 'D') canvas.set(x, row, 'h')
+        }
+      }
+      // Its sheen: a band of light across the back of her head, just under the brim of her hat.
+      for (let dx = -6; dx <= 4; dx++) {
+        set(onHead({ x: dx, y: 0.5 + Math.abs(dx + 1) * 0.15 }), 'L', 'hl')
+        if (Math.abs(dx + 1) < 4)
+          set(onHead({ x: dx, y: 1.5 + Math.abs(dx + 1) * 0.15 }), 'l', 'hD')
+      }
     }
     // The shine on her hair: a band across the crown.
     for (let dx = -6; dx <= 6; dx++) {
@@ -965,7 +1047,8 @@ export function draw(pose: Pose): string[] {
 
     // Her hat: a wide brim and a tall crooked crown with a silver band.
     const hat = new Layer(GRID, HEADROOM)
-    const tipLean = view === 'side' ? -1 : 1
+    // From behind the crown is mirrored too: its tip flops over to the other side of the picture.
+    const tipLean = view === 'side' || fromBehind ? -1 : 1
     const hatCentre = view === 'side' ? 0.5 : 0
     hat.ellipse(onHead({ x: hatCentre, y: -9 }), view === 'side' ? 12.5 : 14, 2.7, 'hat')
     // The crown, rising to a tip that flops over to her right from the front; side on the whole
@@ -997,14 +1080,17 @@ export function draw(pose: Pose): string[] {
       set(onHead({ x: hatCentre + dx, y: -8.6 }), 'F', 'ngN')
       set(onHead({ x: hatCentre - dx, y: -8.6 }), 'F', 'ngN')
     }
-    const hatSide = view === 'side' ? 1 : 0
-    motif(onHead({ x: hatCentre + hatSide * 3, y: -11.5 }), ['YYY', 'YGY', 'YYY'], 'ngNfFq')
-    const lifted = (x: number, y: number) =>
-      onHead({ x: x * tipLean + hatCentre, y: y - lift * 0.15 })
-    motif(lifted(-1.5, -15.5), ['.YY', 'Y..', 'Y..', '.YY'], 'ngN')
-    motif(lifted(2, -14.5), ['Y'], 'ngN')
-    motif(lifted(1.2, -18), ['k'], 'ngN')
-    motif(lifted(-3.8, -13), ['k'], 'ngN')
+    // Its buckle, and the gold moon and stars on its front (none from behind).
+    if (!fromBehind) {
+      const hatSide = view === 'side' ? 1 : 0
+      motif(onHead({ x: hatCentre + hatSide * 3, y: -11.5 }), ['YYY', 'YGY', 'YYY'], 'ngNfFq')
+      const lifted = (x: number, y: number) =>
+        onHead({ x: x * tipLean + hatCentre, y: y - lift * 0.15 })
+      motif(lifted(-1.5, -15.5), ['.YY', 'Y..', 'Y..', '.YY'], 'ngN')
+      motif(lifted(2, -14.5), ['Y'], 'ngN')
+      motif(lifted(1.2, -18), ['k'], 'ngN')
+      motif(lifted(-3.8, -13), ['k'], 'ngN')
+    }
   }
 
   // The near arm last, in front of her (from the front, both arms), and anything she's holding.

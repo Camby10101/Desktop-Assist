@@ -69,11 +69,15 @@ const DAY_MS = 24 * 60 * 60_000
 const MAX_NOTIFICATIONS = 30
 /** How many issues are looked at in parallel (each is one request to Atlassian). */
 const PARALLEL = 4
+/** How many notifications opened one at a time are remembered (the newest). */
+const MAX_READ_IDS = 200
 
 /** What the app remembers between runs (atlassian.json): what the user has already seen. */
 export const AtlassianMemorySchema = z.object({
   /** Notifications up to this ISO time have been seen. */
   notificationsReadAt: z.string().nullable().optional(),
+  /** Later notifications that have been opened one at a time, by id. */
+  notificationsRead: z.array(z.string()).optional(),
   /**
    * For each of the user's requests, as "status|latest reply": what they've seen in the panel,
    * and what they've had a Windows notification about.
@@ -219,18 +223,34 @@ export class Atlassian {
     return this.feedState
   }
 
-  /** The user has looked at the Notifications tab. */
-  async markNotificationsRead(): Promise<JiraFeed> {
+  /**
+   * The user has opened a notification (by its id), or closed the Jira page, which counts all of
+   * them as seen.
+   */
+  async markNotificationsRead(id?: string): Promise<JiraFeed> {
     const { items } = this.feedState.notifications
-    if (!items.some((n) => n.unread)) return this.feedState
-    const newest = items.reduce((latest, n) => (n.at > latest ? n.at : latest), '')
-    this.memory.notificationsReadAt = newest || new Date(this.now()).toISOString()
-    this.setFeed({
-      ...this.feedState,
-      notifications: { ...this.feedState.notifications, items: items.map(read) },
-    })
+    if (id !== undefined) {
+      if (!items.some((n) => n.id === id && n.unread)) return this.feedState
+      const opened = (this.memory.notificationsRead ?? []).filter((other) => other !== id)
+      this.memory.notificationsRead = [...opened, id].slice(-MAX_READ_IDS)
+      this.setNotifications(items.map((n) => (n.id === id ? read(n) : n)))
+    } else {
+      if (!items.some((n) => n.unread)) return this.feedState
+      const newest = items.reduce((latest, n) => (n.at > latest ? n.at : latest), '')
+      this.memory.notificationsReadAt = newest || new Date(this.now()).toISOString()
+      // Everything up to the newest is seen now, the ones opened one at a time included.
+      this.memory.notificationsRead = []
+      this.setNotifications(items.map(read))
+    }
     await this.saveMemory()
     return this.feedState
+  }
+
+  private setNotifications(items: JiraNotification[]): void {
+    this.setFeed({
+      ...this.feedState,
+      notifications: { ...this.feedState.notifications, items },
+    })
   }
 
   /** The user has seen what's new on a request (or on all of them, without a key). */
@@ -481,11 +501,12 @@ export class Atlassian {
       this.mentionedNotifications(user, since),
     ])
     const readAt = this.memory.notificationsReadAt ?? null
+    const opened = new Set(this.memory.notificationsRead ?? [])
     const items = [...assigned, ...mentioned]
       .filter((n) => Date.parse(n.at) >= since)
       .sort((a, b) => b.at.localeCompare(a.at))
       .slice(0, MAX_NOTIFICATIONS)
-      .map((n) => ({ ...n, unread: readAt === null || n.at > readAt }))
+      .map((n) => ({ ...n, unread: (readAt === null || n.at > readAt) && !opened.has(n.id) }))
     return { status: 'ready', items }
   }
 

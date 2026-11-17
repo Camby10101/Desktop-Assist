@@ -9,6 +9,8 @@ export type ActionHandlers = Record<CommandActionId, () => Promise<ActionResult>
 export function createActionHandlers(deps: {
   controller: BubbleController
   screenshots: ScreenshotService
+  /** Starts the screen saver (main/screenSaver.ts). */
+  startScreenSaver: () => void
   /** Opens the company's IT service desk in the browser, or null if the tenant has none. */
   openServiceDesk: (() => Promise<void>) | null
   quit: () => void
@@ -34,6 +36,11 @@ export function createActionHandlers(deps: {
         console.error('Screenshot failed', error)
         return { ok: false, message: "Couldn't take a screenshot" }
       }
+    },
+    async screensaver() {
+      deps.controller.collapse()
+      deps.startScreenSaver()
+      return { ok: true }
     },
     async close() {
       // She vanishes into white motes first, then the app quits.

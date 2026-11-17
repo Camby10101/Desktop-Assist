@@ -543,6 +543,28 @@ describe('Atlassian', () => {
     atlassian.dispose()
   })
 
+  it('marks a notification seen when it’s opened, remembering it, and the rest when the page closes', async () => {
+    const { atlassian, world } = await connected()
+    const unread = () => atlassian.currentFeed.notifications.items.filter((n) => n.unread)
+    expect(unread()).toHaveLength(2)
+    const [first, second] = unread()
+    await atlassian.markNotificationsRead(first!.id)
+    expect(unread().map((n) => n.id)).toEqual([second!.id])
+    expect(world.memory.notificationsRead).toEqual([first!.id])
+    // It's remembered when the notifications are looked for again.
+    await atlassian.feed(true)
+    expect(unread().map((n) => n.id)).toEqual([second!.id])
+    // An id that isn't an unread notification changes nothing.
+    await atlassian.markNotificationsRead('mentioned:NOPE-1:description')
+    expect(world.memory.notificationsRead).toEqual([first!.id])
+    // Closing the page: all seen, up to the newest.
+    await atlassian.markNotificationsRead()
+    expect(unread()).toHaveLength(0)
+    expect(world.memory.notificationsRead).toEqual([])
+    expect(world.memory.notificationsReadAt).toBe(DAYS_AGO(1))
+    atlassian.dispose()
+  })
+
   it('tells the user when IT replies to their request, once, until they look', async () => {
     const { atlassian, world } = await connected()
     const request = () => atlassian.currentFeed.requests.items[0]

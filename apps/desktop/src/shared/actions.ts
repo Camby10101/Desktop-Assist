@@ -13,6 +13,7 @@ export const ACTION_IDS = [
   'screenshot',
   'settings',
   'spells',
+  'screensaver',
   'close',
 ] as const
 
@@ -29,6 +30,8 @@ export const ACTIONS = {
   settings: { label: 'Settings', kind: 'popover' },
   // A menu of her spells (src/shared/spells.ts); casting one goes to the main process.
   spells: { label: 'Spells', kind: 'popover' },
+  // Every screen fades to white, then to a sunset she watches (src/shared/screenSaver.ts).
+  screensaver: { label: 'Screen saver', kind: 'command' },
   close: { label: 'Close Desktop Wizard', kind: 'command' },
 } as const satisfies Record<ActionId, { label: string; kind: 'command' | 'popover' }>
 

@@ -325,17 +325,14 @@ state the main process can report:
 The page behind the Jira icon (a bell). `Panel` shows it while `view` is `'jira'`, and opens an
 issue over it when one is clicked.
 
-### `Tab`, `MARK_READ_AFTER_MS` and `SEARCH_DELAY_MS`
+### `Tab` and `SEARCH_DELAY_MS`
 
-<!-- code: apps/desktop/src/renderer/src/components/JiraPage.tsx#Tab,MARK_READ_AFTER_MS,SEARCH_DELAY_MS -->
+<!-- code: apps/desktop/src/renderer/src/components/JiraPage.tsx#Tab,SEARCH_DELAY_MS -->
 
-[`src/renderer/src/components/JiraPage.tsx`, lines 16–21](../../apps/desktop/src/renderer/src/components/JiraPage.tsx#L16-L21)
+[`src/renderer/src/components/JiraPage.tsx`, lines 16–19](../../apps/desktop/src/renderer/src/components/JiraPage.tsx#L16-L19)
 
 ```tsx
 type Tab = 'notifications' | 'search'
-
-/** How long the unread dots stay after the Notifications tab opens, before they're marked seen. */
-const MARK_READ_AFTER_MS = 2000
 
 /** Typing pauses this long before searching. */
 const SEARCH_DELAY_MS = 350
@@ -344,8 +341,6 @@ const SEARCH_DELAY_MS = 350
 <!-- /code -->
 
 - `Tab`: the page's two tabs.
-- `MARK_READ_AFTER_MS`: as the comment says, the dots on new notifications stay for 2 seconds after
-  the tab opens, so the user sees what's new before it counts as seen.
 - `SEARCH_DELAY_MS`: searching waits until typing has paused for 350 ms, so each key press doesn't
   send a search.
 
@@ -353,7 +348,7 @@ const SEARCH_DELAY_MS = 350
 
 <!-- code: apps/desktop/src/renderer/src/components/JiraPage.tsx#JiraPage -->
 
-[`src/renderer/src/components/JiraPage.tsx`, lines 23–117](../../apps/desktop/src/renderer/src/components/JiraPage.tsx#L23-L117)
+[`src/renderer/src/components/JiraPage.tsx`, lines 21–105](../../apps/desktop/src/renderer/src/components/JiraPage.tsx#L21-L105)
 
 ```tsx
 /**
@@ -378,16 +373,6 @@ export function JiraPage(props: {
   useEffect(() => {
     if (props.open && connected) void window.assist.atlassian.feed()
   }, [props.open, connected])
-
-  // The dots show what's new for a moment, then it all counts as seen.
-  useEffect(() => {
-    if (!props.open || tab !== 'notifications' || unread === 0) return
-    const timer = setTimeout(
-      () => void window.assist.atlassian.markNotificationsRead(),
-      MARK_READ_AFTER_MS,
-    )
-    return () => clearTimeout(timer)
-  }, [props.open, tab, unread])
 
   async function refresh() {
     setRefreshing(true)
@@ -466,10 +451,11 @@ The page itself, with the comment that sums it up.
   for the latest (`atlassian.feed()`). The main process answers from memory if it checked less
   than a minute ago; either way the answer also arrives through the `assist:jira-feed` broadcast,
   which `Panel` passes back in as `feed`.
-- The second `useEffect`: while the Notifications tab is on screen with something unread, a timer
-  marks everything seen after 2 seconds (`atlassian.markNotificationsRead()`). The function it
-  returns clears the timer, so switching tab or closing the panel sooner leaves the dots for next
-  time.
+- The page itself marks nothing seen. Up to 2.1.1 a timer marked every notification seen two
+  seconds after the tab showed, so the dots went before the user had looked at them, let alone
+  opened one. Now a notification counts as seen when it's opened (`NotificationList`, below), and
+  the rest once the page closes, for another page or with the panel (`shown` in `Panel`, see
+  [The pages](7-renderer-pages.md)). The dots stay for as long as the page is open.
 - `refresh()`: the Refresh button (and Retry): `feed(true)` checks again even if the last check
   was recent. `refreshing` turns the button's icon meanwhile; `.finally()` stops it whether the
   check worked or not.
@@ -485,7 +471,7 @@ The page itself, with the comment that sums it up.
 
 <!-- code: apps/desktop/src/renderer/src/components/JiraPage.tsx#NotificationList -->
 
-[`src/renderer/src/components/JiraPage.tsx`, lines 119–149](../../apps/desktop/src/renderer/src/components/JiraPage.tsx#L119-L149)
+[`src/renderer/src/components/JiraPage.tsx`, lines 107–144](../../apps/desktop/src/renderer/src/components/JiraPage.tsx#L107-L144)
 
 ```tsx
 function NotificationList(props: {
@@ -511,7 +497,14 @@ function NotificationList(props: {
         <ul className="min-h-0 overflow-y-auto px-1.5 pb-1.5" aria-label="Notifications">
           {list.items.map((n) => (
             <li key={n.id}>
-              <NotificationRow notification={n} onOpen={() => props.onOpenIssue(n.key)} />
+              <NotificationRow
+                notification={n}
+                onOpen={() => {
+                  // Opening one is seeing it (the rest are seen when the page closes).
+                  if (n.unread) void window.assist.atlassian.markNotificationsRead(n.id)
+                  props.onOpenIssue(n.key)
+                }}
+              />
             </li>
           ))}
         </ul>
@@ -532,12 +525,17 @@ The Notifications tab.
 - `list.items.length === 0 && list.status === 'ready'`: nothing in the last two weeks, said in
   full so the user knows what the tab is for.
 - `overflow-y-auto`: a long list scrolls inside the card.
+- `onOpen={() => {`: as the comment says, opening a notification is seeing it, so one with a dot
+  is marked seen (`atlassian.markNotificationsRead(n.id)`), by its id, and loses its dot, while the
+  others keep theirs until the page closes. Then the issue opens over the page
+  (`props.onOpenIssue(n.key)`). The call isn't awaited: the new feed arrives through
+  `assist:jira-feed` like any other change.
 
 ### `NotificationRow`
 
 <!-- code: apps/desktop/src/renderer/src/components/JiraPage.tsx#NotificationRow -->
 
-[`src/renderer/src/components/JiraPage.tsx`, lines 151–192](../../apps/desktop/src/renderer/src/components/JiraPage.tsx#L151-L192)
+[`src/renderer/src/components/JiraPage.tsx`, lines 146–187](../../apps/desktop/src/renderer/src/components/JiraPage.tsx#L146-L187)
 
 ```tsx
 function NotificationRow({
@@ -605,7 +603,7 @@ One notification, as a button that opens its issue.
 
 <!-- code: apps/desktop/src/renderer/src/components/JiraPage.tsx#SearchTab -->
 
-[`src/renderer/src/components/JiraPage.tsx`, lines 194–304](../../apps/desktop/src/renderer/src/components/JiraPage.tsx#L194-L304)
+[`src/renderer/src/components/JiraPage.tsx`, lines 189–299](../../apps/desktop/src/renderer/src/components/JiraPage.tsx#L189-L299)
 
 ```tsx
 function SearchTab(props: { open: boolean; onOpenIssue: (key: string) => void }) {
@@ -1618,7 +1616,8 @@ My requests: the user's requests, newest change first.
 - "Open, and closed in the last 30 days": what the list holds (`myRequestsJql()`).
 - `list.status === 'error'`: the reason with Retry, above the requests as last loaded.
 - Each request is a button that opens it in the card (`onOpenIssue`), which also marks its news
-  as seen (`Atlassian.issue()`). It shows the key and summary, the status pill, then either the
+  as seen (`Atlassian.issue()`). The news on the others is marked seen once the service desk page
+  closes (`shown` in `Panel`). It shows the key and summary, the status pill, then either the
   news in the accent colour ("Now Resolved · Grace Hopper replied") or when it was last updated.
 
 ### `Field` and `firstLine()`

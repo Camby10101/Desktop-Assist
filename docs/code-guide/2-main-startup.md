@@ -40,7 +40,7 @@ tests can drive them with fakes. `index.ts` is the only file that knows about al
 
 <!-- code: apps/desktop/src/main/index.ts#SHUTDOWN_TIMEOUT_MS,controller,tray,refusedSwitches -->
 
-[`src/main/index.ts`, lines 75–98](../../apps/desktop/src/main/index.ts#L75-L98)
+[`src/main/index.ts`, lines 76–99](../../apps/desktop/src/main/index.ts#L76-L99)
 
 ```ts
 const SHUTDOWN_TIMEOUT_MS = 2000
@@ -124,7 +124,7 @@ backend, the conversation and the JumpCloud sign-in) are in a separate function,
 
 <!-- code: apps/desktop/src/main/index.ts#start.tenant -->
 
-[`src/main/index.ts`, line 115](../../apps/desktop/src/main/index.ts#L115)
+[`src/main/index.ts`, line 116](../../apps/desktop/src/main/index.ts#L116)
 
 ```ts
 const tenant = await withDevOverrides(TenantSchema.parse(tenantConfig))
@@ -153,7 +153,7 @@ const tenant = await withDevOverrides(TenantSchema.parse(tenantConfig))
 
 <!-- code: apps/desktop/src/main/index.ts#start.userData,screenshotsDir,actionCount,log,notes,settings -->
 
-[`src/main/index.ts`, lines 119–130](../../apps/desktop/src/main/index.ts#L119-L130)
+[`src/main/index.ts`, lines 120–131](../../apps/desktop/src/main/index.ts#L120-L131)
 
 ```ts
 const userData = app.getPath('userData')
@@ -193,7 +193,7 @@ const settings = new SettingsService(join(userData, 'preferences.json'), screens
 
 <!-- code: apps/desktop/src/main/index.ts#start.bubbleWindow,panelWindow,windows,stopKeepingOnTop,windowsReady,broadcast -->
 
-[`src/main/index.ts`, lines 136–144](../../apps/desktop/src/main/index.ts#L136-L144)
+[`src/main/index.ts`, lines 137–145](../../apps/desktop/src/main/index.ts#L137-L145)
 
 ```ts
 const bubbleWindow = createOverlayWindow('bubble', { width: box, height: box + headroom })
@@ -233,8 +233,8 @@ included. By the time a page's request is handled, its handler has been register
   taskbar.
 - `const windows = [bubbleWindow, panelWindow]`: these two are the app's lasting windows. The
   clones', the vision's and the spells' windows (see
-  [Overlays that come and go](#overlays-that-come-and-go) below) come and go, and aren't among
-  them.
+  [Overlays that come and go](#overlays-that-come-and-go) below), and the screen saver's (see
+  [The screen saver](#the-screen-saver)), come and go, and aren't among them.
 - `windows.map(keepOnTop)`: each window checks every few seconds that it's still on top of other
   apps' windows, and puts itself back if not (`bubble/windows.ts`). The functions that stop the
   checks are kept for quitting.
@@ -251,7 +251,7 @@ included. By the time a page's request is handled, its handler has been register
 
 <!-- code: apps/desktop/src/main/index.ts#start.openOverlay,vision,effects -->
 
-[`src/main/index.ts`, lines 146–164](../../apps/desktop/src/main/index.ts#L146-L164)
+[`src/main/index.ts`, lines 147–165](../../apps/desktop/src/main/index.ts#L147-L165)
 
 ```ts
 /**
@@ -323,13 +323,15 @@ once its page is drawn, behind her own window, which is put back in front.
 
 None of these windows is in `windows`, so they get no `keepOnTop()` check and no broadcasts: they
 only last a few seconds (the clones thirty, the explosion under twenty), and everything their pages
-need comes in their addresses.
+need comes in their addresses. The screen saver's windows are made differently, since they must
+take the mouse and the keyboard and cover the taskbar (see [The screen saver](#the-screen-saver)
+below).
 
 #### The bubble controller
 
 <!-- code: apps/desktop/src/main/index.ts#start.bubble -->
 
-[`src/main/index.ts`, lines 166–188](../../apps/desktop/src/main/index.ts#L166-L188)
+[`src/main/index.ts`, lines 167–190](../../apps/desktop/src/main/index.ts#L167-L190)
 
 ```ts
 const bubble = new BubbleController({
@@ -339,6 +341,7 @@ const bubble = new BubbleController({
   actionCount,
   initialAnchor: settings.bubbleAnchor,
   initialScale: settings.characterScale,
+  initialHabits: settings.get(),
   onDiagnostic: (message) => log(message),
   onModeChange: (mode) => broadcast(IPC.modeChanged, mode),
   onPoseChange: (pose) => {
@@ -374,6 +377,9 @@ here.
 - `initialScale: settings.characterScale`: the size the user last chose for her under Size in the
   settings menu, or `null` if it's never been changed (her usual size then). The controller snaps it to one of
   `CHARACTER_SIZES` and keeps it to what fits her display.
+- `initialHabits: settings.get()`: whether she's to stand still and whether she does her idle
+  animations (Stand still and No idle animations in the settings menu). The whole of the settings
+  is passed; the controller only reads `standStill` and `noIdles` (`Habits`).
 - `onModeChange`: every mode change (collapsed, expanded, dragging and so on) is broadcast, so the
   pages can animate to match.
 - `onPoseChange: (pose) => {`: every change of the character's pose (standing, walking, a fidget,
@@ -410,7 +416,7 @@ here.
 
 <!-- code: apps/desktop/src/main/index.ts#start.clones,castSpell -->
 
-[`src/main/index.ts`, lines 192–209](../../apps/desktop/src/main/index.ts#L192-L209)
+[`src/main/index.ts`, lines 194–239](../../apps/desktop/src/main/index.ts#L194-L239)
 
 ```ts
 // Her clones: a window along the taskbar.
@@ -472,11 +478,89 @@ the Spells menu.
     her: if someone clicks her or picks her up before it's done, the chant stops, and
     `onPoseChange` (above) calls the explosion off.
 
+#### The screen saver
+
+<!-- code: apps/desktop/src/main/index.ts#start.screenSaver -->
+
+[`src/main/index.ts`, lines 197–223](../../apps/desktop/src/main/index.ts#L197-L223)
+
+```ts
+// The screen saver: a window over the whole of every display, in front of the taskbar too (from
+// the "screen-saver" level up, Windows keeps it there), the one on her display taking the focus
+// so it hears the keyboard. Each is placed twice: Windows can size a window placed on a display
+// with another scale by the first's, until it's there.
+const screenSaver = new ScreenSaver({
+  accentColor: tenant.accentColor,
+  displays: () => screen.getAllDisplays().map(({ id, bounds }) => ({ id, bounds })),
+  herDisplay: () => screen.getDisplayMatching(bubbleWindow.getBounds()).id,
+  open: (bounds, query, focus) => {
+    const win = createOverlayWindow('screensaver', bounds, query)
+    win.setAlwaysOnTop(true, 'screen-saver')
+    win.setBounds(bounds)
+    win.once('ready-to-show', () => {
+      win.setBounds(bounds)
+      if (focus) win.show()
+      else win.showInactive()
+      win.moveTop()
+    })
+    return {
+      id: win.webContents.id,
+      end: () => !win.isDestroyed() && win.webContents.send(IPC.screensaverEnd),
+      close: () => !win.isDestroyed() && win.destroy(),
+    }
+  },
+  onStart: () => bubble.sleep(),
+  onEnd: () => bubble.wake(),
+})
+```
+
+<!-- /code -->
+
+In the source this sits between `clones` and `castSpell`, above. `ScreenSaver`
+(`src/main/screenSaver.ts`, see [The bubble](5-bubble.md)) runs the screen saver icon: every screen
+whitens, then shows a scene, her sunset on her display and falling stars on the others, until the
+user moves the mouse, clicks or presses a key. Like `Clones`, it never touches Electron; this is
+where its windows are made. As the comment says, each covers the whole of a display, in front of
+the taskbar too, and the one on her display takes the focus so it hears the keyboard.
+
+- `displays: () => screen.getAllDisplays().map(({ id, bounds }) => ({ id, bounds }))`: every
+  display, by its whole `bounds` (not its work area), so the taskbar is covered too. It's asked
+  each time the screen saver starts, so a monitor plugged in since is included.
+- `herDisplay: () => screen.getDisplayMatching(bubbleWindow.getBounds()).id`: the display her
+  window is on, which gets the sunset. `getDisplayMatching()` picks the display a rectangle overlaps
+  most.
+- `open: (bounds, query, focus) => {`: makes one window. `createOverlayWindow('screensaver', ...)`
+  makes it like the other overlays, hidden, loading the page with `?view=screensaver` and `query`;
+  unlike the clones', the vision's and the spells', it isn't passive, so it takes the mouse and can
+  take the focus (`bubble/windows.ts`).
+- `win.setAlwaysOnTop(true, 'screen-saver')`: as the comment says, from the `'screen-saver'` level
+  up Windows keeps a window in front of the taskbar too, as well as in front of her own window and
+  the panel, which use the lower `ON_TOP_LEVEL`.
+- `win.setBounds(bounds)` twice, once now and once when its page has painted: as the comment says,
+  Windows can size a window placed on a display with another scale (say, a 150% laptop screen
+  beside a 100% monitor) by the first display's scale until it's really there, leaving it too big
+  or too small. Placing it again once it exists on that display puts that right.
+- `if (focus) win.show()`, `else win.showInactive()`: the window on her display takes the keyboard
+  focus, so a key press wakes it; the others are shown without taking it, so they don't fight over
+  it. `win.moveTop()` makes sure each is in front of everything at its level.
+- `id: win.webContents.id`: its page's id, which `ScreenSaver.wakeFrom()` compares with the sender
+  of `IPC.screensaverWake`.
+- `end: () => !win.isDestroyed() && win.webContents.send(IPC.screensaverEnd)`: tells the page to
+  fade away. `close` destroys the window, as `openOverlay`'s does. Both skip a window that has
+  already gone.
+- `onStart: () => bubble.sleep()`, `onEnd: () => bubble.wake()`: she vanishes as the screens
+  whiten, and forms again once they've cleared (`BubbleController.sleep()` and `wake()`).
+
+None of these windows is in `windows` either, so they get no broadcasts and no `keepOnTop()`
+check; their pages call in only to say the user is back, which `registerIpc()` allows for (see
+[`registerIpc()`](#registeripc)). The screen saver icon starts it through `actions.ts`
+(`startScreenSaver`, below).
+
 #### Screenshots, notifications and the clipboard
 
 <!-- code: apps/desktop/src/main/index.ts#start.screenshots,notify,copyScreenshots -->
 
-[`src/main/index.ts`, lines 211–232](../../apps/desktop/src/main/index.ts#L211-L232)
+[`src/main/index.ts`, lines 241–262](../../apps/desktop/src/main/index.ts#L241-L262)
 
 ```ts
 const screenshots = new ScreenshotService(screenshotsDir, () =>
@@ -534,7 +618,7 @@ const copyScreenshots = async (paths: string[]) => {
 
 <!-- code: apps/desktop/src/main/index.ts#start.builtIn,claudeDesktop -->
 
-[`src/main/index.ts`, lines 235–264](../../apps/desktop/src/main/index.ts#L235-L264)
+[`src/main/index.ts`, lines 265–294](../../apps/desktop/src/main/index.ts#L265-L294)
 
 ```ts
 const builtIn =
@@ -613,7 +697,7 @@ exists.
 
 <!-- code: apps/desktop/src/main/index.ts#start.netFetch,updater -->
 
-[`src/main/index.ts`, lines 265–295](../../apps/desktop/src/main/index.ts#L265-L295)
+[`src/main/index.ts`, lines 295–325](../../apps/desktop/src/main/index.ts#L295-L325)
 
 ```ts
 // Electron's fetch, so a proxy set in Windows is used.
@@ -661,14 +745,15 @@ const updater = updates
 - `new Updater({`: Settings → Check for updates (see
   [`updates.ts`](#srcmainupdatests-checking-for-updates)).
 - `currentVersion: app.getVersion()`: this copy's version, from `apps/desktop/package.json`
-  (`1.0.0`, the first release).
+  (`2.2.0` at the moment; `1.0.0` was the first release).
 - `` latestUrl: `${updates.api}/repos/${updates.repo}/releases/latest` ``: GitHub's API address for
   the repository's latest release, such as
-  `https://api.github.com/repos/Camby10101/Desktop-Assist/releases/latest`.
+  `https://api.github.com/repos/Camby10101/Desktop-Wizard/releases/latest`.
 - `` downloads: `${updates.downloads}/${updates.repo}/releases/download/` ``: where the
   repository's release files are, such as
-  `https://github.com/Camby10101/Desktop-Assist/releases/download/`. Nothing from anywhere else is
-  downloaded.
+  `https://github.com/Camby10101/Desktop-Wizard/releases/download/`. Nothing from anywhere else is
+  downloaded, except from where a renamed repository's releases now are (see
+  [`ownDownloads()`](#release-item-isobject-owndownloads-and-releaseof)).
 - `publicKey: updates.publicKey`: the release key's public half from `tenant.json`. Only an
   installer signed with the key's private half, which stays off GitHub, is ever run.
 - `saveDownload(join(app.getPath('temp'), ...), name, chunks)`: the installer is saved in a folder
@@ -692,7 +777,7 @@ const updater = updates
 
 <!-- code: apps/desktop/src/main/index.ts#start.appsStatus,portalApps -->
 
-[`src/main/index.ts`, lines 297–319](../../apps/desktop/src/main/index.ts#L297-L319)
+[`src/main/index.ts`, lines 327–349](../../apps/desktop/src/main/index.ts#L327-L349)
 
 ```ts
 let appsStatus: AppsState['status'] = 'loading'
@@ -757,7 +842,7 @@ icon (see [Your apps](10-apps.md)). It's only set up when the tenant has a `port
 
 <!-- code: apps/desktop/src/main/index.ts#start.requests,memoryPath,atlassianStatus,atlassian,desk -->
 
-[`src/main/index.ts`, lines 324–386](../../apps/desktop/src/main/index.ts#L324-L386)
+[`src/main/index.ts`, lines 354–416](../../apps/desktop/src/main/index.ts#L354-L416)
 
 ```ts
 const requests = serviceDesk?.requests
@@ -881,10 +966,14 @@ Two statements follow:
 
 <!-- code: apps/desktop/src/main/index.ts#start.onDisplayChange -->
 
-[`src/main/index.ts`, line 447](../../apps/desktop/src/main/index.ts#L447)
+[`src/main/index.ts`, lines 482–486](../../apps/desktop/src/main/index.ts#L482-L486)
 
 ```ts
-const onDisplayChange = () => bubble.displayChanged()
+const onDisplayChange = () => {
+  // The screen saver's windows no longer fit the screens: it ends, and she comes back.
+  screenSaver.stop()
+  bubble.displayChanged()
+}
 ```
 
 <!-- /code -->
@@ -911,13 +1000,17 @@ Everything else in this part of `start()` is plain statements:
   `spawn(path, [], { detached: true, stdio: 'ignore' }).unref()`. `detached` runs it as a process
   of its own, `stdio: 'ignore'` connects nothing to it, and `unref()` tells Node not to wait for
   it, so it carries on after Desktop Wizard has quit.
-- `actions: createActionHandlers({`: the commands behind the service desk, Screenshot and Close
-  icons (`actions.ts`). It's given the controller, which Screenshot hides the windows with and
-  Close says goodbye with.
+- `actions: createActionHandlers({`: the commands behind the service desk, Screenshot, Screen
+  saver and Close icons (`actions.ts`). It's given the controller, which Screenshot hides the
+  windows with and Close says goodbye with.
 - `openServiceDesk: serviceDesk ? () => shell.openExternal(serviceDesk.url) : null`: opens the
   service desk's address from `tenant.json` in the browser, or `null` when the tenant has none.
+- `startScreenSaver: () => screenSaver.start()`: what the screen saver icon starts (see
+  [The screen saver](#the-screen-saver)).
 - `castSpell`: the Spells menu's spells (see
   [Her clones, and casting spells](#her-clones-and-casting-spells)).
+- `screenSaver`: the screen saver itself, which `registerIpc()` tells when one of its pages says
+  the user is back (`wakeFrom()`).
 - `getState: () => ({`: builds the snapshot a page asks for when it first loads: the bubble's mode
   and corner, the character's pose (`bubble.currentPose`) and size (`bubble.size`), the draft, the
   settings, the branding,
@@ -929,19 +1022,22 @@ Everything else in this part of `start()` is plain statements:
   empty: the panel shows just the text box.
 - `tray = createTray({`: adds the icon in the notification area. `onOpen` opens the panel (see
   [`createTray()`](#createtray)).
-- `onQuit: () => bubble.farewell(() => app.quit())`: as the comment says, the tray's Quit does as
-  the Close icon does: she vanishes into white motes where she stands
-  (`BubbleController.farewell()`), and once she's gone the app quits.
+- `onQuit: () => {`: as the comment says, the tray's Quit does as the Close icon does: she vanishes
+  into white motes where she stands (`bubble.farewell()`), and once she's gone the app quits.
+  First, `screenSaver.dispose()` closes the screen saver's windows at once, if it's on, so they
+  don't sit over the screens while she says goodbye.
 - `screen.on('display-added', onDisplayChange)`: the same handler also runs for
-  `display-removed` and `display-metrics-changed` (a resolution, scaling or taskbar change).
-  `BubbleController.displayChanged()` stands the character back on the taskbar near its corner, or
-  on the main display if its own display was unplugged.
+  `display-removed` and `display-metrics-changed` (a resolution, scaling or taskbar change). As
+  its comment says, the screen saver's windows no longer fit the screens, so it ends
+  (`screenSaver.stop()`, which does nothing if it isn't on), and she comes back once it has faded.
+  Then `BubbleController.displayChanged()` stands the character back on the taskbar near its
+  corner, or on the main display if its own display was unplugged.
 
 #### Quitting
 
 <!-- code: apps/desktop/src/main/index.ts#start.shuttingDown -->
 
-[`src/main/index.ts`, lines 452–453](../../apps/desktop/src/main/index.ts#L452-L453)
+[`src/main/index.ts`, lines 491–492](../../apps/desktop/src/main/index.ts#L491-L492)
 
 ```ts
 // Save the text box before quitting. before-quit fires again after the second app.quit().
@@ -959,10 +1055,11 @@ straight away. It doesn't fire when Windows shuts down or logs off, which is wha
 - `if (shuttingDown) return`: the handler ends by calling `app.quit()` again, which fires
   `before-quit` a second time. This flag lets that second one through.
 - `event.preventDefault()`: cancels this first quit, to make time for the steps below.
-- `bubble.dispose()`, `clones.stop()`, `vision.stop()`, `effects.stop()`, `builtIn?.chat.stop()`:
-  stops the bubble's animation timers, closes the clones' window if the clones are about, the
-  vision's if she's having one and a spell's effects if they're showing, and, with the built-in
-  chat, aborts a reply that is still streaming. The loop over `stopKeepingOnTop` ends the windows'
+- `bubble.dispose()`, `clones.stop()`, `vision.stop()`, `effects.stop()`, `screenSaver.dispose()`,
+  `builtIn?.chat.stop()`: stops the bubble's animation timers, closes the clones' window if the
+  clones are about, the vision's if she's having one, a spell's effects if they're showing and the
+  screen saver's windows if it's on, and, with the built-in chat, aborts a reply that is still
+  streaming. The loop over `stopKeepingOnTop` ends the windows'
   on-top checks.
 - `void portalApps?.dispose()`: closes the Apps list's connection to JumpCloud, and stops waiting
   for a browser sign-in if one is under way. `atlassian?.dispose()` does the same for Atlassian,
@@ -985,7 +1082,7 @@ there, and none of it is lost before the window shows.
 
 <!-- code: apps/desktop/src/main/index.ts#start.stopWatchingFront -->
 
-[`src/main/index.ts`, lines 477–487](../../apps/desktop/src/main/index.ts#L477-L487)
+[`src/main/index.ts`, lines 517–527](../../apps/desktop/src/main/index.ts#L517-L527)
 
 ```ts
 // For its first ten minutes, make sure the bubble isn't stuck behind other apps' windows.
@@ -1037,7 +1134,7 @@ was part of `start()`. It returns a [`BuiltInChat`](#builtinchat): the `AuthMana
 
 <!-- code: apps/desktop/src/main/index.ts#startBuiltInChat.devBaseUrl,lastIdToken,backend,chat -->
 
-[`src/main/index.ts`, lines 507–531](../../apps/desktop/src/main/index.ts#L507-L531)
+[`src/main/index.ts`, lines 547–571](../../apps/desktop/src/main/index.ts#L547-L571)
 
 ```ts
 // Dev runs may point at a local test server; an installed app always talks to Anthropic.
@@ -1110,7 +1207,7 @@ const chat = new ChatSession({
 
 <!-- code: apps/desktop/src/main/index.ts#startBuiltInChat.missing,localIssuer,authState,auth -->
 
-[`src/main/index.ts`, lines 533–557](../../apps/desktop/src/main/index.ts#L533-L557)
+[`src/main/index.ts`, lines 573–597](../../apps/desktop/src/main/index.ts#L573-L597)
 
 ```ts
 const missing = missingSettings(signIn, claudeAccess)
@@ -1187,7 +1284,7 @@ Two statements end the function:
 
 <!-- code: apps/desktop/src/main/index.ts#safeStorageEncryptor -->
 
-[`src/main/index.ts`, lines 563–568](../../apps/desktop/src/main/index.ts#L563-L568)
+[`src/main/index.ts`, lines 603–608](../../apps/desktop/src/main/index.ts#L603-L608)
 
 ```ts
 /** Windows DPAPI through Electron: only this Windows user can decrypt what it encrypts. */
@@ -1215,7 +1312,7 @@ The encryption `SecretStore` uses for the saved sign-in. `SecretStore` only know
 
 <!-- code: apps/desktop/src/main/index.ts#withDevOverrides -->
 
-[`src/main/index.ts`, lines 570–593](../../apps/desktop/src/main/index.ts#L570-L593)
+[`src/main/index.ts`, lines 610–633](../../apps/desktop/src/main/index.ts#L610-L633)
 
 ```ts
 /**
@@ -1271,7 +1368,7 @@ example to try the built-in chat against a test identity provider, without editi
 
 <!-- code: apps/desktop/src/main/index.ts#isLoopback -->
 
-[`src/main/index.ts`, lines 595–597](../../apps/desktop/src/main/index.ts#L595-L597)
+[`src/main/index.ts`, lines 635–637](../../apps/desktop/src/main/index.ts#L635-L637)
 
 ```ts
 function isLoopback(url: URL): boolean {
@@ -1289,7 +1386,7 @@ in `hostname`. Used only to decide whether plain `http` is allowed for a dev ide
 
 <!-- code: apps/desktop/src/main/index.ts#toArea,electronDisplays -->
 
-[`src/main/index.ts`, lines 599–614](../../apps/desktop/src/main/index.ts#L599-L614)
+[`src/main/index.ts`, lines 639–654](../../apps/desktop/src/main/index.ts#L639-L654)
 
 ```ts
 /** Electron's `screen`, in the shape the bubble controller uses. All coordinates are DIPs. */
@@ -1336,7 +1433,7 @@ method is called, which happens after `start()` has begun.
 
 <!-- code: apps/desktop/src/main/index.ts#fail -->
 
-[`src/main/index.ts`, lines 616–620](../../apps/desktop/src/main/index.ts#L616-L620)
+[`src/main/index.ts`, lines 656–660](../../apps/desktop/src/main/index.ts#L656-L660)
 
 ```ts
 function fail(error: unknown): void {
@@ -1546,9 +1643,11 @@ Some names deliberately stay as they were, because copies of 1.0.0 depend on the
   that text, so changing it would cut those copies off from updates.
 - The release key's file on the PC that builds releases (`.desktop-assist\release-key.pem`), the
   `DESKTOP_ASSIST_*` environment variables (for the release key, and for dev runs and tests), the
-  npm package names (`@desktop-assist/desktop`) and the GitHub repository
-  (`Camby10101/Desktop-Assist`). Nobody using the app sees these, so there's nothing to gain from
-  moving them.
+  npm package names (`@desktop-assist/desktop`). Nobody using the app sees these, so there's
+  nothing to gain from moving them. (The GitHub repository kept the old name too, until 2.1.1:
+  it's now `Camby10101/Desktop-Wizard`. GitHub answers for a renamed repository under its old
+  name, and `ownDownloads()` in `updates.ts` lets copies that still ask by the old name download
+  from the new one.)
 
 ### `PRODUCT_NAME` and `FORMER_NAME`
 
@@ -1699,7 +1798,8 @@ functions send messages on named channels (listed in `src/shared/ipc.ts`; see
 process's answer to every channel.
 
 Two rules apply to every request: it must come from one of the app's own two windows, and its
-argument must pass a _zod schema_. zod is a validation library: a schema describes the shape a
+argument must pass a _zod schema_. (The one exception is the screen saver's "the user is back",
+which comes from its own windows and carries nothing; see `registerIpc()`.) zod is a validation library: a schema describes the shape a
 value must have (a string of at most so many characters, one of three words, and so on), and
 `schema.parse(value)` returns the value if it matches or throws if it doesn't. The pages are
 trusted code, but checking at this boundary means a bug or an injected script in a page can't
@@ -1737,7 +1837,7 @@ which one exists without the other.
 
 <!-- code: apps/desktop/src/main/ipc.ts#IpcContext -->
 
-[`src/main/ipc.ts`, lines 43–68](../../apps/desktop/src/main/ipc.ts#L43-L68)
+[`src/main/ipc.ts`, lines 43–70](../../apps/desktop/src/main/ipc.ts#L43-L70)
 
 ```ts
 export interface IpcContext {
@@ -1762,6 +1862,8 @@ export interface IpcContext {
   actions: ActionHandlers
   /** The Spells menu: casts one of her spells. */
   castSpell(spell: Spell): void
+  /** The screen saver, which its own windows' pages wake (they aren't among `windows`). */
+  screenSaver: { wakeFrom(senderId: number): void }
   /** Settings → Uninstall. */
   uninstall(): UninstallResult
   getState(): AppState
@@ -1775,6 +1877,7 @@ are created there, so this file only needs their types, not how to build them.
 
 - `windows: BrowserWindow[]`: the bubble and panel windows; requests from any other page are
   refused (the clones', the vision's and the spells' windows included: their pages never call in).
+  The screen saver's pages only ever say the user is back, which goes to `screenSaver` instead.
 - `builtIn: BuiltInChat | null`, `claudeDesktop: ClaudeDesktop | null`: where questions go.
   Exactly one of the two is set, depending on the tenant's `chatApp` (see
   [The chat: built in, or in Claude Desktop](#the-chat-built-in-or-in-claude-desktop)).
@@ -1786,6 +1889,9 @@ are created there, so this file only needs their types, not how to build them.
 - `updater: Updater | null`: as the comment says, Check for updates, or `null` without `updates`.
 - `castSpell(spell: Spell): void`: as the comment says, the Spells menu: casts one of her spells
   (`castSpell` in `start()`).
+- `screenSaver: { wakeFrom(senderId: number): void }`: as the comment says, the screen saver,
+  which its own windows' pages wake; they aren't among `windows`. Only the one method is needed,
+  so that's all the type asks for (`ScreenSaver` in `src/main/screenSaver.ts` has it).
 - `uninstall(): UninstallResult`: Settings → Uninstall, ready-wired in `start()`.
 - `getState(): AppState`: builds the full snapshot a page asks for when it first loads (defined
   in `start()`).
@@ -1794,7 +1900,7 @@ are created there, so this file only needs their types, not how to build them.
 
 <!-- code: apps/desktop/src/main/ipc.ts#NoArgs,FilePath,IssueKey,TimeSpent,ASK_PROBLEMS,ExternalUrl -->
 
-[`src/main/ipc.ts`, lines 70–97](../../apps/desktop/src/main/ipc.ts#L70-L97)
+[`src/main/ipc.ts`, lines 72–99](../../apps/desktop/src/main/ipc.ts#L72-L99)
 
 ```ts
 const NoArgs = z.undefined()
@@ -1856,7 +1962,7 @@ Schemas used by several channels.
 
 <!-- code: apps/desktop/src/main/ipc.ts#registerIpc -->
 
-[`src/main/ipc.ts`, lines 99–351](../../apps/desktop/src/main/ipc.ts#L99-L351)
+[`src/main/ipc.ts`, lines 101–369](../../apps/desktop/src/main/ipc.ts#L101-L369)
 
 ```ts
 /** Wires every renderer request to the main process. All arguments are validated with zod. */
@@ -1887,6 +1993,11 @@ export function registerIpc(ctx: IpcContext): void {
   }
 
   handle(IPC.getState, NoArgs, () => ctx.getState())
+
+  // From the screen saver's pages, which aren't among `windows`: it listens only to its own.
+  ipcMain.on(IPC.screensaverWake, (event: IpcMainEvent) =>
+    ctx.screenSaver.wakeFrom(event.sender.id),
+  )
 
   on(IPC.bubbleClick, z.number().finite().optional(), (pressedAt) =>
     ctx.controller.clickBubble(pressedAt),
@@ -1933,6 +2044,15 @@ export function registerIpc(ctx: IpcContext): void {
   )
   handle(IPC.settingsSetAutoSend, z.boolean(), (autoSend) => ctx.settings.setAutoSend(autoSend))
   handle(IPC.settingsSetTheme, z.enum(['dark', 'light']), (theme) => ctx.settings.setTheme(theme))
+  handle(
+    IPC.settingsSetHabits,
+    z.object({ standStill: z.boolean().optional(), noIdles: z.boolean().optional() }).strict(),
+    async (habits) => {
+      const settings = await ctx.settings.setHabits(habits)
+      ctx.controller.setHabits(settings)
+      return settings
+    },
+  )
   handle(
     IPC.characterSetSize,
     z.number().refine((scale) => (CHARACTER_SIZES as readonly number[]).includes(scale)),
@@ -1993,7 +2113,9 @@ export function registerIpc(ctx: IpcContext): void {
     handle(IPC.atlassianSignOut, NoArgs, () => atlassian.signOut())
     handle(IPC.atlassianRetry, NoArgs, () => void atlassian.retry())
     handle(IPC.atlassianFeed, z.boolean(), (refresh) => atlassian.feed(refresh))
-    handle(IPC.atlassianMarkNotificationsRead, NoArgs, () => atlassian.markNotificationsRead())
+    handle(IPC.atlassianMarkNotificationsRead, z.string().min(1).max(200).optional(), (id) =>
+      atlassian.markNotificationsRead(id),
+    )
     handle(IPC.atlassianMarkRequestsRead, IssueKey.optional(), (key) =>
       atlassian.markRequestsRead(key),
     )
@@ -2143,6 +2265,12 @@ Check for updates have inner functions of their own too.
 **The bubble and the windows**
 
 - `handle(IPC.getState, ...)`: the snapshot each page loads at startup.
+- `ipcMain.on(IPC.screensaverWake, ...)`: as the comment says, from the screen saver's pages, which
+  aren't among `windows`, so it's registered straight on `ipcMain` rather than through `on()`, whose
+  `trusted` check would drop it. Instead `ctx.screenSaver.wakeFrom(event.sender.id)` hands over
+  the sender's id, and the screen saver listens only to its own windows' pages. It carries no
+  argument, so there's nothing to check, and the worst another page could do is end the screen
+  saver.
 - `IPC.bubbleClick`, `IPC.bubbleDragStart`, `IPC.bubbleDragEnd`, `IPC.collapse`: forwarded to the
   matching `BubbleController` methods.
 - `z.number().finite().optional()`: the bubble click's press time, a real number (not `NaN` or
@@ -2155,8 +2283,8 @@ Check for updates have inner functions of their own too.
 
 **Actions, links and the clipboard**
 
-- `z.enum(COMMAND_ACTION_IDS)`: only the `command` actions (service desk, Screenshot and Close)
-  are accepted. `ctx.actions[id]()` runs the matching handler from `actions.ts` and returns its
+- `z.enum(COMMAND_ACTION_IDS)`: only the `command` actions (service desk, Screenshot, Screen saver
+  and Close) are accepted. `ctx.actions[id]()` runs the matching handler from `actions.ts` and returns its
   result, which the panel shows as a toast. The Settings and Spells icons are `popover` actions
   that never leave the page; what's in their menus has channels of its own (below).
 - `shell.openExternal(url)`: opens a link from a Claude reply (or the Claude Desktop download
@@ -2187,6 +2315,11 @@ Check for updates have inner functions of their own too.
   menu always shows what actually took effect. (The menu offers the response style only with the
   built-in chat, and "Send in Claude automatically" only with Claude Desktop.)
 - `IPC.settingsSetTheme`, `z.enum(['dark', 'light'])`: the settings menu's Light mode switch.
+- `IPC.settingsSetHabits`: the menu's Stand still and No idle animations switches. The schema is an
+  object with either or both of `standStill` and `noIdles`, each `true` or `false`; `.strict()`
+  refuses any other field, so a page can't slip some other preference in. `ctx.settings.setHabits()`
+  saves the change and returns the settings as they now are, which `ctx.controller.setHabits()`
+  applies to her at once (she stops a walk of her own, say); then the page gets them back.
 - `IPC.characterSetSize`: the Smaller and Bigger buttons under Size in the settings menu.
   `z.number().refine(...)` accepts only one of `CHARACTER_SIZES` (from `src/shared/geometry.ts`);
   `CHARACTER_SIZES as readonly number[]` lets `includes()` take any number, since on the list's own
@@ -2261,6 +2394,8 @@ Check for updates have inner functions of their own too.
   call returns at once and progress arrives as `IPC.atlassianState` broadcasts. Retry works the
   same way. No token ever reaches the page.
 - `z.boolean()`: `feed`'s `refresh`; the preload always sends `true` or `false`.
+- `z.string().min(1).max(200).optional()`: marking one notification as seen, by its id (such as
+  `assigned:ISD-12:10234`), when it's opened, or all of them without one, when the Jira page closes.
 - `IssueKey.optional()`: marking one request's news as seen, or all of them without a key.
 - `z.string().max(200)`, `z.string().max(2000)`: a search, and the words to look for articles
   about, each capped.
@@ -2337,7 +2472,7 @@ is either a `popover` (opens UI inside the panel, handled entirely by the page) 
 
 <!-- code: apps/desktop/src/main/actions.ts#ActionHandlers,createActionHandlers -->
 
-[`src/main/actions.ts`, lines 6–44](../../apps/desktop/src/main/actions.ts#L6-L44)
+[`src/main/actions.ts`, lines 6–51](../../apps/desktop/src/main/actions.ts#L6-L51)
 
 ```ts
 export type ActionHandlers = Record<CommandActionId, () => Promise<ActionResult>>
@@ -2346,6 +2481,8 @@ export type ActionHandlers = Record<CommandActionId, () => Promise<ActionResult>
 export function createActionHandlers(deps: {
   controller: BubbleController
   screenshots: ScreenshotService
+  /** Starts the screen saver (main/screenSaver.ts). */
+  startScreenSaver: () => void
   /** Opens the company's IT service desk in the browser, or null if the tenant has none. */
   openServiceDesk: (() => Promise<void>) | null
   quit: () => void
@@ -2372,6 +2509,11 @@ export function createActionHandlers(deps: {
         return { ok: false, message: "Couldn't take a screenshot" }
       }
     },
+    async screensaver() {
+      deps.controller.collapse()
+      deps.startScreenSaver()
+      return { ok: true }
+    },
     async close() {
       // She vanishes into white motes first, then the app quits.
       deps.controller.farewell(deps.quit)
@@ -2389,8 +2531,10 @@ export function createActionHandlers(deps: {
 
 - `Record<CommandActionId, () => Promise<ActionResult>>`: `Record<K, V>` is a TypeScript type for
   an object with a `V` under every key in `K`. `CommandActionId` is the list of command actions
-  (`'servicedesk' | 'screenshot' | 'close'`), so if a new command is added to the registry, this
-  file won't compile until it has a handler.
+  (`'servicedesk' | 'screenshot' | 'screensaver' | 'close'`), so if a new command is added to the
+  registry, this file won't compile until it has a handler.
+- `startScreenSaver: () => void`: as its comment says, starts the screen saver
+  (`ScreenSaver.start()` in `src/main/screenSaver.ts`), passed in so this file needn't know how.
 - `openServiceDesk: (() => Promise<void>) | null`: a function that opens the service desk, or
   `null` when the tenant has none. The brackets around the function type are needed so that
   `| null` applies to the whole of it.
@@ -2404,6 +2548,10 @@ export function createActionHandlers(deps: {
   way the app isn't in its own screenshot.
 - `catch (error)`: any failure (including `whileHidden()` refusing because the panel isn't open)
   becomes a friendly message; the details go to the log.
+- `async screensaver()`: the screen saver icon (a sunset). `deps.controller.collapse()` closes the
+  panel first, then `deps.startScreenSaver()` covers the screens; she vanishes as they whiten (the
+  screen saver's `onStart`, `BubbleController.sleep()`). It returns at once with nothing to say,
+  so there's no toast.
 - `async close()`: the Close icon (a power button). As the comment says, she vanishes into white
   motes first, then the app quits: `deps.controller.farewell(deps.quit)` closes the panel, plays
   her `vanish` pose where she stands, and calls `deps.quit` once she's gone, just under a second
@@ -2595,9 +2743,9 @@ export function isNewer(candidate: string, current: string): boolean {
 - `a[i]!`: the `!` tells TypeScript the element is there; with `noUncheckedIndexedAccess` on, it
   would otherwise count every element of an array as possibly missing.
 
-### `Release`, `Item`, `isObject` and `releaseOf()`
+### `Release`, `Item`, `isObject`, `ownDownloads()` and `releaseOf()`
 
-<!-- code: apps/desktop/src/main/updates.ts#Release,Item,isObject,releaseOf -->
+<!-- code: apps/desktop/src/main/updates.ts#Release,Item,isObject,ownDownloads,releaseOf -->
 
 [`src/main/updates.ts`, lines 33–99](../../apps/desktop/src/main/updates.ts#L33-L99)
 
@@ -2620,6 +2768,19 @@ type Item = Record<string, unknown>
 
 const isObject = (value: unknown): value is Item =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
+
+/**
+ * Where a renamed or moved repository's release files are downloaded from, by the release's own
+ * page (`html_url`, https://github.com/<owner>/<name>/releases/tag/<tag>) on the same site as
+ * `downloads`; null if the page isn't one there. GitHub sends requests for a repository's old name
+ * on to its new one, but names the files in its answer by the new name.
+ */
+export function ownDownloads(htmlUrl: unknown, downloads: string): string | null {
+  const site = /^(https?:\/\/[^/]+\/)[^/]+\/[^/]+\/releases\/download\/$/.exec(downloads)?.[1]
+  if (!site || typeof htmlUrl !== 'string' || !htmlUrl.startsWith(site)) return null
+  const repo = /^([\w.-]+)\/([\w.-]+)\/releases\/tag\//.exec(htmlUrl.slice(site.length))
+  return repo ? `${site}${repo[1]}/${repo[2]}/releases/download/` : null
+}
 
 /**
  * The release in GitHub's answer for a repository's latest release, if it's a version with an
@@ -2663,8 +2824,27 @@ export function releaseOf(payload: unknown, downloads: string): Release | null {
 
 `Release` is a release worth installing: its version (`1.0.1`), its installer's name, address,
 size and SHA-256, and where its signature is. `Item` and `isObject` are the same helpers as in
-`portalData.ts`. `releaseOf()` reads GitHub's answer for a repository's latest release, as the
-comment says.
+`portalData.ts`. `ownDownloads()` copes with a renamed repository, and `releaseOf()` reads GitHub's
+answer for a repository's latest release, as the comment says.
+
+`ownDownloads(htmlUrl, downloads)`: as its comment says, where a renamed or moved repository's
+release files are now. The repository was renamed from `Camby10101/Desktop-Assist` to
+`Camby10101/Desktop-Wizard` in 2.1.1. Copies built before then still ask GitHub about the old name;
+GitHub answers, but names every file in its answer by the new name, so without this the files would
+fail the "from the repository's own releases" check below, and those copies could never update.
+
+- `site`: the start of `downloads` (`https://github.com/`), if `downloads` has the usual
+  `<owner>/<name>/releases/download/` shape; otherwise `null`.
+- `htmlUrl.startsWith(site)`: the release's own page (`html_url` in GitHub's answer) must be on the
+  same site. Anything else (not a string, another site) gives `null`.
+- `repo`: the owner and name from the page's address (`Camby10101/Desktop-Wizard/releases/tag/…`).
+  `[\w.-]+` allows only the letters, digits, `_`, `.` and `-` GitHub names are made of, so nothing
+  else can be smuggled into the address built from it.
+- `` `${site}${repo[1]}/${repo[2]}/releases/download/` ``: that repository's release files. So the
+  files are only ever taken from the repository the release itself belongs to, on GitHub, and the
+  signature check still decides whether anything runs.
+
+In `releaseOf()`:
 
 - `payload['draft'] === true || payload['prerelease'] === true`: drafts and pre-releases are never
   installed. GitHub's "latest release" is never one of those anyway, so this is a second guard.
@@ -2673,9 +2853,12 @@ comment says.
 - `assets`: the files attached to the release. `/setup.*\.exe$/i` picks the installer by its name
   (electron-builder calls it `<product>-Setup-<version>.exe`); any other files attached to the
   release are ignored.
+- `moved = ownDownloads(payload['html_url'], downloads)`: where the release's own repository keeps
+  its files, if it has been renamed (`null` if its page can't be read).
 - `fromRepo(a)`: the file must come from the repository's own releases
-  (`browser_download_url` starts with `downloads`), so even a strange answer can't make the app
-  download something from elsewhere. Both the installer and its signature must pass it.
+  (`browser_download_url` starts with `downloads`, or with `moved`), so even a strange answer can't
+  make the app download something from elsewhere. Both the installer and its signature must pass
+  it.
 - `/^sha256:([0-9a-f]{64})$/i.exec(digest)`: GitHub works out each attached file's SHA-256 itself
   and gives it as `digest`, written `sha256:` and 64 hex digits. `?.[1]` takes the digits if it
   matched; `?? null` covers a release without a digest (older ones), which is checked by its size
@@ -3593,7 +3776,7 @@ export type UpdatesConfig = z.infer<typeof UpdatesSchema>
 <!-- /code -->
 
 Where Check for updates looks for new releases, and the key they must be signed with. For Morse
-Micro, `tenant.json` has `"updates": { "repo": "Camby10101/Desktop-Assist", "publicKey": "MCow…" }`.
+Micro, `tenant.json` has `"updates": { "repo": "Camby10101/Desktop-Wizard", "publicKey": "MCow…" }`.
 
 - `repo`: the GitHub repository, as "owner/name". `[\w.-]+` is one or more letters, digits, `_`,
   `.` or `-` (`\w` covers the first three), so the pattern is two such names with one `/`
@@ -3939,9 +4122,9 @@ changes.
 
 `SettingsService` keeps the user's preferences in `preferences.json` in the userData folder: the
 reply effort (Fast, Balanced, Thorough) for the built-in chat, whether questions are sent in Claude
-Desktop automatically, the apps starred in the Apps list, light or dark mode, the character's size,
-where the bubble was dragged to, and whether "Start with Windows" has been set up. It also reports
-the settings the
+Desktop automatically, the apps starred in the Apps list, light or dark mode, whether the
+character stands still and whether she does her idle animations, her size, where the bubble was
+dragged to, and whether "Start with Windows" has been set up. It also reports the settings the
 Settings menu shows. Created in `start()`; the Settings menu reaches it through the `settings...`
 IPC channels, and its size buttons through `characterSetSize`.
 
@@ -3949,7 +4132,7 @@ IPC channels, and its size buttons through `characterSetSize`.
 
 <!-- code: apps/desktop/src/main/settings.ts#DEFAULT_EFFORT,PreferencesSchema,Preferences -->
 
-[`src/main/settings.ts`, lines 8–30](../../apps/desktop/src/main/settings.ts#L8-L30)
+[`src/main/settings.ts`, lines 8–33](../../apps/desktop/src/main/settings.ts#L8-L33)
 
 ```ts
 /** Fast answers by default; Balanced and Thorough think longer. */
@@ -3962,6 +4145,9 @@ const PreferencesSchema = z.object({
   autoSend: z.boolean().optional(),
   /** Light or dark mode; dark until the user switches. */
   theme: z.enum(['dark', 'light']).optional(),
+  /** She stays where she stands, and doesn't do her idle animations: both off unless turned on. */
+  standStill: z.boolean().optional(),
+  noIdles: z.boolean().optional(),
   /** Apps starred in the Apps list (their IDs), shown first. */
   favoriteApps: z.array(z.string().min(1).max(200)).max(500).optional(),
   /** How big she is, as a multiple of her usual size (see CHARACTER_SIZES). */
@@ -3984,6 +4170,9 @@ type Preferences = z.infer<typeof PreferencesSchema>
 - `PreferencesSchema`: what the file may contain. Every field is optional, so a missing field
   just means "not set yet", and an older file still loads after a new preference is added.
 - `theme`: light or dark mode; as the comment says, dark until the user switches.
+- `standStill`, `noIdles`: Stand still (she doesn't wander about on her own) and No idle animations
+  (she doesn't do her habits on her own). As the comment says, both are off unless the user turns
+  them on, so a missing value counts as off (see `get()`).
 - `favoriteApps`: the IDs of the starred apps. `.max(500)` keeps a damaged file from holding an
   endless list.
 - `autoSend`: "Send in Claude automatically", for Claude Desktop. As the comment says, it's on
@@ -4003,7 +4192,7 @@ type Preferences = z.infer<typeof PreferencesSchema>
 
 <!-- code: apps/desktop/src/main/settings.ts#SettingsService.prefs,saving,constructor -->
 
-[`src/main/settings.ts`, lines 33–39](../../apps/desktop/src/main/settings.ts#L33-L39)
+[`src/main/settings.ts`, lines 36–42](../../apps/desktop/src/main/settings.ts#L36-L42)
 
 ```ts
 private prefs: Preferences = {}
@@ -4033,7 +4222,7 @@ constructor(
 
 <!-- code: apps/desktop/src/main/settings.ts#SettingsService.init -->
 
-[`src/main/settings.ts`, lines 41–60](../../apps/desktop/src/main/settings.ts#L41-L60)
+[`src/main/settings.ts`, lines 44–63](../../apps/desktop/src/main/settings.ts#L44-L63)
 
 ```ts
 /**
@@ -4087,7 +4276,7 @@ Loads the file once at startup (called from `start()`).
 
 <!-- code: apps/desktop/src/main/settings.ts#SettingsService.get -->
 
-[`src/main/settings.ts`, lines 62–75](../../apps/desktop/src/main/settings.ts#L62-L75)
+[`src/main/settings.ts`, lines 65–80](../../apps/desktop/src/main/settings.ts#L65-L80)
 
 ```ts
 get(): Settings {
@@ -4101,6 +4290,8 @@ get(): Settings {
     autoSend: this.prefs.autoSend ?? true,
     favoriteApps: this.prefs.favoriteApps ?? [],
     theme: this.prefs.theme ?? 'dark',
+    standStill: this.prefs.standStill ?? false,
+    noIdles: this.prefs.noIdles ?? false,
     canUninstall: available,
   }
 }
@@ -4121,12 +4312,14 @@ The current settings, as the Settings menu shows them (`Settings` in `src/shared
 - `canUninstall: available`: only an installed build has an uninstaller.
 - `favoriteApps: this.prefs.favoriteApps ?? []`: no stars until the user adds some.
 - `theme: this.prefs.theme ?? 'dark'`: dark until the user switches.
+- `standStill: this.prefs.standStill ?? false`, `noIdles: this.prefs.noIdles ?? false`: she
+  wanders about and does her idle animations until the user says otherwise.
 
 ### `SettingsService.setAutoStart()`
 
 <!-- code: apps/desktop/src/main/settings.ts#SettingsService.setAutoStart -->
 
-[`src/main/settings.ts`, lines 77–80](../../apps/desktop/src/main/settings.ts#L77-L80)
+[`src/main/settings.ts`, lines 82–85](../../apps/desktop/src/main/settings.ts#L82-L85)
 
 ```ts
 setAutoStart(enabled: boolean): Settings {
@@ -4146,7 +4339,7 @@ settings, so the menu shows what actually happened; in a dev run that's still "o
 
 <!-- code: apps/desktop/src/main/settings.ts#SettingsService.setEffort,setAutoSend -->
 
-[`src/main/settings.ts`, lines 82–90](../../apps/desktop/src/main/settings.ts#L82-L90)
+[`src/main/settings.ts`, lines 87–95](../../apps/desktop/src/main/settings.ts#L87-L95)
 
 ```ts
 async setEffort(effort: Effort): Promise<Settings> {
@@ -4171,7 +4364,7 @@ dependency each time it hands a question over.
 
 <!-- code: apps/desktop/src/main/settings.ts#SettingsService.setTheme -->
 
-[`src/main/settings.ts`, lines 92–100](../../apps/desktop/src/main/settings.ts#L92-L100)
+[`src/main/settings.ts`, lines 97–105](../../apps/desktop/src/main/settings.ts#L97-L105)
 
 ```ts
 /**
@@ -4197,11 +4390,39 @@ Switches every Desktop Wizard window between light and dark, and saves the choic
 - `await this.save({ theme })`, `return this.get()`: saved for next time, and the new settings go
   back to the panel, which updates the Light mode switch.
 
+### `SettingsService.setHabits()`
+
+<!-- code: apps/desktop/src/main/settings.ts#SettingsService.setHabits -->
+
+[`src/main/settings.ts`, lines 107–111](../../apps/desktop/src/main/settings.ts#L107-L111)
+
+```ts
+/** Whether she wanders about and does her idle animations on her own (either, or both). */
+async setHabits(habits: Partial<Habits>): Promise<Settings> {
+  await this.save(habits)
+  return this.get()
+}
+```
+
+<!-- /code -->
+
+Saves Stand still, No idle animations or both, and returns the settings as they now are. As its
+comment says, they're whether she wanders about and whether she does her idle animations on her
+own.
+
+- `habits: Partial<Habits>`: `Habits` (from `src/shared/types.ts`) is `standStill` and `noIdles`;
+  `Partial` makes each optional, so the menu sends only the switch that was flipped, and the other
+  is left as it was. `ipc.ts` has already checked that nothing else is in it.
+- `await this.save(habits)`: `save()` merges what it's given into the preferences, so this needs
+  nothing more.
+- Unlike the theme, nothing else happens here: `ipc.ts` passes the result to
+  `BubbleController.setHabits()`, which changes what she does at once.
+
 ### `SettingsService.setFavoriteApp()`
 
 <!-- code: apps/desktop/src/main/settings.ts#SettingsService.setFavoriteApp -->
 
-[`src/main/settings.ts`, lines 102–107](../../apps/desktop/src/main/settings.ts#L102-L107)
+[`src/main/settings.ts`, lines 113–118](../../apps/desktop/src/main/settings.ts#L113-L118)
 
 ```ts
 /** Stars an app in the Apps list, or takes its star away. */
@@ -4226,7 +4447,7 @@ list, which the panel adopts.
 
 <!-- code: apps/desktop/src/main/settings.ts#SettingsService.bubbleAnchor,setBubbleAnchor -->
 
-[`src/main/settings.ts`, lines 109–115](../../apps/desktop/src/main/settings.ts#L109-L115)
+[`src/main/settings.ts`, lines 120–126](../../apps/desktop/src/main/settings.ts#L120-L126)
 
 ```ts
 get bubbleAnchor(): BubbleAnchor | null {
@@ -4250,7 +4471,7 @@ settles near the other bottom corner or on another display.
 
 <!-- code: apps/desktop/src/main/settings.ts#SettingsService.characterScale,setCharacterScale -->
 
-[`src/main/settings.ts`, lines 117–124](../../apps/desktop/src/main/settings.ts#L117-L124)
+[`src/main/settings.ts`, lines 128–135](../../apps/desktop/src/main/settings.ts#L128-L135)
 
 ```ts
 /** Her size as chosen in Settings, or null if it's never been changed. */
@@ -4276,7 +4497,7 @@ has room for less.
 
 <!-- code: apps/desktop/src/main/settings.ts#SettingsService.save -->
 
-[`src/main/settings.ts`, lines 126–133](../../apps/desktop/src/main/settings.ts#L126-L133)
+[`src/main/settings.ts`, lines 137–144](../../apps/desktop/src/main/settings.ts#L137-L144)
 
 ```ts
 private async save(changes: Preferences): Promise<void> {
