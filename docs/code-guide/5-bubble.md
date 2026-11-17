@@ -11,8 +11,8 @@ what the character is doing, and how big she is, and moves, sizes, shows and hid
 to match, using the pure maths in `layout.ts` (where things go) and `wander.ts` (what the
 character does on its own, and how it falls). Three more overlay windows come and go: `clones.ts`
 opens and closes one for her clones (her Clones spell), `vision.ts` one for the light and the logo
-of her `vision` habit, and `spellEffects.ts` one for her spells' effects (starfall, and the
-explosion). The bubble's page draws the figure and animates it
+of her `vision` habit, and `spellEffects.ts` one for her spells' effects (every spell but the
+clones and the teleport). The bubble's page draws the figure and animates it
 (`Character.tsx`, with pixel art drawn by code in `src/renderer/src/character/`; see
 [The UI components](8-renderer-components.md)).
 
@@ -70,14 +70,16 @@ the panel's offsets from its corner (`bubbleMetrics()` and `panelLayout()` in `g
 and she walks faster. Every change of size, or of the biggest she can be, is broadcast to both
 pages (`IPC.sizeChanged`).
 
-**Her spells.** The Spells menu (the wand icon) casts one of four spells (`src/shared/spells.ts`);
+**Her spells.** The Spells menu (the wand icon) casts one of ten spells (`src/shared/spells.ts`);
 `castSpell` in `index.ts` closes the panel and starts it. Clones puts ten copies of her on the
 taskbar of her display for thirty seconds (`CLONES` in `src/shared/character.ts`), each wandering
-up and down on its own. Starfall sends shooting stars across her screen for ten seconds. Teleport:
-she vanishes into white motes and forms out of them again a little way along the taskbar. And
-Explosion: she chants for fifteen seconds under a rising pillar of magic circles, then it goes off
-in the middle of the screen. The clones and the effects are only pictures: they live in windows of
-their own, which never take the mouse or the focus, and they come and go without changing the mode.
+up and down on its own. Teleport: she vanishes into white motes and forms out of them again a
+little way along the taskbar. The other eight are drawn over the screen while she acts them out:
+Butterflies, Starfall, Fireworks, Blizzard, Thunderstorm, Phoenix and Vortex, for 7.5 to 10
+seconds each, and Explosion: she chants for fifteen seconds under a rising pillar of magic circles,
+then it goes off in the middle of the screen. The clones and the effects are only pictures: they
+live in windows of their own, which never take the mouse or the focus, and they come and go
+without changing the mode.
 For them, `BubbleController` only says where she stands (`standing`); `clones.ts` and
 `spellEffects.ts` open and close their windows, and the pages in them do the drawing (`ClonesView`
 and `SpellView`, see [The pages](7-renderer-pages.md)). What she does herself, her poses as she
@@ -119,10 +121,9 @@ Who calls it:
   panel window's `blur` event to `panelBlurred()`, screen changes to `displayChanged()`, the tray
   icon, a second launch, a finished sign-in and a click on a notification to `expand()`, the
   tray's Quit to `farewell()`, and quitting to `dispose()`. When the pose becomes `vision`, it
-  reads `standing` to open the vision's window over her (see `vision.ts` below), and when it
-  becomes `chant`, to open the explosion's (`spellEffects.ts`). Its `castSpell`, for the Spells
-  menu, calls `collapse()`, then `act()` or `teleport()`, reading `standing` for the clones and
-  starfall.
+  reads `standing` to open the vision's window over her (see `vision.ts` below). Its `castSpell`,
+  for the Spells menu, calls `collapse()`, then `act()` or `teleport()`, reading `standing` for the
+  clones and for the window of any spell drawn over the screen (`spellEffects.ts`).
 - `src/main/ipc.ts` forwards the pages' requests: the bubble's click and drag (`clickBubble()`,
   `startDrag()`, `endDrag()`), the panel's Esc (`collapse()`) and the Smaller and Bigger buttons
   under Size in the settings menu (`setScale()`). It also calls `collapse()` after handing a question to Claude Desktop
@@ -637,8 +638,8 @@ Two more read-only properties, both about her size.
   spell and hands it to `Clones.start()`, which opens the clones' window along the bottom of that
   work area, with them setting off from where her window is, at her size. `index.ts` reads it too
   when she starts her vision, for `Vision.start()`, which opens the window of light above her, and
-  for her spells' effects, `SpellEffects.start()` (starfall, and the explosion when she starts her
-  chant). (The comment doesn't mention the spells' effects.)
+  for her spells' effects, `SpellEffects.start()` (in `castSpell`, for every spell drawn over the
+  screen). (The comment doesn't mention the spells' effects.)
 - `bubbleWindowBounds(this.position, this.scale)`: her window as it is placed now (see
   `layout.ts`), a new object each time.
 
@@ -1037,8 +1038,10 @@ act(pose: Fidget | SpellPose, then?: () => void): void {
 <!-- /code -->
 
 Plays one of her poses because a spell was cast, rather than because she's been left alone.
-`castSpell` in `index.ts` uses it for her `chant` (the explosion), and for her little `spell`
-fidget as she casts the clones or starfall; `teleport()` uses it for vanishing and appearing.
+`castSpell` in `index.ts` uses it for the pose she casts each spell with: her little `spell`
+fidget for the clones, and for the spells drawn over the screen whatever `CAST_POSE` says (her
+`chant` for the explosion, one of her fidgets for the rest); `teleport()` uses it for vanishing and
+appearing.
 
 - `act(pose: Fidget | SpellPose, then?: () => void)`: as the comment says, a spell's pose, or a
   fidget as she casts one of the other spells. `then` is optional: what to do when the pose is
@@ -2852,22 +2855,23 @@ change but the one to `vision`, so it's usually called with nothing open, which 
 
 ## `src/main/bubble/spellEffects.ts`: the window her spells are drawn in
 
-Two of her spells reach beyond her own window: starfall, whose shooting stars cross the whole
-screen, and the explosion, whose pillar of magic circles rises above her while she chants, and
-which then goes off in the middle of the screen. (Her clones have a window of their own,
-`clones.ts` above, and teleporting happens in her own window.) This file opens and closes the window
-those two are drawn in. It's built like `vision.ts`: the page in the window (`SpellView.tsx`; see
-[The pages](7-renderer-pages.md)) does the drawing, a pixel at a time and in time with her, from the
-numbers in `src/shared/spells.ts`.
+Eight of her ten spells reach beyond her own window: starfall, whose shooting stars cross the whole
+screen; the explosion, whose pillar of magic circles rises above her while she chants, and which
+then goes off in the middle of the screen; and the six newer ones (fireworks, the thunderstorm, the
+blizzard, the vortex, the butterflies and the phoenix). (Her clones have a window of their own,
+`clones.ts` above, and teleporting happens in her own window.) This file opens and closes the
+window those eight are drawn in. It's built like `vision.ts`: the page in the window
+(`SpellView.tsx`; see [The pages](7-renderer-pages.md)) does the drawing, a pixel at a time and in
+time with her, from the numbers in `src/shared/spells.ts`.
 
 Who uses it:
 
 - `src/main/index.ts` creates the one `SpellEffects` in `start()`, with the tenant's accent colour
   and an `open` that makes the window (the same `openOverlay` as the clones' and the vision's, with
-  `createOverlayWindow('spell', …)`). `castSpell` calls `start('starfall', …)` for starfall. The
-  explosion's effects follow her pose instead: `onPoseChange` calls `start('explosion', …)` when her
-  pose becomes `chant`, and `stop()` if her pose changes while `chanting` is still true. It also
-  calls `stop()` when the app quits.
+  `createOverlayWindow('spell', …)`). `castSpell` calls `start(spell, …)` for each of the eight, as
+  she starts the pose that goes with it. `onPoseChange` calls `stop()` if her pose changes while
+  `chanting` is still true, which calls the explosion off. It also calls `stop()` when the app
+  quits.
 
 Like `Vision`, the controller knows nothing about it. `tests/spellEffects.test.ts` checks it with a
 fake `open` and fake timers.
@@ -2885,7 +2889,7 @@ export interface SpellWindow {
 }
 
 export interface SpellEffectsDeps {
-  /** The tenant's accent colour, for the magic circles. */
+  /** The tenant's accent colour, for the magic circles and the vortex. */
   accentColor: string
   /**
    * Opens the effects' window over `bounds`, its page told (in its query string) which spell, her
@@ -2907,8 +2911,9 @@ What `SpellEffects` needs, as for `Vision`, and one number.
 
 - `SpellWindow`: as its comment says, the effects' window as `SpellEffects` uses it: only to close
   it.
-- `accentColor: string`: as its comment says, the tenant's accent colour, for the magic circles.
-  It's passed on to the page, which has no app state of its own.
+- `accentColor: string`: as its comment says, the tenant's accent colour, for the magic circles
+  (and the vortex, which the comment doesn't mention). It's passed on to the page, which has no app
+  state of its own.
 - `open(bounds: Rect, query: Record<string, string>): SpellWindow`: as the comment says, opens the
   window over `bounds`, its page told which spell, her size, where she stands across it and how far
   down her feet are (in DIPs from its left and top edges), when the spell was cast, and the accent
@@ -2924,14 +2929,13 @@ What `SpellEffects` needs, as for `Vision`, and one number.
 
 <!-- code: apps/desktop/src/main/bubble/spellEffects.ts#SpellEffects.class -->
 
-[`src/main/bubble/spellEffects.ts`, lines 25–31](../../apps/desktop/src/main/bubble/spellEffects.ts#L25-L31)
+[`src/main/bubble/spellEffects.ts`, lines 25–30](../../apps/desktop/src/main/bubble/spellEffects.ts#L25-L30)
 
 ```ts
 /**
- * The window her spells' effects are drawn in (starfall, and the explosion's pillar of magic
- * circles and its bang): over the whole of her display's work area, since the stars fall across
- * all of it and the explosion goes off in the middle of it, and never taking the mouse or the
- * focus. One at a time; each closes itself once its spell is over (SPELL_EFFECT_MS).
+ * The window her spells' effects are drawn in (all but her clones and her teleport): over the
+ * whole of her display's work area, since they fill the sky, fall across the screen or go off in
+ * the middle of it, and never taking the mouse or the focus. One at a time; each closes itself once its spell is over (SPELL_EFFECT_MS).
  */
 export class SpellEffects {
   // …
@@ -2941,15 +2945,17 @@ export class SpellEffects {
 <!-- /code -->
 
 As the comment says: the window her spells' effects are drawn in, for starfall, and for the
-explosion's pillar of magic circles and its bang. It covers the whole of her display's work area,
-since the stars fall across all of it and the explosion goes off in the middle of it, and it never
-takes the mouse or the focus. There's one at a time, and each closes itself once its spell is over
-(`SPELL_EFFECT_MS`: 10 seconds for starfall, 18.6 for the explosion). Its fields and constructor are
-like `Vision`'s, with two getters:
+explosion's pillar of magic circles and its bang. (The comment names only those two; the six newer
+spells are drawn in it too.) It covers the whole of her display's work area, since the stars fall
+across all of it and the explosion goes off in the middle of it (as do the others: the storm
+clouds hang over the top, the butterflies and the phoenix fly off across it), and it never takes
+the mouse or the focus. There's one at a time, and each closes itself once its spell is over
+(`SPELL_EFFECT_MS`: 10 seconds for starfall, 18.6 for the explosion, 7.5 to 9 for the rest). Its
+fields and constructor are like `Vision`'s, with two getters:
 
 <!-- code: apps/desktop/src/main/bubble/spellEffects.ts#SpellEffects.current,constructor,running,chanting -->
 
-[`src/main/bubble/spellEffects.ts`, lines 32–53](../../apps/desktop/src/main/bubble/spellEffects.ts#L32-L53)
+[`src/main/bubble/spellEffects.ts`, lines 31–52](../../apps/desktop/src/main/bubble/spellEffects.ts#L31-L52)
 
 ```ts
 private current: {
@@ -2986,8 +2992,8 @@ get chanting(): boolean {
   `null`. Only the tests read it.
 - `get chanting(): boolean`: as its comment says, whether the explosion is still at its chant,
   before the bang. `index.ts` asks it on every change of her pose: if she stops chanting now
-  (someone clicked her or picked her up), the explosion is called off. It's `false` while starfall
-  shows, so a change of pose never stops the stars.
+  (someone clicked her or picked her up), the explosion is called off. It's `false` while any other
+  spell shows, so a change of pose never stops those.
 - `this.now() - this.current.startedAt < EXPLOSION.chantMs - CHANT_SLACK_MS`: more than a quarter
   of a second from the chant's end. After that, a change of pose is taken as the chant ending as it
   should, and the window stays open for the bang.
@@ -2996,7 +3002,7 @@ get chanting(): boolean {
 
 <!-- code: apps/desktop/src/main/bubble/spellEffects.ts#SpellEffects.start -->
 
-[`src/main/bubble/spellEffects.ts`, lines 55–70](../../apps/desktop/src/main/bubble/spellEffects.ts#L55-L70)
+[`src/main/bubble/spellEffects.ts`, lines 54–69](../../apps/desktop/src/main/bubble/spellEffects.ts#L54-L69)
 
 ```ts
 /** Draws `spell`'s effects over her display, from where she stands (BubbleController.standing). */
@@ -3027,16 +3033,17 @@ As its comment says, draws `spell`'s effects over her display, from where she st
   cast, say) is closed first, so there's only ever one.
 - `this.deps.open(workArea, {`: the window covers her display's work area: the whole screen but the
   taskbar.
-- `spell`: which of the two to draw, `starfall` or `explosion`.
+- `spell`: which of the eight to draw (a `SpellEffect`).
 - `scale: String(scale)`: her size, so the effects' pixels go with hers (each twice the size of one
   of hers; see `SpellView`) and the pillar is sized for her.
 - `x: String(Math.round(bounds.x + bounds.width / 2 - workArea.x))`: her middle, measured from the
-  window's left edge, where the pillar rises.
+  window's left edge, where the pillar rises, the first rocket launches, a bolt of lightning
+  strikes, and the butterflies and the phoenix come out of her.
 - `feet: String(Math.round(bounds.y + bounds.height - workArea.y))`: how far down the window her
   feet are (the bottom of her window), where the magic circle under her goes.
 - `starts: String(startedAt)`: when the spell was cast, on the wall clock, so the page keeps in
   time with her chant even if it took a moment to load.
-- `accent: this.deps.accentColor`: the magic circles' colour.
+- `accent: this.deps.accentColor`: the magic circles' colour, and the vortex's.
 - `setTimeout(() => this.stop(), SPELL_EFFECT_MS[spell])`: closes the window once the spell is
   over.
 
@@ -3044,7 +3051,7 @@ As its comment says, draws `spell`'s effects over her display, from where she st
 
 <!-- code: apps/desktop/src/main/bubble/spellEffects.ts#SpellEffects.stop,now -->
 
-[`src/main/bubble/spellEffects.ts`, lines 72–82](../../apps/desktop/src/main/bubble/spellEffects.ts#L72-L82)
+[`src/main/bubble/spellEffects.ts`, lines 71–81](../../apps/desktop/src/main/bubble/spellEffects.ts#L71-L81)
 
 ```ts
 /** Closes the window now, if one is open. */
@@ -3077,8 +3084,9 @@ and adapts the bubble's and the panel's to the controller's `Surface` interface.
 `createOverlayWindow()` twice at startup, once for the bubble and once for the panel, and wraps the
 results with `bubbleSurface()` and `panelSurface()` before handing them to `BubbleController`. It
 calls it again for each lot of clones, for a window that lasts their thirty seconds, for each of
-her visions, for a window that lasts the habit's 8.6 seconds, and for starfall and the explosion,
-for a window that lasts the spell (see `clones.ts`, `vision.ts` and `spellEffects.ts` above).
+her visions, for a window that lasts the habit's 8.6 seconds, and for each spell drawn over the
+screen, for a window that lasts the spell (see `clones.ts`, `vision.ts` and `spellEffects.ts`
+above).
 
 Key ideas:
 

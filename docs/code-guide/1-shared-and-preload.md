@@ -537,7 +537,7 @@ timetable of one of her habits, and `CLONES` the numbers for her clones, which b
 
 <!-- code: apps/desktop/src/shared/character.ts#FIDGETS,Fidget,Pose,FIDGET_MS,isFidget -->
 
-[`src/shared/character.ts`, lines 6–110](../../apps/desktop/src/shared/character.ts#L6-L110)
+[`src/shared/character.ts`, lines 6–111](../../apps/desktop/src/shared/character.ts#L6-L111)
 
 ```ts
 /**
@@ -667,11 +667,12 @@ export const isFidget = (pose: Pose): pose is Fidget =>
 
 <!-- code: apps/desktop/src/shared/character.ts#SPELL_POSES,SpellPose,SPELL_POSE_MS,isSpellPose -->
 
-[`src/shared/character.ts`, lines 56–75](../../apps/desktop/src/shared/character.ts#L56-L75)
+[`src/shared/character.ts`, lines 56–76](../../apps/desktop/src/shared/character.ts#L56-L76)
 
 ```ts
 /**
- * What she does for her spells (src/shared/spells.ts), only when one is cast:
+ * Poses of her own for her spells (src/shared/spells.ts), only when one is cast (for most, she
+ * plays one of her habits instead: see CAST_POSE):
  * - `chant`: arms raised, eyes shut, a magic circle under her and her hair and robe lifting, as she
  *   chants (round and round, for as long as the explosion's chant lasts).
  * - `vanish`: she dissolves into white motes that drift up and fade (teleporting; and when the app
@@ -703,9 +704,10 @@ the main process plays them on purpose (`BubbleController.act()` and `teleport()
   her hair and robe lifting, for as long as the explosion's chant lasts), `vanish` (she dissolves
   into white motes that drift up and fade) and `appear` (the motes come down and she forms out of
   them). Vanishing and appearing are her teleport, and also how she leaves when the app is closed
-  and arrives when it starts. Two spells use none of these: casting clones or starfall, she does
-  her little `spell` fidget instead. `as const`, as for `FIDGETS`, makes it a list of those exact
-  strings, so `SpellPose` can be made from it.
+  and arrives when it starts. Most spells use none of these: as she casts the others, she does one
+  of her fidgets instead (her little `spell` for the clones, and for the rest see `CAST_POSE` in
+  `spells.ts`). `as const`, as for `FIDGETS`, makes it a list of those exact strings, so
+  `SpellPose` can be made from it.
 - `SPELL_POSE_MS`: as the comment says, how long each lasts: the chant as long as the explosion's
   (`EXPLOSION.chantMs`, 15 seconds), and vanishing and appearing as long as the teleport's two
   halves (`TELEPORT.vanishMs` and `appearMs`, 0.9 seconds each). The numbers live in `spells.ts`
@@ -719,7 +721,7 @@ the main process plays them on purpose (`BubbleController.act()` and `teleport()
 
 <!-- code: apps/desktop/src/shared/character.ts#VISION -->
 
-[`src/shared/character.ts`, lines 112–123](../../apps/desktop/src/shared/character.ts#L112-L123)
+[`src/shared/character.ts`, lines 113–124](../../apps/desktop/src/shared/character.ts#L113-L124)
 
 ```ts
 /**
@@ -758,7 +760,7 @@ pages. Each entry is a `[from, to]` pair:
 
 <!-- code: apps/desktop/src/shared/character.ts#CLONES -->
 
-[`src/shared/character.ts`, lines 125–129](../../apps/desktop/src/shared/character.ts#L125-L129)
+[`src/shared/character.ts`, lines 126–130](../../apps/desktop/src/shared/character.ts#L126-L130)
 
 ```ts
 /**
@@ -786,45 +788,77 @@ and the page for how many clones to draw and when to fade them.
 
 ## `src/shared/spells.ts`: her spells
 
-Her four spells, which the user casts from the Spells menu (the wand icon in the stack): what each
-is called and what the menu says about it, and the numbers each one runs to. As the comment at the
+Her ten spells, which the user casts from the Spells menu (the wand icon in the stack): what each
+is called, the numbers each one runs to, and what she does as she casts it. As the comment at the
 top of the file says, both sides need them: the main process casts the spells (moving her, and
 opening the windows their effects are drawn in), and the pages draw the menu, her animations and
 the effects. `character.ts` (above) takes the lengths of her spells' poses from here too.
+
+The file starts by importing two types from `character.ts`, `Fidget` and `SpellPose`, for
+`CAST_POSE` (below). It's `import type`, which is only for the compiler and is left out of the
+built code, so although `character.ts` imports from this file too, neither needs the other loaded
+first when the app runs.
 
 ### `SPELLS`, `Spell` and `SPELL_LABELS`
 
 <!-- code: apps/desktop/src/shared/spells.ts#SPELLS,Spell,SPELL_LABELS -->
 
-[`src/shared/spells.ts`, lines 1–14](../../apps/desktop/src/shared/spells.ts#L1-L14)
+[`src/shared/spells.ts`, lines 3–34](../../apps/desktop/src/shared/spells.ts#L3-L34)
 
 ```ts
 // Her spells, cast from the Spells menu beside the stack of icons above her: what each is called,
 // and their timings. Shared by the main process (which casts them, moving her and opening the
 // windows their effects are drawn in) and the pages (the menu, her animations, the effects).
 
-export const SPELLS = ['clones', 'starfall', 'teleport', 'explosion'] as const
+/** In the menu's order: her own tricks first, then the sky, then the biggest. */
+export const SPELLS = [
+  'clones',
+  'teleport',
+  'butterflies',
+  'starfall',
+  'fireworks',
+  'blizzard',
+  'thunderstorm',
+  'phoenix',
+  'vortex',
+  'explosion',
+] as const
 
 export type Spell = (typeof SPELLS)[number]
 
 /** What the Spells menu calls each. */
 export const SPELL_LABELS: Record<Spell, string> = {
   clones: 'Clones',
-  starfall: 'Starfall',
   teleport: 'Teleport',
+  butterflies: 'Butterflies',
+  starfall: 'Starfall',
+  fireworks: 'Fireworks',
+  blizzard: 'Blizzard',
+  thunderstorm: 'Thunderstorm',
+  phoenix: 'Phoenix',
+  vortex: 'Vortex',
   explosion: 'Explosion',
 }
 ```
 
 <!-- /code -->
 
-- `SPELLS`: the four spells, in the order the menu lists them: `clones` (ten of her, wandering the
-  taskbar for thirty seconds; see `CLONES` above), `starfall` (shooting stars across her screen),
-  `teleport` (she vanishes, and appears again a little way along the taskbar) and `explosion` (a
-  long chant under a rising pillar of magic circles, then a big bang in the middle of the screen).
-  As with `ACTION_IDS` below, it's a real list made `as const`, and `Spell` is the type of any item
-  of it. It exists at runtime because code goes through it: the menu draws a row for each, and
-  `registerIpc()` in `src/main/ipc.ts` checks the spell a page asks for with `z.enum(SPELLS)`.
+- `SPELLS`: the ten spells, in the order the menu lists them: as its comment says, her own tricks
+  first, then the sky, then the biggest. As with `ACTION_IDS` below, it's a real list made
+  `as const`, and `Spell` is the type of any item of it. It exists at runtime because code goes
+  through it: the menu draws a row for each, and `registerIpc()` in `src/main/ipc.ts` checks the
+  spell a page asks for with `z.enum(SPELLS)`. The spells:
+  - `clones`: ten of her, wandering the taskbar for thirty seconds (see `CLONES` above).
+  - `teleport`: she vanishes, and appears again a little way along the taskbar.
+  - `butterflies`: a swarm of little magic butterflies bursts out of her and flutters away.
+  - `starfall`: shooting stars across her screen.
+  - `fireworks`: rockets bursting high over the screen, then a finale.
+  - `blizzard`: snow blowing across the screen, frost in the corners and a drift along the bottom.
+  - `thunderstorm`: clouds, rain, and lightning striking down, once beside her.
+  - `phoenix`: a bird of fire flies out of her, round a loop and away.
+  - `vortex`: a portal swirls open in the middle of the screen, pulls everything in, and implodes.
+  - `explosion`: a long chant under a rising pillar of magic circles, then a big bang in the
+    middle of the screen.
 - `SPELL_LABELS`: as the comment says, what the menu calls each: just its name. `Record<Spell,
 string>` makes TypeScript insist on one for every spell.
 
@@ -832,7 +866,7 @@ string>` makes TypeScript insist on one for every spell.
 
 <!-- code: apps/desktop/src/shared/spells.ts#STARFALL,EXPLOSION,TELEPORT -->
 
-[`src/shared/spells.ts`, lines 16–30](../../apps/desktop/src/shared/spells.ts#L16-L30)
+[`src/shared/spells.ts`, lines 36–50](../../apps/desktop/src/shared/spells.ts#L36-L50)
 
 ```ts
 /** Starfall: shooting stars across her screen for this long (ms), this many starting a second. */
@@ -868,17 +902,77 @@ are read by the main process (how long to keep the effects' window open) and by 
   them again over `appearMs`, 0.9 seconds each. The same two are how she leaves when the app is
   closed and arrives when it starts.
 
+### `FIREWORKS`, `THUNDERSTORM`, `BLIZZARD`, `VORTEX`, `BUTTERFLIES` and `PHOENIX`
+
+<!-- code: apps/desktop/src/shared/spells.ts#FIREWORKS,THUNDERSTORM,BLIZZARD,VORTEX,BUTTERFLIES,PHOENIX -->
+
+[`src/shared/spells.ts`, lines 52–74](../../apps/desktop/src/shared/spells.ts#L52-L74)
+
+```ts
+/**
+ * Fireworks: `rockets` launched from along the taskbar, one about every `gapMs`, the last `finale`
+ * of them together from `finaleAt` (ms), each bursting high over the screen.
+ */
+export const FIREWORKS = { durationMs: 9_000, rockets: 20, gapMs: 480, finale: 7, finaleAt: 6_200 }
+
+/** Thunderstorm: clouds roll in over the top of the screen, rain, and `strikes` bolts of lightning. */
+export const THUNDERSTORM = { durationMs: 9_000, strikes: 7 }
+
+/** Blizzard: `flakes` snowflakes blowing across the screen, frost creeping in, snow piling up. */
+export const BLIZZARD = { durationMs: 9_000, flakes: 340 }
+
+/**
+ * Vortex: a portal opens in the middle of the screen over `openMs`, swirls, pulling everything in,
+ * collapses from `collapseAt` (ms) to `implodeAt`, and goes off in a flash.
+ */
+export const VORTEX = { durationMs: 8_000, openMs: 1_000, collapseAt: 6_300, implodeAt: 6_900 }
+
+/** Butterflies: `count` magic butterflies burst out of her and flutter away across the screen. */
+export const BUTTERFLIES = { durationMs: 8_000, count: 36 }
+
+/** Phoenix: a bird of fire flies out of her, round the screen and away, over `flightMs`. */
+export const PHOENIX = { durationMs: 7_500, flightMs: 6_000 }
+```
+
+<!-- /code -->
+
+The numbers for the six newer spells, all drawn over the screen like starfall. Each has a
+`durationMs`, how long its window stays open, read by the main process (`SPELL_EFFECT_MS`, next)
+and by the spell's drawing in `lib/spells/` (see [The UI components](8-renderer-components.md)),
+which fades everything out by then. The rest only the drawing reads.
+
+- `FIREWORKS`: as the comment says, `rockets` (20) launched from along the taskbar, one about every
+  `gapMs` (0.48 seconds), the last `finale` (7) of them together from `finaleAt` (6.2 seconds),
+  each bursting high over the screen; 9 seconds in all.
+- `THUNDERSTORM`: as the comment says, clouds roll in over the top of the screen, rain, and
+  `strikes` (7) bolts of lightning; 9 seconds.
+- `BLIZZARD`: as the comment says, `flakes` (340) snowflakes blowing across the screen, frost
+  creeping in and snow piling up; 9 seconds.
+- `VORTEX`: as the comment says, a portal opens in the middle of the screen over `openMs` (a
+  second), swirls, pulling everything in, collapses from `collapseAt` (6.3 seconds) to `implodeAt`
+  (6.9), and goes off in a flash; 8 seconds.
+- `BUTTERFLIES`: as the comment says, `count` (36) magic butterflies burst out of her and flutter
+  away across the screen; 8 seconds.
+- `PHOENIX`: as the comment says, a bird of fire flies out of her, round the screen and away, over
+  `flightMs` (6 seconds); 7.5 seconds in all, leaving time for its embers to fade once it's gone.
+
 ### `SPELL_EFFECT_MS` and `SpellEffect`
 
 <!-- code: apps/desktop/src/shared/spells.ts#SPELL_EFFECT_MS,SpellEffect -->
 
-[`src/shared/spells.ts`, lines 32–37](../../apps/desktop/src/shared/spells.ts#L32-L37)
+[`src/shared/spells.ts`, lines 76–87](../../apps/desktop/src/shared/spells.ts#L76-L87)
 
 ```ts
 /** The spells drawn in a window of their own over the screen, and how long it stays open (ms). */
 export const SPELL_EFFECT_MS = {
   starfall: STARFALL.durationMs,
   explosion: EXPLOSION.chantMs + EXPLOSION.boomMs,
+  fireworks: FIREWORKS.durationMs,
+  thunderstorm: THUNDERSTORM.durationMs,
+  blizzard: BLIZZARD.durationMs,
+  vortex: VORTEX.durationMs,
+  butterflies: BUTTERFLIES.durationMs,
+  phoenix: PHOENIX.durationMs,
 } as const
 
 export type SpellEffect = keyof typeof SPELL_EFFECT_MS
@@ -887,16 +981,57 @@ export type SpellEffect = keyof typeof SPELL_EFFECT_MS
 <!-- /code -->
 
 As the comment says, the spells drawn in a window of their own over the screen, and how long that
-window stays open: starfall for its 10 seconds, and the explosion for its chant and its bang
-together (18.6 seconds), since its pillar of circles rises while she chants. The other two need no
-such window: the clones have a strip of their own along the taskbar (`Clones`), and teleporting
-happens in her own window.
+window stays open: eight of the ten. Starfall stays 10 seconds, and the explosion for its chant and
+its bang together (18.6 seconds), since its pillar of circles rises while she chants; the six newer
+spells each for their `durationMs` (7.5 to 9 seconds). The other two need no such window: the
+clones have a strip of their own along the taskbar (`Clones`), and teleporting happens in her own
+window.
 
-- `as const`: keeps the keys exactly `starfall` and `explosion`, and the object read-only.
+- `as const`: keeps the keys exactly these eight names, and the object read-only.
 - `SpellEffect`: `keyof typeof SPELL_EFFECT_MS`, the names of its keys, so
-  `'starfall' | 'explosion'`. `SpellEffects` in the main process (`bubble/spellEffects.ts`) and
-  `SpellView` only take these two, so asking for the effects of a spell that has none is a compile
-  error.
+  `'starfall' | 'explosion' | 'fireworks' | ...`. `SpellEffects` in the main process
+  (`bubble/spellEffects.ts`), `SpellView` and `SPELL_ART` (which says which spell draws what) only
+  take these eight, so asking for the effects of a spell that has none is a compile error.
+
+### `CAST_POSE`
+
+<!-- code: apps/desktop/src/shared/spells.ts#CAST_POSE -->
+
+[`src/shared/spells.ts`, lines 89–102](../../apps/desktop/src/shared/spells.ts#L89-L102)
+
+```ts
+/**
+ * What she does as she casts each of those: one of her habits (casting a spell, twirling,
+ * levitating, a butterfly coming to her finger), or her chant for the explosion.
+ */
+export const CAST_POSE: Record<SpellEffect, Fidget | SpellPose> = {
+  starfall: 'spell',
+  explosion: 'chant',
+  fireworks: 'spell',
+  thunderstorm: 'spell',
+  blizzard: 'twirl',
+  vortex: 'levitate',
+  butterflies: 'butterfly',
+  phoenix: 'spell',
+}
+```
+
+<!-- /code -->
+
+As its comment says, what she does as she casts each of the spells drawn over the screen: one of
+her habits, or her chant for the explosion. `castSpell` in `src/main/index.ts` opens the spell's
+window and plays this pose (`BubbleController.act()`), so she acts it out while the effects
+appear.
+
+- `spell`: her little spell, for starfall, fireworks, the thunderstorm and the phoenix.
+- `twirl`: a twirl, for the blizzard.
+- `levitate`: rising over a magic circle, for the vortex.
+- `butterfly`: a butterfly coming to her finger, for the butterflies.
+- `chant`: her chant, for the explosion. It lasts as long as the chant (`SPELL_POSE_MS`), and if
+  it's cut short, so is the explosion (`onPoseChange` in `index.ts`).
+- `Record<SpellEffect, Fidget | SpellPose>`: TypeScript insists on a pose for each of the eight,
+  and each must be one of her fidgets or her spells' poses, the two kinds of pose
+  `BubbleController.act()` takes. These are the two types imported from `character.ts`.
 
 ## `src/shared/actions.ts`: the action registry
 

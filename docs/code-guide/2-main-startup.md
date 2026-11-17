@@ -273,7 +273,7 @@ const openOverlay =
 // Her vision's light and logo, over her for as long as she's having it.
 const vision = new Vision({ open: openOverlay('vision') })
 
-// Her spells' effects (starfall; the explosion's pillar of magic circles, and the bang).
+// Her spells' effects, drawn over the screen (all but her clones and her teleport).
 const effects = new SpellEffects({ accentColor: tenant.accentColor, open: openOverlay('spell') })
 ```
 
@@ -281,7 +281,8 @@ const effects = new SpellEffects({ accentColor: tenant.accentColor, open: openOv
 
 Besides the bubble and the panel, three kinds of window appear for a while and close again: her
 clones' (her Clones spell), her vision's (the light and the logo of her `vision` habit) and her
-spells' effects (starfall, and the explosion's pillar of magic circles and its bang). All three
+spells' effects (all her spells but the clones and the teleport: starfall, the explosion's pillar
+of magic circles and its bang, and the six newer ones). All three
 only show something: they never take the mouse or the focus. `Clones`, `Vision` and `SpellEffects`
 (in `bubble/clones.ts`, `bubble/vision.ts` and `bubble/spellEffects.ts`, see
 [The bubble](5-bubble.md)) decide when they open, where, and what their pages are told; like the
@@ -315,9 +316,10 @@ once its page is drawn, behind her own window, which is put back in front.
   light and logo, over her for as long as she's having it. It's made before the controller,
   because the controller's `onPoseChange` (below) starts and stops it.
 - `const effects = new SpellEffects({ accentColor: tenant.accentColor, open: openOverlay('spell') })`:
-  as the comment says, her spells' effects. The accent colour goes on to the page for the magic
-  circles. It's made before the controller too, as `onPoseChange` starts the explosion's effects
-  when she begins her chant, and `castSpell` (below) starts starfall's.
+  as the comment says, her spells' effects (the comment only names the first two). The accent
+  colour goes on to the page for the magic circles and the vortex. It's made before the controller
+  too, as `onPoseChange` stops the explosion's effects if her chant is cut short; `castSpell`
+  (below) starts them all.
 
 None of these windows is in `windows`, so they get no `keepOnTop()` check and no broadcasts: they
 only last a few seconds (the clones thirty, the explosion under twenty), and everything their pages
@@ -327,7 +329,7 @@ need comes in their addresses.
 
 <!-- code: apps/desktop/src/main/index.ts#start.bubble -->
 
-[`src/main/index.ts`, lines 166–189](../../apps/desktop/src/main/index.ts#L166-L189)
+[`src/main/index.ts`, lines 166–188](../../apps/desktop/src/main/index.ts#L166-L188)
 
 ```ts
 const bubble = new BubbleController({
@@ -343,10 +345,9 @@ const bubble = new BubbleController({
     broadcast(IPC.poseChanged, pose)
     if (pose === 'vision') vision.start(bubble.standing)
     else vision.stop()
-    // The explosion is her chant: it starts with it, and it's called off if she stops chanting
-    // before it's done (someone clicked her, or picked her up).
-    if (pose === 'chant') effects.start('explosion', bubble.standing)
-    else if (effects.chanting) effects.stop()
+    // The explosion is called off if she stops chanting before it's done (someone clicked her,
+    // or picked her up).
+    if (pose !== 'chant' && effects.chanting) effects.stop()
   },
   onSizeChange: (size) => broadcast(IPC.sizeChanged, size),
   onAnchorChange: (anchor) => {
@@ -382,14 +383,12 @@ here.
   nothing if they aren't there). So the vision ends when the habit does, or as soon as anything
   interrupts it, such as a click or a drag. `bubble` can be used inside its own options because
   the callback only runs later, once the controller exists.
-- `if (pose === 'chant') effects.start('explosion', bubble.standing)`: as the comment says, the
-  explosion is her chant. When she starts chanting (cast from the Spells menu, below), its window
-  opens over her display, with the pillar of magic circles rising above her for the chant and the
-  bang after it.
-- `else if (effects.chanting) effects.stop()`: and it's called off if she stops chanting before
-  it's done, because someone clicked her or picked her up. `effects.chanting` is true only while
-  the explosion's window is open and its chant isn't over, so when the chant ends as it should (her
-  pose goes back to `idle`), the bang still goes off; a starfall in progress is left alone too.
+- `if (pose !== 'chant' && effects.chanting) effects.stop()`: as the comment says, the explosion is
+  called off if she stops chanting before it's done, because someone clicked her or picked her up.
+  (`castSpell`, below, opens its window as she starts the chant.) `effects.chanting` is true only
+  while the explosion's window is open and its chant isn't over, so when the chant ends as it
+  should (her pose goes back to `idle`), the bang still goes off. Any other spell's effects are left
+  alone: they run their time whatever she does.
 - `onSizeChange: (size) => broadcast(IPC.sizeChanged, size)`: her size (a `CharacterSize`: how big
   she is, and the biggest she can be on her display) is broadcast whenever either changes, so the
   bubble's page draws her at that size and the panel lays itself out for it. Saving the size is
@@ -411,7 +410,7 @@ here.
 
 <!-- code: apps/desktop/src/main/index.ts#start.clones,castSpell -->
 
-[`src/main/index.ts`, lines 193–216](../../apps/desktop/src/main/index.ts#L193-L216)
+[`src/main/index.ts`, lines 192–209](../../apps/desktop/src/main/index.ts#L192-L209)
 
 ```ts
 // Her clones: a window along the taskbar.
@@ -420,22 +419,16 @@ const clones = new Clones({ accentColor: tenant.accentColor, open: openOverlay('
 /** The Spells menu: the panel closes, so the spell can be seen, and she casts it. */
 const castSpell = (spell: Spell) => {
   bubble.collapse()
-  switch (spell) {
-    case 'clones':
-      clones.start(bubble.standing)
-      bubble.act('spell')
-      return
-    case 'starfall':
-      effects.start('starfall', bubble.standing)
-      bubble.act('spell')
-      return
-    case 'teleport':
-      bubble.teleport()
-      return
-    case 'explosion':
-      // Her chant brings the effects (onPoseChange, above).
-      bubble.act('chant')
-      return
+  if (spell === 'clones') {
+    clones.start(bubble.standing)
+    bubble.act('spell')
+  } else if (spell === 'teleport') {
+    bubble.teleport()
+  } else {
+    // The rest are drawn over the screen while she acts them out (the explosion while she
+    // chants).
+    effects.start(spell, bubble.standing)
+    bubble.act(CAST_POSE[spell])
   }
 }
 ```
@@ -459,24 +452,31 @@ the Spells menu.
 - `bubble.collapse()`: first the panel closes, so the spell can be seen. The mode is `collapsed`
   straight away (the panel only fades out), which matters because the controller plays her poses
   on purpose only while collapsed (`BubbleController.act()`).
-- `case 'clones':`: the clones set off from where she stands, at her size (`bubble.standing` is her
-  display's work area, her window and her size), and she does her little `spell` fidget as she
-  casts them (`bubble.act('spell')`). Afterwards she stands idle and gets on with her day.
-- `case 'starfall':`: the same, but with the starfall's window over her display
-  (`effects.start('starfall', bubble.standing)`): shooting stars for ten seconds.
-- `case 'teleport':`: `bubble.teleport()` does it all in her own window: she vanishes into white
-  motes, moves a little way along the taskbar near her corner, and forms out of them again.
-- `case 'explosion':`: as the comment says, she only starts her chant (`bubble.act('chant')`); the
-  effects follow from her pose, in `onPoseChange` above. That way they're tied to the chant: if
-  someone clicks her or picks her up before it's done, the chant stops and so does the explosion.
-- `return` after each `case`: ends the function there, rather than running on into the next
-  `case`.
+- `if (spell === 'clones')`: the clones set off from where she stands, at her size
+  (`bubble.standing` is her display's work area, her window and her size), and she does her little
+  `spell` fidget as she casts them (`bubble.act('spell')`). Afterwards she stands idle and gets on
+  with her day.
+- `else if (spell === 'teleport')`: `bubble.teleport()` does it all in her own window: she vanishes
+  into white motes, moves a little way along the taskbar near her corner, and forms out of them
+  again.
+- `else`: as the comment says, the rest are drawn over the screen while she acts them out (the
+  explosion while she chants). By here TypeScript knows `spell` is neither `clones` nor `teleport`,
+  so it's one of the eight in `SPELL_EFFECT_MS` (a `SpellEffect`), which is what the next two lines
+  need.
+  - `effects.start(spell, bubble.standing)`: opens the spell's window over her display, its page
+    told which spell and where she stands.
+  - `bubble.act(CAST_POSE[spell])`: and she plays the pose that goes with it (`CAST_POSE` in
+    `src/shared/spells.ts`): her little `spell` for starfall, fireworks, the thunderstorm and the
+    phoenix, a twirl for the blizzard, levitating for the vortex, a butterfly coming to her finger
+    for the butterflies, and her chant for the explosion. The chant is what ties the explosion to
+    her: if someone clicks her or picks her up before it's done, the chant stops, and
+    `onPoseChange` (above) calls the explosion off.
 
 #### Screenshots, notifications and the clipboard
 
 <!-- code: apps/desktop/src/main/index.ts#start.screenshots,notify,copyScreenshots -->
 
-[`src/main/index.ts`, lines 218–239](../../apps/desktop/src/main/index.ts#L218-L239)
+[`src/main/index.ts`, lines 211–232](../../apps/desktop/src/main/index.ts#L211-L232)
 
 ```ts
 const screenshots = new ScreenshotService(screenshotsDir, () =>
@@ -534,7 +534,7 @@ const copyScreenshots = async (paths: string[]) => {
 
 <!-- code: apps/desktop/src/main/index.ts#start.builtIn,claudeDesktop -->
 
-[`src/main/index.ts`, lines 242–271](../../apps/desktop/src/main/index.ts#L242-L271)
+[`src/main/index.ts`, lines 235–264](../../apps/desktop/src/main/index.ts#L235-L264)
 
 ```ts
 const builtIn =
@@ -613,7 +613,7 @@ exists.
 
 <!-- code: apps/desktop/src/main/index.ts#start.netFetch,updater -->
 
-[`src/main/index.ts`, lines 272–302](../../apps/desktop/src/main/index.ts#L272-L302)
+[`src/main/index.ts`, lines 265–295](../../apps/desktop/src/main/index.ts#L265-L295)
 
 ```ts
 // Electron's fetch, so a proxy set in Windows is used.
@@ -692,7 +692,7 @@ const updater = updates
 
 <!-- code: apps/desktop/src/main/index.ts#start.appsStatus,portalApps -->
 
-[`src/main/index.ts`, lines 304–326](../../apps/desktop/src/main/index.ts#L304-L326)
+[`src/main/index.ts`, lines 297–319](../../apps/desktop/src/main/index.ts#L297-L319)
 
 ```ts
 let appsStatus: AppsState['status'] = 'loading'
@@ -757,7 +757,7 @@ icon (see [Your apps](10-apps.md)). It's only set up when the tenant has a `port
 
 <!-- code: apps/desktop/src/main/index.ts#start.requests,memoryPath,atlassianStatus,atlassian,desk -->
 
-[`src/main/index.ts`, lines 331–393](../../apps/desktop/src/main/index.ts#L331-L393)
+[`src/main/index.ts`, lines 324–386](../../apps/desktop/src/main/index.ts#L324-L386)
 
 ```ts
 const requests = serviceDesk?.requests
@@ -881,7 +881,7 @@ Two statements follow:
 
 <!-- code: apps/desktop/src/main/index.ts#start.onDisplayChange -->
 
-[`src/main/index.ts`, line 454](../../apps/desktop/src/main/index.ts#L454)
+[`src/main/index.ts`, line 447](../../apps/desktop/src/main/index.ts#L447)
 
 ```ts
 const onDisplayChange = () => bubble.displayChanged()
@@ -941,7 +941,7 @@ Everything else in this part of `start()` is plain statements:
 
 <!-- code: apps/desktop/src/main/index.ts#start.shuttingDown -->
 
-[`src/main/index.ts`, lines 459–460](../../apps/desktop/src/main/index.ts#L459-L460)
+[`src/main/index.ts`, lines 452–453](../../apps/desktop/src/main/index.ts#L452-L453)
 
 ```ts
 // Save the text box before quitting. before-quit fires again after the second app.quit().
@@ -985,7 +985,7 @@ there, and none of it is lost before the window shows.
 
 <!-- code: apps/desktop/src/main/index.ts#start.stopWatchingFront -->
 
-[`src/main/index.ts`, lines 484–494](../../apps/desktop/src/main/index.ts#L484-L494)
+[`src/main/index.ts`, lines 477–487](../../apps/desktop/src/main/index.ts#L477-L487)
 
 ```ts
 // For its first ten minutes, make sure the bubble isn't stuck behind other apps' windows.
@@ -1037,7 +1037,7 @@ was part of `start()`. It returns a [`BuiltInChat`](#builtinchat): the `AuthMana
 
 <!-- code: apps/desktop/src/main/index.ts#startBuiltInChat.devBaseUrl,lastIdToken,backend,chat -->
 
-[`src/main/index.ts`, lines 514–538](../../apps/desktop/src/main/index.ts#L514-L538)
+[`src/main/index.ts`, lines 507–531](../../apps/desktop/src/main/index.ts#L507-L531)
 
 ```ts
 // Dev runs may point at a local test server; an installed app always talks to Anthropic.
@@ -1110,7 +1110,7 @@ const chat = new ChatSession({
 
 <!-- code: apps/desktop/src/main/index.ts#startBuiltInChat.missing,localIssuer,authState,auth -->
 
-[`src/main/index.ts`, lines 540–564](../../apps/desktop/src/main/index.ts#L540-L564)
+[`src/main/index.ts`, lines 533–557](../../apps/desktop/src/main/index.ts#L533-L557)
 
 ```ts
 const missing = missingSettings(signIn, claudeAccess)
@@ -1187,7 +1187,7 @@ Two statements end the function:
 
 <!-- code: apps/desktop/src/main/index.ts#safeStorageEncryptor -->
 
-[`src/main/index.ts`, lines 570–575](../../apps/desktop/src/main/index.ts#L570-L575)
+[`src/main/index.ts`, lines 563–568](../../apps/desktop/src/main/index.ts#L563-L568)
 
 ```ts
 /** Windows DPAPI through Electron: only this Windows user can decrypt what it encrypts. */
@@ -1215,7 +1215,7 @@ The encryption `SecretStore` uses for the saved sign-in. `SecretStore` only know
 
 <!-- code: apps/desktop/src/main/index.ts#withDevOverrides -->
 
-[`src/main/index.ts`, lines 577–600](../../apps/desktop/src/main/index.ts#L577-L600)
+[`src/main/index.ts`, lines 570–593](../../apps/desktop/src/main/index.ts#L570-L593)
 
 ```ts
 /**
@@ -1271,7 +1271,7 @@ example to try the built-in chat against a test identity provider, without editi
 
 <!-- code: apps/desktop/src/main/index.ts#isLoopback -->
 
-[`src/main/index.ts`, lines 602–604](../../apps/desktop/src/main/index.ts#L602-L604)
+[`src/main/index.ts`, lines 595–597](../../apps/desktop/src/main/index.ts#L595-L597)
 
 ```ts
 function isLoopback(url: URL): boolean {
@@ -1289,7 +1289,7 @@ in `hostname`. Used only to decide whether plain `http` is allowed for a dev ide
 
 <!-- code: apps/desktop/src/main/index.ts#toArea,electronDisplays -->
 
-[`src/main/index.ts`, lines 606–621](../../apps/desktop/src/main/index.ts#L606-L621)
+[`src/main/index.ts`, lines 599–614](../../apps/desktop/src/main/index.ts#L599-L614)
 
 ```ts
 /** Electron's `screen`, in the shape the bubble controller uses. All coordinates are DIPs. */
@@ -1336,7 +1336,7 @@ method is called, which happens after `start()` has begun.
 
 <!-- code: apps/desktop/src/main/index.ts#fail -->
 
-[`src/main/index.ts`, lines 623–627](../../apps/desktop/src/main/index.ts#L623-L627)
+[`src/main/index.ts`, lines 616–620](../../apps/desktop/src/main/index.ts#L616-L620)
 
 ```ts
 function fail(error: unknown): void {
@@ -2195,7 +2195,7 @@ Check for updates have inner functions of their own too.
   `ctx.settings.setCharacterScale(scale)` saves the size asked for, not the size she may have been
   kept to, so next time she starts at that size again wherever it fits. The answer is her size as
   it now is (a `CharacterSize`).
-- `IPC.characterCastSpell`, `z.enum(SPELLS)`: a spell from the Spells menu. Only the four names in
+- `IPC.characterCastSpell`, `z.enum(SPELLS)`: a spell from the Spells menu. Only the ten names in
   `SPELLS` (`src/shared/spells.ts`) pass, and `ctx.castSpell(spell)` casts it (see
   [Her clones, and casting spells](#her-clones-and-casting-spells)). It answers nothing; the page
   sees what happens through her pose.

@@ -22,8 +22,11 @@ code in `src/renderer/src/character/`: a tiny pixel rasteriser (`raster.ts`), th
 and draws her (`rig.ts`), the parts of her drawn by hand (`pictures.ts`) and her animations
 (`sprite.ts`). `BubbleView` renders `Character`, and so does `ClonesView`, once for each of her
 clones; all of these are covered near the end of this page. Last come the pixel art of her spells'
-effects, which `SpellView` draws: where things are, moment by moment (`lib/spellMotion.ts`), and
-the drawing itself (`lib/spellArt.ts`).
+effects, which `SpellView` draws, in nine files: where things are, moment by moment
+(`lib/spellMotion.ts`), the helpers that draw a pixel at a time (`lib/pixels.ts`), starfall, the
+explosion and which spell draws what (`lib/spellArt.ts`), and the six newer spells, a file each in
+`lib/spells/` (`fireworks.ts`, `thunderstorm.ts`, `blizzard.ts`, `vortex.ts`, `butterflies.ts`
+and `phoenix.ts`).
 
 ## `src/renderer/src/components/ChatBox.tsx`: the chat card
 
@@ -2063,8 +2066,9 @@ One of the two round buttons, private to this file.
 
 ## `src/renderer/src/components/SpellsMenu.tsx`: the spells menu
 
-The small menu that opens beside the wand icon (Spells), listing her four spells by name. `Panel` renders it only while the panel is open, the wand has toggled it on,
-and the tenant's list of actions includes `spells`. Its props are the `corner`, `layout` and
+The small menu that opens beside the wand icon (Spells), listing her ten spells by name. `Panel`
+renders it only while the panel is open, the wand has toggled it on, and the tenant's list of
+actions includes `spells`. Its props are the `corner`, `layout` and
 `offset` for positioning, as for `SettingsMenu`, and `onCast`, through which `Panel` closes the
 menu and asks the main process to cast the spell (`window.assist.character.castSpell()`). The
 spells, and what the menu says about each, are in `src/shared/spells.ts` (see
@@ -2078,15 +2082,21 @@ closes.
 
 <!-- code: apps/desktop/src/renderer/src/components/SpellsMenu.tsx#MENU_WIDTH,ICONS -->
 
-[`src/renderer/src/components/SpellsMenu.tsx`, lines 9–16](../../apps/desktop/src/renderer/src/components/SpellsMenu.tsx#L9-L16)
+[`src/renderer/src/components/SpellsMenu.tsx`, lines 21–34](../../apps/desktop/src/renderer/src/components/SpellsMenu.tsx#L21-L34)
 
 ```tsx
 const MENU_WIDTH = 176
 
 const ICONS: Record<Spell, LucideIcon> = {
   clones: UsersRound,
-  starfall: Sparkles,
   teleport: Orbit,
+  butterflies: Flower,
+  starfall: Sparkles,
+  fireworks: Rocket,
+  blizzard: Snowflake,
+  thunderstorm: CloudLightning,
+  phoenix: Bird,
+  vortex: Tornado,
   explosion: Flame,
 }
 ```
@@ -2094,16 +2104,18 @@ const ICONS: Record<Spell, LucideIcon> = {
 <!-- /code -->
 
 - `MENU_WIDTH = 176`: the menu's width in pixels, room for an icon and the longest name.
-- `ICONS: Record<Spell, LucideIcon>`: the lucide icon beside each spell's name: two people
-  (`UsersRound`) for Clones, sparkles for Starfall, a ring round a dot (`Orbit`) for Teleport and a
-  flame for Explosion. `Record<Spell, ...>` makes TypeScript insist on one for every spell in
-  `SPELLS`.
+- `ICONS: Record<Spell, LucideIcon>`: the lucide icon beside each spell's name, in the menu's
+  order: two people (`UsersRound`) for Clones, a ring round a dot (`Orbit`) for Teleport, a flower
+  (`Flower`) for Butterflies, sparkles for Starfall, a rocket for Fireworks, a snowflake for
+  Blizzard, a cloud with a bolt of lightning (`CloudLightning`) for Thunderstorm, a bird for
+  Phoenix, a tornado for Vortex and a flame for Explosion. `Record<Spell, ...>` makes TypeScript
+  insist on one for every spell in `SPELLS`.
 
 ### `SpellsMenu`
 
 <!-- code: apps/desktop/src/renderer/src/components/SpellsMenu.tsx#SpellsMenu -->
 
-[`src/renderer/src/components/SpellsMenu.tsx`, lines 18–70](../../apps/desktop/src/renderer/src/components/SpellsMenu.tsx#L18-L70)
+[`src/renderer/src/components/SpellsMenu.tsx`, lines 36–88](../../apps/desktop/src/renderer/src/components/SpellsMenu.tsx#L36-L88)
 
 ```tsx
 /**
@@ -2163,8 +2175,8 @@ export function SpellsMenu(props: {
 
 <!-- /code -->
 
-As the comment says, the menu beside the wand icon: her spells, each with a line saying what it
-does. Picking one casts it, and the main process closes the panel so it can be seen. It's built
+As the comment says, the menu beside the wand icon: her spells, by name. Picking one casts it, and
+the main process closes the panel so it can be seen. It's built
 like the settings menu: the same look, placed the same way and kept inside the window the same way.
 
 - `offset: number`: as the comment says, the distance from the bubble's edge of the window to the
@@ -2184,8 +2196,9 @@ like the settings menu: the same look, placed the same way and kept inside the w
   window's height. Its look (rounded corners, a border, a shadow, white or near-black) is the
   settings menu's too.
 - `<p className="... uppercase">Spells</p>`: a small grey heading at the top, in capitals.
-- `{SPELLS.map((spell) => {`: one row per spell, in `SPELLS`' order: Clones, Starfall, Teleport and
-  Explosion. `key={spell}` lets React tell the rows apart.
+- `{SPELLS.map((spell) => {`: one row per spell, in `SPELLS`' order: Clones, Teleport,
+  Butterflies, Starfall, Fireworks, Blizzard, Thunderstorm, Phoenix, Vortex and Explosion.
+  `key={spell}` lets React tell the rows apart.
 - `onClick={() => props.onCast(spell)}`: casts it. The menu does nothing else itself: `Panel`
   closes it and asks the main process to cast the spell, which closes the panel first.
 - `<Icon size={16} className="shrink-0 text-accent" aria-hidden />`: the spell's icon, in the
@@ -7567,7 +7580,9 @@ The character's colours: a rule per palette class, as the comment says.
 
 As the comment at the top says, where things are in her spells' effects, moment by moment:
 starfall's shooting stars, the explosion's magic circles, and how big its blast is.
-`lib/spellArt.ts` (next) draws them, for `SpellView` (see [The pages](7-renderer-pages.md)).
+`lib/spellArt.ts` (below) draws them, for `SpellView` (see [The pages](7-renderer-pages.md)). The
+six newer spells in `lib/spells/` keep their own sums beside their drawing, but use its `Scene`
+and its helpers.
 Everything is in the effects' pixels, twice the size of hers, and every time is in milliseconds
 since the spell was cast. Two ideas run through it:
 
@@ -7616,14 +7631,15 @@ export interface Scene {
 <!-- /code -->
 
 As its comment says, what a frame is drawn from. `SpellView` builds one every frame and hands it to
-`drawStarfall()` or `drawExplosion()`.
+the spell's drawing function (`SPELL_ART` in `spellArt.ts`).
 
 - `t`: as its comment says, the time since the spell was cast.
 - `w`, `h`: the canvas's size, in its own pixels.
 - `x`, `feet`: where she stands across the canvas, and how far down it her feet are.
 - `height`: as its comment says, how many canvas pixels tall she is, from hat to boots. Her 92
   sprite pixels make 46 of the effects' pixels, whatever her size, since both grow with her.
-- `accent`: her accent colour, the colour of her robe, which the magic circles are drawn in.
+- `accent`: her accent colour, the colour of her robe, which the magic circles are drawn in (and
+  the vortex, in part).
 - `still`: as its comment says, Windows' reduced-motion setting: nothing moves; things just show.
 
 ### `seeded()`, `clamp01`, `easeOut` and `between`
@@ -7669,8 +7685,8 @@ export const between = (t: number, from: number, to: number) => clamp01((t - fro
   from 0 and flattens out as it reaches 1. It's for things that burst out and settle: a magic
   circle growing, the fireball, the shock wave.
 - `between(t, from, to)`: as its comment says, 0 before `from`, 1 after `to`, and in a straight line
-  in between: how far through a stretch of time `t` is. Most of the timings in `spellArt.ts` are
-  written with it.
+  in between: how far through a stretch of time `t` is. Most of the timings in `spellArt.ts` and
+  `lib/spells/` are written with it.
 
 ### `lattice()` and `noise()`
 
@@ -7707,7 +7723,8 @@ export function noise(x: number, y: number): number {
 - `noise(x, y)`: as its comment says, smooth _value noise_, from 0 to 1: random numbers at the
   grid's points, blended smoothly in between, so it changes gradually as `x` and `y` change rather
   than jumping about as plain random numbers do. It's the turbulence that gives the fireball its
-  ragged, churning edges.
+  ragged, churning edges, and the storm clouds, the snowdrift and the phoenix's tail their lumps
+  and flicker.
   - `x0`, `y0`: the top-left corner of the grid square the point is in; `fx`, `fy` how far past it
     the point is.
   - `sx`, `sy`: those fractions eased (`f * f * (3 - 2 * f)`, the _smoothstep_ curve, as in
@@ -7910,61 +7927,101 @@ and its shock wave's.
   that billows on as it cools. A test checks it bursts out fast, then grows slowly.
 - `shock`: the shock wave races out to 2.6 times `full` over the first second, slowing as it goes.
 
-## `src/renderer/src/lib/spellArt.ts`: drawing her spells' effects
+## `src/renderer/src/lib/pixels.ts`: drawing a pixel at a time
 
-As the comment at the top says, the pixel art of her spells' effects, which `SpellView` draws each
-frame: starfall's shooting stars, and the explosion's pillar of magic circles and its bang.
-Everything is drawn a pixel at a time on a small canvas that the page stretches over its window
-without smoothing, so it's crisp pixel art like her. Where things are, moment by moment, comes
-from `lib/spellMotion.ts` (above).
+As the comment at the top says, drawing pixel art for her spells' effects, a pixel at a time.
+Everything draws through a `Painter`, the one thing it needs from a canvas: filling a rectangle
+with a colour. So the effects can be drawn, and tested, away from a page. On a page,
+`lib/spellArt.ts` (next) makes a `Painter` of the canvas; `tests/moreSpells.test.ts` passes one
+that only counts what's drawn. Every spell draws with the helpers here: starfall and the explosion
+in `spellArt.ts`, and the other six in `lib/spells/` (after it).
 
-**Drawing on a canvas.** `g` is the canvas's 2D drawing context, the object everything is drawn
-through. `g.fillStyle` is the colour to paint with, `g.globalAlpha` how opaque (from 0, clear, to
-1), and `g.fillRect(x, y, width, height)` paints a rectangle: a 1 by 1 rectangle is one pixel. Each
-frame starts on a cleared canvas (`SpellView`), and whatever is drawn later in a frame goes over
-what came before.
+### `Painter`
 
-### `plot()`, `twinkle()`, `line()` and `ring()`
+<!-- code: apps/desktop/src/renderer/src/lib/pixels.ts#Painter -->
 
-<!-- code: apps/desktop/src/renderer/src/lib/spellArt.ts#plot,twinkle,line,ring -->
-
-[`src/renderer/src/lib/spellArt.ts`, lines 15–92](../../apps/desktop/src/renderer/src/lib/spellArt.ts#L15-L92)
+[`src/renderer/src/lib/pixels.ts`, lines 1–9](../../apps/desktop/src/renderer/src/lib/pixels.ts#L1-L9)
 
 ```ts
-// The pixel art of her spells' effects (see SpellView): starfall's shooting stars, and the
-// explosion's pillar of magic circles and its bang. Everything is drawn a pixel at a time on a
-// small canvas that the page stretches over its window without smoothing, so it's crisp pixel art
-// like her. Where things are, moment by moment, comes from lib/spellMotion.ts.
+// Drawing pixel art for her spells' effects, a pixel at a time. Everything draws through a
+// Painter, the one thing it needs from a canvas (filling a rectangle with a colour), so the
+// effects can be drawn, and tested, away from a page. On a page, spellArt.ts makes one of a
+// canvas's 2D context.
 
-/** Sets one pixel, if it's on the canvas. */
-function plot(g: CanvasRenderingContext2D, x: number, y: number, colour: string, alpha = 1) {
+/** What the spells draw with: fills a rectangle of pixels with `colour`, at `alpha` (0 to 1). */
+export interface Painter {
+  rect(x: number, y: number, width: number, height: number, colour: string, alpha: number): void
+}
+```
+
+<!-- /code -->
+
+As its comment says, what the spells draw with: one method, `rect`, which fills a rectangle of
+pixels (`width` by `height`, its top-left corner at `x`, `y`) with `colour` at `alpha` opacity,
+from 0 (clear) to 1 (solid). A 1 by 1 rectangle is one pixel. An `interface` only describes a
+shape: anything with a `rect` method like this one is a `Painter`, whether it paints a canvas or
+only counts the calls.
+
+### `plot()`, `square()` and `twinkle()`
+
+<!-- code: apps/desktop/src/renderer/src/lib/pixels.ts#plot,square,twinkle -->
+
+[`src/renderer/src/lib/pixels.ts`, lines 11–30](../../apps/desktop/src/renderer/src/lib/pixels.ts#L11-L30)
+
+```ts
+/** Sets one pixel (rounded to the nearest), if `alpha` is above nothing. */
+export function plot(p: Painter, x: number, y: number, colour: string, alpha = 1): void {
   if (alpha <= 0) return
-  g.globalAlpha = Math.min(1, alpha)
-  g.fillStyle = colour
-  g.fillRect(Math.round(x), Math.round(y), 1, 1)
+  p.rect(Math.round(x), Math.round(y), 1, 1, colour, Math.min(1, alpha))
 }
 
-/** A plus-shaped twinkle: a pixel and its four neighbours, the middle brighter. */
-function twinkle(g: CanvasRenderingContext2D, x: number, y: number, colour: string, alpha = 1) {
-  plot(g, x, y, '#ffffff', alpha)
-  for (const [dx, dy] of [
-    [1, 0],
-    [-1, 0],
-    [0, 1],
-    [0, -1],
-  ] as const) {
-    plot(g, x + dx, y + dy, colour, alpha * 0.8)
-  }
+/** A square of `size` pixels, its top-left corner at `x`, `y`. */
+export function square(p: Painter, x: number, y: number, size: number, colour: string, alpha = 1) {
+  if (alpha <= 0) return
+  p.rect(Math.round(x), Math.round(y), size, size, colour, Math.min(1, alpha))
 }
 
-/** A straight line of pixels (Bresenham's). */
-function line(
-  g: CanvasRenderingContext2D,
+/** A plus-shaped twinkle: a white pixel and its four neighbours in `colour`, a little fainter. */
+export function twinkle(p: Painter, x: number, y: number, colour: string, alpha = 1): void {
+  plot(p, x, y, '#ffffff', alpha)
+  plot(p, x + 1, y, colour, alpha * 0.8)
+  plot(p, x - 1, y, colour, alpha * 0.8)
+  plot(p, x, y + 1, colour, alpha * 0.8)
+  plot(p, x, y - 1, colour, alpha * 0.8)
+}
+```
+
+<!-- /code -->
+
+The smallest pieces everything is drawn with. Each takes the `Painter` to draw on first (`p`).
+
+- `plot(p, x, y, colour, alpha)`: as its comment says, sets one pixel, in `colour` at `alpha`
+  opacity (fully opaque if left out), on the nearest whole pixel (`Math.round`). Nothing is drawn
+  for an `alpha` of 0 or less, so callers can fade things out without checking first, and above 1
+  it's kept to 1 (`Math.min(1, alpha)`). A pixel off the canvas the canvas itself leaves out.
+- `square(p, x, y, size, colour, alpha)`: as its comment says, a square `size` pixels across, its
+  top-left corner at `x`, `y` (rounded), in one rectangle, with the same checks as `plot()`. The
+  newer spells use it for anything chunkier than a pixel: a rocket's head, a spark, a butterfly's
+  pixels at its size.
+- `twinkle(p, x, y, colour, alpha)`: as its comment says, a plus-shaped twinkle: a white pixel in
+  the middle, and its four neighbours (right, left, below and above) in `colour`, a little fainter
+  (80%).
+
+### `line()`, `ring()` and `disc()`
+
+<!-- code: apps/desktop/src/renderer/src/lib/pixels.ts#line,ring,disc -->
+
+[`src/renderer/src/lib/pixels.ts`, lines 32–108](../../apps/desktop/src/renderer/src/lib/pixels.ts#L32-L108)
+
+```ts
+/** A straight line of pixels (Bresenham's), at most 2000 long. */
+export function line(
+  p: Painter,
   from: { x: number; y: number },
   to: { x: number; y: number },
   colour: string,
   alpha = 1,
-) {
+): void {
   let x = Math.round(from.x)
   let y = Math.round(from.y)
   const x1 = Math.round(to.x)
@@ -7975,7 +8032,7 @@ function line(
   const sy = y < y1 ? 1 : -1
   let error = dx + dy
   for (let i = 0; i < 2000; i++) {
-    plot(g, x, y, colour, alpha)
+    plot(p, x, y, colour, alpha)
     if (x === x1 && y === y1) return
     const e2 = 2 * error
     if (e2 >= dy) {
@@ -7990,8 +8047,8 @@ function line(
 }
 
 /** An ellipse's outline, a pixel at a time; `gap` leaves every other `gap` radians out (dashes). */
-function ring(
-  g: CanvasRenderingContext2D,
+export function ring(
+  p: Painter,
   cx: number,
   cy: number,
   rx: number,
@@ -8000,34 +8057,54 @@ function ring(
   alpha = 1,
   turn = 0,
   gap = 0,
-) {
+): void {
   if (rx < 0.5) return
   const steps = Math.max(8, Math.ceil(Math.PI * 2 * Math.max(rx, ry)))
   for (let k = 0; k < steps; k++) {
     const a = (k / steps) * Math.PI * 2
     if (gap && Math.floor((a + turn) / gap) % 2 === 1) continue
-    plot(g, cx + Math.cos(a) * rx, cy + Math.sin(a) * ry, colour, alpha)
+    plot(p, cx + Math.cos(a) * rx, cy + Math.sin(a) * ry, colour, alpha)
+  }
+}
+
+/** A filled ellipse, a row of pixels at a time. */
+export function disc(
+  p: Painter,
+  cx: number,
+  cy: number,
+  rx: number,
+  ry: number,
+  colour: string,
+  alpha = 1,
+): void {
+  if (alpha <= 0 || rx < 0.5 || ry < 0.5) return
+  for (let dy = -Math.floor(ry); dy <= Math.floor(ry); dy++) {
+    const half = rx * Math.sqrt(Math.max(0, 1 - (dy / ry) ** 2))
+    if (half < 0.5) continue
+    p.rect(
+      Math.round(cx - half),
+      Math.round(cy + dy),
+      Math.round(half * 2),
+      1,
+      colour,
+      Math.min(1, alpha),
+    )
   }
 }
 ```
 
 <!-- /code -->
 
-The four ways everything is drawn.
+Lines and ellipses, still a pixel at a time.
 
-- `plot(g, x, y, colour, alpha)`: as its comment says, sets one pixel, in `colour` at `alpha`
-  opacity (fully opaque if left out), on the nearest whole pixel (`Math.round`). Nothing is drawn
-  for an `alpha` of 0 or less, so callers can fade things out without checking first, and above 1
-  it's kept to 1. A pixel off the canvas the canvas itself leaves out.
-- `twinkle(g, x, y, colour, alpha)`: as its comment says, a plus-shaped twinkle: a white pixel in
-  the middle, and its four neighbours in `colour`, a little fainter (80%).
-- `line(g, from, to, colour, alpha)`: as its comment says, a straight line of pixels, by
+- `line(p, from, to, colour, alpha)`: as its comment says, a straight line of pixels, by
   _Bresenham's algorithm_, the classic way to draw a line on a grid. It steps a pixel at a time from
   one end toward the other, keeping a running `error`, how far the pixels have strayed from the true
   line, and steps across (`x += sx`), down (`y += sy`) or both, whichever keeps closest. So the line
   has no gaps and no doubled pixels. `sx` and `sy` are which way to step (1 or -1). It stops at the
-  far end; `i < 2000` is only a safety limit, so a bad number can never make it loop for ever.
-- `ring(g, cx, cy, rx, ry, colour, alpha, turn, gap)`: as its comment says, an ellipse's outline, a
+  far end; as the comment says, it's at most 2000 pixels long: `i < 2000` is only a safety limit,
+  so a bad number can never make it loop for ever.
+- `ring(p, cx, cy, rx, ry, colour, alpha, turn, gap)`: as its comment says, an ellipse's outline, a
   pixel at a time: `rx` across and `ry` up and down from its middle.
   - `if (rx < 0.5) return`: too small to draw.
   - `steps`: how many points to plot round it: about one per pixel round the circle of its longer
@@ -8036,18 +8113,79 @@ The four ways everything is drawn.
   - `gap`: as the comment says, leaves every other `gap` radians out, for a dashed ring, and `turn`
     turns the dashes round it. `Math.floor((a + turn) / gap) % 2 === 1` is true for every other
     stretch of `gap` radians.
+- `disc(p, cx, cy, rx, ry, colour, alpha)`: as its comment says, a filled ellipse, a row of pixels
+  at a time. The spells use it for soft glows: a faint disc of colour behind a burst, round the
+  vortex, about the phoenix. (The magic circles' glow in `spellArt.ts` is filled the same way.)
+  Nothing is drawn if it's clear, or less than half a pixel across or down.
+  - `for (let dy = -Math.floor(ry); dy <= Math.floor(ry); dy++)`: a row for each pixel of its
+    height, from top to bottom.
+  - `half`: how far the ellipse reaches either side of its middle at that height, from the
+    ellipse's equation (`1 - (dy / ry) ** 2` is how much of its width is left there, and the square
+    root turns that into a share of `rx`). A row less than a pixel wide is skipped.
+  - `p.rect(...)`: the row, one rectangle a pixel high, from `cx - half` to `cx + half`.
+
+## `src/renderer/src/lib/spellArt.ts`: drawing her spells' effects
+
+As the comment at the top says, the pixel art of her spells' effects, which `SpellView` draws each
+frame: which spell draws what (`SPELL_ART`, at the end of the file), and, here, starfall's shooting
+stars and the explosion's pillar of magic circles and its bang. The other six each have a file of
+their own in `lib/spells/` (after this one). Everything is drawn a pixel at a time, with the
+helpers in `lib/pixels.ts` (above), on a small canvas that the page stretches over its window
+without smoothing, so it's crisp pixel art like her. Where things are, moment by moment, comes
+from `lib/spellMotion.ts` (above).
+
+**Drawing on a canvas.** `SpellView` hands each frame the canvas's 2D drawing context, the object
+everything on a canvas is drawn through. Its `fillStyle` is the colour to paint with, its
+`globalAlpha` how opaque (from 0, clear, to 1), and `fillRect(x, y, width, height)` paints a
+rectangle. Each frame starts on a cleared canvas (`SpellView`), and whatever is drawn later in a
+frame goes over what came before. Only `canvasPainter()` (next) and the explosion's fireball use
+the context directly; everything else draws on the `Painter` made of it.
+
+### `canvasPainter()`
+
+<!-- code: apps/desktop/src/renderer/src/lib/spellArt.ts#canvasPainter -->
+
+[`src/renderer/src/lib/spellArt.ts`, lines 22–37](../../apps/desktop/src/renderer/src/lib/spellArt.ts#L22-L37)
+
+```ts
+// The pixel art of her spells' effects (see SpellView): which spell draws what (SPELL_ART), and
+// here starfall's shooting stars and the explosion's pillar of magic circles and its bang (the
+// others each have a file of their own in lib/spells/). Everything is drawn a pixel at a time
+// (lib/pixels.ts) on a small canvas that the page stretches over its window without smoothing, so
+// it's crisp pixel art like her. Where things are, moment by moment, comes from lib/spellMotion.ts.
+
+/** A Painter (lib/pixels.ts) that draws on a canvas's 2D context. */
+export function canvasPainter(g: CanvasRenderingContext2D): Painter {
+  return {
+    rect(x, y, width, height, colour, alpha) {
+      g.globalAlpha = alpha
+      g.fillStyle = colour
+      g.fillRect(x, y, width, height)
+    },
+  }
+}
+```
+
+<!-- /code -->
+
+As its comment says, a `Painter` (`lib/pixels.ts`) that draws on a canvas's 2D context. It returns
+a plain object with the one method a `Painter` needs: `rect` sets the opacity (`g.globalAlpha`) and
+the colour (`g.fillStyle`), then paints the rectangle (`g.fillRect`). It rounds and checks nothing
+itself: `plot()` and the other helpers have done that already. Since every rectangle sets its own
+opacity, nothing has to put `globalAlpha` back afterwards. `SPELL_ART` (at the end of the file)
+makes one of the canvas for each spell that draws on a `Painter`.
 
 ### `drawStarfall()`
 
 <!-- code: apps/desktop/src/renderer/src/lib/spellArt.ts#drawStarfall -->
 
-[`src/renderer/src/lib/spellArt.ts`, lines 94–127](../../apps/desktop/src/renderer/src/lib/spellArt.ts#L94-L127)
+[`src/renderer/src/lib/spellArt.ts`, lines 39–72](../../apps/desktop/src/renderer/src/lib/spellArt.ts#L39-L72)
 
 ```ts
 // --------------------------------------------------------------------------------- starfall
 
 /** Starfall: twinkling stars over the top of the screen, and shooting stars streaking down it. */
-export function drawStarfall(g: CanvasRenderingContext2D, scene: Scene): void {
+export function drawStarfall(g: Painter, scene: Scene): void {
   const { t, w, h, still } = scene
   const shown = still ? 1 : Math.min(1, t / 600, (STARFALL.durationMs - t) / 1000)
   // Twinkles, over the top two thirds of the screen, each brightening and dimming in its time.
@@ -8083,7 +8221,7 @@ export function drawStarfall(g: CanvasRenderingContext2D, scene: Scene): void {
 <!-- /code -->
 
 As its comment says, starfall: twinkling stars over the top of the screen, and shooting stars
-streaking down it.
+streaking down it. It draws on a `Painter` (`g`), which `SPELL_ART` makes of the canvas.
 
 - `shown`: how much of it shows: fading in over the first 0.6 seconds and out over the last second
   (the smallest of the three), or all of it with reduced motion.
@@ -8106,19 +8244,13 @@ streaking down it.
 
 <!-- code: apps/desktop/src/renderer/src/lib/spellArt.ts#magicCircle -->
 
-[`src/renderer/src/lib/spellArt.ts`, lines 129–185](../../apps/desktop/src/renderer/src/lib/spellArt.ts#L129-L185)
+[`src/renderer/src/lib/spellArt.ts`, lines 74–129](../../apps/desktop/src/renderer/src/lib/spellArt.ts#L74-L129)
 
 ```ts
 // --------------------------------------------------------------------------------- explosion
 
 /** One magic circle at `t`: rings, a turning ring of runes, a six-pointed star, a bright heart. */
-function magicCircle(
-  g: CanvasRenderingContext2D,
-  c: Circle,
-  t: number,
-  power: number,
-  accent: string,
-) {
+function magicCircle(g: Painter, c: Circle, t: number, power: number, accent: string) {
   const age = t - c.born
   if (age < 0) return
   const grown = easeOut(age / 450)
@@ -8128,11 +8260,16 @@ function magicCircle(
   const spin = (c.turn * age * (0.0008 + power * 0.004)) % (Math.PI * 2)
   const bright = 0.75 + power * 0.25
   // A soft glow filling it, in her colour.
-  g.globalAlpha = 0.1 + power * 0.12
-  g.fillStyle = accent
   for (let dy = -Math.floor(ry); dy <= Math.floor(ry); dy++) {
     const half = rx * Math.sqrt(Math.max(0, 1 - (dy / Math.max(1, ry)) ** 2))
-    g.fillRect(Math.round(c.cx - half), Math.round(c.cy + dy), Math.round(half * 2), 1)
+    g.rect(
+      Math.round(c.cx - half),
+      Math.round(c.cy + dy),
+      Math.round(half * 2),
+      1,
+      accent,
+      0.1 + power * 0.12,
+    )
   }
   // Its rings: the outer one in her colour (white as it forms), a dashed one inside it turning.
   ring(g, c.cx, c.cy, rx, ry, flash > 0.3 ? '#ffffff' : accent, bright)
@@ -8171,8 +8308,8 @@ function magicCircle(
 <!-- /code -->
 
 As its comment says, one magic circle at `t`: rings, a turning ring of runes, a six-pointed star
-and a bright heart. `power` is how strong the magic is now, from 0 to 1 (see `drawPillar()`), which
-makes it brighter and turn faster.
+and a bright heart. `g` is the `Painter` that `drawPillar()` passes on, and `power` is how strong
+the magic is now, from 0 to 1 (see `drawPillar()`), which makes it brighter and turn faster.
 
 - `age`: how long since it came; before then it isn't drawn.
 - `grown`: it grows from nothing to its full size over its first 0.45 seconds, fast and then
@@ -8183,8 +8320,8 @@ makes it brighter and turn faster.
   radians a millisecond), its own way round (`c.turn`), kept within one turn (`% (Math.PI * 2)`).
 - `bright`: how bright its lines are: three quarters to full, with the magic.
 - The glow: as the comment says, a soft glow filling it, in her colour, faint (10% to 22% opaque):
-  a row of pixels for each pixel of its height, as wide as the ellipse is at that height (`half`,
-  from the ellipse's equation).
+  a row of pixels for each pixel of its height (`g.rect`, a pixel high), as wide as the ellipse is
+  at that height (`half`, from the ellipse's equation), as `disc()` in `pixels.ts` does.
 - Its rings: as the comment says, the outer one in her colour (white while it flashes as it forms),
   a fainter one just inside it, a dashed gold ring that turns (`spin`, with dashes 0.18 radians
   long), and an inner ring in her colour.
@@ -8202,7 +8339,7 @@ makes it brighter and turn faster.
 
 <!-- code: apps/desktop/src/renderer/src/lib/spellArt.ts#drawPillar -->
 
-[`src/renderer/src/lib/spellArt.ts`, lines 187–253](../../apps/desktop/src/renderer/src/lib/spellArt.ts#L187-L253)
+[`src/renderer/src/lib/spellArt.ts`, lines 131–205](../../apps/desktop/src/renderer/src/lib/spellArt.ts#L131-L205)
 
 ```ts
 /**
@@ -8211,7 +8348,7 @@ makes it brighter and turn faster.
  * brighter, sparks streaming up it, and in the last moments everything brighter and faster, the
  * column white.
  */
-function drawPillar(g: CanvasRenderingContext2D, scene: Scene): void {
+function drawPillar(g: Painter, scene: Scene): void {
   const { feet, accent, still } = scene
   const t = still ? EXPLOSION.chantMs * 0.8 : scene.t
   const circles = pillarCircles(scene)
@@ -8230,9 +8367,14 @@ function drawPillar(g: CanvasRenderingContext2D, scene: Scene): void {
   for (let dx = -Math.ceil(width); dx <= Math.ceil(width); dx++) {
     const edge = 1 - Math.abs(dx) / width
     if (edge <= 0) continue
-    g.globalAlpha = clamp01(edge * edge * (0.12 + power * 0.5) * flicker)
-    g.fillStyle = surge > 0.7 || Math.abs(dx) < width * 0.25 ? '#ffffff' : '#fde68a'
-    g.fillRect(Math.round(x + dx), Math.round(columnTop), 1, Math.round(feet - columnTop))
+    g.rect(
+      Math.round(x + dx),
+      Math.round(columnTop),
+      1,
+      Math.round(feet - columnTop),
+      surge > 0.7 || Math.abs(dx) < width * 0.25 ? '#ffffff' : '#fde68a',
+      clamp01(edge * edge * (0.12 + power * 0.5) * flicker),
+    )
   }
 
   // The circle under her feet, turning, there from the start.
@@ -8265,12 +8407,15 @@ function drawPillar(g: CanvasRenderingContext2D, scene: Scene): void {
 
   // At the very end, a white flash up the whole column.
   const flare = between(t, EXPLOSION.chantMs - 200, EXPLOSION.chantMs)
-  if (flare > 0) {
-    g.globalAlpha = flare * 0.9
-    g.fillStyle = '#ffffff'
-    g.fillRect(Math.round(x - width), 0, Math.round(width * 2), Math.round(feet))
-  }
-  g.globalAlpha = 1
+  if (flare > 0)
+    g.rect(
+      Math.round(x - width),
+      0,
+      Math.round(width * 2),
+      Math.round(feet),
+      '#ffffff',
+      flare * 0.9,
+    )
 }
 ```
 
@@ -8279,7 +8424,7 @@ function drawPillar(g: CanvasRenderingContext2D, scene: Scene): void {
 As its comment says, the chant's pillar, from the moment she starts chanting: a magic circle under
 her feet, then the circles above her one after another, a column of light rising through them and
 growing brighter, sparks streaming up it, and in the last moments everything brighter and faster,
-the column white.
+the column white. It draws on a `Painter` (`g`), which `drawExplosion()` makes of the canvas.
 
 - `const t = still ? EXPLOSION.chantMs * 0.8 : scene.t`: with reduced motion, the pillar as it is
   four fifths of the way through the chant, every circle up, held there.
@@ -8291,10 +8436,10 @@ the column white.
 - `flicker`: the light flickering a little (between 70% and full), faster in the surge (a sine wave
   whose swing shortens from about 0.38 seconds to 0.13). With reduced motion, none.
 - The column: as the comment says, brightest in the middle, from her feet up past the top circle.
-  It's a row of strips a pixel wide, `width` either side of the middle (half to four fifths of the
-  lowest circle's radius, widening with the magic), each fainter toward the edges (`edge * edge`),
-  brighter with the magic, and flickering. The middle quarter is white and the rest gold; in the
-  surge, all of it white. `columnTop` is a tenth of its height above `top`.
+  It's a row of strips a pixel wide (`g.rect`), `width` either side of the middle (half to four
+  fifths of the lowest circle's radius, widening with the magic), each fainter toward the edges
+  (`edge * edge`), brighter with the magic, and flickering. The middle quarter is white and the
+  rest gold; in the surge, all of it white. `columnTop` is a tenth of its height above `top`.
 - The ground circle: as the comment says, the circle under her feet, turning, there from the start
   (`born: 0`), a little smaller than the lowest circle above her and flatter (`ry` a fifth of `rx`,
   not three tenths). Then each circle above her, each from its own time.
@@ -8306,13 +8451,12 @@ the column white.
   are, and come in her colour, gold and white; every fifth is a twinkle.
 - `flare`: as the comment says, at the very end, a white flash up the whole column, from the top of
   the screen to her feet, over the chant's last 0.2 seconds, just before the bang.
-- `g.globalAlpha = 1`: leaves the opacity as it found it.
 
 ### `FIRE`, `fireCanvas` and `drawBoom()`
 
 <!-- code: apps/desktop/src/renderer/src/lib/spellArt.ts#FIRE,fireCanvas,drawBoom -->
 
-[`src/renderer/src/lib/spellArt.ts`, lines 255–354](../../apps/desktop/src/renderer/src/lib/spellArt.ts#L255-L354)
+[`src/renderer/src/lib/spellArt.ts`, lines 207–302](../../apps/desktop/src/renderer/src/lib/spellArt.ts#L207-L302)
 
 ```ts
 /** The explosion's palette, hottest first: white, yellow, orange, red, deep red, then smoke. */
@@ -8333,7 +8477,8 @@ let fireCanvas: HTMLCanvasElement | null = null
  * yellow, orange and red to smoke as it rises, a shock wave racing out round it, and sparks
  * thrown out and falling.
  */
-function drawBoom(g: CanvasRenderingContext2D, scene: Scene, b: number): void {
+function drawBoom(canvas: CanvasRenderingContext2D, scene: Scene, b: number): void {
+  const g = canvasPainter(canvas)
   const { w, h, still } = scene
   const at = still ? 700 : b
   const cx = w / 2
@@ -8342,11 +8487,7 @@ function drawBoom(g: CanvasRenderingContext2D, scene: Scene, b: number): void {
   const gone = 1 - between(at, EXPLOSION.boomMs - 800, EXPLOSION.boomMs)
 
   // The flash.
-  if (!still && b < 220) {
-    g.globalAlpha = 0.75 * (1 - b / 220)
-    g.fillStyle = '#ffffff'
-    g.fillRect(0, 0, w, h)
-  }
+  if (!still && b < 220) g.rect(0, 0, w, h, '#ffffff', 0.75 * (1 - b / 220))
 
   // The fireball, drawn a pixel at a time at half size (chunkier pixels) and stretched on.
   const size = Math.ceil(fire * 1.5) + 2
@@ -8376,9 +8517,9 @@ function drawBoom(g: CanvasRenderingContext2D, scene: Scene, b: number): void {
       }
     }
     fg.putImageData(image, 0, 0)
-    g.globalAlpha = 1
-    g.imageSmoothingEnabled = false
-    g.drawImage(fireCanvas, Math.round(cx - size), Math.round(cy - size), size * 2, size * 2)
+    canvas.globalAlpha = 1
+    canvas.imageSmoothingEnabled = false
+    canvas.drawImage(fireCanvas, Math.round(cx - size), Math.round(cy - size), size * 2, size * 2)
   }
 
   if (still) return
@@ -8413,7 +8554,6 @@ function drawBoom(g: CanvasRenderingContext2D, scene: Scene, b: number): void {
       )
     }
   }
-  g.globalAlpha = 1
 }
 ```
 
@@ -8424,18 +8564,21 @@ function drawBoom(g: CanvasRenderingContext2D, scene: Scene, b: number): void {
   colour as red, green and blue from 0 to 255; a pixel takes the first entry its heat reaches.
 - `fireCanvas`: a second, small canvas the fireball is drawn on, made the first time it's needed
   and kept for every frame after.
-- `drawBoom(g, scene, b)`: as its comment says, the explosion, `b` milliseconds after the bang, in
-  the middle of the screen: a white flash across the screen, a fireball that bursts out with ragged,
-  churning edges and cools from white through yellow, orange and red to smoke as it rises, a shock
-  wave racing out round it, and sparks thrown out and falling.
+- `drawBoom(canvas, scene, b)`: as its comment says, the explosion, `b` milliseconds after the
+  bang, in the middle of the screen: a white flash across the screen, a fireball that bursts out
+  with ragged, churning edges and cools from white through yellow, orange and red to smoke as it
+  rises, a shock wave racing out round it, and sparks thrown out and falling. Unlike the rest, it's
+  given the canvas's context itself, not a `Painter`: the fireball is drawn on a canvas of its own
+  and stretched onto this one, which only a canvas can do.
+  - `const g = canvasPainter(canvas)`: everything else it draws on a `Painter` made of the canvas.
   - `at`: the moment to draw: with reduced motion, the fireball as it is 0.7 seconds in, held
     still.
   - `cx`, `cy`: its middle: halfway across the screen, a little above halfway down (45%), and rising
     as it goes (by 5% of the screen's shorter side a second).
   - `fire`, `shock`: how big the fireball and the shock wave are now (`blastAt()`).
   - `gone`: the fireball fading away over the bang's last 0.8 seconds.
-  - The flash: the whole screen white, three quarters opaque, fading over the first 0.22 seconds.
-    Not with reduced motion.
+  - The flash: the whole screen white (one `g.rect`), three quarters opaque, fading over the first
+    0.22 seconds. Not with reduced motion.
   - The fireball: as the comment says, drawn a pixel at a time at half size (chunkier pixels), and
     stretched on. `size` is the small canvas's width and height: room for the fireball at half
     size, and some to spare.
@@ -8460,10 +8603,12 @@ function drawBoom(g: CanvasRenderingContext2D, scene: Scene, b: number): void {
   - `image.data[o]` to `image.data[o + 3]`: the pixel's red, green, blue and opacity; `o`, which is
     `(j * size + i) * 4`, is where its four numbers start.
   - `fg.putImageData(image, 0, 0)`: puts the pixels on the small canvas.
-  - `g.imageSmoothingEnabled = false`, `g.drawImage(fireCanvas, ..., size * 2, size * 2)`: draws it
-    on the effects' canvas at twice its size, centred on the middle, without smoothing, so each of
-    its pixels is a crisp block 2 by 2: chunkier than the rest of the effects, as fire is in pixel
-    art.
+  - `canvas.globalAlpha = 1`: fully opaque, whatever the last rectangle left it at (the fireball's
+    pixels carry their own opacity).
+  - `canvas.imageSmoothingEnabled = false`, `canvas.drawImage(fireCanvas, ..., size * 2, size * 2)`:
+    draws it on the effects' canvas at twice its size, centred on the middle, without smoothing, so
+    each of its pixels is a crisp block 2 by 2: chunkier than the rest of the effects, as fire is in
+    pixel art.
   - `if (still) return`: with reduced motion, no shock wave or sparks, only the still fireball.
   - The shock wave: as the comment says, a ring racing out, fading: a cream ring and a gold one just
     inside it, `shock` across and four fifths as tall, fading over the first second.
@@ -8477,17 +8622,1679 @@ function drawBoom(g: CanvasRenderingContext2D, scene: Scene, b: number): void {
 
 <!-- code: apps/desktop/src/renderer/src/lib/spellArt.ts#drawExplosion -->
 
-[`src/renderer/src/lib/spellArt.ts`, lines 356–360](../../apps/desktop/src/renderer/src/lib/spellArt.ts#L356-L360)
+[`src/renderer/src/lib/spellArt.ts`, lines 304–308](../../apps/desktop/src/renderer/src/lib/spellArt.ts#L304-L308)
 
 ```ts
 /** The explosion spell: the pillar while she chants, then the bang. */
 export function drawExplosion(g: CanvasRenderingContext2D, scene: Scene): void {
-  if (scene.t < EXPLOSION.chantMs) drawPillar(g, scene)
+  if (scene.t < EXPLOSION.chantMs) drawPillar(canvasPainter(g), scene)
   else drawBoom(g, scene, scene.t - EXPLOSION.chantMs)
 }
 ```
 
 <!-- /code -->
 
-As its comment says, the explosion spell: the pillar while she chants, then the bang, with `b`
-counted from the end of the chant. `SpellView` calls it every frame for the whole 18.6 seconds.
+As its comment says, the explosion spell: the pillar while she chants, drawn on a `Painter` made of
+the canvas (`canvasPainter(g)`), then the bang, given the canvas itself for its fireball, with `b`
+counted from the end of the chant. `SpellView` calls it every frame for the whole 18.6 seconds,
+through `SPELL_ART` (next).
+
+### `SPELL_ART`
+
+<!-- code: apps/desktop/src/renderer/src/lib/spellArt.ts#SPELL_ART -->
+
+[`src/renderer/src/lib/spellArt.ts`, lines 310–323](../../apps/desktop/src/renderer/src/lib/spellArt.ts#L310-L323)
+
+```ts
+/**
+ * Which spell draws what: on a canvas (the explosion's fireball needs one of its own to stretch),
+ * or, for the rest, on a Painter made of it.
+ */
+export const SPELL_ART: Record<SpellEffect, (g: CanvasRenderingContext2D, scene: Scene) => void> = {
+  starfall: (g, scene) => drawStarfall(canvasPainter(g), scene),
+  explosion: drawExplosion,
+  fireworks: (g, scene) => drawFireworks(canvasPainter(g), scene),
+  thunderstorm: (g, scene) => drawThunderstorm(canvasPainter(g), scene),
+  blizzard: (g, scene) => drawBlizzard(canvasPainter(g), scene),
+  vortex: (g, scene) => drawVortex(canvasPainter(g), scene),
+  butterflies: (g, scene) => drawButterflies(canvasPainter(g), scene),
+  phoenix: (g, scene) => drawPhoenix(canvasPainter(g), scene),
+}
+```
+
+<!-- /code -->
+
+As its comment says, which spell draws what: a drawing function for each spell drawn over the
+screen (each `SpellEffect`), which `SpellView` looks up by the spell's name and calls every frame
+with the canvas's context and the `Scene`.
+
+- `explosion: drawExplosion`: takes the canvas as it is, since its fireball needs one of its own to
+  stretch (`drawBoom()`).
+- The rest: each a small arrow function that makes a `Painter` of the canvas (`canvasPainter(g)`)
+  and hands it on with the scene: `drawStarfall()` above, and the six newer spells' drawing
+  functions, each from its own file in `lib/spells/` (below).
+- `Record<SpellEffect, (g: CanvasRenderingContext2D, scene: Scene) => void>`: TypeScript insists on
+  one for every spell in `SPELL_EFFECT_MS` (`src/shared/spells.ts`), so a spell drawn over the
+  screen can't be added without its art, and each is a function taking the context and the scene.
+
+The six files in `lib/spells/` that follow are all built alike, and like this one. Each draws on a
+`Painter` with the helpers in `lib/pixels.ts`, each frame from scratch from `scene.t`, with
+anything random from `seeded()` (`lib/spellMotion.ts`), so every frame has the same rockets,
+flakes or embers, only further along. Each keeps the sums for where things are (which draw
+nothing) beside its drawing, and exports the ones `tests/moreSpells.test.ts` checks. That test
+also draws each spell on a `Painter` that only counts rectangles: half way through, still or
+moving, it must draw plenty on the screen, and at its end, nothing at all. Their timings are in
+`src/shared/spells.ts` (`FIREWORKS`, `THUNDERSTORM` and so on; see
+[Shared code and the preload bridge](1-shared-and-preload.md)). With reduced motion
+(`scene.still`), each shows one moment part way through, held still.
+
+## `src/renderer/src/lib/spells/fireworks.ts`: fireworks
+
+As the comment at the top says, fireworks: rockets climbing from along the taskbar, each bursting
+high over the screen in one of four kinds (a round peony, a ring, a drooping golden willow,
+crackling glitter), then a finale of several at once.
+
+### `KINDS`, `COLOURS` and `SPARKS`
+
+<!-- code: apps/desktop/src/renderer/src/lib/spells/fireworks.ts#KINDS,Kind,COLOURS,SPARKS -->
+
+[`src/renderer/src/lib/spells/fireworks.ts`, lines 5–20](../../apps/desktop/src/renderer/src/lib/spells/fireworks.ts#L5-L20)
+
+```ts
+// Fireworks: rockets climbing from along the taskbar, each bursting high over the screen in one of
+// four kinds (a round peony, a ring, a drooping golden willow, crackling glitter), then a finale
+// of several at once.
+
+/** The kinds of burst, and the colours they come in. */
+const KINDS = ['peony', 'ring', 'willow', 'glitter'] as const
+
+type Kind = (typeof KINDS)[number]
+
+const COLOURS = ['#f87171', '#fbbf24', '#4ade80', '#60a5fa', '#f472b6', '#c084fc', '#ffffff']
+
+/** How many sparks each kind throws, and how long they last (ms). */
+const SPARKS: Record<Kind, { count: number; life: number }> = {
+  peony: { count: 80, life: 1600 },
+  ring: { count: 56, life: 1400 },
+  willow: { count: 60, life: 2500 },
+  glitter: { count: 70, life: 1900 },
+}
+```
+
+<!-- /code -->
+
+- `KINDS`: as its comment says, the kinds of burst: `peony` (a round ball of sparks, named after
+  the flower), `ring` (sparks all flying out at the same speed, so they stay a circle), `willow`
+  (heavy golden sparks with long tails that droop, like a weeping willow's branches) and `glitter`
+  (sparks that crackle, flashing white and off). As with `SPELLS`, it's a list made `as const`,
+  and `Kind` is the type of any item of it.
+- `COLOURS`: as the comment says, the colours a rocket can burst in: red, amber, green, blue, pink,
+  violet and white.
+- `SPARKS`: as its comment says, how many sparks each kind throws, and how long they last: a peony
+  80 for 1.6 seconds, a ring 56 for 1.4, a willow 60 for 2.5 (the longest, as they drift down) and
+  glitter 70 for 1.9. `Record<Kind, ...>` insists on an entry for each kind.
+
+### `Rocket` and `rockets()`
+
+<!-- code: apps/desktop/src/renderer/src/lib/spells/fireworks.ts#Rocket,rockets -->
+
+[`src/renderer/src/lib/spells/fireworks.ts`, lines 22–63](../../apps/desktop/src/renderer/src/lib/spells/fireworks.ts#L22-L63)
+
+```ts
+/** One rocket: when it launches, from where, where and when it bursts, and how. */
+export interface Rocket {
+  launch: number
+  x: number
+  burstX: number
+  burstY: number
+  /** How long it climbs (ms). */
+  rise: number
+  kind: Kind
+  colour: string
+  /** How fast its sparks fly out (pixels a ms). */
+  speed: number
+  seed: number
+}
+
+/**
+ * The show: FIREWORKS.rockets, one about every FIREWORKS.gapMs (the first from beside her), then
+ * the last FIREWORKS.finale of them close together from FIREWORKS.finaleAt. Each climbs from the
+ * bottom of the screen to somewhere over its top half and bursts.
+ */
+export function rockets(w: number, h: number, from: number): Rocket[] {
+  const random = seeded(31)
+  const steady = FIREWORKS.rockets - FIREWORKS.finale
+  return Array.from({ length: FIREWORKS.rockets }, (_, i) => {
+    const launch =
+      i < steady
+        ? 150 + i * FIREWORKS.gapMs + random() * 200
+        : FIREWORKS.finaleAt + (i - steady) * 110 + random() * 120
+    const x = i === 0 ? from : w * (0.08 + random() * 0.84)
+    return {
+      launch,
+      x,
+      burstX: Math.min(w * 0.95, Math.max(w * 0.05, x + (random() - 0.5) * w * 0.1)),
+      burstY: h * (0.1 + random() * 0.32),
+      rise: 650 + random() * 400,
+      kind: KINDS[Math.floor(random() * KINDS.length)]!,
+      colour: COLOURS[Math.floor(random() * COLOURS.length)]!,
+      speed: (0.07 + random() * 0.05) * (Math.min(w, h) / 300),
+      seed: 100 + i,
+    }
+  })
+}
+```
+
+<!-- /code -->
+
+- `Rocket`: as its comment says, one rocket: when it launches (`launch`, ms into the spell), from
+  where along the bottom (`x`), where it bursts (`burstX`, `burstY`), how long it climbs (`rise`),
+  its `kind` and `colour`, how fast its sparks fly out (`speed`, pixels a millisecond) and the
+  `seed` its sparks are scattered from.
+- `rockets(w, h, from)`: as its comment says, the show: `FIREWORKS.rockets` (20), one about every
+  `gapMs` (0.48 seconds), the first from beside her (`from`, her `x`), then the last `finale` (7)
+  of them close together from `finaleAt` (6.2 seconds). Each climbs from the bottom of the screen
+  to somewhere over its top half and bursts. It's worked out afresh every frame, the same each time
+  (`seeded(31)`). A test checks the first launches from beside her, every burst is over the top
+  half of the screen and on it, each bursts at least a second before the end, and the finale comes
+  after `finaleAt`.
+  - `steady`: how many come before the finale, 13.
+  - `launch`: for the steady ones, 0.15 seconds in and then one every 0.48 seconds, each up to 0.2
+    seconds late at random, the last about 6 seconds in; for the finale, from 6.2 seconds, one
+    every 0.11 seconds (each up to 0.12 seconds late), all seven within a second.
+  - `x`: where it launches: the first beside her (`i === 0 ? from`), so the show starts where she
+    cast it; the rest anywhere from 8% to 92% of the way across.
+  - `burstX`: a little to one side of where it launched (up to 5% of the width either way), kept
+    at least 5% of the width from either edge.
+  - `burstY`: from 10% to 42% of the way down the screen, so always over its top half.
+  - `rise`: it climbs for 0.65 to 1.05 seconds.
+  - `kind`, `colour`: one of each, at random. The `!`s tell TypeScript the index is in range.
+  - `speed`: how fast its sparks fly out, 0.07 to 0.12 pixels a millisecond, scaled for the screen
+    (`Math.min(w, h) / 300`), so a burst fills as much of a big screen as of a small one.
+  - `seed: 100 + i`: each rocket's own seed for its sparks, so they're scattered the same way every
+    frame.
+
+### `spark()`
+
+<!-- code: apps/desktop/src/renderer/src/lib/spells/fireworks.ts#spark -->
+
+[`src/renderer/src/lib/spells/fireworks.ts`, lines 65–80](../../apps/desktop/src/renderer/src/lib/spells/fireworks.ts#L65-L80)
+
+```ts
+/** Where a spark is `age` ms after its burst: flying out, slowing, falling. */
+function spark(
+  rocket: Rocket,
+  angle: number,
+  speed: number,
+  age: number,
+  gravity: number,
+): { x: number; y: number } {
+  // It slows as it goes (air): out to speed × 450 at most, the willow's further and slower.
+  const drag = rocket.kind === 'willow' ? 650 : 450
+  const out = speed * drag * (1 - Math.exp(-age / drag))
+  return {
+    x: rocket.burstX + Math.cos(angle) * out,
+    y: rocket.burstY + Math.sin(angle) * out + gravity * age * age,
+  }
+}
+```
+
+<!-- /code -->
+
+As its comment says, where a spark is `age` milliseconds after its burst: flying out, slowing,
+falling. It's given its rocket, which way it flies (`angle`), how fast (`speed`) and how strongly
+it falls (`gravity`).
+
+- `drag`, `out`: as the comment says, it slows as it goes, as a real spark does in the air. `out`
+  is how far it has flown: `speed * drag * (1 - Math.exp(-age / drag))`. At first that grows at
+  its full speed, but `Math.exp(-age / drag)` shrinks toward 0 as time goes on, so it slows, and
+  never gets further than `speed × drag`. A willow's `drag` is 650 rather than 450, so its sparks
+  go further and take longer to slow down, hanging in the air.
+- `x`, `y`: out from the burst that far along its angle (`Math.cos(angle)` across,
+  `Math.sin(angle)` down), and down by `gravity * age * age` as well: falling faster and faster, as
+  things do.
+
+### `drawFireworks()`
+
+<!-- code: apps/desktop/src/renderer/src/lib/spells/fireworks.ts#drawFireworks -->
+
+[`src/renderer/src/lib/spells/fireworks.ts`, lines 82–149](../../apps/desktop/src/renderer/src/lib/spells/fireworks.ts#L82-L149)
+
+```ts
+/** The fireworks spell at `scene.t`. */
+export function drawFireworks(p: Painter, scene: Scene): void {
+  const { w, h } = scene
+  const t = scene.still ? FIREWORKS.durationMs * 0.45 : scene.t
+  const shown = scene.still ? 1 : Math.min(1, (FIREWORKS.durationMs - t) / 600)
+  const gravity = 0.00004 * (h / 520)
+  for (const rocket of rockets(w, h, scene.x)) {
+    const age = t - rocket.launch
+    if (age < 0) continue
+    // Climbing: a bright head, a wobble, and a trail of sparks behind it.
+    if (age < rocket.rise) {
+      const climb = easeOut(age / rocket.rise)
+      const x = rocket.x + (rocket.burstX - rocket.x) * climb + Math.sin(age / 40) * 0.6
+      const y = h + (rocket.burstY - h) * climb
+      square(p, x, y, 2, '#fff7d6', shown)
+      for (let k = 1; k <= 8; k++) {
+        const back = Math.max(0, age - k * 28) / rocket.rise
+        const by = h + (rocket.burstY - h) * easeOut(back)
+        plot(
+          p,
+          x + Math.sin(k * 2.3 + age / 30),
+          by,
+          k < 3 ? '#fde68a' : '#fb923c',
+          shown * (1 - k / 9),
+        )
+      }
+      continue
+    }
+    // Bursting: a flash at the heart, then the sparks.
+    const burst = age - rocket.rise
+    const { count, life } = SPARKS[rocket.kind]
+    if (burst > life) continue
+    if (burst < 140) {
+      const flash = 1 - burst / 140
+      square(p, rocket.burstX - 3, rocket.burstY - 3, 6, '#ffffff', flash * shown)
+      twinkle(p, rocket.burstX, rocket.burstY, rocket.colour, shown)
+    }
+    // A soft glow in its colour, spreading and fading.
+    if (burst < 500) {
+      const glow = burst / 500
+      const size = 10 + glow * 30
+      disc(p, rocket.burstX, rocket.burstY, size, size, rocket.colour, 0.14 * (1 - glow) * shown)
+    }
+    const random = seeded(rocket.seed)
+    // The willow's sparks are heavier: they droop.
+    const fall = rocket.kind === 'willow' ? gravity * 1.6 : gravity
+    for (let k = 0; k < count; k++) {
+      const angle = (k / count) * Math.PI * 2 + random() * 0.15
+      const speed = rocket.kind === 'ring' ? rocket.speed : rocket.speed * (0.45 + random() * 0.55)
+      const second = random() < 0.35
+      const colour = rocket.kind === 'willow' ? '#fbbf24' : second ? '#ffffff' : rocket.colour
+      const fade = (1 - burst / life) ** 0.6 * shown
+      const at = spark(rocket, angle, speed, burst, fall)
+      // Glitter crackles: sparks flashing white and off as they go.
+      if (rocket.kind === 'glitter' && burst > life * 0.35) {
+        if (Math.sin(burst / 25 + k * 1.7) > 0.2) plot(p, at.x, at.y, '#ffffff', fade)
+        continue
+      }
+      square(p, at.x - 0.5, at.y - 0.5, 2, colour, fade)
+      // A tail back along its path, long and golden for the willow.
+      const tail = rocket.kind === 'willow' ? 7 : 3
+      for (let j = 1; j <= tail; j++) {
+        const back = spark(rocket, angle, speed, Math.max(0, burst - j * 45), fall)
+        plot(p, back.x, back.y, colour, fade * (1 - j / (tail + 1)) * 0.7)
+      }
+    }
+  }
+}
+```
+
+<!-- /code -->
+
+As its comment says, the fireworks spell at `scene.t`.
+
+- `t`: the moment to draw: with reduced motion, 45% of the way through (about 4 seconds in), held
+  still.
+- `shown`: everything fades out over the last 0.6 seconds; with reduced motion, all of it shows.
+- `gravity`: how strongly the sparks fall, for the screen's height (`h / 520`; 520 pixels is a
+  1080-pixel screen's work area, in the effects' pixels at her usual size), so they droop as far
+  down a tall screen as a short one.
+- `for (const rocket of rockets(w, h, scene.x))`: every rocket in the show. `age` is how long since
+  it launched; one that hasn't yet is skipped.
+- Climbing: as the comment says, a bright head, a wobble, and a trail of sparks behind it. While
+  `age < rocket.rise`:
+  - `climb`: how far up it is, fast at first and slowing as it nears the top (`easeOut`), as a real
+    rocket does.
+  - `x`, `y`: from where it launched to where it bursts, that far along, with a little wobble from
+    side to side (`Math.sin(age / 40) * 0.6`).
+  - `square(p, x, y, 2, '#fff7d6', shown)`: its head, a cream square two pixels across.
+  - The trail: 8 pixels below it, where it was 28, 56, 84 ms ago and so on (`back`), each jiggling
+    a little sideways and fainter than the last; the two nearest gold, the rest orange.
+  - `continue`: a climbing rocket has nothing else to draw.
+- Bursting: as the comment says, a flash at the heart, then the sparks.
+  - `burst`: how long since it burst. Once its sparks' `life` is over, nothing is left of it.
+  - `if (burst < 140)`: for the first 0.14 seconds, a white square six pixels across at the burst,
+    fading, and a twinkle in its colour.
+  - The glow: as the comment says, a soft glow in its colour, spreading and fading: a faint `disc`
+    growing from 10 pixels round to 40 over half a second, fading from 14% to nothing.
+  - `const random = seeded(rocket.seed)`: its own sparks, the same every frame.
+  - `fall`: as the comment says, the willow's sparks are heavier: they droop, falling 1.6 times as
+    fast.
+  - `angle`: the sparks spread evenly round the circle (`k / count` of a turn), each nudged a
+    little at random so they don't look ruled.
+  - `speed`: a ring's sparks all fly at the rocket's speed, so they stay a ring; the others' from
+    45% of it to all of it, which fills the ball.
+  - `second`, `colour`: about a third of the sparks are white instead of the rocket's colour; a
+    willow's are all gold.
+  - `fade`: dimming over the sparks' life, slowly at first (`** 0.6`), and with the spell.
+  - `at`: where the spark is now (`spark()`).
+  - Glitter: as the comment says, glitter crackles: past the first 35% of its life, each spark is
+    only a white pixel, flashing on and off about every 0.16 seconds, each at its own moment
+    (`Math.sin(burst / 25 + k * 1.7) > 0.2`).
+  - `square(p, at.x - 0.5, at.y - 0.5, 2, colour, fade)`: the spark, two pixels by two, centred on
+    where it is.
+  - The tail: as the comment says, back along its path, long and golden for the willow: where the
+    spark was 45, 90, 135 ms ago and so on (7 of those for a willow, 3 for the rest), each fainter.
+
+## `src/renderer/src/lib/spells/thunderstorm.ts`: the thunderstorm
+
+As the comment at the top says, a thunderstorm: dark clouds roll in over the top of the screen,
+rain pours from them and splashes along the taskbar, and bolts of lightning crack down to it,
+branching as they go, each with a flash over the whole screen (one strikes right beside her).
+
+### `Point`, `Bolt`, `BOLT_MS`, `flickering` and `CLOUD`
+
+<!-- code: apps/desktop/src/renderer/src/lib/spells/thunderstorm.ts#Point,Bolt,BOLT_MS,flickering,CLOUD -->
+
+[`src/renderer/src/lib/spells/thunderstorm.ts`, lines 5–24](../../apps/desktop/src/renderer/src/lib/spells/thunderstorm.ts#L5-L24)
+
+```ts
+// Thunderstorm: dark clouds roll in over the top of the screen, rain pours from them and splashes
+// along the taskbar, and bolts of lightning crack down to it, branching as they go, each with a
+// flash over the whole screen (one strikes right beside her).
+
+type Point = { x: number; y: number }
+
+/** A bolt of lightning: when it strikes, its jagged path from the clouds down, and its branches. */
+export interface Bolt {
+  at: number
+  path: Point[]
+  branches: Point[][]
+}
+
+/** How long a bolt shows (ms): flickering on and off, three times. */
+const BOLT_MS = 280
+
+const flickering = (age: number) =>
+  age < 70 || (age > 110 && age < 180) || (age > 220 && age < BOLT_MS)
+
+/** How far down the clouds hang, at their fullest (a share of the screen's height). */
+const CLOUD = 0.24
+```
+
+<!-- /code -->
+
+- `Point`: a point on the canvas, `x` across and `y` down, for this file's own use.
+- `Bolt`: as its comment says, a bolt of lightning: when it strikes (`at`, ms into the spell), its
+  jagged `path` from the clouds down (a list of points) and its `branches` (a list of points each).
+- `BOLT_MS = 280`: as its comment says, how long a bolt shows: 0.28 seconds.
+- `flickering(age)`: whether a bolt `age` ms old is lit: for its first 0.07 seconds, again from
+  0.11 to 0.18, and again from 0.22 to the end. So, as the comment says, it flickers on and off,
+  three times, as real lightning does.
+- `CLOUD = 0.24`: as its comment says, how far down the clouds hang at their fullest, as a share of
+  the screen's height: about a quarter.
+
+### `jagged()`
+
+<!-- code: apps/desktop/src/renderer/src/lib/spells/thunderstorm.ts#jagged -->
+
+[`src/renderer/src/lib/spells/thunderstorm.ts`, lines 26–37](../../apps/desktop/src/renderer/src/lib/spells/thunderstorm.ts#L26-L37)
+
+```ts
+/** A jagged line from `from` to `to`: its middle pushed sideways, and again in each half. */
+function jagged(from: Point, to: Point, rough: number, random: () => number, depth = 5): Point[] {
+  if (depth === 0) return [from, to]
+  const middle = {
+    x: (from.x + to.x) / 2 + (random() - 0.5) * rough,
+    y: (from.y + to.y) / 2 + (random() - 0.5) * rough * 0.25,
+  }
+  return [
+    ...jagged(from, middle, rough / 2, random, depth - 1),
+    ...jagged(middle, to, rough / 2, random, depth - 1).slice(1),
+  ]
+}
+```
+
+<!-- /code -->
+
+As its comment says, a jagged line from `from` to `to`: its middle pushed sideways, and again in
+each half. This is _midpoint displacement_, a classic way to draw lightning, coastlines and
+mountain ridges: take the middle of a line and push it aside by a random amount, then do the same
+to each half with half as much (`rough / 2`), and so on, `depth` times (5 unless it's told
+otherwise, which makes 32 short lines). The result is rough at every scale, as lightning is.
+`random` is passed in, so the bolts all take their numbers from one seeded generator.
+
+- `if (depth === 0) return [from, to]`: at the bottom, just the two ends.
+- `middle`: halfway between them, pushed sideways by up to half of `rough` either way, and up or
+  down by only a quarter as much, so the bolt zigzags from side to side on its way down.
+- `[...jagged(from, middle, ...), ...jagged(middle, to, ...).slice(1)]`: the points of the first
+  half, then those of the second. `.slice(1)` drops the second half's first point, which is the
+  first half's last (the middle), so it isn't there twice. A function that calls itself like this
+  is _recursive_; `depth - 1` each time makes sure it stops.
+
+### `bolts()` and `cloudDepth()`
+
+<!-- code: apps/desktop/src/renderer/src/lib/spells/thunderstorm.ts#bolts,cloudDepth -->
+
+[`src/renderer/src/lib/spells/thunderstorm.ts`, lines 39–76](../../apps/desktop/src/renderer/src/lib/spells/thunderstorm.ts#L39-L76)
+
+```ts
+/**
+ * The storm's bolts: THUNDERSTORM.strikes of them, about a second apart once the clouds are in,
+ * each from the clouds' underside down to the bottom of the screen (the third right beside her),
+ * with two or three branches forking off partway down.
+ */
+export function bolts(w: number, h: number, beside: number): Bolt[] {
+  const random = seeded(47)
+  const base = h * CLOUD * 0.75
+  return Array.from({ length: THUNDERSTORM.strikes }, (_, i) => {
+    const at = 1500 + i * 950 + random() * 300
+    const top = { x: w * (0.1 + random() * 0.8), y: base }
+    const bottom =
+      i === 2
+        ? { x: beside + (random() - 0.5) * 20, y: h - 1 }
+        : { x: top.x + (random() - 0.5) * w * 0.15, y: h - 1 }
+    if (i === 2) top.x = bottom.x + (random() - 0.5) * w * 0.08
+    const path = jagged(top, bottom, (h - base) * 0.35, random)
+    const branches = Array.from({ length: 2 + Math.floor(random() * 2) }, () => {
+      const from = path[Math.floor(path.length * (0.2 + random() * 0.4))]!
+      const to = {
+        x: from.x + (random() - 0.5) * w * 0.12,
+        y: from.y + (h - from.y) * (0.3 + random() * 0.3),
+      }
+      return jagged(from, to, (to.y - from.y) * 0.4, random, 4)
+    })
+    return { at, path, branches }
+  })
+}
+
+/** How far down the clouds hang at `t` (pixels): rolling in, then away at the end. */
+export function cloudDepth(t: number, h: number): number {
+  return (
+    h *
+    CLOUD *
+    easeOut(t / 1500) *
+    (1 - between(t, THUNDERSTORM.durationMs - 1300, THUNDERSTORM.durationMs))
+  )
+}
+```
+
+<!-- /code -->
+
+- `bolts(w, h, beside)`: as its comment says, the storm's bolts: `THUNDERSTORM.strikes` (7) of
+  them, about a second apart once the clouds are in, each from the clouds' underside down to the
+  bottom of the screen (the third right beside her), with two or three branches forking off partway
+  down. `seeded(47)` makes them the same every frame. A test checks each bolt starts in the clouds,
+  reaches the ground, strikes while the clouds are in, and has branches that head down, and that
+  one hits within 15 pixels of her.
+  - `base`: where they start: three quarters of the way down the clouds at their fullest, so they
+    come out of the cloud bank.
+  - `at`: the first 1.5 seconds in, once the clouds have rolled in, then one every 0.95 seconds,
+    each up to 0.3 seconds late: the last about 7.5 seconds in, before the clouds roll away.
+  - `top`: where it leaves the clouds: anywhere from 10% to 90% of the way across.
+  - `bottom`: where it strikes, on the bottom row (`h - 1`): a little to one side of `top` (up to
+    7.5% of the width either way). The third (`i === 2`) strikes within 10 pixels of her
+    (`beside`, her `x`) instead, and its `top` moves to just above that spot, so it comes almost
+    straight down beside her.
+  - `path`: the jagged path between them, pushed aside by up to 35% of its height.
+  - `branches`: two or three (`2 + Math.floor(random() * 2)`), each forking off from a point 20%
+    to 60% of the way down the path, heading off to one side (up to 6% of the width) and down 30%
+    to 60% of the rest of the way to the ground; jagged too, a level less (16 short lines).
+- `cloudDepth(t, h)`: as its comment says, how far down the clouds hang at `t`, in pixels: rolling
+  in over the first 1.5 seconds, fast and then slowing (`easeOut`), to a quarter of the screen
+  (`CLOUD`), and away again over the last 1.3 seconds. A test checks there are none at the start
+  or the end, and more than a fifth of the screen of them 3 seconds in.
+
+### `drawThunderstorm()`
+
+<!-- code: apps/desktop/src/renderer/src/lib/spells/thunderstorm.ts#drawThunderstorm -->
+
+[`src/renderer/src/lib/spells/thunderstorm.ts`, lines 78–167](../../apps/desktop/src/renderer/src/lib/spells/thunderstorm.ts#L78-L167)
+
+```ts
+/** The thunderstorm spell at `scene.t`. */
+export function drawThunderstorm(p: Painter, scene: Scene): void {
+  const { w, h } = scene
+  const t = scene.still ? THUNDERSTORM.durationMs * 0.45 : scene.t
+  const depth = cloudDepth(t, h)
+  const storm = depth / (h * CLOUD)
+  const strikes = bolts(w, h, scene.x)
+  const flashing = !scene.still && strikes.some((bolt) => t - bolt.at >= 0 && t - bolt.at < 60)
+
+  // The flash: the whole screen lit for a moment.
+  if (flashing) p.rect(0, 0, w, h, '#e0f2fe', 0.22)
+
+  // Rain: slanting streaks falling from the clouds, more as the storm grows.
+  const random = seeded(53)
+  for (let k = 0; k < 380; k++) {
+    const x0 = random() * w * 1.25
+    const speed = 0.7 + random() * 0.5
+    const phase = random() * h
+    if (k >= 380 * storm) continue
+    const y = depth * 0.6 + ((phase + t * speed) % (h - depth * 0.6))
+    const x = x0 - (y - depth * 0.6) * 0.25
+    for (let j = 0; j < 5; j++) {
+      plot(p, x + j * 0.25, y - j, j < 2 ? '#bfdbfe' : '#93c5fd', 0.6 - j * 0.1)
+    }
+  }
+  // Splashes along the bottom: little crowns of water, coming and going.
+  for (let k = 0; k < 50; k++) {
+    const x = random() * w
+    const phase = random() * 320
+    const age = (t + phase) % 320
+    if (k >= 50 * storm || age > 160) continue
+    const spread = age / 40
+    plot(p, x - spread, h - 2 - spread * 0.6, '#bfdbfe', 0.6 * (1 - age / 160))
+    plot(p, x + spread, h - 2 - spread * 0.6, '#bfdbfe', 0.6 * (1 - age / 160))
+    plot(p, x, h - 1, '#93c5fd', 0.5 * (1 - age / 160))
+  }
+
+  // Lightning: each bolt flickering for a moment, a white core with a blue glow; its branches
+  // thinner; a burst of sparks where it hits.
+  for (const bolt of strikes) {
+    const age = t - bolt.at
+    if (scene.still || age < 0 || age > BOLT_MS || !flickering(age)) continue
+    for (let k = 0; k < bolt.path.length - 1; k++) {
+      const [a, b] = [bolt.path[k]!, bolt.path[k + 1]!]
+      line(p, { x: a.x - 1, y: a.y }, { x: b.x - 1, y: b.y }, '#93c5fd', 0.55)
+      line(p, { x: a.x + 1, y: a.y }, { x: b.x + 1, y: b.y }, '#93c5fd', 0.55)
+      line(p, a, b, '#ffffff', 1)
+    }
+    for (const branch of bolt.branches) {
+      for (let k = 0; k < branch.length - 1; k++)
+        line(p, branch[k]!, branch[k + 1]!, '#e0f2fe', 0.85)
+    }
+    const hit = bolt.path.at(-1)!
+    disc(p, hit.x, hit.y, 8, 3, '#e0f2fe', 0.5)
+    for (let k = 0; k < 6; k++)
+      twinkle(
+        p,
+        hit.x + Math.cos(k) * (4 + age / 25),
+        hit.y - Math.abs(Math.sin(k)) * (2 + age / 30),
+        '#bfdbfe',
+        0.9,
+      )
+  }
+
+  // The clouds: a dark bank over the top, its underside lumpy and rolling, lighter towards it (and
+  // lit up during a flash).
+  for (let x = 0; x < w; x += 2) {
+    const lump = noise(x * 0.018 + t * 0.00025, 1.5) * 0.45 + noise(x * 0.06 - t * 0.0004, 4) * 0.2
+    const bottom = depth * (0.6 + lump)
+    if (bottom < 1) continue
+    const alpha = 0.92 * Math.min(1, storm * 1.5)
+    p.rect(x, 0, 2, Math.round(bottom * 0.55), flashing ? '#4b5563' : '#111827', alpha)
+    p.rect(
+      x,
+      Math.round(bottom * 0.55),
+      2,
+      Math.round(bottom * 0.3),
+      flashing ? '#6b7280' : '#1f2937',
+      alpha,
+    )
+    p.rect(
+      x,
+      Math.round(bottom * 0.85),
+      2,
+      Math.max(1, Math.round(bottom * 0.15)),
+      flashing ? '#9ca3af' : '#374151',
+      alpha,
+    )
+  }
+}
+```
+
+<!-- /code -->
+
+As its comment says, the thunderstorm spell at `scene.t`. It's drawn from the back: the flash, the
+rain, the lightning, then the clouds over the top of it all.
+
+- `t`: with reduced motion, 45% of the way through, held still (and with no lightning; below).
+- `depth`, `storm`: how far down the clouds are now, and that as a share of their fullest, 0 to 1:
+  how much of the storm there is. The rain and the splashes grow with it.
+- `strikes`: the bolts (`bolts()`), the third beside her.
+- `flashing`: whether a bolt struck less than 0.06 seconds ago. Never with reduced motion.
+- The flash: as the comment says, the whole screen lit for a moment: one `p.rect` over all of it,
+  a pale blue at 22%.
+- The rain: as the comment says, slanting streaks falling from the clouds, more as the storm grows.
+  Of 380 drops, the first `380 * storm` are drawn (each takes its three numbers first, so each
+  keeps its own).
+  - `y`: each falls at its own speed from a little way into the clouds (60% of their depth) to the
+    bottom, and starts again (`% (h - depth * 0.6)`).
+  - `x`: it drifts left as it falls (`- (y - depth * 0.6) * 0.25`), which slants the rain. `x0`
+    goes up to a quarter past the right-hand edge, so the slant doesn't leave that side dry.
+  - Each streak is 5 pixels, going up and a little to the right from its head, so it leans the way
+    it falls: the two lowest a paler blue, all of them fainter toward the top.
+- The splashes: as the comment says, little crowns of water along the bottom, coming and going: up
+  to 50 (fewer while the storm builds), each splashing for 0.16 seconds of every 0.32, at its own
+  moment: two drops flying up and out either side, fading, and a pixel on the bottom row.
+- The lightning: as the comment says, each bolt flickering for a moment, a white core with a blue
+  glow; its branches thinner; a burst of sparks where it hits. A bolt is drawn only in its first
+  `BOLT_MS`, and only while it's `flickering()`; with reduced motion, never.
+  - For each short line of its path, a pale blue line a pixel to either side (55%), then a white
+    one between them: a white core with its glow, three pixels wide.
+  - Its branches: a single pale line each, so thinner than the bolt.
+  - `hit`: its last point, where it strikes the ground: a flat, pale glow (`disc`, 8 pixels round
+    and 3 up and down), and six twinkles thrown up and out from it.
+- The clouds: as the comment says, a dark bank over the top, its underside lumpy and rolling,
+  lighter toward it, and lit up during a flash. For every second column of pixels:
+  - `lump`: two layers of `noise()` (`spellMotion.ts`), a broad one and a finer one, each drifting
+    its own way with time (`+ t * 0.00025`, `- t * 0.0004`), so the underside rolls and churns.
+  - `bottom`: how far down the cloud reaches in this column: 60% to 125% of `depth`, with the
+    lumps. A column with nothing to draw is skipped.
+  - `alpha`: nearly opaque (92%) once the storm is two thirds in, fading in and out with it.
+  - Three `rect`s two pixels wide: the top 55% of the column darkest (a near-black blue-grey), the
+    next 30% a shade lighter, and the bottom 15% lighter again, so the underside looks lit from
+    below. During a flash, all three are lighter greys.
+
+## `src/renderer/src/lib/spells/blizzard.ts`: the blizzard
+
+As the comment at the top says, a blizzard: snow blowing across the screen in gusts (flakes of
+three sizes, streaks of wind), frost creeping in from the corners of the screen, and snow piling up
+along the taskbar, under a faint cold tint, all melting away at the end.
+
+### `drift()`, `strength()` and `frostReach()`
+
+<!-- code: apps/desktop/src/renderer/src/lib/spells/blizzard.ts#drift,strength,frostReach -->
+
+[`src/renderer/src/lib/spells/blizzard.ts`, lines 5–22](../../apps/desktop/src/renderer/src/lib/spells/blizzard.ts#L5-L22)
+
+```ts
+// Blizzard: snow blowing across the screen in gusts (flakes of three sizes, streaks of wind),
+// frost creeping in from the corners of the screen, and snow piling up along the taskbar, under a
+// faint cold tint, all melting away at the end.
+
+/** How far the wind has blown the snow sideways by `t` (pixels, to the left): steady, in gusts. */
+export function drift(t: number): number {
+  return 0.09 * t + 90 * Math.sin(t / 1400) + 40 * Math.sin(t / 530)
+}
+
+/** How much of the blizzard there is at `t`, 0 to 1: building up, then melting away at the end. */
+export function strength(t: number): number {
+  return easeOut(t / 1500) * (1 - between(t, BLIZZARD.durationMs - 1200, BLIZZARD.durationMs))
+}
+
+/** How far the frost has crept in from each corner at `t` (pixels), at most a fifth of the screen. */
+export function frostReach(t: number, w: number, h: number): number {
+  return Math.min(w, h) * 0.2 * easeOut((t - 400) / 4500) * strength(t)
+}
+```
+
+<!-- /code -->
+
+- `drift(t)`: as its comment says, how far the wind has blown the snow sideways by `t`, in pixels
+  to the left: steadily (`0.09 * t`, 90 pixels a second), plus two slow swings (sine waves, one
+  about every 8.8 seconds and one about every 3.3), which make it come in gusts, now strong, now
+  dying away almost to nothing. A test checks it keeps blowing one way.
+- `strength(t)`: as its comment says, how much of the blizzard there is at `t`, 0 to 1: building
+  up over the first 1.5 seconds (fast, then slowing) and melting away over the last 1.2. Nearly
+  everything drawn is scaled by it. A test checks it's 0 at the start and the end, and full in
+  between.
+- `frostReach(t, w, h)`: as its comment says, how far the frost has crept in from each corner, at
+  most a fifth of the screen's shorter side: from 0.4 seconds in, growing over 4.5 seconds, fast at
+  first, and melting with the rest. A test checks it never creeps further.
+
+### `crystal()`
+
+<!-- code: apps/desktop/src/renderer/src/lib/spells/blizzard.ts#crystal -->
+
+[`src/renderer/src/lib/spells/blizzard.ts`, lines 24–49](../../apps/desktop/src/renderer/src/lib/spells/blizzard.ts#L24-L49)
+
+```ts
+/** A frost crystal: a branch from a corner, with twigs off it at 60°, each shorter than the last. */
+function crystal(
+  p: Painter,
+  from: { x: number; y: number },
+  angle: number,
+  length: number,
+  alpha: number,
+): void {
+  const to = { x: from.x + Math.cos(angle) * length, y: from.y + Math.sin(angle) * length }
+  line(p, from, to, '#e0f2fe', alpha * 0.7)
+  plot(p, to.x, to.y, '#ffffff', alpha)
+  for (let d = 5; d < length - 2; d += 5) {
+    const at = { x: from.x + Math.cos(angle) * d, y: from.y + Math.sin(angle) * d }
+    const twig = (length - d) * 0.35
+    for (const side of [-1, 1]) {
+      const a = angle + side * (Math.PI / 3)
+      line(
+        p,
+        at,
+        { x: at.x + Math.cos(a) * twig, y: at.y + Math.sin(a) * twig },
+        '#e0f2fe',
+        alpha * 0.5,
+      )
+    }
+  }
+}
+```
+
+<!-- /code -->
+
+As its comment says, a frost crystal: a branch from a corner, with twigs off it at 60°, each
+shorter than the last. Ice crystals grow in sixes, which is why frost forks at 60°
+(`Math.PI / 3`).
+
+- `to`: the branch's tip, `length` pixels from `from` at `angle`; a pale blue line to it, with a
+  white pixel at the tip.
+- The twigs: every 5 pixels along the branch (`d`), stopping short of the tip, one off each side
+  (`side`, -1 and 1) at 60° to it, 35% as long as the branch still has to go
+  (`(length - d) * 0.35`), so they get shorter toward the tip, like a feather of frost. They're
+  fainter than the branch.
+
+### `drawBlizzard()`
+
+<!-- code: apps/desktop/src/renderer/src/lib/spells/blizzard.ts#drawBlizzard -->
+
+[`src/renderer/src/lib/spells/blizzard.ts`, lines 51–131](../../apps/desktop/src/renderer/src/lib/spells/blizzard.ts#L51-L131)
+
+```ts
+/** The blizzard spell at `scene.t`. */
+export function drawBlizzard(p: Painter, scene: Scene): void {
+  const { w, h } = scene
+  const t = scene.still ? BLIZZARD.durationMs * 0.45 : scene.t
+  const now = strength(t)
+
+  // The cold: a faint blue over everything.
+  p.rect(0, 0, w, h, '#bae6fd', 0.06 * now)
+
+  // Frost from each corner: a fan of crystals growing in, each its own length.
+  const reach = frostReach(t, w, h)
+  const corners = [
+    { x: 0, y: 0, a: 0 },
+    { x: w - 1, y: 0, a: Math.PI / 2 },
+    { x: w - 1, y: h - 1, a: Math.PI },
+    { x: 0, y: h - 1, a: (Math.PI * 3) / 2 },
+  ]
+  const random = seeded(61)
+  for (const corner of corners) {
+    for (let k = 0; k < 6; k++) {
+      const angle = corner.a + ((k + 0.5) / 6) * (Math.PI / 2) + (random() - 0.5) * 0.2
+      const length = reach * (0.55 + random() * 0.45)
+      if (length > 3) crystal(p, corner, angle, length, 0.8 * now)
+    }
+  }
+
+  // Streaks of wind racing across.
+  for (let k = 0; k < 14; k++) {
+    const y = random() * h * 0.9
+    const speed = 0.5 + random() * 0.5
+    const phase = random() * (w + 60)
+    const x = w + 30 - ((phase + t * speed) % (w + 60))
+    const length = 10 + random() * 14
+    line(p, { x, y }, { x: x + length, y: y - 1 }, '#ffffff', 0.25 * now)
+  }
+
+  // The snow: flakes of three sizes, the bigger ones nearer, so faster, blown by the wind and
+  // swaying, wrapping round the screen; more of them as it builds.
+  const blown = drift(t)
+  for (let k = 0; k < BLIZZARD.flakes; k++) {
+    const size = random() < 0.7 ? 0 : random() < 0.66 ? 1 : 2
+    const fall = 0.025 + random() * 0.03 + size * 0.02
+    const x0 = random() * (w + 40)
+    const phase = random() * (h + 20)
+    const sway = random() * Math.PI * 2
+    if (k >= BLIZZARD.flakes * now) continue
+    const y = ((phase + t * fall) % (h + 20)) - 10
+    const x =
+      ((((x0 - blown * (0.6 + size * 0.3) + Math.sin(t / 600 + sway) * 5) % (w + 40)) + w + 40) %
+        (w + 40)) -
+      20
+    const alpha = (0.65 + size * 0.15) * now
+    plot(p, x, y, '#ffffff', alpha)
+    if (size >= 1) {
+      plot(p, x + 1, y, '#e0f2fe', alpha * 0.8)
+      plot(p, x - 1, y, '#e0f2fe', alpha * 0.8)
+      plot(p, x, y + 1, '#e0f2fe', alpha * 0.8)
+      plot(p, x, y - 1, '#e0f2fe', alpha * 0.8)
+    }
+    if (size === 2) {
+      for (const [dx, dy] of [
+        [1, 1],
+        [-1, 1],
+        [1, -1],
+        [-1, -1],
+      ] as const) {
+        plot(p, x + dx * 2, y + dy * 2, '#ffffff', alpha * 0.7)
+      }
+    }
+  }
+
+  // Snow piling up along the bottom: a white drift with a lumpy top, edged in pale blue.
+  const pile = Math.min(h * 0.04, 22) * between(t, 1200, 7000) * now
+  if (pile >= 1) {
+    for (let x = 0; x < w; x += 2) {
+      const height = pile * (0.55 + 0.45 * noise(x * 0.03, 7.5))
+      p.rect(x, Math.round(h - height), 2, Math.ceil(height), '#f8fafc', 0.92 * now)
+      p.rect(x, Math.round(h - height), 2, 1, '#bae6fd', 0.8 * now)
+    }
+  }
+}
+```
+
+<!-- /code -->
+
+As its comment says, the blizzard spell at `scene.t`, drawn from the back.
+
+- `t`: with reduced motion, 45% of the way through, held still. `now`: its `strength()` then.
+- The cold: as the comment says, a faint blue over everything: one pale blue `rect` over the whole
+  screen at 6%.
+- The frost: as the comment says, from each corner, a fan of crystals growing in, each its own
+  length. `corners` are the four corners, each with the angle its fan starts at: from the top-left,
+  it spreads between pointing right (0) and pointing down (π/2), and each corner after it a
+  quarter-turn further round, so every fan opens into the screen. Each has six crystals spread
+  evenly across its quarter-turn (nudged a little at random), each 55% to all of `reach` long. One
+  of 3 pixels or less isn't drawn.
+- The wind: as the comment says, streaks racing across: 14 faint white lines, 10 to 24 pixels long,
+  each at its own height, racing from the right-hand edge to the left at its own speed and starting
+  again (`% (w + 60)`, with 30 pixels to spare at either side, so they come and go off the screen),
+  a pixel higher at their right-hand end.
+- The snow: as the comment says, flakes of three sizes, the bigger ones nearer, so faster, blown by
+  the wind and swaying, wrapping round the screen; more of them as it builds. Of `BLIZZARD.flakes`
+  (340), the first `340 * now` are drawn, each taking its numbers first.
+  - `size`: 0 for 70% of them, 1 for about two thirds of the rest, and 2 for the others.
+  - `fall`: how fast it falls, faster for the bigger ones. Nearer things seem to move faster, so
+    this gives the snow depth (_parallax_).
+  - `y`: falling at that speed from just above the top to just below the bottom, and round again.
+  - `x`: where it started, blown left by the wind (`blown`, the bigger ones further, again for
+    depth), swaying 5 pixels either way, and wrapped round (`% (w + 40)`), so a flake blown off the
+    left-hand edge comes back on the right. It's `%`, `+ w + 40` and `%` again because in
+    JavaScript `%` of a negative number stays negative.
+  - The flake: a white pixel; size 1 adds its four neighbours in pale blue, a little plus; size 2
+    also four white pixels two out on the diagonals, a little star.
+- The drift: as the comment says, snow piling up along the bottom: a white drift with a lumpy top
+  and a blue shadow along it.
+  - `pile`: how high it has got: up to 4% of the screen's height (and no more than 22 pixels),
+    growing from 1.2 seconds in to 7, and melting with the rest.
+  - For every second column, `height` is 55% to all of that, `noise()` making the top lumpy (it
+    doesn't move with time: a drift stays put), then a near-white `rect` up from the bottom, and
+    the pale blue shadow a pixel deep along its top.
+
+## `src/renderer/src/lib/spells/vortex.ts`: the vortex
+
+As the comment at the top says, a vortex: a portal tears open in the middle of the screen: a black
+heart ringed with light, four glowing arms spiralling round it, rings of bent light about it,
+sparks of lightning crackling at its rim, and specks drawn in from all over the screen, spiralling
+faster as they fall in. Then it collapses into itself and goes off in a flash and a shock wave.
+
+### `portalRadius()`, `middle` and `armColour()`
+
+<!-- code: apps/desktop/src/renderer/src/lib/spells/vortex.ts#portalRadius,middle,armColour -->
+
+[`src/renderer/src/lib/spells/vortex.ts`, lines 5–25](../../apps/desktop/src/renderer/src/lib/spells/vortex.ts#L5-L25)
+
+```ts
+// Vortex: a portal tears open in the middle of the screen: a black heart ringed with light, four
+// glowing arms spiralling round it, rings of bent light about it, sparks of lightning crackling at
+// its rim, and specks drawn in from all over the screen, spiralling faster as they fall in. Then it
+// collapses into itself and goes off in a flash and a shock wave.
+
+/** How big the portal is at `t` (pixels): opening, steady (breathing a little), collapsing, gone. */
+export function portalRadius(t: number, w: number, h: number): number {
+  const full = Math.min(w, h) * 0.3
+  if (t >= VORTEX.implodeAt) return 0
+  const open = easeOut(t / VORTEX.openMs)
+  const collapse = between(t, VORTEX.collapseAt, VORTEX.implodeAt) ** 2
+  return full * open * (1 - collapse) * (1 + 0.04 * Math.sin(t / 180))
+}
+
+/** Where the portal opens: the middle of the screen, a little above it. */
+const middle = (w: number, h: number) => ({ x: w / 2, y: h * 0.45 })
+
+/** A colour along a spiral arm: white at its heart, then lilac, her colour, and blue at its ends. */
+function armColour(share: number, accent: string): string {
+  return share < 0.2 ? '#ffffff' : share < 0.45 ? '#e9d5ff' : share < 0.75 ? accent : '#60a5fa'
+}
+```
+
+<!-- /code -->
+
+- `portalRadius(t, w, h)`: as its comment says, how big the portal is at `t`, in pixels: opening,
+  steady (breathing a little), collapsing, then gone. A test checks it opens from nothing, holds at
+  about 30% of the screen, shrinks as it collapses, and is gone at the implosion.
+  - `full`: 30% of the screen's shorter side.
+  - `if (t >= VORTEX.implodeAt) return 0`: from the implosion (6.9 seconds in), it's gone.
+  - `open`: opening over the first second (`openMs`), fast and then slowing.
+  - `collapse`: 0 to 1 from `collapseAt` (6.3 seconds) to `implodeAt`, squared (`** 2`), so it
+    starts slowly and speeds up: the portal falls in on itself faster and faster.
+  - `(1 + 0.04 * Math.sin(t / 180))`: breathing, 4% bigger and smaller, about once a second.
+- `middle(w, h)`: as its comment says, where the portal opens: halfway across the screen, and a
+  little above halfway down (45%).
+- `armColour(share, accent)`: as its comment says, a colour along a spiral arm, by how far out
+  along it (`share`, 0 at the heart to 1 at its end): white for the first fifth, then lilac, then
+  her colour, and blue for the last quarter.
+
+### `drawVortex()`
+
+<!-- code: apps/desktop/src/renderer/src/lib/spells/vortex.ts#drawVortex -->
+
+[`src/renderer/src/lib/spells/vortex.ts`, lines 27–132](../../apps/desktop/src/renderer/src/lib/spells/vortex.ts#L27-L132)
+
+```ts
+/** The vortex spell at `scene.t`. */
+export function drawVortex(p: Painter, scene: Scene): void {
+  const { w, h, accent } = scene
+  const t = scene.still ? VORTEX.durationMs * 0.45 : scene.t
+  const c = middle(w, h)
+  const r = portalRadius(t, w, h)
+  const spin = t * 0.0022 + between(t, VORTEX.collapseAt, VORTEX.implodeAt) * 6
+
+  if (r > 1) {
+    // Specks drawn in from all over the screen, spiralling round faster as they fall in.
+    const random = seeded(71)
+    const far = Math.hypot(w, h) * 0.6
+    for (let k = 0; k < 200; k++) {
+      const start = r * 1.2 + random() * (far - r)
+      const angle = random() * Math.PI * 2
+      const period = 1800 + random() * 1800
+      const phase = random() * period
+      const colour = k % 3 === 0 ? '#ffffff' : k % 3 === 1 ? accent : '#93c5fd'
+      const u = ((t + phase) % period) / period
+      const fall = start * (1 - u) ** 1.6 + r * 0.25
+      const a = angle + u * u * 9 + spin
+      const x = c.x + Math.cos(a) * fall
+      const y = c.y + Math.sin(a) * fall * 0.85
+      if (k % 3 === 0) square(p, x - 0.5, y - 0.5, 2, colour, Math.min(1, u * 4) * 0.9)
+      else plot(p, x, y, colour, Math.min(1, u * 4) * 0.9)
+      const back = start * (1 - Math.max(0, u - 0.03)) ** 1.6 + r * 0.25
+      const ab = angle + Math.max(0, u - 0.03) ** 2 * 9 + spin
+      plot(p, c.x + Math.cos(ab) * back, c.y + Math.sin(ab) * back * 0.85, colour, u * 0.5)
+    }
+
+    // Rings of bent light round it, dashed and turning, one each way.
+    ring(p, c.x, c.y, r * 1.08, r * 0.92, accent, 0.5, spin * 0.7, 0.22)
+    ring(p, c.x, c.y, r * 1.3, r * 1.1, '#93c5fd', 0.35, -spin * 0.5, 0.3)
+
+    // A glow of her colour about it.
+    disc(p, c.x, c.y, r * 0.8, r * 0.68, accent, 0.12)
+    disc(p, c.x, c.y, r * 0.5, r * 0.43, '#e9d5ff', 0.1)
+
+    // Four arms of light spiralling in to the heart, each three pixels wide, with a fainter
+    // fourth along one side.
+    for (let arm = 0; arm < 4; arm++) {
+      for (let k = 0; k <= 90; k++) {
+        const share = k / 90
+        const a = spin + (arm * Math.PI) / 2 + share * 2.6
+        const d = r * (0.3 + share * 0.72)
+        const x = c.x + Math.cos(a) * d
+        const y = c.y + Math.sin(a) * d * 0.85
+        const colour = armColour(share, accent)
+        const alpha = 1 - share * 0.6
+        const across = { x: Math.cos(a + 1.57), y: Math.sin(a + 1.57) * 0.85 }
+        plot(p, x, y, colour, alpha)
+        plot(p, x + across.x, y + across.y, colour, alpha * 0.75)
+        plot(p, x - across.x, y - across.y, colour, alpha * 0.75)
+        plot(p, x + across.x * 2, y + across.y * 2, colour, alpha * 0.35)
+      }
+    }
+
+    // The black heart, ringed with light.
+    disc(p, c.x, c.y, r * 0.3, r * 0.26, '#0b0618', 0.95)
+    ring(p, c.x, c.y, r * 0.3, r * 0.26, '#e9d5ff', 0.95)
+    ring(p, c.x, c.y, r * 0.33, r * 0.29, accent, 0.6)
+
+    // Lightning crackling at its rim: a new spark every tenth of a second.
+    const crackle = seeded(Math.floor(t / 100) + 7)
+    for (let k = 0; k < 3; k++) {
+      const a = crackle() * Math.PI * 2
+      const from = { x: c.x + Math.cos(a) * r * 0.85, y: c.y + Math.sin(a) * r * 0.72 }
+      let at = from
+      for (let s = 0; s < 4; s++) {
+        const next = {
+          x: at.x + (crackle() - 0.5) * r * 0.25,
+          y: at.y + (crackle() - 0.5) * r * 0.2,
+        }
+        line(p, at, next, '#e0f2fe', 0.85)
+        at = next
+      }
+    }
+  }
+
+  // The implosion: a white flash over the screen, a shock wave racing out, sparks flung outward.
+  const after = t - VORTEX.implodeAt
+  if (after >= 0 && !scene.still) {
+    if (after < 200) p.rect(0, 0, w, h, '#ffffff', 0.6 * (1 - after / 200))
+    const wave = easeOut(after / 900)
+    const fade = 1 - between(after, 0, VORTEX.durationMs - VORTEX.implodeAt)
+    ring(p, c.x, c.y, wave * Math.max(w, h) * 0.6, wave * Math.max(w, h) * 0.5, '#e9d5ff', fade)
+    ring(
+      p,
+      c.x,
+      c.y,
+      wave * Math.max(w, h) * 0.58,
+      wave * Math.max(w, h) * 0.48,
+      accent,
+      fade * 0.6,
+    )
+    const random = seeded(73)
+    for (let k = 0; k < 60; k++) {
+      const a = random() * Math.PI * 2
+      const speed = (0.1 + random() * 0.2) * (Math.min(w, h) / 300)
+      const x = c.x + Math.cos(a) * speed * after
+      const y = c.y + Math.sin(a) * speed * after * 0.85
+      if (k % 4 === 0) twinkle(p, x, y, accent, fade)
+      else plot(p, x, y, '#ffffff', fade)
+    }
+  }
+}
+```
+
+<!-- /code -->
+
+As its comment says, the vortex spell at `scene.t`.
+
+- `t`: with reduced motion, 45% of the way through, held still. `c`: the portal's middle; `r`: its
+  radius now.
+- `spin`: how far it has turned, in radians: steadily (`t * 0.0022`, a turn about every 2.9
+  seconds), and six radians more (nearly another turn) while it collapses, so it whirls faster as
+  it falls in.
+- `if (r > 1)`: the portal, drawn while it's there (everything but the implosion).
+- The specks: as the comment says, drawn in from all over the screen, spiralling round faster as
+  they fall in. 200 of them, from `seeded(71)`.
+  - `start`: how far out each starts: from just outside the portal to `far`, 60% of the screen's
+    diagonal, so from the corners too.
+  - `angle`, `period`, `phase`: where round it starts, how long it takes to fall in (1.8 to 3.6
+    seconds) and how far through that it was when the spell began. Each falls in and starts again,
+    over and over.
+  - `u`: how far through its fall it is now, 0 to 1.
+  - `fall`: its distance from the middle: from `start` down to a quarter of the portal's radius,
+    slowly at first and faster as it nears (`(1 - u) ** 1.6`).
+  - `a`: its angle, turning faster and faster as it falls (`u * u * 9`, about a turn and a half by
+    the end), and with the portal.
+  - `y`: squashed to 85% up and down, as is everything in the vortex, so it looks tipped a little
+    toward you.
+  - Every third is a white square two pixels across, the rest single pixels in her colour or blue;
+    each fades in over the first quarter of its fall. A fainter pixel where it was a moment before
+    (3% of its fall earlier) gives it a short tail.
+- The rings: as the comment says, rings of bent light round it, dashed and turning, one each way:
+  one just outside its edge in her colour, and a fainter blue one further out, turning the other
+  way (`-spin`). It's how light looks bent round a black hole (_gravitational lensing_).
+- The glow: as the comment says, a glow of her colour about it: a faint disc of her colour, and a
+  smaller lilac one inside it.
+- The arms: as the comment says, four arms of light spiralling in to the heart. Each is 91 points,
+  a quarter-turn round from the last arm (`arm * Math.PI / 2`), from the heart's edge (30% of the
+  radius) out to just past the portal's edge (102%), curving round by 2.6 radians (about 150°) as
+  it goes. Each point is coloured by `armColour()` and fainter toward the end
+  (`1 - share * 0.6`). `across` is the direction square to the arm there (`a + 1.57`, a
+  quarter-turn), and a pixel either side of the point, a little fainter, makes the arm the three
+  pixels wide the comment says, with a fourth, fainter still, two out on one side.
+- The heart: as the comment says, the black heart, ringed with light: a near-black disc (the
+  darkest purple) 30% of the radius, a lilac ring round it, and a fainter ring of her colour just
+  outside that.
+- The rim lightning: as the comment says, lightning crackling at its rim, a new spark every tenth
+  of a second. `seeded(Math.floor(t / 100) + 7)` takes a new seed every 0.1 seconds, so the same
+  three sparks show for a tenth of a second, then three new ones. Each starts at a random point on
+  the rim (85% of the radius) and zigzags four short steps at random, in pale blue.
+- The implosion: as the comment says, a white flash over the screen, a shock wave racing out, and
+  sparks flung outward. From `implodeAt`, and not with reduced motion:
+  - `after`: how long since it went off.
+  - The flash: the whole screen white at 60%, fading over 0.2 seconds.
+  - `wave`: how far out the shock wave is: to 60% of the screen's longer side over 0.9 seconds,
+    fast and then slowing. `fade`: fading over the 1.1 seconds left until the window closes.
+  - The shock wave: a lilac ring, and a fainter one of her colour just inside it, flattened like
+    the portal.
+  - The sparks: 60 of them, from `seeded(73)`, flung straight out from the middle, each its own way
+    at its own speed (for the screen's size); every fourth a twinkle in her colour, the rest white
+    pixels.
+
+## `src/renderer/src/lib/spells/butterflies.ts`: the butterflies
+
+As the comment at the top says, butterflies: a burst of sparkles at her, and out of it a swarm of
+little magic butterflies, each its own colour (some bigger, nearer), fluttering up and away across
+the screen along wavy paths of their own, flapping, each with a glittering trail.
+
+### `OPEN`, `SHUT` and `WINGS`
+
+<!-- code: apps/desktop/src/renderer/src/lib/spells/butterflies.ts#OPEN,SHUT,WINGS -->
+
+[`src/renderer/src/lib/spells/butterflies.ts`, lines 5–12](../../apps/desktop/src/renderer/src/lib/spells/butterflies.ts#L5-L12)
+
+```ts
+// Butterflies: a burst of sparkles at her, and out of it a swarm of little magic butterflies,
+// each its own colour (some bigger, nearer), fluttering up and away across the screen along wavy
+// paths of their own, flapping, each with a glittering trail.
+
+/** Wings open and shut, as rows of pixels: W the wings, S a white spot on each, k the gold body. */
+const OPEN = ['WW.WW', 'WSkSW', '.W.W.']
+
+const SHUT = ['.WkW.', '..k..']
+
+const WINGS = ['#2dd4bf', '#f472b6', '#fbbf24', '#60a5fa', '#fb923c', '#a3e635', '#e879f9']
+```
+
+<!-- /code -->
+
+- `OPEN`, `SHUT`: as the comment says, a butterfly with its wings open and shut, written as rows of
+  pixels like the small pictures in `rig.ts`: `W` the wings, `S` a white spot on each, `k` the gold
+  body, and `.` nothing. It's the butterfly that lands on her finger in her `butterfly` habit
+  (`BUTTERFLY_OPEN` and `BUTTERFLY_SHUT`), in any colour. Open, it's five pixels wide and three
+  tall: two wings at the top, a spot either side of the body, and two smaller wings below. Shut,
+  only the body and the wings folded up beside it show.
+- `WINGS`: the colours its wings can be: teal, pink, amber, blue, orange, lime and orchid.
+
+### `Flier`, `heart` and `flier()`
+
+<!-- code: apps/desktop/src/renderer/src/lib/spells/butterflies.ts#Flier,heart,flier -->
+
+[`src/renderer/src/lib/spells/butterflies.ts`, lines 14–60](../../apps/desktop/src/renderer/src/lib/spells/butterflies.ts#L14-L60)
+
+```ts
+/** Where a butterfly is: its middle, whether its wings are open, its colour and size. */
+export interface Flier {
+  x: number
+  y: number
+  open: boolean
+  colour: string
+  size: 2 | 3
+}
+
+/** Where she is, as the butterflies come out of her: her middle (pixels). */
+const heart = (scene: Pick<Scene, 'x' | 'feet' | 'height'>) => ({
+  x: scene.x,
+  y: scene.feet - scene.height * 0.55,
+})
+
+/**
+ * Butterfly `k` (of BUTTERFLIES.count) at `t`, or null before it comes out of her: each leaves her
+ * a moment after the last, heading up and outward at its own speed, weaving side to side, bobbing
+ * as it flaps, its wings opening and shutting at its own pace.
+ */
+export function flier(
+  k: number,
+  t: number,
+  scene: Pick<Scene, 'x' | 'feet' | 'height'>,
+): Flier | null {
+  const random = seeded(200 + k)
+  const born = k * 55 + random() * 500
+  const heading = -Math.PI / 2 + (random() - 0.5) * 2.4
+  const speed = 0.05 + random() * 0.06
+  const weave = 8 + random() * 10
+  const sway = random() * Math.PI * 2
+  const flap = 100 + random() * 60
+  const colour = WINGS[Math.floor(random() * WINGS.length)]!
+  const size = random() < 0.3 ? 3 : 2
+  const age = t - born
+  if (age < 0) return null
+  const from = heart(scene)
+  const along = speed * age
+  const across = Math.sin(age / 320 + sway) * weave
+  return {
+    x: from.x + Math.cos(heading) * along - Math.sin(heading) * across,
+    y: from.y + Math.sin(heading) * along + Math.cos(heading) * across + Math.sin(age / 90) * 1.5,
+    open: Math.floor(age / flap) % 2 === 0,
+    colour,
+    size,
+  }
+}
+```
+
+<!-- /code -->
+
+- `Flier`: as its comment says, where a butterfly is: its middle (`x`, `y`), whether its wings are
+  open, its colour and its size (each of its pixels drawn 2 or 3 pixels across).
+- `heart(scene)`: as its comment says, where she is as the butterflies come out of her: her middle,
+  55% of her height up from her feet.
+- `flier(k, t, scene)`: as its comment says, butterfly `k` at `t`, or `null` before it comes out of
+  her. Each leaves her a moment after the last, heading up and outward at its own speed, weaving
+  from side to side, bobbing as it flaps, its wings opening and shutting at its own pace. Each has
+  a seeded generator of its own (`seeded(200 + k)`), so any butterfly at any moment can be worked
+  out on its own, which is how their trails are drawn (below). A test checks none is out at the
+  start and all are 3 seconds in, the first starts near her middle and climbs, and it flaps.
+  - `born`: when it comes out: 0.055 seconds after the one before (`k * 55`), plus up to half a
+    second at random, so all 36 are out within 2.5 seconds.
+  - `heading`: which way it goes: straight up (`-Math.PI / 2`, as `y` grows downward), give or take
+    1.2 radians (about 70°) either way, so the swarm fans up and out.
+  - `speed`: 0.05 to 0.11 pixels a millisecond.
+  - `weave`, `sway`: how far it weaves from side to side (8 to 18 pixels), and where in its weave it
+    starts.
+  - `flap`: how long its wings stay open, and then shut: 0.1 to 0.16 seconds, each its own pace.
+  - `colour`, `size`: one of `WINGS`, and size 3 (nearer) for three in ten of them, 2 for the rest.
+  - `along`, `across`: how far it has flown along its heading, and how far off to one side it is
+    now, weaving (a sine wave, a full swing about every 2 seconds).
+  - `x`, `y`: from her middle, `along` its heading and `across` square to it (the `cos` and `sin`
+    turn the two into across and down the screen), plus a little bob up and down (1.5 pixels, about
+    every 0.57 seconds) as it flaps.
+  - `open`: open and shut by turns, every `flap` milliseconds.
+
+### `draw()` and `drawButterflies()`
+
+<!-- code: apps/desktop/src/renderer/src/lib/spells/butterflies.ts#draw,drawButterflies -->
+
+[`src/renderer/src/lib/spells/butterflies.ts`, lines 62–111](../../apps/desktop/src/renderer/src/lib/spells/butterflies.ts#L62-L111)
+
+```ts
+/** One butterfly, its wings as they are, `size` pixels a pixel. */
+function draw(p: Painter, b: Flier, alpha: number): void {
+  const rows = b.open ? OPEN : SHUT
+  const left = b.x - (rows[0]!.length * b.size) / 2
+  const top = b.y - (rows.length * b.size) / 2
+  rows.forEach((row, j) =>
+    [...row].forEach((letter, i) => {
+      if (letter === '.') return
+      const colour = letter === 'W' ? b.colour : letter === 'S' ? '#ffffff' : '#b3832c'
+      square(p, left + i * b.size, top + j * b.size, b.size, colour, alpha)
+    }),
+  )
+}
+
+/** The butterflies spell at `scene.t`. */
+export function drawButterflies(p: Painter, scene: Scene): void {
+  const t = scene.still ? BUTTERFLIES.durationMs * 0.35 : scene.t
+  const shown = scene.still
+    ? 1
+    : 1 - between(t, BUTTERFLIES.durationMs - 900, BUTTERFLIES.durationMs)
+  const from = heart(scene)
+
+  // The burst they come out of: a ring of sparkles, spreading and fading.
+  if (t < 700 && !scene.still) {
+    const spread = t / 700
+    for (let k = 0; k < 12; k++) {
+      const a = (k / 12) * Math.PI * 2
+      twinkle(
+        p,
+        from.x + Math.cos(a) * spread * 22,
+        from.y + Math.sin(a) * spread * 16,
+        '#fde68a',
+        1 - spread,
+      )
+    }
+  }
+
+  for (let k = 0; k < BUTTERFLIES.count; k++) {
+    const b = flier(k, t, scene)
+    if (!b) continue
+    // Its trail: where it was a little while ago, glittering and fading.
+    for (let j = 1; j <= 5; j++) {
+      const before = flier(k, t - j * 70, scene)
+      if (!before) break
+      const glint = (k + j + Math.floor(t / 120)) % 4 === 0
+      plot(p, before.x, before.y + 2, glint ? '#ffffff' : '#fde68a', shown * (1 - j / 6) * 0.8)
+    }
+    draw(p, b, shown)
+  }
+}
+```
+
+<!-- /code -->
+
+- `draw(p, b, alpha)`: as its comment says, one butterfly, its wings as they are, `size` pixels a
+  pixel: each letter of its picture a `square` of `size` pixels, in its wing colour, white or gold
+  (`#b3832c`), the picture centred on where it is (`left`, `top`).
+- `drawButterflies(p, scene)`: as its comment says, the butterflies spell at `scene.t`.
+  - `t`: with reduced motion, 35% of the way through (2.8 seconds in, when they're all out), held
+    still.
+  - `shown`: everything fades out over the last 0.9 seconds.
+  - The burst: as the comment says, the burst they come out of: a ring of sparkles, spreading and
+    fading: 12 gold twinkles going out from her middle over 0.7 seconds, wider than it is tall (22
+    pixels round and 16 up and down by the end). Not with reduced motion.
+  - For each butterfly that's out (`flier()`), its trail: as the comment says, where it was a
+    little while ago, glittering and fading: five pixels just below where it was 0.07, 0.14, 0.21,
+    0.28 and 0.35 seconds before (`flier(k, t - j * 70, scene)`), each fainter. One in four is
+    white rather than gold, and which moves on every 0.12 seconds, so the trail glitters. A trail
+    stops where the butterfly hadn't yet come out (`break`).
+  - `draw(p, b, shown)`: then the butterfly itself, over its trail.
+
+## `src/renderer/src/lib/spells/phoenix.ts`: the phoenix
+
+As the comment at the top says, a phoenix: a ring of fire at her, and out of it a bird of fire: it
+climbs, swoops across the screen, turns a loop in the middle of it and flies off the far side, its
+wings of flame beating, its tail streaming, a glow about it and a trail of embers drifting down
+behind it, cooling from white to red as they fall.
+
+### `Point`, `TAKE_OFF` and `phoenixPath()`
+
+<!-- code: apps/desktop/src/renderer/src/lib/spells/phoenix.ts#Point,TAKE_OFF,phoenixPath -->
+
+[`src/renderer/src/lib/spells/phoenix.ts`, lines 5–37](../../apps/desktop/src/renderer/src/lib/spells/phoenix.ts#L5-L37)
+
+```ts
+// Phoenix: a ring of fire at her, and out of it a bird of fire: it climbs, swoops across the
+// screen, turns a loop in the middle of it and flies off the far side, its wings of flame beating,
+// its tail streaming, a glow about it and a trail of embers drifting down behind it, cooling from
+// white to red as they fall.
+
+type Point = { x: number; y: number }
+
+/** When the bird leaves her (ms). */
+const TAKE_OFF = 300
+
+/**
+ * The bird's way across the screen, through these points: from her, up, across to the middle of
+ * the screen (towards whichever side has more room), round a loop there, and away off the far side.
+ */
+export function phoenixPath(scene: Pick<Scene, 'w' | 'h' | 'x' | 'feet' | 'height'>): Point[] {
+  const { w, h } = scene
+  const start = { x: scene.x, y: scene.feet - scene.height * 0.6 }
+  const dir = scene.x > w / 2 ? -1 : 1
+  const loop = { x: w * 0.5, y: h * 0.34 }
+  const r = Math.min(w, h) * 0.13
+  return [
+    start,
+    { x: start.x + dir * w * 0.02, y: start.y - h * 0.22 },
+    { x: loop.x - dir * r * 2.2, y: loop.y + r * 1.1 },
+    { x: loop.x, y: loop.y + r },
+    { x: loop.x + dir * r, y: loop.y },
+    { x: loop.x, y: loop.y - r },
+    { x: loop.x - dir * r, y: loop.y },
+    { x: loop.x, y: loop.y + r * 0.95 },
+    { x: loop.x + dir * w * 0.25, y: h * 0.18 },
+    { x: dir > 0 ? w + 80 : -80, y: h * 0.05 },
+  ]
+}
+```
+
+<!-- /code -->
+
+- `Point`: a point on the canvas, as in `thunderstorm.ts`.
+- `TAKE_OFF = 300`: as its comment says, when the bird leaves her: 0.3 seconds in, as the ring of
+  fire spreads.
+- `phoenixPath(scene)`: as its comment says, the bird's way across the screen, through these
+  points: from her, up, across to the middle of the screen (toward whichever side has more room),
+  round a loop there, and away off the far side. `along()` (next) draws the curve through them. A
+  test checks it starts at her and leaves off the side away from her.
+  - `start`: just above her middle (60% of her height up from her feet).
+  - `dir`: which way it goes: left (`-1`) if she's on the right-hand half of the screen, right
+    (`1`) if not, so it flies toward the side with more room.
+  - `loop`, `r`: the loop's middle, halfway across and about a third of the way down the screen,
+    and its radius, 13% of the screen's shorter side.
+  - The points, in order: her; up a little over a fifth of the screen, and a touch across; short of
+    the loop and a little below it (`loop.x - dir * r * 2.2`); the bottom of the loop; its far
+    side; its top; its near side; its bottom again, so it goes right round; on and up beyond it, a
+    quarter of the screen further across; and away past the far edge (80 pixels beyond it), near
+    the top of the screen.
+
+### `along()` and `flightAt()`
+
+<!-- code: apps/desktop/src/renderer/src/lib/spells/phoenix.ts#along,flightAt -->
+
+[`src/renderer/src/lib/spells/phoenix.ts`, lines 39–66](../../apps/desktop/src/renderer/src/lib/spells/phoenix.ts#L39-L66)
+
+```ts
+/** The smooth curve through `points` (Catmull-Rom), `u` of the way along it (0 to 1). */
+function along(points: Point[], u: number): Point {
+  const s = clamp01(u) * (points.length - 1)
+  const i = Math.min(points.length - 2, Math.floor(s))
+  const f = s - i
+  const p0 = points[i - 1] ?? points[i]!
+  const p1 = points[i]!
+  const p2 = points[i + 1]!
+  const p3 = points[i + 2] ?? p2
+  const at = (a: number, b: number, c: number, d: number) =>
+    0.5 *
+    (2 * b + (-a + c) * f + (2 * a - 5 * b + 4 * c - d) * f * f + (-a + 3 * b - 3 * c + d) * f ** 3)
+  return { x: at(p0.x, p1.x, p2.x, p3.x), y: at(p0.y, p1.y, p2.y, p3.y) }
+}
+
+/** Where the bird is at `t`, and which way it's heading (radians), or null before or after its flight. */
+export function flightAt(
+  t: number,
+  scene: Pick<Scene, 'w' | 'h' | 'x' | 'feet' | 'height'>,
+): (Point & { heading: number }) | null {
+  const u = (t - TAKE_OFF) / PHOENIX.flightMs
+  if (u < 0 || u > 1) return null
+  const points = phoenixPath(scene)
+  const here = along(points, u)
+  const ahead = along(points, u + 0.004)
+  const behind = along(points, u - 0.004)
+  return { ...here, heading: Math.atan2(ahead.y - behind.y, ahead.x - behind.x) }
+}
+```
+
+<!-- /code -->
+
+- `along(points, u)`: as its comment says, the smooth curve through `points`, `u` of the way along
+  it (0 to 1). It's a _Catmull-Rom spline_: a curve that goes through every point, bending
+  smoothly at each, with its shape between two points set by the points either side of them. Each
+  stretch between two points takes the same share of `u`, so the bird flies faster where the
+  points are further apart.
+  - `s`: where along the list `u` is, counted in points: 0 at the first, `points.length - 1` at the
+    last. `i` is the point just before it (at most the last but one), and `f` how far it is from
+    there to the next, 0 to 1.
+  - `p0` to `p3`: the point before `i`, `i` itself, the next and the one after that. At the ends,
+    where there's no point before or after, the end point stands in (`??`).
+  - `at(a, b, c, d)`: the Catmull-Rom formula: a cubic in `f` (with powers up to 3) that's `b` at 0
+    and `c` at 1, leaving `b` heading the way from `a` to `c`, and arriving at `c` heading the way
+    from `b` to `d`, so the pieces join without a kink. It's worked out for `x` and `y` separately.
+- `flightAt(t, scene)`: as its comment says, where the bird is at `t`, and which way it's heading
+  (in radians), or `null` before or after its flight. The type `Point & { heading: number }` is a
+  point with a heading as well (`&` joins two types). A test checks there's no bird before it
+  takes off or once the spell is over, that it starts beside her, and that on its loop it heads
+  back the way it came for a while (the top of the loop).
+  - `u`: how far through its flight it is: `PHOENIX.flightMs` (6 seconds) from `TAKE_OFF`.
+  - `heading`: from a point just behind it on the path to one just ahead (0.4% either way):
+    `Math.atan2` gives the angle of the line between them.
+
+### `fire` and `BIRD`
+
+<!-- code: apps/desktop/src/renderer/src/lib/spells/phoenix.ts#fire,BIRD -->
+
+[`src/renderer/src/lib/spells/phoenix.ts`, lines 68–81](../../apps/desktop/src/renderer/src/lib/spells/phoenix.ts#L68-L81)
+
+```ts
+/** Fire, by how hot (1 white, then yellow, orange, red, 0 deep red). */
+const fire = (heat: number) =>
+  heat > 0.8
+    ? '#fff7d6'
+    : heat > 0.6
+      ? '#fde68a'
+      : heat > 0.4
+        ? '#fb923c'
+        : heat > 0.2
+          ? '#ef4444'
+          : '#7f1d1d'
+
+/** How big the bird is: each of its own units this many pixels, each drawn this many across. */
+const BIRD = 2
+```
+
+<!-- /code -->
+
+- `fire(heat)`: as its comment says, the colour of fire by how hot, from 1 down to 0: a near-white
+  cream above 0.8, then yellow, orange, red, and a deep red at 0.2 and below. The bird's tail, its
+  wings and its embers are coloured with it, so they cool from white to red.
+- `BIRD = 2`: as its comment says, how big the bird is. It's drawn in units of its own (its body
+  12 long, its wings up to 16 out), and each unit is 2 pixels on the canvas, drawn as a square 2
+  pixels across, so the bird is chunky pixel art, as the explosion's fireball is. Changing it
+  scales the whole bird.
+
+### `bird()`
+
+<!-- code: apps/desktop/src/renderer/src/lib/spells/phoenix.ts#bird -->
+
+[`src/renderer/src/lib/spells/phoenix.ts`, lines 83–164](../../apps/desktop/src/renderer/src/lib/spells/phoenix.ts#L83-L164)
+
+```ts
+/** The bird at `at`, heading its way, wings beating with `t`. */
+function bird(p: Painter, at: Point & { heading: number }, t: number, alpha: number): void {
+  const f = { x: Math.cos(at.heading), y: Math.sin(at.heading) }
+  // Across it, the way that's down on the screen, so it stays the right way up flying either way
+  // (its crest and eye on top).
+  const s = f.x >= 0 ? { x: -f.y, y: f.x } : { x: f.y, y: -f.x }
+  // A point given along its body (forward) and across it, in its own units.
+  const place = (forward: number, across: number) => ({
+    x: at.x + (f.x * forward + s.x * across) * BIRD,
+    y: at.y + (f.y * forward + s.y * across) * BIRD,
+  })
+  const dot = (forward: number, across: number, colour: string, a = alpha) => {
+    const q = place(forward, across)
+    square(p, q.x - BIRD / 2, q.y - BIRD / 2, BIRD, colour, a)
+  }
+
+  // Its glow.
+  disc(p, at.x, at.y, 17 * BIRD, 13 * BIRD, '#fb923c', 0.12 * alpha)
+  disc(p, at.x, at.y, 10 * BIRD, 8 * BIRD, '#fde68a', 0.12 * alpha)
+
+  // Its tail: five streaks of flame streaming back, flickering, cooling to red at their ends.
+  for (let i = 0; i < 5; i++) {
+    const spread = (i - 2) * 0.17
+    const length = 14 + 5 * noise(t / 90, i * 3.1)
+    for (let j = 0; j < length; j++) {
+      const share = j / length
+      const wobble = Math.sin(t / 60 + j * 0.5 + i) * 1.4 * share
+      dot(
+        -6 - Math.cos(spread) * j,
+        Math.sin(spread) * j * 1.6 + wobble,
+        fire(1 - share),
+        alpha * (1 - share * 0.6),
+      )
+    }
+  }
+
+  // Its wings, beating: each a triangle of flame from its body to a tip, hot at the root.
+  const beat = Math.sin(t / 85)
+  for (const side of [-1, 1]) {
+    const span = 6 + 10 * (0.55 + 0.45 * beat)
+    const root = [
+      { forward: 3, across: 0 },
+      { forward: -4, across: 0 },
+    ]
+    const tip = { forward: -8, across: side * span }
+    const n = 16
+    for (let a = 0; a <= n; a++) {
+      for (let b = 0; b <= n - a; b++) {
+        const u = a / n
+        const v = b / n
+        const forward =
+          root[0]!.forward +
+          (root[1]!.forward - root[0]!.forward) * u +
+          (tip.forward - root[0]!.forward) * v
+        const across = (tip.across - root[0]!.across) * v
+        dot(forward, across, fire(1 - v * 0.9))
+      }
+    }
+    // Feathers of flame off its trailing edge.
+    for (let k = 1; k <= 3; k++)
+      dot(-8 - k, side * span * (0.55 + k * 0.12), '#ef4444', alpha * 0.8)
+  }
+
+  // Its body, head, crest, beak and eye.
+  for (let forward = -6; forward <= 6; forward += 0.7) {
+    for (let across = -2.5; across <= 2.5; across += 0.7) {
+      if ((forward / 6) ** 2 + (across / 2.5) ** 2 > 1) continue
+      dot(forward, across, forward > 1 ? '#fff7d6' : Math.abs(across) > 1.6 ? '#fb923c' : '#fde68a')
+    }
+  }
+  for (let forward = 5.5; forward <= 9.5; forward += 0.7) {
+    for (let across = -2.2; across <= 2.2; across += 0.7) {
+      if ((forward - 7.5) ** 2 + across ** 2 > 2.4 ** 2) continue
+      dot(forward, across, '#fff7d6')
+    }
+  }
+  for (let k = 0; k < 3; k++)
+    dot(6.5 - k * 1.2, -3 - k * 0.8 - Math.abs(Math.sin(t / 70 + k)), fire(0.7 - k * 0.15))
+  dot(10, 0, '#fbbf24')
+  dot(11, 0, '#fbbf24')
+  dot(8.5, -0.8, '#7c2d12')
+}
+```
+
+<!-- /code -->
+
+As its comment says, the bird at `at`, heading its way, its wings beating with `t`. Every part is
+placed in the bird's own terms, along its body and across it, so the whole bird turns with its
+heading.
+
+- `f`, `s`: a step forward (along `heading`) and a step to its side (`f` turned a quarter-turn). As
+  the comment says, `s` is always the side that's down on the screen: `{ x: -f.y, y: f.x }` flying
+  right, `{ x: f.y, y: -f.x }` flying left. With only the first, a bird flying left (the usual way,
+  from her bottom-right corner) would be upside down, its crest and eye underneath; this way it's
+  mirrored instead, the right way up whichever way it flies.
+- `place(forward, across)`: as the comment says, a point given along its body (forward) and across
+  it, in its own units: that far along `f` and along `s`, times `BIRD`, from where it is.
+- `dot(forward, across, colour, a)`: a square `BIRD` pixels across with its middle there (hence
+  `- BIRD / 2`).
+- The glow: as the comment says, its glow: two faint discs round it, a broad orange one and a
+  smaller yellow one.
+- The tail: as the comment says, five streaks of flame streaming back, flickering, cooling to red
+  at their ends. Each starts 6 units behind its middle and fans out at its own angle (`spread`,
+  -0.34 to 0.34 radians, about 20° either way, spread wider across with `* 1.6`). Its length
+  flickers between 14 and 19 units with `noise()` over time, it wobbles more toward its end
+  (`* share`), and it runs from white (`fire(1)`) at its root to deep red, a little fainter there.
+- The wings: as the comment says, beating, each a triangle of flame from its body to a tip, hot at
+  the root.
+  - `beat`: a sine wave, a beat about every 0.53 seconds. `span`: how far out the tip is, from 7 to
+    16 units, with the beat.
+  - `root`, `tip`: the triangle's corners: two along its body (3 units ahead of its middle and 4
+    behind), and the tip, out to that side and swept back (8 behind).
+  - The two loops fill it: `u` and `v` step across it in 16ths, `u + v` never more than 1, and each
+    pair is a point inside the triangle (`u` of the way from the front of the root toward the back,
+    and `v` toward the tip). Its colour cools from white at the root toward red at the tip
+    (`fire(1 - v * 0.9)`).
+  - The feathers: as the comment says, feathers of flame off its trailing edge: three red dots
+    behind the wing, each further out.
+- Its body, head, crest, beak and eye, as the comment says:
+  - The body: an ellipse 12 units long and 5 across (`(forward / 6) ** 2 + (across / 2.5) ** 2 > 1`
+    leaves out the dots outside it), filled with dots 0.7 units apart, so they overlap with no
+    gaps: cream at the front, yellow along the middle and orange along its sides.
+  - The head: a cream circle of radius 2.4 units, 7.5 units ahead of its middle.
+  - The crest: three dots of flame sweeping back from its head on one side, each flicking in and
+    out (`Math.abs(Math.sin(t / 70 + k))`), cooler toward the back.
+  - The beak: two amber dots at its front (10 and 11 units ahead); the eye, one dark brown dot on
+    its head.
+
+### `drawPhoenix()`
+
+<!-- code: apps/desktop/src/renderer/src/lib/spells/phoenix.ts#drawPhoenix -->
+
+[`src/renderer/src/lib/spells/phoenix.ts`, lines 166–208](../../apps/desktop/src/renderer/src/lib/spells/phoenix.ts#L166-L208)
+
+```ts
+/** The phoenix spell at `scene.t`. */
+export function drawPhoenix(p: Painter, scene: Scene): void {
+  const t = scene.still ? TAKE_OFF + PHOENIX.flightMs * 0.45 : scene.t
+  const shown = scene.still ? 1 : 1 - between(t, PHOENIX.durationMs - 600, PHOENIX.durationMs)
+  const start = { x: scene.x, y: scene.feet - scene.height * 0.6 }
+
+  // The ring of fire it rises out of.
+  if (t < 600 && !scene.still) {
+    const spread = t / 600
+    for (let k = 0; k < 14; k++) {
+      const a = (k / 14) * Math.PI * 2
+      twinkle(
+        p,
+        start.x + Math.cos(a) * spread * 24,
+        start.y + Math.sin(a) * spread * 14,
+        '#fb923c',
+        1 - spread,
+      )
+    }
+  }
+
+  // Its embers: dropped all along its way, drifting down and sideways, cooling as they go.
+  const random = seeded(83)
+  for (let k = 0; k < 420; k++) {
+    const born = TAKE_OFF + (k / 420) * PHOENIX.flightMs
+    const jitter = { x: (random() - 0.5) * 14, y: (random() - 0.5) * 10 }
+    const drift = { x: (random() - 0.5) * 0.025, y: 0.012 + random() * 0.025 }
+    const life = 700 + random() * 1000
+    const age = t - born
+    if (age < 0 || age > life) continue
+    const from = flightAt(born, scene)
+    if (!from) continue
+    const share = age / life
+    const x = from.x + jitter.x + drift.x * age
+    const y = from.y + jitter.y + drift.y * age
+    if (k % 7 === 0 && share < 0.3) twinkle(p, x, y, '#fde68a', shown * (1 - share))
+    else if (share < 0.4) square(p, x - 0.5, y - 0.5, 2, fire(1 - share), shown)
+    else plot(p, x, y, fire(1 - share), shown * (1 - share * 0.6))
+  }
+
+  const at = flightAt(t, scene)
+  if (at) bird(p, at, t, shown)
+}
+```
+
+<!-- /code -->
+
+As its comment says, the phoenix spell at `scene.t`.
+
+- `t`: with reduced motion, the bird 45% of the way through its flight, held still.
+- `shown`: fading out over the last 0.6 seconds.
+- `start`: where it rises from, as in `phoenixPath()`.
+- The ring of fire: as the comment says, the ring of fire it rises out of: 14 orange twinkles
+  spreading out from her over 0.6 seconds, wider than tall, fading. Not with reduced motion.
+- The embers: as the comment says, dropped all along its way, drifting down and sideways, cooling
+  as they go. 420 of them, one dropped about every 14 ms of its flight (`born`), each from
+  `seeded(83)`:
+  - `jitter`: scattered a little round where the bird was (up to 7 pixels to either side, and 5 up
+    or down).
+  - `drift`: drifting a little sideways and down, each at its own pace.
+  - `life`: lasting 0.7 to 1.7 seconds.
+  - `from`: where the bird was when it was dropped (`flightAt(born)`), so the embers trace its way.
+  - `share`: how far through its life it is. Every seventh starts as a gold twinkle; the rest are
+    squares two pixels across while they're young and hot, then single pixels, cooling through
+    `fire()` from white to deep red, and fading.
+- `const at = flightAt(t, scene)`, `bird(p, at, t, shown)`: the bird itself, over its embers, while
+  it's flying.

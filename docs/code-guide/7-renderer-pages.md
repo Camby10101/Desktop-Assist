@@ -1986,13 +1986,16 @@ The JSX:
 
 ## `src/renderer/src/views/SpellView.tsx`: her spells' effects
 
-The page shown in the spells' window, which the main process opens for starfall and for the
-explosion (see `SpellEffects` in [The bubble](5-bubble.md)). The window covers her display's work
-area, behind her own window, and never takes the mouse or the focus. Like the clones' and the
-vision's pages, it never asks the main process for anything: what it needs comes in its query
-string. Unlike them, it draws on a `<canvas>` rather than with elements: the effects are pixel art
-like her, drawn a pixel at a time by `lib/spellArt.ts` from where things are at each moment, which
-`lib/spellMotion.ts` works out (both in [The UI components](8-renderer-components.md)).
+The page shown in the spells' window, which the main process opens for every spell drawn over the
+screen: starfall, fireworks, the thunderstorm, the blizzard, the vortex, the butterflies, the
+phoenix and the explosion (see `SpellEffects` in [The bubble](5-bubble.md)). The window covers her
+display's work area, behind her own window, and never takes the mouse or the focus. Like the
+clones' and the vision's pages, it never asks the main process for anything: what it needs comes
+in its query string. Unlike them, it draws on a `<canvas>` rather than with elements: the effects
+are pixel art like her, drawn a pixel at a time (`lib/pixels.ts`) by the spell's drawing function,
+which `SPELL_ART` in `lib/spellArt.ts` picks (starfall's and the explosion's are in that file, the
+rest in `lib/spells/`), from where things are at each moment (all in
+[The UI components](8-renderer-components.md)).
 
 ### `PIXEL`
 
@@ -2019,7 +2022,7 @@ window). It's multiplied by her size below, so the effects' pixels grow with her
 
 <!-- code: apps/desktop/src/renderer/src/views/SpellView.tsx#SpellView -->
 
-[`src/renderer/src/views/SpellView.tsx`, lines 13–62](../../apps/desktop/src/renderer/src/views/SpellView.tsx#L13-L62)
+[`src/renderer/src/views/SpellView.tsx`, lines 13–65](../../apps/desktop/src/renderer/src/views/SpellView.tsx#L13-L65)
 
 ```tsx
 /**
@@ -2032,7 +2035,10 @@ window). It's multiplied by her size below, so the effects' pixels grow with her
  */
 export function SpellView() {
   const [params] = useState(() => new URLSearchParams(window.location.search))
-  const spell: SpellEffect = params.get('spell') === 'explosion' ? 'explosion' : 'starfall'
+  const asked = params.get('spell') ?? ''
+  const spell: SpellEffect = Object.hasOwn(SPELL_EFFECT_MS, asked)
+    ? (asked as SpellEffect)
+    : 'starfall'
   const scale = snapSize(Number(params.get('scale')) || DEFAULT_SIZE)
   const accent = /^#[0-9a-f]{6}$/i.test(params.get('accent') ?? '')
     ? params.get('accent')!
@@ -2053,7 +2059,7 @@ export function SpellView() {
     const x = (Number(params.get('x')) || window.innerWidth / 2) / pixel
     const feet = (Number(params.get('feet')) || window.innerHeight) / pixel
     const starts = Number(params.get('starts')) || Date.now()
-    const draw = spell === 'explosion' ? drawExplosion : drawStarfall
+    const draw = SPELL_ART[spell]
     let frame = requestAnimationFrame(function tick() {
       const t = Date.now() - starts
       g.clearRect(0, 0, w, h)
@@ -2083,11 +2089,16 @@ smoothing, so the effects are crisp pixel art, their pixels twice the size of he
 
 Reading the query string (once, kept in state as in `ClonesView`):
 
-- `spell`: `explosion`, or `starfall` for anything else. `SpellEffect` (`src/shared/spells.ts`) is
-  the type of the two.
+- `asked`, `spell`: the spell asked for (`''` if there's none), if it's one of the spells drawn
+  over the screen, and `starfall` for anything else. `Object.hasOwn(SPELL_EFFECT_MS, asked)` checks
+  that `SPELL_EFFECT_MS` (`src/shared/spells.ts`) has a property of that name of its own, one for
+  each of the eight (unlike `in`, it doesn't count the names every object inherits, such as
+  `toString`); after that check, `as SpellEffect` tells TypeScript it's one of them, which it can't
+  work out from the check alone.
 - `scale`: her size, snapped to one of `CHARACTER_SIZES` (her usual size if it's missing).
-- `accent`: the tenant's accent colour, for the magic circles, if it's a `#` and six hex digits;
-  otherwise a purple (`#9333ea`), so nothing odd in the address reaches the drawing.
+- `accent`: the tenant's accent colour, for the magic circles and the vortex, if it's a `#` and
+  six hex digits; otherwise a purple (`#9333ea`), so nothing odd in the address reaches the
+  drawing.
 - `const canvas = useRef<HTMLCanvasElement>(null)`: the `<canvas>` element, once React has made it.
 - `still`: as the comment says, with Windows' reduced-motion setting nothing moves: the effects just
   show, still. It's read once, as the page loads.
@@ -2107,8 +2118,8 @@ The effect, which sets up the canvas and draws every frame:
   string, turned from DIPs into the canvas's pixels. Missing, the middle and the bottom.
 - `starts`: when the spell was cast, on the wall clock the main process and the page share.
   Missing, now.
-- `const draw = spell === 'explosion' ? drawExplosion : drawStarfall`: this spell's drawing
-  function, from `lib/spellArt.ts`. Both take the drawing context and a `Scene`
+- `const draw = SPELL_ART[spell]`: this spell's drawing function, looked up by its name in
+  `SPELL_ART` (`lib/spellArt.ts`). Each takes the drawing context and a `Scene`
   (`lib/spellMotion.ts`).
 - `requestAnimationFrame(function tick() {`: every frame, `t` is how long it is since the spell was
   cast, the canvas is cleared, and the frame for that moment is drawn from scratch. Nothing is kept
@@ -2116,7 +2127,8 @@ The effect, which sets up the canvas and draws every frame:
 - `draw(g, { t, w, h, x, feet, height: (92 * scale) / pixel, accent, still })`: the `Scene`.
   `height` is how tall she is in the canvas's pixels: her 92 sprite pixels from hat to boots, a DIP
   each at her usual size, times her size, divided by the size of one of the effects' pixels. The
-  pillar uses it to start its circles above her hat.
+  pillar uses it to start its circles above her hat, and the butterflies and the phoenix to come
+  out of her middle.
 - `if (t < SPELL_EFFECT_MS[spell]) frame = requestAnimationFrame(tick)`: it keeps going until the
   spell is over, when the main process closes the window anyway.
 - `return () => cancelAnimationFrame(frame)`: the cleanup cancels the next frame. With reduced
