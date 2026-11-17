@@ -4,7 +4,7 @@ import type { Size } from '@shared/geometry'
 import { IPC } from '@shared/ipc'
 import type { PanelSurface, Surface } from './BubbleController'
 
-export type View = 'bubble' | 'panel' | 'clones' | 'vision' | 'spell'
+export type View = 'bubble' | 'panel' | 'clones' | 'vision' | 'spell' | 'screensaver'
 
 /** Windows that only show something: they never take the mouse or the focus. */
 const passive = (view: View) => view === 'clones' || view === 'vision' || view === 'spell'

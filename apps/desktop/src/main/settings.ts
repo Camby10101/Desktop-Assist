@@ -1,6 +1,6 @@
 import { app, nativeTheme } from 'electron'
 import { z } from 'zod'
-import type { Effort, Settings, Theme } from '@shared/types'
+import type { Effort, Habits, Settings, Theme } from '@shared/types'
 import type { BubbleAnchor } from './bubble/BubbleController'
 import { adoptFormerLoginItem } from './formerName'
 import { readJsonFile, writeJsonFile } from './storage/jsonFile'
@@ -15,6 +15,9 @@ const PreferencesSchema = z.object({
   autoSend: z.boolean().optional(),
   /** Light or dark mode; dark until the user switches. */
   theme: z.enum(['dark', 'light']).optional(),
+  /** She stays where she stands, and doesn't do her idle animations: both off unless turned on. */
+  standStill: z.boolean().optional(),
+  noIdles: z.boolean().optional(),
   /** Apps starred in the Apps list (their IDs), shown first. */
   favoriteApps: z.array(z.string().min(1).max(200)).max(500).optional(),
   /** How big she is, as a multiple of her usual size (see CHARACTER_SIZES). */
@@ -70,6 +73,8 @@ export class SettingsService {
       autoSend: this.prefs.autoSend ?? true,
       favoriteApps: this.prefs.favoriteApps ?? [],
       theme: this.prefs.theme ?? 'dark',
+      standStill: this.prefs.standStill ?? false,
+      noIdles: this.prefs.noIdles ?? false,
       canUninstall: available,
     }
   }
@@ -96,6 +101,12 @@ export class SettingsService {
   async setTheme(theme: Theme): Promise<Settings> {
     nativeTheme.themeSource = theme
     await this.save({ theme })
+    return this.get()
+  }
+
+  /** Whether she wanders about and does her idle animations on her own (either, or both). */
+  async setHabits(habits: Partial<Habits>): Promise<Settings> {
+    await this.save(habits)
     return this.get()
   }
 

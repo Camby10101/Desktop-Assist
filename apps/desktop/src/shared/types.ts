@@ -44,7 +44,14 @@ export interface Settings {
   favoriteApps: string[]
   /** Light or dark mode for Desktop Wizard (dark until the user switches). */
   theme: Theme
+  /** She stays where she stands instead of wandering about (off until the user turns it on). */
+  standStill: boolean
+  /** She doesn't do her idle animations, her habits, on her own (off until turned on). */
+  noIdles: boolean
 }
+
+/** What she does on her own, from Settings: whether she wanders, and her idle animations. */
+export type Habits = Pick<Settings, 'standStill' | 'noIdles'>
 
 export type Theme = 'dark' | 'light'
 

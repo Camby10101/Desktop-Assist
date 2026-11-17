@@ -44,7 +44,7 @@ the icon opens a page instead, for raising requests from the panel (and followin
   the type's form address (`…/portal/<portalId>/create/<id>`).
 
 `updates`: where **Check for updates** in Settings looks: `repo`, the public GitHub repository
-whose releases carry the installer (`"Camby10101/Desktop-Assist"`), and `publicKey`, the release
+whose releases carry the installer (`"Camby10101/Desktop-Wizard"`), and `publicKey`, the release
 key's public half (from `npm run release:key`); only installers signed with its private half are
 installed. Without `updates`, Settings doesn't offer updates. See
 [docs/RELEASING.md](../docs/RELEASING.md).

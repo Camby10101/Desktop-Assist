@@ -4,8 +4,8 @@
 
 This part covers the renderer's own files: the HTML page every overlay window loads, the startup
 script, the stylesheet, two small helpers and the clones' wandering, the hooks (most of them
-connecting React to the main process), and the five views (the bubble, her clones, her vision, her
-spells' effects and the panel). The building blocks the views use are covered in
+connecting React to the main process), and the six views (the bubble, her clones, her vision, her
+spells' effects, the screen saver and the panel). The building blocks the views use are covered in
 [the components part](8-renderer-components.md). If React is new to you: a React _component_ is a
 function that returns a description of what to show, written in JSX (HTML-like tags inside
 TypeScript, in `.tsx` files), and whenever the data it uses changes, React calls it again and
@@ -13,8 +13,8 @@ updates only the parts of the page that changed.
 
 ## `src/renderer/index.html`: the page every window loads
 
-The bubble window, the panel window, and the clones', the vision's and the spells' windows all load
-this one page. It's almost
+The bubble window, the panel window, and the clones', the vision's, the spells' and the screen
+saver's windows all load this one page. It's almost
 empty: a `<div>` for React to fill and a script tag that starts the app. The interesting part is
 the security policy.
 
@@ -64,16 +64,16 @@ the security policy.
   `main.tsx` and everything it imports into plain JavaScript and, in the build, rewrites this tag to
   point at the bundled file.
 
-## `src/renderer/src/main.tsx`: choosing bubble, clones, vision, spell or panel
+## `src/renderer/src/main.tsx`: choosing bubble, clones, vision, spell, screen saver or panel
 
 The first code that runs in each window. It works out which window it's in and renders the
-matching view. `BubbleView`, `ClonesView`, `VisionView`, `SpellView` and `PanelView` are React components: functions whose
+matching view. `BubbleView`, `ClonesView`, `VisionView`, `SpellView`, `ScreenSaverView` and `PanelView` are React components: functions whose
 names start with a capital letter and return JSX. In JSX, `<BubbleView />` means "render the
 `BubbleView` component here".
 
 <!-- code: apps/desktop/src/renderer/src/main.tsx -->
 
-[`src/renderer/src/main.tsx`, lines 1–27](../../apps/desktop/src/renderer/src/main.tsx#L1-L27)
+[`src/renderer/src/main.tsx`, lines 1–30](../../apps/desktop/src/renderer/src/main.tsx#L1-L30)
 
 ```tsx
 import { StrictMode } from 'react'
@@ -82,6 +82,7 @@ import './styles.css'
 import { BubbleView } from './views/BubbleView'
 import { ClonesView } from './views/ClonesView'
 import { PanelView } from './views/PanelView'
+import { ScreenSaverView } from './views/ScreenSaverView'
 import { SpellView } from './views/SpellView'
 import { VisionView } from './views/VisionView'
 
@@ -98,6 +99,8 @@ createRoot(document.getElementById('root')!).render(
       <VisionView />
     ) : view === 'spell' ? (
       <SpellView />
+    ) : view === 'screensaver' ? (
+      <ScreenSaverView />
     ) : (
       <PanelView />
     )}
@@ -112,9 +115,9 @@ createRoot(document.getElementById('root')!).render(
 - `// Every overlay window loads this page`: as the comment says, the query string says which one
   this is.
 - `new URLSearchParams(window.location.search).get('view')`: reads the `view` (`bubble`, `panel`,
-  `clones`, `vision` or `spell`) that `createOverlayWindow` (src/main/bubble/windows.ts) adds to the
-  query string when it loads the page. Anything other than `bubble`, `clones`, `vision` or `spell`
-  gets the panel.
+  `clones`, `vision`, `spell` or `screensaver`) that `createOverlayWindow`
+  (src/main/bubble/windows.ts) adds to the query string when it loads the page. Anything other than
+  `bubble`, `clones`, `vision`, `spell` or `screensaver` gets the panel.
 - `document.getElementById('root')!`: the `!` tells TypeScript "this is not null"; the div is in
   `index.html`.
 - `createRoot(`: hands that div to React, which from now on owns everything inside it. `render`
@@ -123,9 +126,9 @@ createRoot(document.getElementById('root')!).render(
   runs each effect, cleans it up, then runs it again, to expose code that doesn't clean up after
   itself. That's why every hook below has a careful cleanup. It does nothing in the installed app.
 - `{view === 'bubble' ? (`: curly braces switch from JSX back to ordinary TypeScript, here a
-  choice between the five views. Each `? :` after the first only runs when the test before it
+  choice between the six views. Each `? :` after the first only runs when the test before it
   fails, so it reads "the bubble, otherwise the clones, otherwise the vision, otherwise a spell's
-  effects, otherwise the panel". The round brackets only let each view sit on a line of its own.
+  effects, otherwise the screen saver, otherwise the panel". The round brackets only let each view sit on a line of its own.
 
 ## `src/renderer/src/env.d.ts`: telling TypeScript about `window.assist`
 
@@ -849,7 +852,8 @@ the top of its body, in the same order on every render.
   the same stateful logic. Each component that calls it gets its own separate copy of the state.
 
 This file's hooks are used by the views: `useAssistState` by the bubble and the panel, and
-`useAccentColor` by those two and the clones (the vision's and the spells' pages use neither). Each window is a separate page, so each keeps its own
+`useAccentColor` by those two, the clones and the screen saver (the vision's and the spells' pages
+use neither). Each window is a separate page, so each keeps its own
 copy of the state.
 
 ### `useAssistState`
@@ -1002,8 +1006,8 @@ passing pointer movements to the page. This hook watches those movements and ask
 to switch mouse input on only while the pointer is over real UI, which is any element marked
 `data-hit` (the chat card, each action icon, the settings menu and the spells menu). See
 [Code Guide section 1](CODE_GUIDE.md#1-background-how-an-electron-app-is-put-together) for the
-background. Only `PanelView` uses it; the bubble window always takes the mouse, and the clones',
-the vision's and the spells' windows never do.
+background. Only `PanelView` uses it; the bubble window and the screen saver's always take the
+mouse, and the clones', the vision's and the spells' windows never do.
 
 ### `useClickThrough`
 
@@ -2142,6 +2146,389 @@ The JSX:
 - `style={{ imageRendering: 'pixelated' }}`: stretched without smoothing, so each of the canvas's
   pixels becomes a crisp square, `pixel` DIPs across, rather than a blur.
 
+## `src/renderer/src/views/ScreenSaverView.tsx`: the screen saver
+
+The page in each of the screen saver's windows, which the main process opens over the whole of
+every display, the taskbar too, when the screen saver icon is clicked (see `ScreenSaver` in
+[The bubble](5-bubble.md)). The screen fades to white, then a scene fades in out of the white: on
+her display, a pixel sunset over rolling hills, with her standing on the nearest, her back to us,
+watching it; on the others, shooting stars falling without end. Any movement of the mouse, a click,
+a scroll or a key tells the main process the user's back, and then every screen fades back to the
+desktop together and she forms again on the taskbar.
+
+Like `SpellView`, it asks the main process for nothing (what it needs comes in its query string)
+and draws pixel art on a `<canvas>`, a pixel at a time through a `Painter`. Unlike it, it isn't
+click-through: it listens to the mouse and the keyboard, because they're what end it. The scenes
+themselves are drawn by `lib/screensaver/` (`scene.ts`, `sunset.ts`, `stars.ts` and `her.ts`; see
+[The UI components](8-renderer-components.md)), and her figure is her own sprite seen from behind
+(`gazeFrames()` in `character/sprite.ts`).
+
+### `SCENE_HEIGHT` and `DRAW_EVERY_MS`
+
+<!-- code: apps/desktop/src/renderer/src/views/ScreenSaverView.tsx#SCENE_HEIGHT,DRAW_EVERY_MS -->
+
+[`src/renderer/src/views/ScreenSaverView.tsx`, lines 22–25](../../apps/desktop/src/renderer/src/views/ScreenSaverView.tsx#L22-L25)
+
+```tsx
+/** About how many pixels high the scenes are, whatever the screen: chunky pixel art. */
+const SCENE_HEIGHT = 360
+
+/** The scenes move slowly: they're drawn this often (ms), not every frame. */
+const DRAW_EVERY_MS = 50
+```
+
+<!-- /code -->
+
+- `SCENE_HEIGHT = 360`: as its comment says, about how many pixels high the scenes are, whatever
+  the screen, so they're chunky pixel art: each of their pixels is 3 DIPs on a 1080-DIP-high screen,
+  2 on a smaller one. Her sprite is drawn one of its pixels to one of the scene's, so she's about a
+  quarter of the screen's height, small on the hill under a big sky.
+- `DRAW_EVERY_MS = 50`: as its comment says, the scenes move slowly, so they're drawn 20 times a
+  second rather than every frame (60 or more), which keeps a big screen's worth of pixels from
+  keeping the PC busy for nothing.
+
+### `<ScreenSaverView>`
+
+<!-- code: apps/desktop/src/renderer/src/views/ScreenSaverView.tsx#ScreenSaverView -->
+
+[`src/renderer/src/views/ScreenSaverView.tsx`, lines 27–143](../../apps/desktop/src/renderer/src/views/ScreenSaverView.tsx#L27-L143)
+
+```tsx
+/**
+ * One of the screen saver's windows (see ScreenSaver in the main process), over the whole of a
+ * display, the taskbar too. The query string says which scene (her sunset, or the starfall), when
+ * it started (wall-clock ms, so every screen keeps in time) and her accent colour. The screen fades
+ * to white, then the scene fades in out of the white: drawn on a small canvas, a pixel at a time,
+ * stretched over the window without smoothing. Moving the mouse, clicking, scrolling or pressing a
+ * key tells the main process the user's back; then the whole thing fades away (onScreensaverEnd),
+ * back to the desktop, and the window closes. The fades are drawn frame by frame with the scene. The pointer's hidden over it.
+ */
+export function ScreenSaverView() {
+  const [params] = useState(() => new URLSearchParams(window.location.search))
+  const scene: SaverScene = params.get('scene') === 'sunset' ? 'sunset' : 'stars'
+  const [starts] = useState(() => Number(params.get('starts')) || Date.now())
+  const accent = /^#[0-9a-f]{6}$/i.test(params.get('accent') ?? '')
+    ? params.get('accent')!
+    : '#9333ea'
+  useAccentColor(accent)
+  // With Windows' reduced-motion setting, the scene stays still (the fades still happen).
+  const [still] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches)
+  /** When the main process said it's ending (wall-clock ms), or null: it fades away from then. */
+  const endedAt = useRef<number | null>(null)
+  const root = useRef<HTMLDivElement>(null)
+  const canvas = useRef<HTMLCanvasElement>(null)
+  const veil = useRef<HTMLDivElement>(null)
+
+  // The user's back: the mouse moving (more than a nudge), a click, a scroll, a key, or another
+  // window taking the focus. Said once.
+  useEffect(() => {
+    let woken = false
+    let from: { x: number; y: number } | null = null
+    const opened = Date.now()
+    const wake = () => {
+      if (woken) return
+      woken = true
+      window.assist.screensaver.wake()
+    }
+    // Where the pointer is in the window (which never moves): how far it's gone from where it was.
+    const onMove = (event: MouseEvent) => {
+      from ??= { x: event.clientX, y: event.clientY }
+      if (Math.hypot(event.clientX - from.x, event.clientY - from.y) > SCREEN_SAVER.wakeMove) {
+        wake()
+      }
+    }
+    const onBlur = () => {
+      if (Date.now() - opened > SCREEN_SAVER.blurGraceMs) wake()
+    }
+    const wakers = ['pointerdown', 'keydown', 'wheel', 'touchstart'] as const
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('blur', onBlur)
+    for (const name of wakers) window.addEventListener(name, wake)
+    return () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('blur', onBlur)
+      for (const name of wakers) window.removeEventListener(name, wake)
+    }
+  }, [])
+
+  useEffect(
+    () =>
+      window.assist.onScreensaverEnd(() => {
+        endedAt.current ??= Date.now()
+      }),
+    [],
+  )
+
+  useEffect(() => {
+    const whole = root.current
+    const element = canvas.current
+    const cover = veil.current
+    if (!whole || !element || !cover) return
+    const pixel = Math.max(2, Math.round(window.innerHeight / SCENE_HEIGHT))
+    const w = Math.ceil(window.innerWidth / pixel)
+    const h = Math.ceil(window.innerHeight / pixel)
+    element.width = w
+    element.height = h
+    element.style.width = `${w * pixel}px`
+    element.style.height = `${h * pixel}px`
+    const g = element.getContext('2d')!
+    const draw = scene === 'sunset' ? sunsetPainter(g, w, h) : starfallPainter(g, w, h)
+    let drawnAt = Number.NEGATIVE_INFINITY
+    let frame = requestAnimationFrame(function tick() {
+      const now = Date.now()
+      const t = now - starts
+      // White over the desktop, then the scene out of the white.
+      const { whiteMs, sceneMs } = SCREEN_SAVER
+      const clearing = Math.min(1, Math.max(0, (t - whiteMs) / sceneMs))
+      cover.style.opacity = String(
+        t < whiteMs ? t / whiteMs : 1 - clearing * clearing * (3 - 2 * clearing),
+      )
+      element.style.visibility = t < whiteMs ? 'hidden' : 'visible'
+      // Ending: all of it fades away, back to the desktop.
+      if (endedAt.current !== null) {
+        const gone = Math.min(1, (now - endedAt.current) / SCREEN_SAVER.fadeOutMs)
+        whole.style.opacity = String(1 - gone * gone)
+      }
+      const due = still ? drawnAt < 0 : now - drawnAt >= DRAW_EVERY_MS
+      if (t >= whiteMs && due) {
+        drawnAt = now
+        draw(still ? 0 : t - whiteMs)
+      }
+      frame = requestAnimationFrame(tick)
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [scene, starts, still])
+
+  return (
+    <div ref={root} className="fixed inset-0 overflow-hidden" style={{ cursor: 'none' }}>
+      <canvas
+        ref={canvas}
+        aria-hidden
+        className="absolute top-0 left-0"
+        style={{ imageRendering: 'pixelated', visibility: 'hidden' }}
+      />
+      <div ref={veil} className="absolute inset-0 bg-white" style={{ opacity: 0 }} />
+    </div>
+  )
+}
+```
+
+<!-- /code -->
+
+As the comment says: the screen fades to white, then the scene fades in out of the white, drawn on
+a small canvas and stretched over the window without smoothing. Input tells the main process the
+user's back; then it all fades away (`onScreensaverEnd`), and the window closes. The pointer is
+hidden over it.
+
+Reading the query string (once, kept in state as in `SpellView`):
+
+- `scene`: `'sunset'` only if the query says exactly that; anything else gets the stars.
+- `starts`: when the screen saver started, on the wall clock the main process and every window
+  share, so every screen whitens and clears together even if one page loaded a moment later.
+  Missing, now.
+- `accent`, `useAccentColor(accent)`: the tenant's accent colour, if it's a `#` and six hex digits
+  (otherwise a purple), set on the page as the other pages do. Her robe and hat are mixed from it
+  in `character.css`, which `herColours()` (below) reads her colours from; that's why the file
+  imports `character.css`.
+- `still`: as the comment says, with Windows' reduced-motion setting the scene stays still; the
+  fades still happen, as they're what show it starting and ending.
+- `ending`: set when the main process says it's ending, which fades the whole page out.
+- `canvas`, `veil`: the `<canvas>` and the white `<div>` over it, once React has made them.
+
+The first effect, as its comment says, listens for the user being back, and says so once:
+
+- `woken`: so `window.assist.screensaver.wake()` is sent only once, however busy the mouse.
+- `onMove`: the mouse moving wakes it only once it has gone more than `SCREEN_SAVER.wakeMove` (6
+  DIPs) from where it was first seen. `from ??= ...` keeps the first position (`??=` assigns only
+  when it's still `null`). Measuring from there, rather than waking on any `mousemove`, means the
+  event Windows sends as the window appears under a still pointer doesn't end it at once, and nor
+  does a nudge of the desk. `screenX` and `screenY` are where the pointer is on the screen, and
+  `Math.hypot()` the distance between the two points.
+- `onBlur`: the window losing the focus (another window coming forward over it) wakes it too, but
+  not in its first `blurGraceMs` (a second), while Windows settles which window has the focus.
+- `wakers`: a click (`pointerdown`), a key, the mouse wheel or a touch wake it straight away.
+  `as const` keeps the names exact, so `addEventListener` knows each one's event type.
+- The cleanup removes every listener.
+
+The second effect: `window.assist.onScreensaverEnd(() => setEnding(true))`, the main process saying
+it's ending (it says so to every window at once, whichever page woke it). It returns the stop
+function, which React uses as the cleanup.
+
+The third effect sets up the canvas and draws:
+
+- `const pixel = Math.max(2, Math.round(window.innerHeight / SCENE_HEIGHT))`: how many DIPs one of
+  the scene's pixels is, a whole number, and at least 2.
+- `w`, `h`: how many of those pixels it takes to cover the window, rounded up. The canvas is made
+  exactly that many pixels, and its CSS size is `w * pixel` by `h * pixel` DIPs, a whole number of
+  DIPs per pixel, so every pixel is the same size; the last row and column may run a little past
+  the window, which `overflow-hidden` crops.
+- `const draw = scene === 'sunset' ? sunsetPainter(g, w, h) : starfallPainter(g, w, h)`: the
+  scene's drawing function (below), made once, which paints what never changes up front.
+- `requestAnimationFrame(function tick() {`: every frame, `t` is how long it is since the screen
+  saver started.
+  - `clearing`: how far the scene has come out of the white, from 0 at `whiteMs` to 1 at
+    `whiteMs + sceneMs`, kept between 0 and 1.
+  - The veil's opacity: for the first `whiteMs` it rises from 0 to 1 over the desktop (the window is
+    see-through, so the desktop shows until then), whitening the screen; after that it falls from 1
+    to 0, uncovering the scene. `clearing * clearing * (3 - 2 * clearing)` is a _smoothstep_, which
+    starts and ends gently, so the scene seems to come out of the white rather than cut in.
+  - `element.style.visibility`: the canvas is hidden until the screen is white, so the white fades
+    in over the desktop, not over the scene.
+  - `due`: whether to draw this frame: every `DRAW_EVERY_MS`, or, with reduced motion, only the
+    first time.
+  - `draw(still ? 0 : t - whiteMs)`: the scene at its own time, from when it begins to show (or its
+    first moment, held still).
+- The cleanup cancels the next frame.
+
+The JSX:
+
+- The outer `<div>` covers the window (`fixed inset-0`), with no pointer (`cursor: 'none'`).
+  `opacity: ending ? 0 : 1`, with a CSS `transition` of `fadeOutMs`, fades everything away, scene
+  and veil together, back to the see-through window and the desktop behind it, in the 0.8 seconds
+  before the main process closes the window. `ease-in` starts slowly and finishes quickly.
+- `<canvas ... style={{ imageRendering: 'pixelated', visibility: 'hidden' }} />`: stretched
+  without smoothing, so each pixel is a crisp square; hidden until the effect shows it. `aria-hidden`
+  because it's only for show.
+- `<div ref={veil} className="absolute inset-0 bg-white" style={{ opacity: 0 }} />`: the white
+  that the screen fades to and the scene comes out of, over the canvas.
+
+### `layer()`, `herColours()` and `frameAt()`
+
+<!-- code: apps/desktop/src/renderer/src/views/ScreenSaverView.tsx#layer,herColours,frameAt -->
+
+[`src/renderer/src/views/ScreenSaverView.tsx`, lines 145–188](../../apps/desktop/src/renderer/src/views/ScreenSaverView.tsx#L145-L188)
+
+```tsx
+/** A canvas the size of the scene's, painted once by `paint` (for what never changes). */
+function layer(w: number, h: number, paint: (p: Painter) => void): HTMLCanvasElement {
+  const element = document.createElement('canvas')
+  element.width = w
+  element.height = h
+  paint(canvasPainter(element.getContext('2d')!))
+  return element
+}
+
+/**
+ * Her colours in the sunset, by palette letter: as the page's styles colour her (her robe and hat
+ * from the accent colour), dimmed toward the dusk with the sun behind her.
+ */
+function herColours(g: CanvasRenderingContext2D): Record<string, string> {
+  const ns = 'http://www.w3.org/2000/svg'
+  const svg = document.createElementNS(ns, 'svg')
+  svg.setAttribute('class', 'character')
+  svg.style.position = 'absolute'
+  svg.style.visibility = 'hidden'
+  document.body.append(svg)
+  const colours: Record<string, string> = {}
+  for (const [letter, className] of Object.entries(PALETTE)) {
+    const path = document.createElementNS(ns, 'path')
+    path.setAttribute('class', className)
+    svg.append(path)
+    // The canvas says any CSS colour back as #rrggbb (or rgba() when see-through).
+    g.fillStyle = '#000000'
+    g.fillStyle = getComputedStyle(path).fill
+    colours[letter] = backlit(String(g.fillStyle))
+  }
+  svg.remove()
+  return colours
+}
+
+/** Her frame at `t`, round and round. */
+function frameAt(frames: readonly Frame[], t: number): Frame {
+  const total = frames.reduce((sum, f) => sum + f.ms, 0)
+  let left = t % total
+  for (const frame of frames) {
+    if (left < frame.ms) return frame
+    left -= frame.ms
+  }
+  return frames[0]!
+}
+```
+
+<!-- /code -->
+
+- `layer(w, h, paint)`: as its comment says, a canvas the size of the scene's, painted once by
+  `paint`, for what never changes (the sky, the hills). It's never put on the page: each frame
+  copies it onto the scene's canvas in one step (`drawImage`), far quicker than painting the sky
+  again pixel by pixel. `canvasPainter()` (from `lib/spellArt.ts`) makes a `Painter` of it.
+- `herColours(g)`: as its comment says, her colours in the sunset, by palette letter, as the
+  page's styles colour her (her robe and hat from the accent colour), dimmed toward the dusk with
+  the sun behind her. Her colours live in `character.css` as one class per letter, not in code, so
+  this asks the browser:
+  - It makes a hidden `<svg>` with the `character` class, and in it a `<path>` for each class in
+    `PALETTE` (`character/sprite.ts`), then reads each path's computed `fill`.
+  - `g.fillStyle = '#000000'`, then `g.fillStyle = getComputedStyle(path).fill`: as the comment
+    says, the canvas reads any CSS colour and says it back as `#rrggbb` (or `rgba()` when it's
+    see-through, as her shadow is), which `backlit()` can read. Setting black first means a colour
+    the canvas can't read comes out black rather than as the previous one.
+  - `backlit()` (`lib/screensaver/her.ts`) dims it toward the dusk. Then the `<svg>` is removed.
+- `frameAt(frames, t)`: as its comment says, her frame at `t`, round and round: `t % total` is how
+  far into the current round, and the loop finds the frame showing then.
+
+### `sunsetPainter()` and `starfallPainter()`
+
+<!-- code: apps/desktop/src/renderer/src/views/ScreenSaverView.tsx#sunsetPainter,starfallPainter -->
+
+[`src/renderer/src/views/ScreenSaverView.tsx`, lines 190–223](../../apps/desktop/src/renderer/src/views/ScreenSaverView.tsx#L190-L223)
+
+```tsx
+/** Draws the sunset at `t`: the sky and hills painted once, the rest each time. */
+function sunsetPainter(g: CanvasRenderingContext2D, w: number, h: number): (t: number) => void {
+  const p = canvasPainter(g)
+  const sky = layer(w, h, (q) => paintSunsetSky(q, w, h))
+  const hills = layer(w, h, (q) => paintSunsetHills(q, w, h))
+  const colours = herColours(g)
+  const frames = gazeFrames()
+  const spot = herSpot(w, h)
+  return (t) => {
+    const frame: SaverFrame = { t, w, h }
+    g.globalAlpha = 1
+    g.drawImage(sky, 0, 0)
+    paintEveningStars(p, frame)
+    paintSun(p, frame)
+    paintClouds(p, frame)
+    g.globalAlpha = 1
+    g.drawImage(hills, 0, 0)
+    paintLife(p, frame)
+    // Her feet on the crest: her frame's bottom row (her shadow's) on the row under her soles.
+    const rows = frameAt(frames, t).rows
+    paintHer(p, rows, spot.x - GRID / 2, spot.feet - (GRID + HEADROOM) + 2, colours, 1)
+  }
+}
+
+/** Draws the starfall at `t`: the sky and hills painted once, the stars each time. */
+function starfallPainter(g: CanvasRenderingContext2D, w: number, h: number): (t: number) => void {
+  const p = canvasPainter(g)
+  const night = layer(w, h, (q) => paintNight(q, w, h))
+  return (t) => {
+    g.globalAlpha = 1
+    g.drawImage(night, 0, 0)
+    paintStarfall(p, { t, w, h })
+  }
+}
+```
+
+<!-- /code -->
+
+Each makes, once, the function that draws its scene at `t`, painting what never changes first.
+
+- `sunsetPainter(g, w, h)`: as its comment says, the sky and hills painted once, the rest each time.
+  Her colours, her frames (`gazeFrames()`) and where she stands (`herSpot()`) are worked out once
+  too. Each frame it draws, back to front:
+  - the sky (`drawImage(sky, 0, 0)`), then the evening stars twinkling in it, the sun and the
+    clouds;
+  - the hills (`drawImage(hills, 0, 0)`), which cover the bottom of the sun, setting behind the
+    farthest of them;
+  - the birds and fireflies (`paintLife()`);
+  - and her: `paintHer()` with her frame at `t`, centred on her spot (`spot.x - GRID / 2`), and,
+    as the comment says, placed so that her frame's bottom row, her shadow's, is on the row under
+    her soles (`spot.feet - (GRID + HEADROOM) + 2`: a frame is `GRID + HEADROOM` rows tall). `1`
+    says the sun is to her right.
+  - `g.globalAlpha = 1` before each `drawImage()`: `canvasPainter()` leaves the opacity of the last
+    rectangle it painted, and `drawImage()` would use it.
+- `starfallPainter(g, w, h)`: as its comment says, the night sky and the hills painted once, and
+  the stars (twinkling and falling, `paintStarfall()`) over them each time.
+
 ## `src/renderer/src/views/PanelView.tsx`: everything around the bubble
 
 The page shown in the panel window: the chat card, the action icons, the settings menu and the
@@ -2275,7 +2662,7 @@ returns. The sections after it take its values and functions one at a time.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 66–579](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L66-L579)
+[`src/renderer/src/views/PanelView.tsx`, lines 66–593](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L66-L593)
 
 ```tsx
 function Panel({ state }: { state: AppState }) {
@@ -2324,6 +2711,17 @@ function Panel({ state }: { state: AppState }) {
       }),
     [startPage],
   )
+  // What's new on the Jira page or the service desk's goes as it's opened, and the rest once the
+  // page closes (another page, or the panel closing): it's all been seen.
+  const shown = state.mode === 'collapsed' ? null : view
+  const lastShown = useRef(shown)
+  useEffect(() => {
+    const before = lastShown.current
+    lastShown.current = shown
+    if (before === shown || !atlassianSite) return
+    if (before === 'jira') void window.assist.atlassian.markNotificationsRead()
+    if (before === 'servicedesk') void window.assist.atlassian.markRequestsRead()
+  }, [shown, atlassianSite])
   useEffect(() => window.assist.onAppsState(setApps), [])
   useEffect(() => {
     if (!atlassianSite) return
@@ -2766,6 +3164,9 @@ function Panel({ state }: { state: AppState }) {
           onCheckForUpdates={() => void window.assist.updates.check().then(setUpdate)}
           onToggleTheme={() => void toggleTheme()}
           onSetSize={(next) => void window.assist.character.setSize(next)}
+          onSetHabits={async (habits) =>
+            setSettings(await window.assist.settings.setHabits(habits))
+          }
           onToggleAutoStart={async () =>
             setSettings(await window.assist.settings.setAutoStart(!settings.autoStart))
           }
@@ -2846,6 +3247,16 @@ Effects:
   page again (`setView(startPage)`), with no issue open (`setIssueKey(null)`). Only `collapsed`
   counts: taking a screenshot hides the panel too (`capturing`), and the user expects to come back
   to the same page afterwards.
+- `shown`, `lastShown` and the effect after them: as the comment says, what's new on the Jira page
+  or the service desk page goes as it's opened (a notification or a request, one at a time, see
+  [The Jira and service desk pages](12-atlassian-pages.md)), and the rest once the page closes,
+  because by then it's all been seen. `shown` is the page on screen: `view` while the panel is
+  open (in any mode but `collapsed`, so taking a screenshot doesn't count as closing), `null` once
+  it has closed. `lastShown` is a ref holding the one before, kept from render to render without
+  causing one. When `shown` changes from `'jira'` to anything else (another page, or the panel
+  closing), every notification is marked seen (`atlassian.markNotificationsRead()`, without an id);
+  from `'servicedesk'`, every request's news (`atlassian.markRequestsRead()`, without a key). It
+  does nothing without an Atlassian site.
 - `useEffect(() => window.assist.onAppsState(setApps), [])`: keeps the Apps list up to date as
   the main process reports changes (connecting, loading, ready). `setApps` itself is the callback.
 - `if (!atlassianSite) return`: with an Atlassian site, the connection and the feed are kept up to
@@ -2951,6 +3362,10 @@ The JSX it returns:
 - `onSetSize={(next) => void window.assist.character.setSize(next)}`: Smaller or Bigger under Size
   asks the main process to resize her, which saves it. The panel doesn't use the answer: the new
   size comes back through `onSizeChanged` in `useAssistState`, and with it the new `layout`.
+- `onSetHabits={async (habits) => setSettings(await window.assist.settings.setHabits(habits))}`:
+  the Stand still and No idle animations switches. The main process saves the change and she does
+  as it says at once; the settings it returns go into `settings`, so the switch shows what took
+  effect.
 - `onToggleAutoStart={async () =>`: flips Start with Windows and shows the settings the main
   process returns.
 - `onToggleAutoSend={() => void toggleAutoSend()}`: the menu's "Send in Claude automatically"
@@ -2969,7 +3384,7 @@ The JSX it returns:
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.signedIn,busy,canSend -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 172–179](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L172-L179)
+[`src/renderer/src/views/PanelView.tsx`, lines 183–190](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L183-L190)
 
 ```tsx
 // Not signed in: the chat box shows the sign-in instead of the chat. While a saved sign-in is
@@ -3007,7 +3422,7 @@ Values worked out on every render from the current state.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.runAction -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 181–209](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L181-L209)
+[`src/renderer/src/views/PanelView.tsx`, lines 192–220](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L192-L220)
 
 ```tsx
 async function runAction(id: ActionId) {
@@ -3071,13 +3486,13 @@ Runs when an action icon is clicked (`ActionStack`'s `onAction`).
 - `setSettings(await window.assist.settings.get())`: refreshes the settings as the menu opens,
   because Start with Windows can also be changed in Windows Settings.
 - `window.assist.invokeAction(id)`: after the `apps`, `ask`, `jira`, `spells` and `settings`
-  branches return, TypeScript knows `id` is `servicedesk` (without request types), `screenshot` or
-  `close`, which is exactly the `CommandActionId` type `invokeAction` accepts. The main process
-  runs the matching handler from src/main/actions.ts.
+  branches return, TypeScript knows `id` is `servicedesk` (without request types), `screenshot`,
+  `screensaver` or `close`, which is exactly the `CommandActionId` type `invokeAction` accepts. The
+  main process runs the matching handler from src/main/actions.ts.
 - `if (result.message) showToast(result.message, result.ok ? 'info' : 'error')`: for example
-  "Screenshot saved", or "Couldn't take a screenshot" in red. Close and the service desk return no
-  message when they work (the service desk closes the panel as the browser opens, and Close closes
-  it as she vanishes, before the app quits).
+  "Screenshot saved", or "Couldn't take a screenshot" in red. Close, the screen saver and the
+  service desk return no message when they work (the service desk closes the panel as the browser
+  opens, the screen saver as the screens whiten, and Close as she vanishes, before the app quits).
 - There's no change of page after a screenshot: the panel comes back showing whatever it showed
   before (the Apps list, say). The view isn't reset either, because taking a screenshot moves the
   mode through `capturing`, not `collapsed` (see the mode effect above).
@@ -3086,7 +3501,7 @@ Runs when an action icon is clicked (`ActionStack`'s `onAction`).
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.changeDraft -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 211–214](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L211-L214)
+[`src/renderer/src/views/PanelView.tsx`, lines 222–225](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L222-L225)
 
 ```tsx
 function changeDraft(next: string) {
@@ -3105,7 +3520,7 @@ writes notes.json about half a second after typing stops, so an unsent message s
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.send -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 216–228](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L216-L228)
+[`src/renderer/src/views/PanelView.tsx`, lines 227–239](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L227-L239)
 
 ```tsx
 async function send() {
@@ -3145,7 +3560,7 @@ The other two reasons, `busy` and `empty`, are ignored: `canSend` already rules 
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.askInClaudeDesktop -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 230–242](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L230-L242)
+[`src/renderer/src/views/PanelView.tsx`, lines 241–253](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L241-L253)
 
 ```tsx
 async function askInClaudeDesktop() {
@@ -3190,7 +3605,7 @@ Claude automatically" on) carries on in the main process; the panel isn't told h
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.toggleFavorite -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 244–246](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L244-L246)
+[`src/renderer/src/views/PanelView.tsx`, lines 255–257](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L255-L257)
 
 ```tsx
 async function toggleFavorite(app: PortalApp, favorite: boolean) {
@@ -3208,7 +3623,7 @@ with the starred apps first.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.openApp -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 248–259](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L248-L259)
+[`src/renderer/src/views/PanelView.tsx`, lines 259–270](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L259-L270)
 
 ```tsx
 async function openApp(app: PortalApp) {
@@ -3243,7 +3658,7 @@ panel stays open with a toast, and the portal itself is one click away at the bo
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.openIssue,report,disconnectAtlassian -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 261–281](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L261-L281)
+[`src/renderer/src/views/PanelView.tsx`, lines 272–292](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L272-L292)
 
 ```tsx
 /** Opens a Jira issue in the card if connected to Atlassian, otherwise in the browser. */
@@ -3286,7 +3701,7 @@ async function disconnectAtlassian() {
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.attachLatest,removeAttachment,openAttachment -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 283–299](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L283-L299)
+[`src/renderer/src/views/PanelView.tsx`, lines 294–310](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L294-L310)
 
 ```tsx
 async function attachLatest() {
@@ -3327,7 +3742,7 @@ result.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.copy -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 301–304](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L301-L304)
+[`src/renderer/src/views/PanelView.tsx`, lines 312–315](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L312-L315)
 
 ```tsx
 async function copy(text: string) {
@@ -3345,7 +3760,7 @@ The Copy button on Claude's replies. The main process writes the text to the cli
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.signOut,clearText,uninstall,newConversation,setEffort,toggleAutoSend -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 306–339](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L306-L339)
+[`src/renderer/src/views/PanelView.tsx`, lines 317–350](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L317-L350)
 
 ```tsx
 async function signOut() {
@@ -3412,7 +3827,7 @@ Settings menu actions.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.closeMenusOnOutsideClick -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 341–350](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L341-L350)
+[`src/renderer/src/views/PanelView.tsx`, lines 352–361](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L352-L361)
 
 ```tsx
 // Clicking anywhere else in the panel closes the settings menu, or the spells menu.
@@ -3448,7 +3863,7 @@ mode effect above closes the menus.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.toggleTheme -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 352–354](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L352-L354)
+[`src/renderer/src/views/PanelView.tsx`, lines 363–365](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L363-L365)
 
 ```tsx
 async function toggleTheme() {
@@ -3467,7 +3882,7 @@ returns, so the switch shows the new mode. The menu stays open, as for the other
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.signInPrompt,banner -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 356–401](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L356-L401)
+[`src/renderer/src/views/PanelView.tsx`, lines 367–412](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L367-L412)
 
 ```tsx
 const signInPrompt =
@@ -3566,7 +3981,7 @@ one saying Claude Desktop isn't installed. With the built-in chat, it depends on
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.scale,layout,settingsIndex,spellsIndex -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 403–407](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L403-L407)
+[`src/renderer/src/views/PanelView.tsx`, lines 414–418](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L414-L418)
 
 ```tsx
 // Everything sits further out the bigger she is (see panelLayout).
@@ -3596,7 +4011,7 @@ const spellsIndex = branding.actions.indexOf('spells')
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.issueKeys,unreadNotifications,requestNews,pageContent,page -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 408–484](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L408-L484)
+[`src/renderer/src/views/PanelView.tsx`, lines 419–495](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L419-L495)
 
 ```tsx
 // Only keys of real projects, once the projects are known.

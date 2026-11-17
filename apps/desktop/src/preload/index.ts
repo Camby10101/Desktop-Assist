@@ -36,6 +36,7 @@ const api: AssistApi = {
     setEffort: (effort) => ipcRenderer.invoke(IPC.settingsSetEffort, effort),
     setAutoSend: (autoSend) => ipcRenderer.invoke(IPC.settingsSetAutoSend, autoSend),
     setTheme: (theme) => ipcRenderer.invoke(IPC.settingsSetTheme, theme),
+    setHabits: (habits) => ipcRenderer.invoke(IPC.settingsSetHabits, habits),
     setFavoriteApp: (id, favorite) =>
       ipcRenderer.invoke(IPC.settingsSetFavoriteApp, { id, favorite }),
   },
@@ -73,7 +74,7 @@ const api: AssistApi = {
     signOut: () => ipcRenderer.invoke(IPC.atlassianSignOut),
     retry: () => ipcRenderer.invoke(IPC.atlassianRetry),
     feed: (refresh) => ipcRenderer.invoke(IPC.atlassianFeed, refresh ?? false),
-    markNotificationsRead: () => ipcRenderer.invoke(IPC.atlassianMarkNotificationsRead),
+    markNotificationsRead: (id) => ipcRenderer.invoke(IPC.atlassianMarkNotificationsRead, id),
     markRequestsRead: (key) => ipcRenderer.invoke(IPC.atlassianMarkRequestsRead, key),
     search: (query) => ipcRenderer.invoke(IPC.atlassianSearch, query),
     issue: (key) => ipcRenderer.invoke(IPC.atlassianIssue, key),
@@ -95,6 +96,10 @@ const api: AssistApi = {
     check: () => ipcRenderer.invoke(IPC.updatesCheck),
   },
   uninstall: () => ipcRenderer.invoke(IPC.appUninstall),
+  screensaver: {
+    wake: () => ipcRenderer.send(IPC.screensaverWake),
+  },
+  onScreensaverEnd: (callback) => subscribe(IPC.screensaverEnd, () => callback()),
   onModeChanged: (callback) => subscribe(IPC.modeChanged, callback),
   onPoseChanged: (callback) => subscribe(IPC.poseChanged, callback),
   onArrive: (callback) => subscribe(IPC.bubbleArrive, callback),

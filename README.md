@@ -23,8 +23,10 @@ corner of the screen and opens a panel when clicked. Built for Morse Micro first
 sign-in) and 4 (logos, favourites, service desk, light/dark mode, bubble-click fix), and features
 3.1 (questions open in Claude Desktop) and 3.2 (Apps list, Uninstall) are complete, as are
 Milestone 5 (the app-opening spinner; Jira and the service desk) and its fixes 5.1 and 5.2 (the
-bubble kept in front, and Check for updates). This is version **1.0.0**, the first release (see
-[PLAN.md](docs/PLAN.md) §7h and [RELEASING.md](docs/RELEASING.md)).
+bubble kept in front, and Check for updates). Version **1.0.0** was the first release (see
+[PLAN.md](docs/PLAN.md) §7h and [RELEASING.md](docs/RELEASING.md)); this is version **2.2.0**, with
+the animated character, her spells, the screen saver, and Stand still and No idle animations in
+Settings (PLAN.md §7i).
 
 **Formerly Desktop Assist.** The app was called Desktop Assist up to version 1.0.0. Updating from
 then (from Settings, or with the new installer) installs over it and keeps everything: on its first
@@ -35,8 +37,10 @@ depend on them: the app ID (`com.morsemicro.desktopassist`), by which Windows kn
 so a new version replaces the old one rather than going beside it; the install folder
 (`desktop-assist`); and the text an update's signature signs (`desktop-assist-update …`), which
 1.0.0 checks updates against. The release key's place (`~/.desktop-assist`), the
-`DESKTOP_ASSIST_*` environment variables, the npm package names (`@desktop-assist/…`) and the
-GitHub repository (`Camby10101/Desktop-Assist`) keep it too, since nobody using the app sees them.
+`DESKTOP_ASSIST_*` environment variables and the npm package names (`@desktop-assist/…`) keep it
+too, since nobody using the app sees them. The GitHub repository has been renamed
+`Camby10101/Desktop-Wizard`, and releases are published there; copies that still look for the old
+name are sent on to it.
 
 ## Features
 
@@ -55,7 +59,9 @@ GitHub repository (`Camby10101/Desktop-Assist`) keep it too, since nobody using 
   off and wakes with a start, glances about, juggles three glowing orbs, blows magic bubbles
   through a wand ring, watches a will-o'-wisp go round her and waves it goodbye, sneezes a burst of
   sparkles, or dances a little jig. When the app starts she forms out of white motes, and when it's
-  closed (Close, or Quit in the tray) she dissolves into them before it quits.
+  closed (Close, or Quit in the tray) she dissolves into them before it quits. If her wandering or
+  her habits are a distraction, **Stand still** and **No idle animations** in Settings turn them
+  off.
 - **Drag it anywhere**, even onto another monitor: it dangles from the pointer. Let go and it drops
   onto that screen's taskbar, and from then on lives near the nearer bottom corner, walking back
   if it was dropped far away (and shrinking if she's too big for that screen). The panel opens
@@ -81,8 +87,9 @@ GitHub repository (`Camby10101/Desktop-Assist`) keep it too, since nobody using 
   - **Ask Claude** swaps the apps for the text box (above); click it again or press Esc to go
     back. A dot on it means an unsent question is waiting.
   - **Jira** (a bell): **Notifications** shows when someone else assigned you an issue or
-    mentioned you lately (a dot on the bell means something new), and **Search** finds Jira issues
-    and Confluence pages. Click an issue to see it, ask Claude to summarise it, draft a reply or
+    mentioned you lately (a dot on the bell means something new; a notification stays new until
+    you open it, and the rest count as seen when you leave the page), and **Search** finds Jira
+    issues and Confluence pages. Click an issue to see it, ask Claude to summarise it, draft a reply or
     suggest next steps, move it to another status, comment, or log time. The first time,
     **Connect to Atlassian** connects Desktop Wizard to your Atlassian account in your browser.
   - **IT service desk**: **New request** fills in a request from what's in the text box (pick the
@@ -92,8 +99,9 @@ GitHub repository (`Camby10101/Desktop-Assist`) keep it too, since nobody using 
   - **Screenshot** saves the screen the bubble is on to `Pictures\Desktop Wizard`.
   - **Settings**: **Light mode** (switches Desktop Wizard's colours; it starts dark), **Size**
     (makes the character smaller or bigger, from half her usual size to six times it, or as big as
-    fits your screen; it's remembered), Start with Windows, Send in Claude automatically, Open
-    screenshots folder,
+    fits your screen; it's remembered), **Stand still** (she stays where she is instead of
+    wandering about), **No idle animations** (she stops doing her habits on her own; both are off
+    to start with), Start with Windows, Send in Claude automatically, Open screenshots folder,
     Clear text box, **Check for updates** (downloads a newer release from GitHub, checks it's
     signed with the release key, and installs it; Desktop Wizard closes and starts again on the
     new version) and **Uninstall Desktop Wizard**. (With the
@@ -112,6 +120,11 @@ GitHub repository (`Camby10101/Desktop-Assist`) keep it too, since nobody using 
     - **Vortex**: a portal swirls open mid-screen, pulls everything in and implodes.
     - **Explosion**: she chants for fifteen seconds under a rising pillar of magic circles, then it
       goes off in the middle of the screen.
+  - **Screen saver** (a sunset): every screen fades to white as she vanishes, then a pixel-art
+    scene fades in. On her screen, the sun sets over rolling hills, with clouds drifting, birds
+    gliding by and fireflies over the grass, and she stands on the nearest hill, her back to you,
+    watching it; on any other screens, shooting stars fall through the night sky. Move the mouse,
+    click or press a key and it fades away, and she forms again on the taskbar.
   - **Close**: she dissolves into white motes, and the app quits.
 - **Attach screenshot** adds the newest screenshot to your next question; click it again to add
   the one before, and so on (it says when there are no more). **Report to IT** turns
@@ -135,7 +148,7 @@ GitHub repository (`Camby10101/Desktop-Assist`) keep it too, since nobody using 
 
 **Install it like a normal app:**
 
-1. Run `npm run dist`. This builds `apps/desktop/dist/Desktop Wizard-Setup-2.1.0.exe` (named
+1. Run `npm run dist`. This builds `apps/desktop/dist/Desktop Wizard-Setup-2.2.0.exe` (named
    after the version in `apps/desktop/package.json`; up to 1.0.0 it was
    `Desktop Assist-Setup-<version>.exe`). Its last step signs the installer for Check for updates;
    on a PC without the release key it stops there with a message, and the installer is still built
@@ -193,8 +206,8 @@ apps/desktop/
                   the built-in chat (claude/) and its JumpCloud sign-in (auth/), draft,
                   screenshots, uninstall, IPC
   src/preload/    the typed `window.assist` bridge
-  src/renderer/   React views: the bubble, her clones, vision and spells' effects, and the panel
-                  (actions, settings, spells, chat, sign-in)
+  src/renderer/   React views: the bubble, her clones, vision and spells' effects, the screen
+                  saver, and the panel (actions, settings, spells, chat, sign-in)
   src/shared/     code both sides use: IPC contract, action registry, spells, layout constants,
                   types
   tests/          unit tests

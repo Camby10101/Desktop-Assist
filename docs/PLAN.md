@@ -7,9 +7,10 @@ Check for updates), and features 3.1 (questions open in Claude Desktop) and 3.2 
 Uninstall, fixes) complete**. Version 1.0.0 is the first release (§7h). Version 2.0.0 is on
 `main` (the `character` branch, merged): the bubble as an animated character, in a choice of
 sizes, with a Spells menu (Clones, Starfall, Teleport, Explosion) in place of Bounce, and the app's
-new name, Desktop Wizard: it was Desktop Assist up to 1.0.0 (§7i). Version 2.1.0 is on branch
-`2.1.0`, with six more spells: Butterflies, Fireworks, Blizzard, Thunderstorm, Phoenix and Vortex
-(§7i). Last updated 2026-11-17.
+new name, Desktop Wizard: it was Desktop Assist up to 1.0.0 (§7i). Version 2.1.0 adds six more
+spells: Butterflies, Fireworks, Blizzard, Thunderstorm, Phoenix and Vortex (§7i). Version 2.2.0 is
+on branch `2.2.0`, with a screen saver, Stand still and No idle animations in Settings, and Jira
+notifications that stay new until opened (§7i). Last updated 2026-11-17.
 
 A Windows desktop assistant that runs in the background, shows a small circular company logo
 in the bottom-right corner of the screen, and opens a panel when clicked. It's built for Morse
@@ -409,8 +410,9 @@ tab, as asked). IT's setup guide: [ATLASSIAN_SETUP.md](ATLASSIAN_SETUP.md).
   - **Notifications (5)**: when someone else assigned you an issue (from each issue's change
     history: not when you assigned it yourself) or mentioned you in a comment or description, in
     the last two weeks. New ones have a dot, a count on the tab and a dot on the bell, and count as
-    seen a moment after the tab is looked at (remembered in `atlassian.json`). Checked every five
-    minutes in the background and whenever the page opens.
+    seen a moment after the tab is looked at (remembered in `atlassian.json`; since 2.2.0, when
+    each is opened, and the rest when the page closes). Checked every five minutes in the
+    background and whenever the page opens.
   - **Search (4, 9)**: Jira issues (an issue key finds that issue) and Confluence pages, ranked
     like Confluence's own search.
   - **An issue**: its status, description and latest comments, opened from a notification, a
@@ -766,9 +768,11 @@ tenant's `appName`) and every mention in the app and the docs.
   (`com.morsemicro.desktopassist`), so the new version installs over the old one and the installer
   renames its shortcuts; the install folder (`desktop-assist`); and the text an update's signature
   signs (`desktop-assist-update …`), which 1.0.0 checks updates against. The release key's place
-  (`~/.desktop-assist`) and the `DESKTOP_ASSIST_*` environment variables, the package names
-  (`@desktop-assist/…`) and the GitHub repository (`Camby10101/Desktop-Assist`) keep the old name
-  too, since nobody using the app sees them.
+  (`~/.desktop-assist`) and the `DESKTOP_ASSIST_*` environment variables and the package names
+  (`@desktop-assist/…`) keep the old name too, since nobody using the app sees them. The GitHub
+  repository kept it until 2.1.1, when it was renamed `Camby10101/Desktop-Wizard`; releases are
+  published there, and copies that still ask for the old name follow the rename (`ownDownloads()`
+  in `src/main/updates.ts`).
 
 Tested with unit tests: the data folder moved the first time and left alone after, the new name on
 a PC that never had the old one, the old folder kept in use when it can't be moved, and "Start with
@@ -793,6 +797,34 @@ Tested with unit tests (`moreSpells.test.ts`): each new spell draws plenty half 
 moving or still, and nothing at its end; the fireworks' rockets, the storm's bolts and clouds, the
 blizzard's build-up and frost, the vortex's size, the butterflies' flight and the phoenix's path.
 
+### The screen saver, Stand still and No idle animations (2.2.0)
+
+On branch `2.2.0`, version 2.2.0 adds:
+
+- **A screen saver** (a sunset icon, after Spells): every screen fades to white as she vanishes,
+  then a pixel-art scene fades in. On her screen, a banded evening sky with a striped sun setting
+  behind four lines of rolling hills, clouds drifting, birds and fireflies, and her on the crest of
+  the nearest, seen from behind (a new `back` pose in the rig: her hair over her back, nothing of
+  her front showing), backlit with a rim of warm light, swaying in the breeze, her long shadow
+  toward us; on her other screens, a night sky with shooting stars falling without end. Moving the
+  mouse, a click or a key ends it: the scenes fade away and she forms again on the taskbar.
+  `ScreenSaver` (`src/main/screenSaver.ts`) opens a window over the whole of each display, at the
+  `'screen-saver'` always-on-top level so it covers the taskbar; `ScreenSaverView` draws the
+  scenes (`lib/screensaver/`); `BubbleController.sleep()` and `wake()` take her away and bring her
+  back.
+- **Stand still** and **No idle animations** in Settings, both off to start with: she stays where
+  she is (not even walking back after a drop), or stops doing her habits on her own, or both. They
+  apply at once and are remembered (`standStill` and `noIdles` in `preferences.json`).
+- **Jira notifications stay new until they're seen**: no longer marked seen two seconds after the
+  tab opens, but each when it's opened (`notificationsRead` in `atlassian.json`), and the rest when
+  the Jira page closes. Requests' news likewise, when the service desk page closes.
+
+Tested with unit tests: the screen saver's windows (one per display, the sunset on hers, only its
+own pages heard, fading before closing, closing at once on quitting) and scenes (dithering, her on
+the crest, the sun and clouds moving slowly, stars falling without end, her from behind, backlit);
+her sleeping and waking; the settings (standing still, no idle animations, both, changed mid-walk,
+no walk back after a drop); and notifications marked seen one at a time.
+
 ## 8. Milestones
 
 - **0** ✅ **Foundation**: Everything in §7 works in `npm run dev` and in the unsigned installer. Unit tests and lint pass.
@@ -805,7 +837,7 @@ blizzard's build-up and frost, the vortex's size, the butterflies' flight and th
 - **5** ✅ **Jira and the service desk**: The app-opening spinner, and Atlassian ideas 1 to 9. See §7h.
 - **5.1** ✅ **The bubble on top after starting**: always-on-top that survives a full-screen app. See §7h.
 - **5.2** ✅ **The bubble kept in front, and Check for updates**: the startup front check; updating from GitHub releases, signed with a release key; the `.exe` locked down; version 1.0.0, the first release. See §7h.
-- **6** 🧪 **The character** (on trial, branch `character`): the bubble as an animated character on the taskbar near a bottom corner, in a choice of sizes, with a Spells menu (Clones, Starfall, Teleport, Explosion) in place of Bounce; light or dark mode and her size in Settings; forming out of white motes at start-up and dissolving into them on Close. Six more spells in 2.1.0 (branch `2.1.0`). See §7i.
+- **6** 🧪 **The character** (on trial, branch `character`): the bubble as an animated character on the taskbar near a bottom corner, in a choice of sizes, with a Spells menu (Clones, Starfall, Teleport, Explosion) in place of Bounce; light or dark mode and her size in Settings; forming out of white motes at start-up and dissolving into them on Close. Six more spells in 2.1.0; the screen saver, Stand still and No idle animations in 2.2.0 (branch `2.2.0`). See §7i.
 - 7 (next): To be chosen. Candidates:
   - Shipping: code signing (no "unrecognised app" warning), silent deployment through JumpCloud (with Claude Desktop), CI on GitHub Actions (tests and the installer on every pull request, and building the release), a "What's new" note after an update
   - Bubble and screenshots: a keyboard shortcut to open the panel and to take a screenshot, snipping a region or a window, pasting an image into the text box, hiding during full-screen apps and presentations, a first-run tour

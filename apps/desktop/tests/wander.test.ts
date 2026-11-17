@@ -64,6 +64,36 @@ describe('nextActivity', () => {
   })
 })
 
+describe('nextActivity, as Settings allow', () => {
+  const alone = WANDER.fidgetAfter
+  it('rests instead of walking when she’s to stand still, still fidgeting once left alone', () => {
+    const still = { walk: false, fidget: true }
+    expect(nextActivity(alone - 1, 0, 240, rolls(0.1, 0.5), undefined, still)).toEqual({
+      kind: 'rest',
+    })
+    expect(nextActivity(alone, 0, 240, rolls(0.8, 0.5), undefined, still)).toEqual({ kind: 'rest' })
+    expect(nextActivity(alone, 0, 240, rolls(0.1, 0), undefined, still)).toEqual({
+      kind: 'fidget',
+      pose: 'hop',
+    })
+  })
+
+  it('only ever walks without her idle animations, and does nothing with neither', () => {
+    for (const roll of [0, 0.1, 0.5, 0.9]) {
+      const busy = nextActivity(alone * 2, 0, 240, rolls(roll, 0.5), undefined, {
+        walk: true,
+        fidget: false,
+      })
+      expect(busy.kind).toBe('walk')
+      const neither = nextActivity(alone * 2, 0, 240, rolls(roll, 0.5), undefined, {
+        walk: false,
+        fidget: false,
+      })
+      expect(neither).toEqual({ kind: 'rest' })
+    }
+  })
+})
+
 describe('walkTarget', () => {
   it('picks somewhere else in the zone, far enough away to be worth the walk', () => {
     for (let roll = 0; roll <= 1; roll += 0.05) {

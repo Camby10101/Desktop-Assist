@@ -113,8 +113,9 @@ Atlassian's guide: [Available Atlassian Rovo MCP server domains](https://support
   the person in each issue's history (or the issue's creator, for an issue created already
   assigned), skipped when they made it themselves; and comments (or descriptions) that mention
   their account, by someone else. What they've seen is remembered in
-  `%APPDATA%\Desktop Wizard\atlassian.json` (a time, and each request's last status and reply;
-  no issue content).
+  `%APPDATA%\Desktop Wizard\atlassian.json` (a time, the IDs of notifications opened since, and
+  each request's last status and reply; no issue content). A notification counts as seen once it's
+  opened, and the rest once the Jira page closes.
 - **My requests news**: a reply by a person other than the requester (automatic replies such as
   "Thanks for raising your request" don't count), or a change of status. The first check after
   connecting only learns where things are, so nothing old shows as new.

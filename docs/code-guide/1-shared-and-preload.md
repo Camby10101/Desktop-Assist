@@ -6,8 +6,8 @@ The app runs as two kinds of process: the **main process** (Node.js, which owns 
 files, sign-in and Claude) and a **renderer** for each window (Chromium, which draws the React
 UI). They talk over **IPC** (inter-process communication): one side sends a message on a named
 _channel_ and the other side listens on it. `src/shared` holds the TypeScript both sides must
-agree on (window sizes, the character's poses and spells, action names, data shapes and the list
-of channels), imported as
+agree on (window sizes, the character's poses and spells, the screen saver's timings, action names,
+data shapes and the list of channels), imported as
 `@shared/...` and bundled into each part. `src/preload/index.ts` is the small script that turns
 that list of channels into `window.assist`, the only way a page can reach the main process.
 
@@ -1033,24 +1033,82 @@ appear.
   and each must be one of her fidgets or her spells' poses, the two kinds of pose
   `BubbleController.act()` takes. These are the two types imported from `character.ts`.
 
+## `src/shared/screenSaver.ts`: the screen saver's timings
+
+The screen saver, from its icon in the stack (the `screensaver` action, below): as the comment at
+the top of the file says, every screen fades to white, then a scene fades in out of the white, her
+sunset on her screen and falling stars on the others, until the mouse moves, a click or a key ends
+it. Both sides need its numbers: the main process (`ScreenSaver` in `src/main/screenSaver.ts`, see
+[The bubble](5-bubble.md)) for how long to wait before closing its windows, and their page
+(`ScreenSaverView.tsx`, see [The pages](7-renderer-pages.md)) for its fades and for what counts as
+the user being back.
+
+### `SCREEN_SAVER` and `SaverScene`
+
+<!-- code: apps/desktop/src/shared/screenSaver.ts#SCREEN_SAVER,SaverScene -->
+
+[`src/shared/screenSaver.ts`, lines 1–21](../../apps/desktop/src/shared/screenSaver.ts#L1-L21)
+
+```ts
+// The screen saver, from the icon beside her: every screen fades to white, then a scene fades in
+// out of the white. On her screen, a pixel sunset over rolling hills, with her standing on the
+// nearest, her back to us, watching it; on the others, stars falling through the night sky.
+// Moving the mouse, clicking or pressing a key ends it: the scenes fade away and she's back.
+// Shared by the main process (which opens and closes its windows) and their page.
+
+export const SCREEN_SAVER = {
+  /** Every screen fades to white over this long (ms)... */
+  whiteMs: 1_500,
+  /** ...then its scene fades in out of the white over this long. */
+  sceneMs: 3_500,
+  /** Woken, the scenes fade away over this long, back to the desktop, and she forms again. */
+  fadeOutMs: 800,
+  /** The mouse moving less than this far (DIPs) doesn't wake it: a nudge of the desk. */
+  wakeMove: 6,
+  /** Its window losing the focus wakes it too, but not this soon after it opens (ms). */
+  blurGraceMs: 1_000,
+} as const
+
+/** Which scene a screen shows: hers, the sunset, or the others', the starfall. */
+export type SaverScene = 'sunset' | 'stars'
+```
+
+<!-- /code -->
+
+- `whiteMs: 1_500`: as its comment says, every screen fades to white over 1.5 seconds. Her own
+  `vanish` takes 0.9 (`SPELL_POSE_MS`), so she has gone into the white before it's complete.
+- `sceneMs: 3_500`: then the scene fades in out of the white over 3.5 seconds, slowly, like dusk.
+- `fadeOutMs: 800`: woken, the scenes fade away over 0.8 seconds, back to the desktop, and then she
+  forms again. The main process closes the windows after exactly this long, and the page's CSS
+  fade lasts the same.
+- `wakeMove: 6`: as its comment says, the mouse moving less than 6 DIPs doesn't wake it: a nudge
+  of the desk, or a mouse that jitters, would otherwise end it at once.
+- `blurGraceMs: 1_000`: its window losing the focus wakes it too (another app coming forward, say),
+  but not in its first second, while Windows may still be settling which window has the focus.
+- `as const`: read-only, each number exactly as written.
+- `SaverScene`: as its comment says, which scene a screen shows: `'sunset'` on hers, `'stars'` on
+  the others. `ScreenSaver.start()` puts it in each window's query string, and the page reads it
+  back.
+
 ## `src/shared/actions.ts`: the action registry
 
 The icons that can appear in the stack beside the bubble (the _actions_), each with a tooltip
 label and a _kind_. A tenant's `tenant.json` has an `actions` list that picks which ones appear
 and in what order, nearest the bubble first. There are two kinds:
 
-- `command` actions run in the main process: the IT service desk, screenshot and close (handlers
-  in `createActionHandlers()`, `src/main/actions.ts`). The service desk is the one exception: when
+- `command` actions run in the main process: the IT service desk, screenshot, the screen saver and
+  close (handlers in `createActionHandlers()`, `src/main/actions.ts`). The service desk is the one exception: when
   the tenant lists request types, `PanelView.runAction()` opens the service desk page instead (see
   [Jira and the service desk](11-atlassian.md)).
 - `popover` actions open some UI inside the panel, a page or a menu: Settings (the settings menu,
-  which also holds Light mode and her size); Spells (the spells menu); Ask Claude and Your apps,
-  which switch the card between the text box and the Apps list; and Jira, which swaps in the Jira
-  page. `PanelView.runAction()` handles them, and opening one never reaches the main process. As
-  the comment at the top of the file says, whatever the menu or page does next is up to it: the
-  Light mode switch, the size buttons and the spells each make a request of their own
-  (`window.assist.settings.setTheme()`, `window.assist.character.setSize()` and
-  `window.assist.character.castSpell()`).
+  which also holds Light mode, her size, Stand still and No idle animations); Spells (the spells
+  menu); Ask Claude and Your apps, which switch the card between the text box and the Apps list;
+  and Jira, which swaps in the Jira page. `PanelView.runAction()` handles them, and opening one
+  never reaches the main process. As the comment at the top of the file says, whatever the menu
+  or page does next is up to it: the Light mode switch, the size buttons, the Stand still and No
+  idle animations switches and the spells each make a request of their own
+  (`window.assist.settings.setTheme()`, `window.assist.character.setSize()`,
+  `window.assist.settings.setHabits()` and `window.assist.character.castSpell()`).
 
 The ids are written once, as a real array, and the types are derived from it. So adding an
 action is one edit here, and then the compiler points at the rest: `ICONS` in `ActionStack.tsx`
@@ -1061,7 +1119,7 @@ is a `Record<ActionId, ...>` (it must have an icon for every action), and `Actio
 
 <!-- code: apps/desktop/src/shared/actions.ts#ACTION_IDS,ActionId -->
 
-[`src/shared/actions.ts`, lines 1–19](../../apps/desktop/src/shared/actions.ts#L1-L19)
+[`src/shared/actions.ts`, lines 1–20](../../apps/desktop/src/shared/actions.ts#L1-L20)
 
 ```ts
 // The action registry: every icon that can appear in the stack above the bubble. A tenant's
@@ -1079,6 +1137,7 @@ export const ACTION_IDS = [
   'screenshot',
   'settings',
   'spells',
+  'screensaver',
   'close',
 ] as const
 
@@ -1090,9 +1149,9 @@ export type ActionId = (typeof ACTION_IDS)[number]
 The list of every action that exists, and the type of one of its entries.
 
 - `as const`: without it the array's type would be `string[]`. With it, the type is a read-only
-  list of these eight exact strings, which is what lets the next line work.
+  list of these nine exact strings, which is what lets the next line work.
 - `(typeof ACTION_IDS)[number]`: "the type of whatever you get by indexing the array with a number",
-  which is the union of the eight, `'ask' | 'apps' | 'jira' | ... | 'close'`. The type follows the
+  which is the union of the nine, `'ask' | 'apps' | 'jira' | ... | 'close'`. The type follows the
   list automatically.
 - The array also exists at runtime, which a type doesn't: `TenantSchema` in `src/main/tenant.ts`
   uses `z.enum(ACTION_IDS)` to reject a `tenant.json` that lists an unknown action. **zod** is a
@@ -1104,7 +1163,7 @@ The list of every action that exists, and the type of one of its entries.
 
 <!-- code: apps/desktop/src/shared/actions.ts#ACTIONS -->
 
-[`src/shared/actions.ts`, lines 21–33](../../apps/desktop/src/shared/actions.ts#L21-L33)
+[`src/shared/actions.ts`, lines 22–36](../../apps/desktop/src/shared/actions.ts#L22-L36)
 
 ```ts
 export const ACTIONS = {
@@ -1118,6 +1177,8 @@ export const ACTIONS = {
   settings: { label: 'Settings', kind: 'popover' },
   // A menu of her spells (src/shared/spells.ts); casting one goes to the main process.
   spells: { label: 'Spells', kind: 'popover' },
+  // Every screen fades to white, then to a sunset she watches (src/shared/screenSaver.ts).
+  screensaver: { label: 'Screen saver', kind: 'command' },
   close: { label: 'Close Desktop Wizard', kind: 'command' },
 } as const satisfies Record<ActionId, { label: string; kind: 'command' | 'popover' }>
 ```
@@ -1133,11 +1194,16 @@ screen-reader name, and gives `popover` actions (and the service desk, when it o
   opens the portal in the browser; with them, the panel opens its page instead.
 - `settings: { label: 'Settings', kind: 'popover' }`: the gear, which opens the settings menu. As
   the comment above it says, light or dark mode and her size are in there too (`SettingsMenu.tsx`
-  and `SizeControl.tsx`).
+  and `SizeControl.tsx`), and so, since 2.2.0, are Stand still and No idle animations, which the
+  comment doesn't mention.
 - `spells: { label: 'Spells', kind: 'popover' }`: the wand, which opens the spells menu
   (`SpellsMenu.tsx`). As its comment says, it lists her spells (`spells.ts`, above), and casting
   one goes to the main process, which can move her and open windows over the screen. Opening the
   menu doesn't.
+- `screensaver: { label: 'Screen saver', kind: 'command' }`: a sunset, which starts the screen
+  saver in the main process. As its comment says, every screen fades to white, then to a sunset
+  she watches (`screenSaver.ts`, above). It's a `command`, with nothing to open in the panel, which
+  closes as it starts.
 - `satisfies Record<ActionId, { label: string; kind: 'command' | 'popover' }>`: checks
   that there is exactly one entry per action id, each with a label and a valid kind. A missing,
   extra or misspelt action is a compile error. Unlike a normal type annotation, `satisfies` only
@@ -1150,7 +1216,7 @@ screen-reader name, and gives `popover` actions (and the service desk, when it o
 
 <!-- code: apps/desktop/src/shared/actions.ts#CommandActionId -->
 
-[`src/shared/actions.ts`, lines 35–37](../../apps/desktop/src/shared/actions.ts#L35-L37)
+[`src/shared/actions.ts`, lines 38–40](../../apps/desktop/src/shared/actions.ts#L38-L40)
 
 ```ts
 export type CommandActionId = {
@@ -1160,15 +1226,15 @@ export type CommandActionId = {
 
 <!-- /code -->
 
-The type of just the command actions: `'servicedesk' | 'screenshot' | 'close'`. It's
-worked out from `ACTIONS`, so it can't drift out of step with it.
+The type of just the command actions: `'servicedesk' | 'screenshot' | 'screensaver' | 'close'`.
+It's worked out from `ACTIONS`, so it can't drift out of step with it.
 
 - `[K in ActionId]:`: a _mapped type_. It builds an object type with one property per action id.
   Each property's type is the id itself if that action's kind is `'command'`, or `never` (the
   "impossible" type) if not, giving (in part)
   `{ ask: never; servicedesk: 'servicedesk'; settings: never; close: 'close' }`.
 - `}[ActionId]`: looking up every key at once gives the union of the property types. `never`
-  disappears from a union, leaving the three command ids.
+  disappears from a union, leaving the four command ids.
 - `AssistApi.invokeAction()` in `src/shared/ipc.ts` only accepts these, so a page can't even try to
   send `settings`, `spells`, `ask`, `apps` or `jira` to the main process. In `PanelView.runAction()`, the
   early returns for those narrow the id to exactly this type, which is why it can then be passed on.
@@ -1177,7 +1243,7 @@ worked out from `ACTIONS`, so it can't drift out of step with it.
 
 <!-- code: apps/desktop/src/shared/actions.ts#COMMAND_ACTION_IDS -->
 
-[`src/shared/actions.ts`, lines 39–41](../../apps/desktop/src/shared/actions.ts#L39-L41)
+[`src/shared/actions.ts`, lines 42–44](../../apps/desktop/src/shared/actions.ts#L42-L44)
 
 ```ts
 export const COMMAND_ACTION_IDS = ACTION_IDS.filter(
@@ -1284,11 +1350,11 @@ survives a restart.
 - `updatedAt: string | null`: set by `NotesStore` on every change; `null` for a draft nobody has
   typed in yet.
 
-### `Effort`, `Settings` and `Theme`
+### `Effort`, `Settings`, `Habits` and `Theme`
 
-<!-- code: apps/desktop/src/shared/types.ts#Effort,Settings,Theme -->
+<!-- code: apps/desktop/src/shared/types.ts#Effort,Settings,Habits,Theme -->
 
-[`src/shared/types.ts`, lines 30–49](../../apps/desktop/src/shared/types.ts#L30-L49)
+[`src/shared/types.ts`, lines 30–56](../../apps/desktop/src/shared/types.ts#L30-L56)
 
 ```ts
 /** How hard Claude thinks before answering (the API's `effort`), shown as Fast/Balanced/Thorough. */
@@ -1308,7 +1374,14 @@ export interface Settings {
   favoriteApps: string[]
   /** Light or dark mode for Desktop Wizard (dark until the user switches). */
   theme: Theme
+  /** She stays where she stands instead of wandering about (off until the user turns it on). */
+  standStill: boolean
+  /** She doesn't do her idle animations, her habits, on her own (off until turned on). */
+  noIdles: boolean
 }
+
+/** What she does on her own, from Settings: whether she wanders, and her idle animations. */
+export type Habits = Pick<Settings, 'standStill' | 'noIdles'>
 
 export type Theme = 'dark' | 'light'
 ```
@@ -1336,12 +1409,22 @@ Thorough. `Settings` is what the settings menu shows; `SettingsService.get()` in
   first. They're kept with the other preferences, so they survive a restart.
 - `theme: Theme`: light or dark mode for every Desktop Wizard window, whatever Windows itself
   uses. Dark until the user switches, with Light mode in the settings menu.
+- `standStill: boolean`: as its comment says, she stays where she stands instead of wandering
+  about: Stand still in the settings menu, off until the user turns it on. She still falls where
+  she's dropped, and doesn't walk back to her corner afterwards.
+- `noIdles: boolean`: as its comment says, she doesn't do her idle animations (her habits: the hop,
+  the tea, the vision and the rest) on her own: No idle animations in the settings menu, off until
+  turned on. Spells she's asked to cast still play.
+- `Habits`: as its comment says, what she does on her own, from the settings: just those two
+  fields. `Pick<Settings, 'standStill' | 'noIdles'>` takes them, with their types, from `Settings`,
+  so the two can't disagree. `SettingsService.setHabits()` and `window.assist.settings.setHabits()`
+  take a `Partial<Habits>` (either or both), and `BubbleController` takes the whole of it.
 
 ### `ChatApp`
 
 <!-- code: apps/desktop/src/shared/types.ts#ChatApp -->
 
-[`src/shared/types.ts`, lines 51–55](../../apps/desktop/src/shared/types.ts#L51-L55)
+[`src/shared/types.ts`, lines 58–62](../../apps/desktop/src/shared/types.ts#L58-L62)
 
 ```ts
 /**
@@ -1367,7 +1450,7 @@ Where questions are answered, set per tenant (`chatApp` in `tenant.json`, checke
 
 <!-- code: apps/desktop/src/shared/types.ts#Branding,RequestType,StartPage -->
 
-[`src/shared/types.ts`, lines 57–85](../../apps/desktop/src/shared/types.ts#L57-L85)
+[`src/shared/types.ts`, lines 64–92](../../apps/desktop/src/shared/types.ts#L64-L92)
 
 ```ts
 export interface Branding {
@@ -1426,7 +1509,7 @@ also be the Jira page or the service desk page (`View` in `PanelView.tsx`).
 
 <!-- code: apps/desktop/src/shared/types.ts#SignedInUser,AuthStatus -->
 
-[`src/shared/types.ts`, lines 87–106](../../apps/desktop/src/shared/types.ts#L87-L106)
+[`src/shared/types.ts`, lines 94–113](../../apps/desktop/src/shared/types.ts#L94-L113)
 
 ```ts
 export interface SignedInUser {
@@ -1475,7 +1558,7 @@ token ever reaches them. With Claude Desktop there is no `AuthManager` and no st
 
 <!-- code: apps/desktop/src/shared/types.ts#ChatMessage,SendResult -->
 
-[`src/shared/types.ts`, lines 108–124](../../apps/desktop/src/shared/types.ts#L108-L124)
+[`src/shared/types.ts`, lines 115–131](../../apps/desktop/src/shared/types.ts#L115-L131)
 
 ```ts
 /** One message as the chat shows it. */
@@ -1522,7 +1605,7 @@ draft, which the panel shows. The reply itself arrives later, through `onChatMes
 
 <!-- code: apps/desktop/src/shared/types.ts#AskResult -->
 
-[`src/shared/types.ts`, lines 126–132](../../apps/desktop/src/shared/types.ts#L126-L132)
+[`src/shared/types.ts`, lines 133–139](../../apps/desktop/src/shared/types.ts#L133-L139)
 
 ```ts
 /**
@@ -1557,7 +1640,7 @@ Claude Desktop has opened with the question filled in. The failures come from
 
 <!-- code: apps/desktop/src/shared/types.ts#AppState -->
 
-[`src/shared/types.ts`, lines 134–149](../../apps/desktop/src/shared/types.ts#L134-L149)
+[`src/shared/types.ts`, lines 141–156](../../apps/desktop/src/shared/types.ts#L141-L156)
 
 ```ts
 export interface AppState {
@@ -1607,7 +1690,7 @@ asks with `atlassian.get()` and `atlassian.feed()`, and keeps up through `onAtla
 
 <!-- code: apps/desktop/src/shared/types.ts#PortalApp,AppsState -->
 
-[`src/shared/types.ts`, lines 151–170](../../apps/desktop/src/shared/types.ts#L151-L170)
+[`src/shared/types.ts`, lines 158–177](../../apps/desktop/src/shared/types.ts#L158-L177)
 
 ```ts
 /** One app from the user's JumpCloud User Portal, as the Apps list shows it. */
@@ -1654,7 +1737,7 @@ sets the state and broadcasts every change on `assist:apps-state`.
 
 <!-- code: apps/desktop/src/shared/types.ts#UninstallResult -->
 
-[`src/shared/types.ts`, lines 172–174](../../apps/desktop/src/shared/types.ts#L172-L174)
+[`src/shared/types.ts`, lines 179–181](../../apps/desktop/src/shared/types.ts#L179-L181)
 
 ```ts
 /** Settings → Uninstall. On success the app is already quitting. */
@@ -1676,7 +1759,7 @@ quitting, so the page has nothing more to do.
 
 <!-- code: apps/desktop/src/shared/types.ts#AtlassianState -->
 
-[`src/shared/types.ts`, lines 176–186](../../apps/desktop/src/shared/types.ts#L176-L186)
+[`src/shared/types.ts`, lines 183–193](../../apps/desktop/src/shared/types.ts#L183-L193)
 
 ```ts
 /**
@@ -1709,7 +1792,7 @@ The connection to Atlassian, as the comment says, which `Atlassian` in
 
 <!-- code: apps/desktop/src/shared/types.ts#StatusCategory,IssueStatus,JiraNotification,ServiceRequest -->
 
-[`src/shared/types.ts`, lines 188–222](../../apps/desktop/src/shared/types.ts#L188-L222)
+[`src/shared/types.ts`, lines 195–229](../../apps/desktop/src/shared/types.ts#L195-L229)
 
 ```ts
 /** How far along an issue is, by its status's category in Jira (which sets its colour). */
@@ -1763,7 +1846,7 @@ export interface ServiceRequest {
 
 <!-- code: apps/desktop/src/shared/types.ts#FeedList,JiraFeed -->
 
-[`src/shared/types.ts`, lines 224–235](../../apps/desktop/src/shared/types.ts#L224-L235)
+[`src/shared/types.ts`, lines 231–242](../../apps/desktop/src/shared/types.ts#L231-L242)
 
 ```ts
 /** A list the main process keeps up to date in the background. */
@@ -1792,7 +1875,7 @@ export interface JiraFeed {
 
 <!-- code: apps/desktop/src/shared/types.ts#IssueSummary,ConfluencePage,SearchResult -->
 
-[`src/shared/types.ts`, lines 237–257](../../apps/desktop/src/shared/types.ts#L237-L257)
+[`src/shared/types.ts`, lines 244–264](../../apps/desktop/src/shared/types.ts#L244-L264)
 
 ```ts
 /** An issue in a list of search results. */
@@ -1828,7 +1911,7 @@ What the Search tab shows: Jira issues (`IssueSummary`, with the issue's address
 
 <!-- code: apps/desktop/src/shared/types.ts#IssueComment,IssueTransition,IssueDetail,IssueResult -->
 
-[`src/shared/types.ts`, lines 259–290](../../apps/desktop/src/shared/types.ts#L259-L290)
+[`src/shared/types.ts`, lines 266–297](../../apps/desktop/src/shared/types.ts#L266-L297)
 
 ```ts
 export interface IssueComment {
@@ -1883,7 +1966,7 @@ What the issue view shows.
 
 <!-- code: apps/desktop/src/shared/types.ts#IssuePrompt,AskAboutIssueResult -->
 
-[`src/shared/types.ts`, lines 292–296](../../apps/desktop/src/shared/types.ts#L292-L296)
+[`src/shared/types.ts`, lines 299–303](../../apps/desktop/src/shared/types.ts#L299-L303)
 
 ```ts
 /** What to ask Claude about an issue. */
@@ -1903,7 +1986,7 @@ export type AskAboutIssueResult = { ok: true; inChat: boolean } | { ok: false; m
 
 <!-- code: apps/desktop/src/shared/types.ts#NewRequest,RaiseResult -->
 
-[`src/shared/types.ts`, lines 298–309](../../apps/desktop/src/shared/types.ts#L298-L309)
+[`src/shared/types.ts`, lines 305–316](../../apps/desktop/src/shared/types.ts#L305-L316)
 
 ```ts
 /** A request filled in on the panel, to finish on the help centre portal. */
@@ -1936,7 +2019,7 @@ The service desk page's form, and the answer to sending it (see `ServiceDesk.rai
 
 <!-- code: apps/desktop/src/shared/types.ts#UpdateState -->
 
-[`src/shared/types.ts`, lines 311–323](../../apps/desktop/src/shared/types.ts#L311-L323)
+[`src/shared/types.ts`, lines 318–330](../../apps/desktop/src/shared/types.ts#L318-L330)
 
 ```ts
 /**
@@ -1974,7 +2057,7 @@ it.
 
 <!-- code: apps/desktop/src/shared/types.ts#ActionResult,AttachResult -->
 
-[`src/shared/types.ts`, lines 325–332](../../apps/desktop/src/shared/types.ts#L325-L332)
+[`src/shared/types.ts`, lines 332–339](../../apps/desktop/src/shared/types.ts#L332-L339)
 
 ```ts
 export type ActionResult = { ok: true; message?: string } | { ok: false; message: string }
@@ -2016,13 +2099,13 @@ Messages come in three styles:
   frequent or one-way signals such as each keystroke in the text box. In `AssistApi`, the methods
   that return `void` are these; the ones that return a `Promise` are requests.
 - **Pushed by the main process**: `webContents.send()` to a window, which the page receives
-  through one of the `on...` listeners. These are the last twelve channels.
+  through one of the `on...` listeners. These are the last fourteen channels.
 
 ### `IPC`
 
 <!-- code: apps/desktop/src/shared/ipc.ts#IPC -->
 
-[`src/shared/ipc.ts`, lines 32–109](../../apps/desktop/src/shared/ipc.ts#L32-L109)
+[`src/shared/ipc.ts`, lines 33–113](../../apps/desktop/src/shared/ipc.ts#L33-L113)
 
 ```ts
 /** IPC channel names. The preload maps them onto `window.assist`; src/main/ipc.ts handles them. */
@@ -2049,6 +2132,7 @@ export const IPC = {
   settingsSetAutoSend: 'assist:settings-set-auto-send',
   settingsSetFavoriteApp: 'assist:settings-set-favorite-app',
   settingsSetTheme: 'assist:settings-set-theme',
+  settingsSetHabits: 'assist:settings-set-habits',
   characterSetSize: 'assist:character-set-size',
   characterCastSpell: 'assist:character-cast-spell',
   authSignIn: 'assist:auth-sign-in',
@@ -2088,10 +2172,12 @@ export const IPC = {
   serviceDeskOpenMyRequests: 'assist:service-desk-open-my-requests',
   updatesGet: 'assist:updates-get',
   updatesCheck: 'assist:updates-check',
+  screensaverWake: 'assist:screensaver-wake',
   // main → renderer
   modeChanged: 'assist:mode-changed',
   poseChanged: 'assist:pose-changed',
   bubbleArrive: 'assist:bubble-arrive',
+  screensaverEnd: 'assist:screensaver-end',
   cornerChanged: 'assist:corner-changed',
   sizeChanged: 'assist:size-changed',
   clickThroughReset: 'assist:click-through-reset',
@@ -2116,6 +2202,8 @@ name: a typo is a compile error instead of a message nobody hears.
 - `settingsSetAutoSend`: the settings menu's "Send in Claude automatically" switch.
 - `settingsSetFavoriteApp`: a star on a tile in the Apps list.
 - `settingsSetTheme`: the settings menu's "Light mode" switch.
+- `settingsSetHabits`: the menu's "Stand still" and "No idle animations" switches. The main process
+  saves the change and she does as it says straight away.
 - `characterSetSize`: the Smaller and Bigger buttons under Size in the settings menu. The main
   process resizes the character and saves the size.
 - `characterCastSpell`: a spell picked in the Spells menu. The main process closes the panel and
@@ -2129,6 +2217,9 @@ name: a typo is a compile error instead of a message nobody hears.
   the tenant lists request types.
 - `updatesGet`, `updatesCheck`: Check for updates in Settings, answered only when the tenant has
   `updates`.
+- `screensaverWake`: from the screen saver's pages, the user's back (the mouse moved, a click or a
+  key). It's the only channel the main process hears from pages other than the bubble's and the
+  panel's, and only from the screen saver's own windows (`ScreenSaver.wakeFrom()`).
 - `authSignIn` to `chatNew`, and `claudeDesktopAsk` and `claudeDesktopInstalled`: the first group
   belongs to the built-in chat and the second to Claude Desktop. The main process only answers
   the group the tenant uses (`registerIpc()` in `src/main/ipc.ts`).
@@ -2137,14 +2228,17 @@ name: a typo is a compile error instead of a message nobody hears.
   `CharacterSize`) when it or the biggest she can be changes, `atlassianState` and `jiraFeed`
   carry the Atlassian connection and the notifications and requests, and `updateState` how Check
   for updates is going. `broadcast()` in `start()`
-  (`src/main/index.ts`) sends them to both windows, except `clickThroughReset`, which
-  `resetClickThrough()` in `src/main/bubble/windows.ts` sends only to the panel.
+  (`src/main/index.ts`) sends them to both windows, except three: `clickThroughReset`, which
+  `resetClickThrough()` in `src/main/bubble/windows.ts` sends only to the panel; `bubbleArrive`,
+  which `start()` sends only to the bubble; and `screensaverEnd`, which goes to each of the screen
+  saver's windows to say it's time for its scene to fade away (`end()` in the screen saver's
+  `open`, in `start()`).
 
 ### `AssistApi`
 
 <!-- code: apps/desktop/src/shared/ipc.ts#AssistApi -->
 
-[`src/shared/ipc.ts`, lines 111–265](../../apps/desktop/src/shared/ipc.ts#L111-L265)
+[`src/shared/ipc.ts`, lines 115–278](../../apps/desktop/src/shared/ipc.ts#L115-L278)
 
 ```ts
 /** The API the preload exposes to renderers as `window.assist`. */
@@ -2186,6 +2280,8 @@ export interface AssistApi {
     setFavoriteApp(id: string, favorite: boolean): Promise<Settings>
     /** Light or dark mode for all of Desktop Wizard; saved. */
     setTheme(theme: Theme): Promise<Settings>
+    /** Whether she stands still, and whether she does her idle animations; saved. */
+    setHabits(habits: Partial<Habits>): Promise<Settings>
   }
   character: {
     /** Makes her `scale` times her usual size (one of CHARACTER_SIZES); saved. */
@@ -2242,7 +2338,8 @@ export interface AssistApi {
     retry(): Promise<void>
     /** Notifications and the user's IT requests; checked again first with `refresh`. */
     feed(refresh?: boolean): Promise<JiraFeed>
-    markNotificationsRead(): Promise<JiraFeed>
+    /** Marks one notification (by its id), or all of them, as seen. */
+    markNotificationsRead(id?: string): Promise<JiraFeed>
     /** Marks what's new on one request (or all of them) as seen. */
     markRequestsRead(key?: string): Promise<JiraFeed>
     search(query: string): Promise<SearchResult>
@@ -2283,6 +2380,12 @@ export interface AssistApi {
   }
   /** Starts Desktop Wizard's uninstaller and quits (installed copies only). */
   uninstall(): Promise<UninstallResult>
+  screensaver: {
+    /** The user's back (the mouse moved, a click, a key): the screen saver's pages. */
+    wake(): void
+  }
+  /** The screen saver is ending: time for its scene to fade away (its pages). */
+  onScreensaverEnd(callback: () => void): () => void
   onModeChanged(callback: (mode: Mode) => void): () => void
   /** The character's pose changed (walking, fidgeting, dangling...). */
   onPoseChanged(callback: (pose: Pose) => void): () => void
@@ -2308,8 +2411,8 @@ export interface AssistApi {
 
 The API a page sees as `window.assist`. Each method maps onto one channel in `IPC`. Related calls
 are grouped into nested objects (`notes`, `screenshots`, `settings`, `character`, `auth`,
-`claudeDesktop`, `chat`, `apps`, `atlassian`, `serviceDesk`, `updates`), which is only for
-readability. Every page
+`claudeDesktop`, `chat`, `apps`, `atlassian`, `serviceDesk`, `updates`, `screensaver`), which is
+only for readability. Every page
 gets all of them, but `auth` and `chat` only work with the built-in chat, `claudeDesktop` only with
 Claude Desktop, `apps` only when the tenant has a portal, `atlassian` only when it has an Atlassian
 site, `serviceDesk` only when it lists request types, and `updates` only when it has `updates`; the
@@ -2342,6 +2445,9 @@ panel checks `branding` to know which to call.
   chat) or "Send in Claude automatically" (Claude Desktop), and return the settings as they now
   are, like the other `settings` calls. `setFavoriteApp(id, favorite)` does the same for a star
   in the Apps list, and `setTheme(theme)` for light or dark mode.
+- `setHabits(habits: Partial<Habits>): Promise<Settings>`: as its comment says, whether she stands
+  still and whether she does her idle animations, saved; either or both at once. She does as it
+  says at once, not only after a restart.
 - `character.setSize(scale: number): Promise<CharacterSize>`: as its comment says, makes the
   character `scale` times her usual size, which must be one of `CHARACTER_SIZES` (the main process
   refuses any other number), and saves it. The answer is her size as it now is, which may be
@@ -2372,6 +2478,10 @@ panel checks `branding` to know which to call.
 - `feed(refresh?: boolean): Promise<JiraFeed>`: the notifications and requests, checked again
   first with `refresh` (or if the last check is over a minute old). The answer also arrives
   through `onJiraFeed`, like every other change.
+- `markNotificationsRead(id?: string): Promise<JiraFeed>`: as its comment says, marks one
+  notification (by its id) as seen, which the Jira page does when one is opened, or all of them
+  without an id, which the panel does when the Jira page closes. `markRequestsRead(key?)` does the
+  same for the user's IT requests.
 - `transition()`, `comment()`, `logWork()`: each answers with the issue as it is after the change
   (`IssueResult`).
 - `projectKeys()`: the keys of the Jira projects the user can see, so the text box only offers to
@@ -2384,6 +2494,11 @@ panel checks `branding` to know which to call.
   installs it, but returns straight away, already `checking`; progress arrives through
   `onUpdateState`. If there's an update, the app closes and starts again as the new version.
 - `uninstall(): Promise<UninstallResult>`: starts the uninstaller; the app quits if it worked.
+- `screensaver.wake(): void`: as its comment says, the user's back (the mouse moved, a click, a
+  key), from the screen saver's pages. Fire and forget: the page needn't wait, as the main process
+  answers by telling every page to fade away.
+- `onScreensaverEnd(callback: () => void): () => void`: as its comment says, the screen saver is
+  ending, so its scene should fade away; only its pages listen.
 - `onModeChanged(callback: (mode: Mode) => void): () => void`: each `on...` method starts
   listening and returns a function that stops. That suits React's `useEffect`, whose cleanup
   step can simply call it (see `useAssistState()`).
@@ -2585,8 +2700,8 @@ export function browseUrl(site: string, key: string): string {
 
 ## `src/preload/index.ts`: the bridge to the page
 
-A _preload script_ runs inside each window (the bubble, the panel, and the clones', the vision's and the spells' windows) just
-before the page's own code. This
+A _preload script_ runs inside each window (the bubble, the panel, and the clones', the vision's,
+the spells' and the screen saver's windows) just before the page's own code. This
 one builds `window.assist` and is the only route from a page to the main process. To see why it
 exists, look at how the windows are created (`webPreferences` in `src/main/bubble/windows.ts`):
 
@@ -2636,7 +2751,7 @@ listening. Every `on...` method in `api` uses it.
 
 <!-- code: apps/desktop/src/preload/index.ts#api -->
 
-[`src/preload/index.ts`, lines 12–111](../../apps/desktop/src/preload/index.ts#L12-L111)
+[`src/preload/index.ts`, lines 12–116](../../apps/desktop/src/preload/index.ts#L12-L116)
 
 ```ts
 const api: AssistApi = {
@@ -2666,6 +2781,7 @@ const api: AssistApi = {
     setEffort: (effort) => ipcRenderer.invoke(IPC.settingsSetEffort, effort),
     setAutoSend: (autoSend) => ipcRenderer.invoke(IPC.settingsSetAutoSend, autoSend),
     setTheme: (theme) => ipcRenderer.invoke(IPC.settingsSetTheme, theme),
+    setHabits: (habits) => ipcRenderer.invoke(IPC.settingsSetHabits, habits),
     setFavoriteApp: (id, favorite) =>
       ipcRenderer.invoke(IPC.settingsSetFavoriteApp, { id, favorite }),
   },
@@ -2703,7 +2819,7 @@ const api: AssistApi = {
     signOut: () => ipcRenderer.invoke(IPC.atlassianSignOut),
     retry: () => ipcRenderer.invoke(IPC.atlassianRetry),
     feed: (refresh) => ipcRenderer.invoke(IPC.atlassianFeed, refresh ?? false),
-    markNotificationsRead: () => ipcRenderer.invoke(IPC.atlassianMarkNotificationsRead),
+    markNotificationsRead: (id) => ipcRenderer.invoke(IPC.atlassianMarkNotificationsRead, id),
     markRequestsRead: (key) => ipcRenderer.invoke(IPC.atlassianMarkRequestsRead, key),
     search: (query) => ipcRenderer.invoke(IPC.atlassianSearch, query),
     issue: (key) => ipcRenderer.invoke(IPC.atlassianIssue, key),
@@ -2725,6 +2841,10 @@ const api: AssistApi = {
     check: () => ipcRenderer.invoke(IPC.updatesCheck),
   },
   uninstall: () => ipcRenderer.invoke(IPC.appUninstall),
+  screensaver: {
+    wake: () => ipcRenderer.send(IPC.screensaverWake),
+  },
+  onScreensaverEnd: (callback) => subscribe(IPC.screensaverEnd, () => callback()),
   onModeChanged: (callback) => subscribe(IPC.modeChanged, callback),
   onPoseChanged: (callback) => subscribe(IPC.poseChanged, callback),
   onArrive: (callback) => subscribe(IPC.bubbleArrive, callback),
@@ -2764,7 +2884,10 @@ The implementation of `AssistApi`: one line per method, each sending its channel
 - `castSpell: (spell) => ipcRenderer.invoke(IPC.characterCastSpell, spell)`: the Spells menu's
   request, with the spell's name. The main process checks it's one of `SPELLS`.
 - `subscribe(IPC.chatReset, () => callback())`: the reset carries no data, so the page's callback
-  is called with no arguments, matching its `() => void` type.
+  is called with no arguments, matching its `() => void` type. `onScreensaverEnd` is passed on the
+  same way.
+- `wake: () => ipcRenderer.send(IPC.screensaverWake)`: fire and forget, with nothing more to say
+  than that the user's back.
 - `ipcRenderer.invoke(IPC.appsGet, refresh ?? false)`: `refresh` is optional for the page, but
   the main process's check for this channel wants a real `true` or `false`, so a missing one is
   sent as `false`.
@@ -2772,6 +2895,8 @@ The implementation of `AssistApi`: one line per method, each sending its channel
   argument, checked by one schema in the main process, so the two values go as one object. The
   Atlassian calls that take two values (`transition`, `comment`, `logWork` and `ask`) do the same,
   and `atlassian.feed()` sends a missing `refresh` as `false`, like `apps.get()`.
+  `markNotificationsRead(id)` and `markRequestsRead(key)` send theirs as they are: a missing one
+  goes as `undefined`, which the main process's schemas accept as "all of them".
 
 ### `contextBridge.exposeInMainWorld()`
 

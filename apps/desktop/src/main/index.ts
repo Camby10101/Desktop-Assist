@@ -58,6 +58,7 @@ import { NotesStore } from './notes/NotesStore'
 import { ScreenshotService } from './screenshots/ScreenshotService'
 import { myRequestsUrl, ServiceDesk, windowsVersion } from './serviceDesk'
 import { adoptFormerData, FORMER_NAME, PRODUCT_NAME } from './formerName'
+import { ScreenSaver } from './screenSaver'
 import { SettingsService } from './settings'
 import { readJsonFile, writeJsonFile } from './storage/jsonFile'
 import { SecretStore, type Encryptor } from './storage/SecretStore'
@@ -170,6 +171,7 @@ async function start(): Promise<void> {
     actionCount,
     initialAnchor: settings.bubbleAnchor,
     initialScale: settings.characterScale,
+    initialHabits: settings.get(),
     onDiagnostic: (message) => log(message),
     onModeChange: (mode) => broadcast(IPC.modeChanged, mode),
     onPoseChange: (pose) => {
@@ -191,6 +193,34 @@ async function start(): Promise<void> {
 
   // Her clones: a window along the taskbar.
   const clones = new Clones({ accentColor: tenant.accentColor, open: openOverlay('clones') })
+
+  // The screen saver: a window over the whole of every display, in front of the taskbar too (from
+  // the "screen-saver" level up, Windows keeps it there), the one on her display taking the focus
+  // so it hears the keyboard. Each is placed twice: Windows can size a window placed on a display
+  // with another scale by the first's, until it's there.
+  const screenSaver = new ScreenSaver({
+    accentColor: tenant.accentColor,
+    displays: () => screen.getAllDisplays().map(({ id, bounds }) => ({ id, bounds })),
+    herDisplay: () => screen.getDisplayMatching(bubbleWindow.getBounds()).id,
+    open: (bounds, query, focus) => {
+      const win = createOverlayWindow('screensaver', bounds, query)
+      win.setAlwaysOnTop(true, 'screen-saver')
+      win.setBounds(bounds)
+      win.once('ready-to-show', () => {
+        win.setBounds(bounds)
+        if (focus) win.show()
+        else win.showInactive()
+        win.moveTop()
+      })
+      return {
+        id: win.webContents.id,
+        end: () => !win.isDestroyed() && win.webContents.send(IPC.screensaverEnd),
+        close: () => !win.isDestroyed() && win.destroy(),
+      }
+    },
+    onStart: () => bubble.sleep(),
+    onEnd: () => bubble.wake(),
+  })
 
   /** The Spells menu: the panel closes, so the spell can be seen, and she casts it. */
   const castSpell = (spell: Spell) => {
@@ -408,9 +438,11 @@ async function start(): Promise<void> {
       controller: bubble,
       screenshots,
       openServiceDesk: serviceDesk ? () => shell.openExternal(serviceDesk.url) : null,
+      startScreenSaver: () => screenSaver.start(),
       quit: () => app.quit(),
     }),
     castSpell,
+    screenSaver,
     uninstall: () =>
       uninstall({
         isPackaged: app.isPackaged,
@@ -441,10 +473,17 @@ async function start(): Promise<void> {
     accentColor: tenant.accentColor,
     onOpen: () => bubble.expand(),
     // As the Close icon does: she vanishes, then the app quits.
-    onQuit: () => bubble.farewell(() => app.quit()),
+    onQuit: () => {
+      screenSaver.dispose()
+      bubble.farewell(() => app.quit())
+    },
   })
 
-  const onDisplayChange = () => bubble.displayChanged()
+  const onDisplayChange = () => {
+    // The screen saver's windows no longer fit the screens: it ends, and she comes back.
+    screenSaver.stop()
+    bubble.displayChanged()
+  }
   screen.on('display-added', onDisplayChange)
   screen.on('display-removed', onDisplayChange)
   screen.on('display-metrics-changed', onDisplayChange)
@@ -459,6 +498,7 @@ async function start(): Promise<void> {
     clones.stop()
     vision.stop()
     effects.stop()
+    screenSaver.dispose()
     for (const stop of stopKeepingOnTop) stop()
     builtIn?.chat.stop()
     void portalApps?.dispose()

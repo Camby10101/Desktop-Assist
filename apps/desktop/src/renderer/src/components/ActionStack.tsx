@@ -6,6 +6,7 @@ import {
   MessageCircle,
   Power,
   Settings,
+  Sunset,
   WandSparkles,
   type LucideIcon,
 } from 'lucide-react'
@@ -22,6 +23,7 @@ const ICONS: Record<ActionId, LucideIcon> = {
   screenshot: Camera,
   settings: Settings,
   spells: WandSparkles,
+  screensaver: Sunset,
   close: Power,
 }
 

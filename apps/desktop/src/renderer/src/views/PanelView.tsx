@@ -1,4 +1,4 @@
-import { useEffect, useState, type PointerEvent } from 'react'
+import { useEffect, useRef, useState, type PointerEvent } from 'react'
 import type { ActionId } from '@shared/actions'
 import { CLAUDE_DOWNLOAD_PAGE } from '@shared/claudeDesktop'
 import { actionOffset, panelLayout } from '@shared/geometry'
@@ -109,6 +109,17 @@ function Panel({ state }: { state: AppState }) {
       }),
     [startPage],
   )
+  // What's new on the Jira page or the service desk's goes as it's opened, and the rest once the
+  // page closes (another page, or the panel closing): it's all been seen.
+  const shown = state.mode === 'collapsed' ? null : view
+  const lastShown = useRef(shown)
+  useEffect(() => {
+    const before = lastShown.current
+    lastShown.current = shown
+    if (before === shown || !atlassianSite) return
+    if (before === 'jira') void window.assist.atlassian.markNotificationsRead()
+    if (before === 'servicedesk') void window.assist.atlassian.markRequestsRead()
+  }, [shown, atlassianSite])
   useEffect(() => window.assist.onAppsState(setApps), [])
   useEffect(() => {
     if (!atlassianSite) return
@@ -551,6 +562,9 @@ function Panel({ state }: { state: AppState }) {
           onCheckForUpdates={() => void window.assist.updates.check().then(setUpdate)}
           onToggleTheme={() => void toggleTheme()}
           onSetSize={(next) => void window.assist.character.setSize(next)}
+          onSetHabits={async (habits) =>
+            setSettings(await window.assist.settings.setHabits(habits))
+          }
           onToggleAutoStart={async () =>
             setSettings(await window.assist.settings.setAutoStart(!settings.autoStart))
           }

@@ -26,7 +26,10 @@ effects, which `SpellView` draws, in nine files: where things are, moment by mom
 (`lib/spellMotion.ts`), the helpers that draw a pixel at a time (`lib/pixels.ts`), starfall, the
 explosion and which spell draws what (`lib/spellArt.ts`), and the six newer spells, a file each in
 `lib/spells/` (`fireworks.ts`, `thunderstorm.ts`, `blizzard.ts`, `vortex.ts`, `butterflies.ts`
-and `phoenix.ts`).
+and `phoenix.ts`). The very last are the screen saver's scenes, which `ScreenSaverView` draws with
+the same helpers, in four files in `lib/screensaver/`: what they share (`scene.ts`), her sunset
+(`sunset.ts`), the starfall on her other screens (`stars.ts`) and her in the sunset, from behind
+(`her.ts`).
 
 ## `src/renderer/src/components/ChatBox.tsx`: the chat card
 
@@ -1340,8 +1343,8 @@ gear has toggled it on, and the tenant's list of actions includes `settings`. It
 `corner`, `layout` and `offset` for positioning; the current `settings`, her `size`, `branding` (app
 and company name, and which kind of chat), `version`, signed-in `user`, the `atlassianUser`
 connected to Atlassian and how Check for updates is going (`update`) to display; and one callback
-per menu item, `onToggleTheme`, `onSetSize`, `onUninstall`, `onDisconnectAtlassian` and
-`onCheckForUpdates` included. `Panel` closes it on
+per menu item, `onToggleTheme`, `onSetSize`, `onSetHabits`, `onUninstall`, `onDisconnectAtlassian`
+and `onCheckForUpdates` included. `Panel` closes it on
 Esc, on a click anywhere else in the panel, and when the panel closes.
 
 ### `CONFIRM_MS`, `EFFORTS`
@@ -1373,7 +1376,7 @@ const EFFORTS: { value: Effort; label: string; hint: string }[] = [
 
 <!-- code: apps/desktop/src/renderer/src/components/SettingsMenu.tsx#SettingsMenu -->
 
-[`src/renderer/src/components/SettingsMenu.tsx`, lines 28–268](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L28-L268)
+[`src/renderer/src/components/SettingsMenu.tsx`, lines 28–264](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L28-L264)
 
 ```tsx
 /** The menu that opens beside the gear icon, on the side facing the middle of the screen. */
@@ -1398,6 +1401,7 @@ export function SettingsMenu(props: {
   onCheckForUpdates: () => void
   onToggleTheme: () => void
   onSetSize: (scale: number) => void
+  onSetHabits: (habits: Partial<Habits>) => void
   onToggleAutoStart: () => void
   onSetEffort: (effort: Effort) => void
   onToggleAutoSend: () => void
@@ -1447,23 +1451,27 @@ export function SettingsMenu(props: {
         overflowY: 'auto',
       }}
     >
-      <button
-        type="button"
-        role="menuitemcheckbox"
-        aria-checked={settings.theme === 'light'}
-        onClick={props.onToggleTheme}
-        className="flex w-full items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800"
-      >
-        <span>
-          Light mode
-          <span className="block text-[11px] text-zinc-500">
-            {settings.theme === 'light' ? 'Light windows' : 'Dark windows'}
-          </span>
-        </span>
-        <Switch on={settings.theme === 'light'} />
-      </button>
+      <ToggleRow
+        label="Light mode"
+        hint={settings.theme === 'light' ? 'Light windows' : 'Dark windows'}
+        on={settings.theme === 'light'}
+        onToggle={props.onToggleTheme}
+      />
 
       <SizeControl size={props.size} onSetSize={props.onSetSize} />
+
+      <ToggleRow
+        label="Stand still"
+        hint={settings.standStill ? 'She stays where she is' : 'She wanders about'}
+        on={settings.standStill}
+        onToggle={() => props.onSetHabits({ standStill: !settings.standStill })}
+      />
+      <ToggleRow
+        label="No idle animations"
+        hint={settings.noIdles ? 'She just stands' : 'She keeps herself busy'}
+        on={settings.noIdles}
+        onToggle={() => props.onSetHabits({ noIdles: !settings.noIdles })}
+      />
 
       <div className="my-1 border-t border-black/10 dark:border-white/10" />
 
@@ -1490,21 +1498,12 @@ export function SettingsMenu(props: {
       </button>
 
       {!builtInChat && (
-        <button
-          type="button"
-          role="menuitemcheckbox"
-          aria-checked={settings.autoSend}
-          onClick={props.onToggleAutoSend}
-          className="flex w-full items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800"
-        >
-          <span>
-            Send in Claude automatically
-            <span className="block text-[11px] text-zinc-500">
-              {settings.autoSend ? 'Questions are sent for you' : 'You press Enter in Claude'}
-            </span>
-          </span>
-          <Switch on={settings.autoSend} />
-        </button>
+        <ToggleRow
+          label="Send in Claude automatically"
+          hint={settings.autoSend ? 'Questions are sent for you' : 'You press Enter in Claude'}
+          on={settings.autoSend}
+          onToggle={props.onToggleAutoSend}
+        />
       )}
 
       {builtInChat && (
@@ -1621,8 +1620,8 @@ export function SettingsMenu(props: {
 
 <!-- /code -->
 
-Draws the menu's rows. Every menu starts with Light mode and her Size, then a line. Then, with the
-built-in chat: Start with Windows, Response style, Open screenshots folder, New conversation, who's signed in with Log out, and the version. With Claude
+Draws the menu's rows. Every menu starts with Light mode, her Size, Stand still and No idle
+animations, then a line. Then, with the built-in chat: Start with Windows, Response style, Open screenshots folder, New conversation, who's signed in with Log out, and the version. With Claude
 Desktop the chat and its settings live in Claude Desktop, so there's no Response style and no
 sign-in; instead there's a "Send in Claude automatically" switch, and New conversation becomes
 Clear text box. When the tenant offers it, either kind has Check for updates, and when connected
@@ -1672,27 +1671,32 @@ switches the "New conversation" (or "Clear text box") row into its "Click again"
   go and `fit.maxHeight` how tall it can be.
 - `const builtInChat = branding.chatApp === 'built-in'`: which rows to show. The rest of the menu
   checks this one value.
-- `aria-checked={settings.theme === 'light'}`: the first row, Light mode, is a `menuitemcheckbox`
-  like Start with Windows below, on while the windows are light. Clicking it calls `onToggleTheme`,
-  which asks the main process for the other mode (`Panel.toggleTheme`); every window switches at
-  once, and the menu stays open.
-- `{settings.theme === 'light' ? 'Light windows' : 'Dark windows'}`: the grey line under it says
-  which the windows are now.
+- `<ToggleRow label="Light mode" ... />`: the first row, Light mode, a switch (`ToggleRow`,
+  below), on while the windows are light. Clicking it calls `onToggleTheme`, which asks the main
+  process for the other mode (`Panel.toggleTheme`); every window switches at once, and the menu
+  stays open. The grey line under it (`hint`) says which the windows are now: "Light windows" or
+  "Dark windows".
 - `<SizeControl size={props.size} onSetSize={props.onSetSize} />`: the second row, her size, with
   its Smaller and Bigger buttons (see `SizeControl` below).
-- `<div className="my-1 border-t ..." />`: a line under the two, which are about how things look,
-  setting them apart from the rest of the menu.
+- `<ToggleRow label="Stand still" ... />`: off until the user turns it on. On, she stays where she
+  stands instead of wandering about ("She stays where she is"); off, "She wanders about". Clicking
+  it calls `onSetHabits({ standStill: !settings.standStill })`, sending only this setting, flipped;
+  the main process saves it and she does as it says at once (`BubbleController.setHabits()`).
+- `<ToggleRow label="No idle animations" ... />`: the same for her idle animations, her habits:
+  on, "She just stands"; off, "She keeps herself busy". With both on, she does nothing on her own
+  but breathe and blink.
+- `<div className="my-1 border-t ..." />`: a line under the four, which are about her and how
+  things look, setting them apart from the rest of the menu.
 - `disabled={!settings.autoStartAvailable}`: Start with Windows only works in the installed app,
   not in `npm run dev`; there the row is greyed out with a note. `onToggleAutoStart` asks the
   main process to flip it, and `Panel` keeps the settings it returns (see `settings.ts` in
   [Main process: startup, IPC and app plumbing](2-main-startup.md)).
 - `<Switch on={settings.autoStart} />`: the on/off graphic at the end of the row.
-- `{!builtInChat && (`: with Claude Desktop, the "Send in Claude automatically" row, built the
-  same way as Start with Windows: a `menuitemcheckbox` button with the setting's name, a grey
-  line under it, and a `Switch`. Clicking it calls `onToggleAutoSend`, which flips the setting in
-  the main process.
-- `{settings.autoSend ? 'Questions are sent for you' : 'You press Enter in Claude'}`: the grey
-  line says what the switch means in practice.
+- `{!builtInChat && (`: with Claude Desktop, the "Send in Claude automatically" row, another
+  `ToggleRow`. Clicking it calls `onToggleAutoSend`, which flips the setting in the main process.
+  The grey line says what the switch means in practice: "Questions are sent for you" or "You press
+  Enter in Claude". (Start with Windows, just above, is the one switch that isn't a `ToggleRow`:
+  it can be greyed out, with a note in place of its line.)
 - `{builtInChat && (`: Response style only with the built-in chat. With Claude Desktop the chat,
   and how Claude answers, are Claude Desktop's business, so the setting would do nothing.
 - `aria-checked={settings.effort === option.value}`: the response styles work like radio buttons.
@@ -1736,7 +1740,7 @@ switches the "New conversation" (or "Clear text box") row into its "Click again"
 
 <!-- code: apps/desktop/src/renderer/src/components/SettingsMenu.tsx#UpdateItem -->
 
-[`src/renderer/src/components/SettingsMenu.tsx`, lines 270–308](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L270-L308)
+[`src/renderer/src/components/SettingsMenu.tsx`, lines 266–304](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L266-L304)
 
 ```tsx
 /** Check for updates, showing how it's going: checking, downloading, installing, or the answer. */
@@ -1805,7 +1809,7 @@ whole job happens in the main process (`Updater` in `src/main/updates.ts`; see
 
 <!-- code: apps/desktop/src/renderer/src/components/SettingsMenu.tsx#MenuItem -->
 
-[`src/renderer/src/components/SettingsMenu.tsx`, lines 310–339](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L310-L339)
+[`src/renderer/src/components/SettingsMenu.tsx`, lines 306–335](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L306-L335)
 
 ```tsx
 function MenuItem(props: {
@@ -1856,11 +1860,54 @@ One row of the menu: an icon and a label, as a button.
   conversation", "Clear text box" or Uninstall. Otherwise a disabled row is faded
   (`opacity-60`) with no hover, and an enabled one gets the grey hover.
 
+### `ToggleRow`
+
+<!-- code: apps/desktop/src/renderer/src/components/SettingsMenu.tsx#ToggleRow -->
+
+[`src/renderer/src/components/SettingsMenu.tsx`, lines 337–354](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L337-L354)
+
+```tsx
+/** A setting that's on or off: its name, a line saying what it does now, and its switch. */
+function ToggleRow(props: { label: string; hint: string; on: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      role="menuitemcheckbox"
+      aria-checked={props.on}
+      onClick={props.onToggle}
+      className="flex w-full items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800"
+    >
+      <span>
+        {props.label}
+        <span className="block text-[11px] text-zinc-500">{props.hint}</span>
+      </span>
+      <Switch on={props.on} />
+    </button>
+  )
+}
+```
+
+<!-- /code -->
+
+As its comment says, a setting that's on or off: its name, a line saying what it does now, and its
+switch. Light mode, Stand still, No idle animations and Send in Claude automatically are each one.
+Light mode and Send in Claude automatically used to be written out in full; with the two new
+switches there would have been four copies of the same lines, which would only drift apart.
+
+- `label`, `hint`: the setting's name, and the grey line under it, which says what the setting
+  means as it stands ("She wanders about"), so the user needn't work out what "off" means.
+- `on`, `onToggle`: whether it's on, and what a click does. The row only shows the setting; the
+  menu's caller changes it.
+- `role="menuitemcheckbox"`, `aria-checked={props.on}`: screen readers announce it as an item that's
+  ticked or not, since the `Switch` itself is only a picture.
+- The rest is the same as every other row: the whole row is one button, its text on the left and
+  the switch on the right (`justify-between`), with the grey hover.
+
 ### `Switch`
 
 <!-- code: apps/desktop/src/renderer/src/components/SettingsMenu.tsx#Switch -->
 
-[`src/renderer/src/components/SettingsMenu.tsx`, lines 341–358](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L341-L358)
+[`src/renderer/src/components/SettingsMenu.tsx`, lines 356–373](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L356-L373)
 
 ```tsx
 function Switch({ on }: { on: boolean }) {
@@ -2208,7 +2255,8 @@ like the settings menu: the same look, placed the same way and kept inside the w
 ## `src/renderer/src/components/ActionStack.tsx`: the action icons
 
 The column of round icon buttons that pops out of the bubble when the panel opens (for Morse
-Micro: Ask Claude, Jira, IT service desk, screenshot, settings, spells and close), in the order the
+Micro: Ask Claude, Jira, IT service desk, screenshot, settings, spells, screen saver and close), in
+the order the
 tenant's `tenant.json` lists them, nearest the bubble first. `Panel` always renders it; while
 closed it's simply invisible. Its props are the `corner`, the `layout` for her size, the tenant's
 `actions`, `open`, `activeId` (`settings` while the settings menu is open, `spells` while the
@@ -2221,7 +2269,7 @@ lists request types), `dotted` (icons that get a small dot) and `onAction`, whic
 
 <!-- code: apps/desktop/src/renderer/src/components/ActionStack.tsx#ICONS -->
 
-[`src/renderer/src/components/ActionStack.tsx`, lines 17–26](../../apps/desktop/src/renderer/src/components/ActionStack.tsx#L17-L26)
+[`src/renderer/src/components/ActionStack.tsx`, lines 18–28](../../apps/desktop/src/renderer/src/components/ActionStack.tsx#L18-L28)
 
 ```tsx
 const ICONS: Record<ActionId, LucideIcon> = {
@@ -2232,6 +2280,7 @@ const ICONS: Record<ActionId, LucideIcon> = {
   screenshot: Camera,
   settings: Settings,
   spells: WandSparkles,
+  screensaver: Sunset,
   close: Power,
 }
 ```
@@ -2241,7 +2290,8 @@ const ICONS: Record<ActionId, LucideIcon> = {
 Which lucide icon each action shows. Ask Claude is `MessageCircle`, a speech bubble; Apps is
 `LayoutGrid`, a grid of four squares, the usual sign for "apps"; Jira is `Bell`, for its
 notifications; and the IT service desk is `Headset`, as for a help desk. Spells is
-`WandSparkles`, a magic wand with sparkles, and Close is `Power`, a power button.
+`WandSparkles`, a magic wand with sparkles, the screen saver `Sunset`, a sun setting on the
+horizon, for the scene it shows, and Close is `Power`, a power button.
 
 - `Record<ActionId, LucideIcon>`: an object with exactly one entry for every action id. If a new
   id is added to `ACTION_IDS` in `src/shared/actions.ts` without an icon here, TypeScript reports
@@ -2251,7 +2301,7 @@ notifications; and the IT service desk is `Headset`, as for a help desk. Spells 
 
 <!-- code: apps/desktop/src/renderer/src/components/ActionStack.tsx#ActionStack -->
 
-[`src/renderer/src/components/ActionStack.tsx`, lines 28–103](../../apps/desktop/src/renderer/src/components/ActionStack.tsx#L28-L103)
+[`src/renderer/src/components/ActionStack.tsx`, lines 30–105](../../apps/desktop/src/renderer/src/components/ActionStack.tsx#L30-L105)
 
 ```tsx
 /**
@@ -3145,7 +3195,7 @@ const LIGHT: Point = { x: -1, y: -1 }
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#View,Face,Arm,Leg,Pose,DOWN,STAND,LEG_LENGTH -->
 
-[`src/renderer/src/character/rig.ts`, lines 53–134](../../apps/desktop/src/renderer/src/character/rig.ts#L53-L134)
+[`src/renderer/src/character/rig.ts`, lines 53–140](../../apps/desktop/src/renderer/src/character/rig.ts#L53-L140)
 
 ```ts
 export type View = 'front' | 'diagonal' | 'side'
@@ -3225,6 +3275,12 @@ export interface Pose {
    * gone): see FADE. Played backwards, she forms out of them.
    */
   fade?: number
+  /**
+   * From the front only: turned round, her back to us (watching the sunset in the screen saver).
+   * Her long hair falls over her back from the crown of her head, her ears through it, and nothing
+   * on her front shows: no face, collar, brooch, buttons or buckles, nor the hat's buckle and moon.
+   */
+  back?: boolean
 }
 
 const DOWN: Arm = { shoulder: 0.08, elbow: 0 }
@@ -3299,6 +3355,12 @@ What a pose is made of.
   - `fade`: as its comment says, dissolving into white motes, from 0 (all of her) to `FADE.end`
     (nothing left, the last motes gone); see `FADE` below. Played backwards, from `FADE.end` down to
     0, she forms out of them. Her `vanish` and `appear` poses (`sprite.ts`) are made of it.
+  - `back`: as its comment says, from the front only, she's turned round, her back to us, as she
+    watches the sunset in the screen saver (`gaze()` in `sprite.ts`). Her long hair falls over her
+    back from the crown of her head, her ears showing through it, and nothing on her front shows:
+    no face, collar, brooch, buttons or buckles, nor the hat's buckle and moon. The rig still draws
+    her facing us, with the front left off and her hair over it, which is all a figure seen from
+    behind needs at this size: her arms, legs, robe and hat are the same shapes either way.
 - `DOWN` and `STAND`: the arms (hanging, very slightly away from her body) and legs (straight) of a
   pose that doesn't give them.
 - `LEG_LENGTH`: as its comment says, her thigh and her shin are 16.5 pixels each, so standing
@@ -3309,7 +3371,7 @@ What a pose is made of.
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#EYES,MOUTHS,SPARKLE,TWINKLE,BUTTERFLY_OPEN,BUTTERFLY_SHUT,Z_BIG,Z_SMALL,ORBS,BUBBLE_SMALL,BUBBLE_BIG,WAND_RING,WISP -->
 
-[`src/renderer/src/character/rig.ts`, lines 136–231](../../apps/desktop/src/renderer/src/character/rig.ts#L136-L231)
+[`src/renderer/src/character/rig.ts`, lines 142–237](../../apps/desktop/src/renderer/src/character/rig.ts#L142-L237)
 
 ```ts
 // Face pictures, facing right; `.` is see-through. Eyes have a thick upper lid, a dark-to-light
@@ -3482,7 +3544,7 @@ As the comment says, they face right; frames facing left are mirrored with every
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#TRAIL,JUGGLE,BUBBLES,wispAt -->
 
-[`src/renderer/src/character/rig.ts`, lines 233–291](../../apps/desktop/src/renderer/src/character/rig.ts#L233-L291)
+[`src/renderer/src/character/rig.ts`, lines 239–297](../../apps/desktop/src/renderer/src/character/rig.ts#L239-L297)
 
 ```ts
 /**
@@ -3573,7 +3635,7 @@ puff before each bubble, her eyes following the wisp).
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#FADE,hash,dissolveAt -->
 
-[`src/renderer/src/character/rig.ts`, lines 240–256](../../apps/desktop/src/renderer/src/character/rig.ts#L240-L256)
+[`src/renderer/src/character/rig.ts`, lines 246–262](../../apps/desktop/src/renderer/src/character/rig.ts#L246-L262)
 
 ```ts
 /**
@@ -3623,7 +3685,7 @@ vanishes or appears. `draw()` uses them at its very end (below).
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#eyesFor -->
 
-[`src/renderer/src/character/rig.ts`, lines 293–300](../../apps/desktop/src/renderer/src/character/rig.ts#L293-L300)
+[`src/renderer/src/character/rig.ts`, lines 299–306](../../apps/desktop/src/renderer/src/character/rig.ts#L299-L306)
 
 ```ts
 /** Which eyes a face uses. */
@@ -3645,13 +3707,15 @@ and `awe` and `up` both look up (their mouths are what differ).
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#draw -->
 
-[`src/renderer/src/character/rig.ts`, lines 302–1264](../../apps/desktop/src/renderer/src/character/rig.ts#L302-L1264)
+[`src/renderer/src/character/rig.ts`, lines 308–1350](../../apps/desktop/src/renderer/src/character/rig.ts#L308-L1350)
 
 ```ts
 /** Draws one pose as rows of palette letters. */
 export function draw(pose: Pose): string[] {
   const view = pose.view
   const frontView = view === 'front'
+  /** Her back to us (from the front only): see Pose.back. */
+  const fromBehind = frontView && pose.back === true
   const sitting = pose.sitting ?? false
   const hips: Point = { x: 48 + (pose.x ?? 0), y: (sitting ? 85 : 59) + (pose.y ?? 0) }
   const lean = pose.lean ?? 0
@@ -4023,20 +4087,26 @@ export function draw(pose: Pose): string[] {
       })
       set(p, 'f', 'aAv')
     }
-    if (view !== 'side' && !sitting) {
+    if (view !== 'side' && !sitting && !fromBehind) {
       for (let t = -1; t < hem - 1; t += 0.5) {
         set(onHips({ x: (swing * t) / hem, y: t }), 'f', 'aAv')
       }
     }
     // The collar: a V of trim, the gem brooch at its point; a darker sash at her waist.
     const off = view === 'side' ? 3 : 0
-    if (view !== 'side') {
+    if (view !== 'side' && !fromBehind) {
       for (let t = 0; t <= 5; t += 0.5) {
         set(onBody({ x: -3 + t * 0.6 + off, y: t - 0.5 }), 'f', 'aAv')
         set(onBody({ x: 3 - t * 0.6 + off, y: t - 0.5 }), 'f', 'aAv')
       }
     }
-    canvas.stamp(['.G.', 'GGG', '.G.'], onBody({ x: off - 1, y: 4 }).x, onBody({ x: off, y: 4 }).y)
+    if (!fromBehind) {
+      canvas.stamp(
+        ['.G.', 'GGG', '.G.'],
+        onBody({ x: off - 1, y: 4 }).x,
+        onBody({ x: off, y: 4 }).y,
+      )
+    }
     for (let t = -9; t <= 9; t += 0.5) {
       set(onBody({ x: t, y: 18 }), 'A', 'av')
       set(onBody({ x: t, y: 19 }), 'q', 'av')
@@ -4091,10 +4161,10 @@ export function draw(pose: Pose): string[] {
       }
     }
     // Gold buttons down the bodice from the brooch (from the front), and the sash's gold buckle.
-    if (frontView) {
+    if (frontView && !fromBehind) {
       for (const y of [7.5, 10.5, 13.5]) motif(onBody({ x: 0, y }), ['Y'], 'aAv')
     }
-    motif(onBody({ x: off, y: 18.5 }), ['YYY', 'YkY'], 'Aqav')
+    if (!fromBehind) motif(onBody({ x: off, y: 18.5 }), ['YYY', 'YkY'], 'Aqav')
 
     // Her head: neck, face and chin.
     const face = new Layer(GRID, HEADROOM)
@@ -4141,7 +4211,9 @@ export function draw(pose: Pose): string[] {
     const look = Math.round(pose.look ?? 0)
     const eyeY = head.y - 0.5
     const mouth = MOUTHS[expression]
-    if (frontView) {
+    if (fromBehind) {
+      // No face: the back of her head (her hair, below).
+    } else if (frontView) {
       canvas.stamp(eyes[0]!, head.x + 1 + look, eyeY)
       canvas.stamp(eyes[1]!, head.x - 6 + look, eyeY)
       canvas.stamp(['cc'], head.x + 3 + look, head.y + 5)
@@ -4204,10 +4276,43 @@ export function draw(pose: Pose): string[] {
             [-7.6, -1],
           ]
     const shiftHair = 0
-    hair.polygon(
-      shape(fringe, (p) => onHead(blown({ x: p.x + shiftHair, y: p.y }))),
-      'hair',
-    )
+    if (fromBehind) {
+      // All of it, from the crown of her head down over her back: as wide as her shoulders, and a
+      // little longer than it shows from the front, its ends in points of different lengths.
+      const fall = [
+        [-9.5, -2],
+        [-8.5, -7.5],
+        [-5, -10.8],
+        [0, -11.8],
+        [5, -10.8],
+        [8.5, -7.5],
+        [9.5, -2],
+        [9.1, 8],
+        [8.9, 18],
+        [8.6, 27],
+        [7.4, 29.6],
+        [5.8, 27.6],
+        [3.9, 31],
+        [2, 28.8],
+        [0, 32.2],
+        [-2, 28.8],
+        [-3.9, 31],
+        [-5.8, 27.6],
+        [-7.4, 29.6],
+        [-8.6, 27],
+        [-8.9, 18],
+        [-9.1, 8],
+      ]
+      hair.polygon(
+        shape(supple(fall), (p) => onHead(blown(p))),
+        'hair',
+      )
+    } else {
+      hair.polygon(
+        shape(fringe, (p) => onHead(blown({ x: p.x + shiftHair, y: p.y }))),
+        'hair',
+      )
+    }
     if (view === 'side') {
       // The back of her head: its back edge in line with her hair behind it, so they read as one,
       // and its front edge behind her ear, so her cheek shows.
@@ -4240,8 +4345,9 @@ export function draw(pose: Pose): string[] {
         0.6,
         'hair',
       )
-    // Side on there's no lock: her hair behind her ear is the back hair.
-    if (view !== 'side') {
+    // Side on there's no lock: her hair behind her ear is the back hair. Nor from behind, where
+    // it's all one fall of hair.
+    if (view !== 'side' && !fromBehind) {
       lock(8.2 + shiftHair, 13)
       lock(-8.2 + shiftHair * 0.5, 13)
     }
@@ -4271,6 +4377,38 @@ export function draw(pose: Pose): string[] {
       inkOverHair(tuft)
     } else {
       ink(hair)
+    }
+    if (fromBehind) {
+      // Strands down her back, from under her hat to the gaps between the points of its ends,
+      // curving out a little as it widens, so it reads as long hair rather than a flat shape: a
+      // line of shade where it's lit, and of light where it's in shade (each pixel once).
+      const done = new Set<number>()
+      for (const [top, end] of [
+        [-1, -1],
+        [2.8, 2.9],
+        [-4.6, -4.9],
+        [6, 6.4],
+        [-7.3, -7.5],
+      ] as const) {
+        for (let y = 1; y <= 28; y += 0.5) {
+          const t = (y - 1) / 27
+          const p = onHead(
+            blown({ x: top + (end - top) * t + Math.sin(t * Math.PI) * 0.5 * Math.sign(top), y }),
+          )
+          const [x, row] = [Math.floor(p.x), Math.floor(p.y)]
+          if (done.has(row * GRID + x)) continue
+          done.add(row * GRID + x)
+          const was = canvas.get(x, row)
+          if (was === 'h' || was === 'l') canvas.set(x, row, 'D')
+          else if (was === 'D') canvas.set(x, row, 'h')
+        }
+      }
+      // Its sheen: a band of light across the back of her head, just under the brim of her hat.
+      for (let dx = -6; dx <= 4; dx++) {
+        set(onHead({ x: dx, y: 0.5 + Math.abs(dx + 1) * 0.15 }), 'L', 'hl')
+        if (Math.abs(dx + 1) < 4)
+          set(onHead({ x: dx, y: 1.5 + Math.abs(dx + 1) * 0.15 }), 'l', 'hD')
+      }
     }
     // The shine on her hair: a band across the crown.
     for (let dx = -6; dx <= 6; dx++) {
@@ -4314,7 +4452,8 @@ export function draw(pose: Pose): string[] {
 
     // Her hat: a wide brim and a tall crooked crown with a silver band.
     const hat = new Layer(GRID, HEADROOM)
-    const tipLean = view === 'side' ? -1 : 1
+    // From behind the crown is mirrored too: its tip flops over to the other side of the picture.
+    const tipLean = view === 'side' || fromBehind ? -1 : 1
     const hatCentre = view === 'side' ? 0.5 : 0
     hat.ellipse(onHead({ x: hatCentre, y: -9 }), view === 'side' ? 12.5 : 14, 2.7, 'hat')
     // The crown, rising to a tip that flops over to her right from the front; side on the whole
@@ -4346,14 +4485,17 @@ export function draw(pose: Pose): string[] {
       set(onHead({ x: hatCentre + dx, y: -8.6 }), 'F', 'ngN')
       set(onHead({ x: hatCentre - dx, y: -8.6 }), 'F', 'ngN')
     }
-    const hatSide = view === 'side' ? 1 : 0
-    motif(onHead({ x: hatCentre + hatSide * 3, y: -11.5 }), ['YYY', 'YGY', 'YYY'], 'ngNfFq')
-    const lifted = (x: number, y: number) =>
-      onHead({ x: x * tipLean + hatCentre, y: y - lift * 0.15 })
-    motif(lifted(-1.5, -15.5), ['.YY', 'Y..', 'Y..', '.YY'], 'ngN')
-    motif(lifted(2, -14.5), ['Y'], 'ngN')
-    motif(lifted(1.2, -18), ['k'], 'ngN')
-    motif(lifted(-3.8, -13), ['k'], 'ngN')
+    // Its buckle, and the gold moon and stars on its front (none from behind).
+    if (!fromBehind) {
+      const hatSide = view === 'side' ? 1 : 0
+      motif(onHead({ x: hatCentre + hatSide * 3, y: -11.5 }), ['YYY', 'YGY', 'YYY'], 'ngNfFq')
+      const lifted = (x: number, y: number) =>
+        onHead({ x: x * tipLean + hatCentre, y: y - lift * 0.15 })
+      motif(lifted(-1.5, -15.5), ['.YY', 'Y..', 'Y..', '.YY'], 'ngN')
+      motif(lifted(2, -14.5), ['Y'], 'ngN')
+      motif(lifted(1.2, -18), ['k'], 'ngN')
+      motif(lifted(-3.8, -13), ['k'], 'ngN')
+    }
   }
 
   // The near arm last, in front of her (from the front, both arms), and anything she's holding.
@@ -4627,6 +4769,10 @@ just below them, and last, as she vanishes or appears, she's dissolved into whit
 **Setting up**
 
 - `frontView`: whether she's seen from the front, which a lot of what follows depends on.
+- `fromBehind`: as its comment says, her back to us (`Pose.back`), from the front only: a pose
+  that asks for it seen any other way is simply drawn as usual. Most of the front view stays as it
+  is; the places that check `fromBehind` leave out what's on her front and put her hair over it
+  (noted below).
 - `hips`: the root of the skeleton, in the middle of the grid across (`48`) and 59 pixels down when
   standing (her legs, two `LEG_LENGTH`s, reach down to 92), or 85 when sitting, moved by the pose's
   `x` and `y`.
@@ -4779,12 +4925,13 @@ Math.PI) % 2`), which turn with `spin`. Six white runes (`w`) go round the outer
   garment.
 - The trim along the hem: `hemLeft` and `hemRight` are the skirt's bottom corners, and the loop
   steps between them (`t` from 0 to 1 in fiftieths), setting silver (`f`) on the row just inside
-  the hem, over the robe's pixels only (`'aAv'`). Then, unless she's side on or sitting, a line of
-  trim from her waist down the front to the hem, leaning with the swing.
+  the hem, over the robe's pixels only (`'aAv'`). Then, unless she's side on, sitting or seen from
+  behind, a line of trim from her waist down the front to the hem, leaning with the swing.
 - The collar: as the comment says, a V of trim, the gem brooch at its point, and a darker sash.
   `off` moves these 3 pixels toward the way she faces side on. Except side on,
   two lines of trim run from either side of her neck to meet 4.5 pixels down. The brooch is a
-  small plus of teal (`G`) stamped at the V's point (side on too).
+  small plus of teal (`G`) stamped at the V's point (side on too). From behind there's neither:
+  they're on her front.
 - The sash: two rows right across her waist, 18 and 19 pixels below her neck: the robe's shadow
   colour (`A`) over its outline colour (`q`), only on the robe's lighter pixels (`'av'`).
 - `skirtAt(y)`: where the skirt's left and right edges are at height `y` in the hips' frame,
@@ -4809,7 +4956,8 @@ Math.PI) % 2`), which turn with `spin`. Six white runes (`w`) go round the outer
   outline and shading, and kept off the trim down her front. Not while sitting, when the skirt is
   spread out flat.
 - From the front, three gold buttons down the bodice below the brooch; and on the sash, a gold
-  buckle (`YYY` over `YkY`), at her front (`off` moves it toward the way she faces side on).
+  buckle (`YYY` over `YkY`), at her front (`off` moves it toward the way she faces side on). From
+  behind, neither: the sash goes on round her back plain.
 
 **Head, face, hair and ears**
 
@@ -4827,7 +4975,8 @@ Math.PI) % 2`), which turn with `spin`. Six white runes (`w`) go round the outer
   her cheek, just below her eye (`head.x + 0.5`, 3.5 pixels below the middle of her head); and, as
   the comment says, a short line of mouth in from the notch of her lips: the first two pixels of
   each row of the expression's mouth (`r.slice(0, 2)`), 4.5 pixels in front of the middle of her
-  head and 4.5 below it, a row under the tip of her nose.
+  head and 4.5 below it, a row under the tip of her nose. From behind, as the comment says, there's
+  no face: nothing is stamped, and her hair (next) covers the back of her head.
 - The hair in front, as one layer. The fringe is a polygon whose lower edge zigzags
   (`[7.5, -3.6], [6.5, -0.4], [4.5, -3.4], ...`), so it falls over her forehead in clumps. Side on,
   as its comment says, its front curves out past her forehead (8 pixels in front of the middle of
@@ -4842,10 +4991,34 @@ Math.PI) % 2`), which turn with `spin`. Six white runes (`w`) go round the outer
   side locks (`lock(x, length)`) are chains from her temples down past her chin, 13 pixels long,
   tapering from 1.9 to 0.6 so they end in points, two of them, 8.2 pixels either side of the middle
   of her head. They're only drawn from the front: as the comment says, side on there's no lock,
-  since her hair behind her ear is the back hair.
+  since her hair behind her ear is the back hair, nor from behind, where it's all one fall of hair.
+- From behind, as its comment says, the hair in front isn't a fringe but all of her hair, from the
+  crown of her head down over her back: the `fall` polygon, as wide as her shoulders (9.5 pixels
+  either side of the middle of her head at the top, 8.6 near the ends), and a little longer than it
+  shows from the front (its points 27 to 32 pixels below the middle of her head), its ends in
+  points of different lengths, the middle one longest. It goes through `supple()` and `blown()`
+  like the back hair, so it sways in the wind. Drawn in the hair layer, after her body and robe,
+  it covers her back from her neck to below her waist, as long hair does.
 - Inking the hair in front: from the front, `ink(hair)`, as usual. Side on, `inkOverHair(hair)`,
   because the crown lies over the back hair: where its edge crosses the back hair the line is soft,
   in the hair's shade, so the back of her head and the hair down her back read as one.
+- The strands and the sheen, from behind only. Inked, the fall of hair would be one flat shape, so,
+  as the comment says, strands run down her back from under her hat to the gaps between the points
+  of its ends, so it reads as long hair:
+  - There are five, each from a `top` (across her head, just under the hat) to an `end` (a gap
+    between two points), stepped down in half pixels from 1 to 28 pixels below the middle of her
+    head. `Math.sin(t * Math.PI) * 0.5 * Math.sign(top)` bows each a little outward in the middle,
+    as hair curves over the back of a head and shoulders. Each point is `blown()`, so the strands
+    sway with the hair.
+  - Each strand is a line of shade where the hair is lit (`h` or `l` becomes `D`) and of light where
+    it's in shade (`D` becomes `h`), so it shows on both sides of her hair's broad shadow. `done`
+    remembers every pixel already changed (`row * GRID + x` numbers each pixel once), so two strands
+    crossing the same pixel don't turn it back.
+  - The sheen, as its comment says: a band of light across the back of her head, just under the
+    brim of her hat, a little curved (`Math.abs(dx + 1) * 0.15`): a row of the hair's shine (`L`)
+    over its base and light, and a row of its light (`l`) under the middle of it. With the band of
+    shine across the crown that follows (drawn either way), it gives the back of her head its
+    roundness.
 - The tuft, side on only: as the comment says, under her ear, a tuft of hair over the back of her
   jaw, jagged along the bottom and curling forward to a point. It's a polygon in a `tuft` layer of
   its own, in the head's frame and blown like the rest of her hair: from just behind her ear
@@ -4872,7 +5045,9 @@ Math.PI) % 2`), which turn with `spin`. Six white runes (`w`) go round the outer
   from the brim to a tip 22 pixels above the middle of her head, which flops over to one side
   (to her right from the front): that's what makes it crooked. As the crown's comment says, side
   on the whole crown is mirrored (`p.x * tipLean`, with `tipLean` -1 side on), so the tip flops
-  back over the crown's back edge and its front edge runs straight up to the bend. (Mirroring only
+  back over the crown's back edge and its front edge runs straight up to the bend. As the comment
+  says, from behind the crown is mirrored too: its tip flops to her right, which seen from behind
+  is the other side of the picture. (Mirroring only
   the tip's points, as it once did, left the crown's outline crossing itself where the tip bends
   back: a notch in its front edge and a row only a pixel wide, which looked like a strand.)
   `hatCentre` shifts it a little side on, and `lift * 0.15` raises it a touch when she's carried
@@ -4882,7 +5057,8 @@ Math.PI) % 2`), which turn with `spin`. Six white runes (`w`) go round the outer
 - The stitching: silver dots (`F`) every 2 pixels along the middle of the brim, either side of the
   crown.
 - The buckle: a square of gold with a teal gem in it (`YYY`, `YGY`, `YYY`) on the band, at the
-  front (side on, 3 pixels toward the way she faces).
+  front (side on, 3 pixels toward the way she faces). As the comment says, this and the moon and
+  stars below are on the hat's front, so from behind there are none.
 - The moon and stars: a gold crescent moon (four pixels, curved like a C) and a few stars, one in
   gold and two in its shade, on the crown. `lifted(x, y)` places them with the crown: mirrored
   with `tipLean` side on, where the tip flops back, and raised with the hat by `lift`.
@@ -5034,7 +5210,7 @@ Math.PI) % 2`), which turn with `spin`. Six white runes (`w`) go round the outer
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#HAT,HAIR,ROBE,castShadows -->
 
-[`src/renderer/src/character/rig.ts`, lines 1266–1298](../../apps/desktop/src/renderer/src/character/rig.ts#L1266-L1298)
+[`src/renderer/src/character/rig.ts`, lines 1352–1384](../../apps/desktop/src/renderer/src/character/rig.ts#L1352-L1384)
 
 ```ts
 /** Letters by part, for castShadows. */
@@ -6993,11 +7169,64 @@ Twelve frames of 55 ms, round and round.
   bending as its leg kicks, and her raised arms wave with them.
 - `x`, `tilt` and `wind`: swaying a pixel side to side, her head, hair and robe with her.
 
+### `gaze()`
+
+<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#gaze -->
+
+[`src/renderer/src/character/sprite.ts`, lines 1006–1029](../../apps/desktop/src/renderer/src/character/sprite.ts#L1006-L1029)
+
+```ts
+/**
+ * Watching the sunset, her back to us (the screen saver): standing, breathing, swaying very
+ * slightly from side to side in the evening breeze, her hair and robe stirring with it, round and
+ * round every few seconds.
+ */
+function gaze(): Key[] {
+  const count = 48
+  return Array.from({ length: count }, (_, i) => {
+    const phase = (i / count) * Math.PI * 2
+    const breath = (1 - Math.cos(phase * 2)) / 2
+    const arm = { shoulder: 0.07 + breath * 0.03, elbow: 0.05 }
+    return {
+      pose: {
+        view: 'front',
+        back: true,
+        lean: Math.sin(phase) * 0.02,
+        y: Math.round(breath),
+        wind: 0.6 + Math.sin(phase + 0.8) * 1.2,
+        arms: [arm, arm],
+      },
+      ms: 100,
+    }
+  })
+}
+```
+
+<!-- /code -->
+
+As the comment says, watching the sunset, her back to us, for the screen saver: standing,
+breathing, swaying very slightly in the evening breeze, her hair and robe stirring with it, round
+and round. It isn't one of the poses the main process names (she's in no window of her own while
+the screen saver is on), so it has no entry in `MAKERS`; `gazeFrames()`, below, draws it for
+`ScreenSaverView`.
+
+- `count = 48` frames of `ms: 100` each: one round every 4.8 seconds, slow, like her idle. They're
+  worked out one by one from `phase`, a full turn over the round, rather than eased between key
+  poses, since it's a smooth sway with no poses to hold.
+- `view: 'front', back: true`: from the front, turned round (`Pose.back` in `rig.ts`).
+- `breath`: `(1 - Math.cos(phase * 2)) / 2` goes from 0 to 1 and back twice a round: two breaths.
+  `y: Math.round(breath)` lowers her a pixel as she breathes out, and her arms lift a touch away
+  from her sides (`shoulder: 0.07 + breath * 0.03`), elbows a little bent, the same on both sides.
+- `lean: Math.sin(phase) * 0.02`: swaying very slightly from side to side, once a round.
+- `wind: 0.6 + Math.sin(phase + 0.8) * 1.2`: the breeze in her hair and robe, always a little
+  (0.6) and stirring either way of it, a little behind the sway (`+ 0.8`), as hair follows a
+  movement.
+
 ### `drawn`, `MAKERS`, `LEFT_MAKERS` and `LOOPS`
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#drawn,MAKERS,LEFT_MAKERS,LOOPS -->
 
-[`src/renderer/src/character/sprite.ts`, lines 1006–1079](../../apps/desktop/src/renderer/src/character/sprite.ts#L1006-L1079)
+[`src/renderer/src/character/sprite.ts`, lines 1031–1112](../../apps/desktop/src/renderer/src/character/sprite.ts#L1031-L1112)
 
 ```ts
 // ------------------------------------------------------------------------------------- frames
@@ -7097,11 +7326,38 @@ export const LOOPS: Record<Name, boolean> = {
   `Record<Name, boolean>` makes TypeScript insist on an answer for every pose, so a new habit can't
   be left out.
 
+### `gazing` and `gazeFrames()`
+
+<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#gazing,gazeFrames -->
+
+[`src/renderer/src/character/sprite.ts`, lines 1074–1080](../../apps/desktop/src/renderer/src/character/sprite.ts#L1074-L1080)
+
+```ts
+let gazing: Frame[] | null = null
+
+/** Her frames watching the sunset, from behind (see gaze): round and round. Drawn once, then kept. */
+export function gazeFrames(): Frame[] {
+  gazing ??= drawn(gaze())
+  return gazing
+}
+```
+
+<!-- /code -->
+
+In the source these sit between `LEFT_MAKERS` and `LOOPS`, above.
+
+- `gazing`: her frames watching the sunset, once drawn; `null` until then.
+- `gazeFrames()`: as its comment says, her frames watching the sunset, from behind (`gaze()`),
+  round and round. `??=` draws them only the first time (when `gazing` is still `null`) and keeps
+  them, as `made` does for the other poses. They're never mirrored: seen from behind, she isn't
+  facing either way. `ScreenSaverView` plays them (`frameAt()`), painting each on its canvas
+  with `paintHer()` rather than as SVG paths, so it can dim her colours and light her edges.
+
 ### `Facing`, `made` and `framesOf()`
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#Facing,made,framesOf -->
 
-[`src/renderer/src/character/sprite.ts`, lines 1081–1103](../../apps/desktop/src/renderer/src/character/sprite.ts#L1081-L1103)
+[`src/renderer/src/character/sprite.ts`, lines 1114–1136](../../apps/desktop/src/renderer/src/character/sprite.ts#L1114-L1136)
 
 ```ts
 export type Facing = 'left' | 'right'
@@ -7145,7 +7401,7 @@ export function framesOf(pose: Name, facing: Facing): Frame[] {
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#animationLength,mirror -->
 
-[`src/renderer/src/character/sprite.ts`, lines 1105–1112](../../apps/desktop/src/renderer/src/character/sprite.ts#L1105-L1112)
+[`src/renderer/src/character/sprite.ts`, lines 1138–1145](../../apps/desktop/src/renderer/src/character/sprite.ts#L1138-L1145)
 
 ```ts
 /** How long a pose's frames last altogether (a fidget's must match FIDGET_MS). */
@@ -7171,7 +7427,7 @@ export function mirror(rows: string[]): string[] {
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#framePaths -->
 
-[`src/renderer/src/character/sprite.ts`, lines 1114–1138](../../apps/desktop/src/renderer/src/character/sprite.ts#L1114-L1138)
+[`src/renderer/src/character/sprite.ts`, lines 1147–1171](../../apps/desktop/src/renderer/src/character/sprite.ts#L1147-L1171)
 
 ```ts
 /**
@@ -10298,3 +10554,1137 @@ As its comment says, the phoenix spell at `scene.t`.
     `fire()` from white to deep red, and fading.
 - `const at = flightAt(t, scene)`, `bird(p, at, t, shown)`: the bird itself, over its embers, while
   it's flying.
+
+## `src/renderer/src/lib/screensaver/scene.ts`: what the screen saver's scenes share
+
+As the comment near the top says, what the screen saver's two scenes have in common (see
+`ScreenSaverView` in [The pages](7-renderer-pages.md)): the frame they're drawn from, banded skies
+dithered from one colour into the next, and lines of rolling hills. Like the spells, everything is
+drawn a pixel at a time on a `Painter` (`lib/pixels.ts`), so `tests/screenSaverScenes.test.ts` can
+draw the scenes without a page. The scenes are lower and wider than the spells' effects: some 360
+of their pixels high on any screen, so a pixel is 2 or 3 DIPs.
+
+The look is that of the sunsets in pixel-art games: a sky in bands of flat colour rather than a
+smooth gradient, each band breaking into the next through a checkerboard of the two (a _dither_),
+with layered hills, the far ones paler, as haze makes them.
+
+### `SaverFrame` and `dither()`
+
+<!-- code: apps/desktop/src/renderer/src/lib/screensaver/scene.ts#SaverFrame,dither -->
+
+[`src/renderer/src/lib/screensaver/scene.ts`, lines 3–22](../../apps/desktop/src/renderer/src/lib/screensaver/scene.ts#L3-L22)
+
+```ts
+// What the screen saver's scenes have in common (see ScreenSaverView): the frame they're drawn
+// from, banded skies dithered from one colour into the next, and lines of rolling hills.
+
+/** What a frame of a scene is drawn from. */
+export interface SaverFrame {
+  /** Since the scene began to show (ms). */
+  t: number
+  /** The canvas's size (pixels). */
+  w: number
+  h: number
+}
+
+/**
+ * An ordered (2 × 2 Bayer) dither: whether the pixel at `x`, `y` takes the next colour when
+ * `share` (0 to 1) of them do. A quarter, a half and three quarters make even checks.
+ */
+export function dither(x: number, y: number, share: number): boolean {
+  const order = (y & 1) === 0 ? ((x & 1) === 0 ? 0 : 2) : (x & 1) === 0 ? 3 : 1
+  return (order + 0.5) / 4 < share
+}
+```
+
+<!-- /code -->
+
+- `SaverFrame`: as its comments say, what a frame of a scene is drawn from: `t`, how long since the
+  scene began to show, in milliseconds, and the canvas's size in pixels. Like the spells' `Scene`,
+  nothing is kept from one frame to the next: where everything is comes from `t`.
+- `dither(x, y, share)`: as its comment says, an ordered dither: whether the pixel at `x`, `y` takes
+  the next colour when `share` (0 to 1) of the pixels do. Each pixel of a 2 × 2 square has its own
+  place in the order (`order`: 0 top left, 2 top right, 3 bottom left, 1 bottom right; `x & 1` and
+  `y & 1` are 0 on even columns and rows, 1 on odd ones), and takes the next colour once `share` is
+  past it. So a quarter of the pixels is one in each square, evenly spread; a half is a
+  checkerboard; three quarters leaves one in each square. That even pattern is what makes a
+  dither read as a colour in between, rather than as noise.
+
+### `paintBands()`
+
+<!-- code: apps/desktop/src/renderer/src/lib/screensaver/scene.ts#paintBands -->
+
+[`src/renderer/src/lib/screensaver/scene.ts`, lines 24–49](../../apps/desktop/src/renderer/src/lib/screensaver/scene.ts#L24-L49)
+
+```ts
+/**
+ * A sky of `colours` in bands, from the top of the canvas down to `bottom` (and the last colour
+ * below it), each band dithered into the next over its lower rows, a quarter, a half, then three
+ * quarters of the pixels.
+ */
+export function paintBands(
+  p: Painter,
+  w: number,
+  h: number,
+  colours: readonly string[],
+  bottom: number,
+): void {
+  const last = colours.length - 1
+  for (let y = 0; y < h; y++) {
+    const along = Math.min(1, y / bottom) * last
+    const band = Math.min(last, Math.floor(along))
+    const into = along - band
+    p.rect(0, y, w, 1, colours[band]!, 1)
+    if (band >= last) continue
+    const share = into < 0.55 ? 0 : into < 0.7 ? 0.25 : into < 0.85 ? 0.5 : 0.75
+    if (share === 0) continue
+    for (let x = 0; x < w; x++) {
+      if (dither(x, y, share)) p.rect(x, y, 1, 1, colours[band + 1]!, 1)
+    }
+  }
+}
+```
+
+<!-- /code -->
+
+As its comment says, a sky of `colours` in bands, from the top of the canvas down to `bottom` (and
+the last colour below it), each band dithered into the next over its lower rows.
+
+- `along`: how far down the bands a row is, from 0 at the top to the last band's number at
+  `bottom` (`Math.min(1, y / bottom)`, so it stops there). `band` is the whole part, the band the row
+  is in, and `into` the rest, how far through that band it is.
+- `p.rect(0, y, w, 1, colours[band]!, 1)`: the whole row in the band's colour, as one rectangle.
+- `share`: the first 55% of each band is plain; then a quarter of its pixels take the next band's
+  colour, then a half, then three quarters, so the bands step into each other over their lower
+  rows, as the comment says. The last band has none (`band >= last`): there's nothing below it.
+- The loop across the row sets the pixels `dither()` picks, in the next band's colour.
+
+### `Hill` and `hillTop()`
+
+<!-- code: apps/desktop/src/renderer/src/lib/screensaver/scene.ts#Hill,hillTop -->
+
+[`src/renderer/src/lib/screensaver/scene.ts`, lines 51–73](../../apps/desktop/src/renderer/src/lib/screensaver/scene.ts#L51-L73)
+
+```ts
+/** A line of hills: how far down its tops are, how much they rise and fall, and their colours. */
+export interface Hill {
+  /** Its middle height, and how far it rises and falls about it (shares of the canvas's height). */
+  base: number
+  amp: number
+  /** Three waves added together: how many to a canvas's height, and where each starts (radians). */
+  waves: readonly (readonly [number, number])[]
+  /** Its colour, a deeper one lower down, and the light along its top. */
+  body: string
+  deep: string
+  rim: string
+}
+
+/** How far down the canvas `hill`'s top is, at `x` (pixels): its waves are the same at any width. */
+export function hillTop(hill: Hill, x: number, h: number): number {
+  const u = x / h
+  const weights = [0.6, 0.3, 0.1]
+  let rise = 0
+  hill.waves.forEach(([count, phase], i) => {
+    rise += weights[i]! * Math.sin(u * count * Math.PI * 2 + phase)
+  })
+  return h * hill.base + h * hill.amp * rise
+}
+```
+
+<!-- /code -->
+
+- `Hill`: as its comment says, a line of hills: how far down its tops are, how much they rise and
+  fall, and its colours.
+  - `base`, `amp`: its middle height and how far it rises and falls about it, as shares of the
+    canvas's height, so a scene looks the same on any screen.
+  - `waves`: three waves added together, each as how many fit across a canvas's height and where it
+    starts (radians). Three, of different lengths, make a skyline that rolls irregularly rather than
+    repeating as one wave would.
+  - `body`, `deep`, `rim`: its colour, a deeper one lower down, and the light along its top.
+- `hillTop(hill, x, h)`: as its comment says, how far down the canvas the hill's top is at `x`.
+  `u = x / h` measures across in canvas heights, so the waves are the same shape on a wide screen
+  as on a narrow one, only more of them. The first wave counts 60%, the second 30% and the third
+  10% (`weights`): long, gentle slopes with smaller bumps on them. Canvas rows count downward, so
+  a positive `rise` is lower.
+
+### `paintHill()`
+
+<!-- code: apps/desktop/src/renderer/src/lib/screensaver/scene.ts#paintHill -->
+
+[`src/renderer/src/lib/screensaver/scene.ts`, lines 75–98](../../apps/desktop/src/renderer/src/lib/screensaver/scene.ts#L75-L98)
+
+```ts
+/**
+ * A line of hills down to the bottom of the canvas, a column of pixels at a time: its colour, a
+ * deeper one over its lower part, and a rim of light along its top, as bright as `rim(x)` (0 to 1).
+ * `top(x)` says where its top is.
+ */
+export function paintHill(
+  p: Painter,
+  hill: Hill,
+  w: number,
+  h: number,
+  top: (x: number) => number,
+  rim: (x: number) => number,
+): void {
+  for (let x = 0; x < w; x++) {
+    const y = Math.round(top(x))
+    p.rect(x, y, 1, h - y, hill.body, 1)
+    const deep = Math.round(y + (h - y) * 0.4)
+    p.rect(x, deep, 1, h - deep, hill.deep, 1)
+    if (dither(x, deep - 1, 0.5)) p.rect(x, deep - 1, 1, 1, hill.deep, 1)
+    const light = rim(x)
+    p.rect(x, y, 1, 1, hill.rim, light)
+    p.rect(x, y + 1, 1, 1, hill.rim, light * 0.35)
+  }
+}
+```
+
+<!-- /code -->
+
+As its comment says, a line of hills down to the bottom of the canvas, a column of pixels at a
+time. `top(x)` says where its top is, so a scene can shape a line (the crest her hill rises to),
+and `rim(x)` how bright the light along it is there.
+
+- `p.rect(x, y, 1, h - y, hill.body, 1)`: the column from the hill's top to the bottom.
+- `deep`: 40% of the way from its top to the bottom, the deeper colour begins, with one row of
+  half its pixels dithered in above it, so the change is soft.
+- `p.rect(x, y, 1, 1, hill.rim, light)`, then the pixel below it at a third of that: a rim of light
+  along the top, fading into the hill.
+
+## `src/renderer/src/lib/screensaver/sunset.ts`: her sunset
+
+As the comment at the top says, the screen saver's scene on her screen: a banded evening sky,
+violet to gold, a few stars still out at its top; the sun low over the hills, glowing, stripes of
+sky sliding down through it; long clouds drifting across, lit from below; four lines of rolling
+hills, hazy in the distance and rimmed with light; and on the crest of the nearest, her, watching
+it, with birds gliding by and fireflies over the grass. `ScreenSaverView`'s `sunsetPainter()`
+paints the sky and the hills once and the rest every frame, then her (`her.ts`, below). Every size
+is a share of the canvas's height or width, so it fits any screen.
+
+### `SUNSET_SKY`, `SUN_ROWS` and `HILLS`
+
+<!-- code: apps/desktop/src/renderer/src/lib/screensaver/sunset.ts#SUNSET_SKY,SUN_ROWS,HILLS -->
+
+[`src/renderer/src/lib/screensaver/sunset.ts`, lines 5–83](../../apps/desktop/src/renderer/src/lib/screensaver/sunset.ts#L5-L83)
+
+```ts
+// The screen saver's sunset, on her screen (see ScreenSaverView): a banded evening sky, violet to
+// gold, a few stars still out at its top; the sun low over the hills, drifting very slightly and
+// glowing, stripes of sky sliding down through it; long clouds drifting slowly across, lit pink
+// and gold from below; four lines of rolling hills, hazy in the distance, rimmed with light; and
+// on the crest of the nearest, her, watching it (lib/screensaver/her.ts), birds gliding by and
+// fireflies over the grass. In pixels of the canvas (some 360 of them high), times in ms.
+
+/** The sky, from the top down to the horizon: night, violet, rose, coral, gold. */
+export const SUNSET_SKY = [
+  '#1b1838',
+  '#251c4a',
+  '#33205a',
+  '#462467',
+  '#5c2a72',
+  '#76307a',
+  '#93387e',
+  '#b0437e',
+  '#cb5479',
+  '#e2686f',
+  '#f08466',
+  '#f7a462',
+  '#fbc56c',
+  '#fde19a',
+] as const
+
+/** The sun's rows, from its top (pale gold) down to its bottom (orange). */
+const SUN_ROWS = ['#fff7d1', '#fff0b3', '#ffe28f', '#ffd277', '#ffbf66', '#ffa95c', '#ff9257']
+
+/** The hills, far to near: hazy mauve in the distance, deepening to a dark green-blue at hand. */
+export const HILLS: readonly Hill[] = [
+  {
+    base: 0.575,
+    amp: 0.016,
+    waves: [
+      [3.1, 0.4],
+      [7.3, 2.1],
+      [15.7, 4.4],
+    ],
+    body: '#a65a82',
+    deep: '#9a5280',
+    rim: '#ffb08a',
+  },
+  {
+    base: 0.64,
+    amp: 0.028,
+    waves: [
+      [2.2, 2.6],
+      [5.1, 0.9],
+      [11.3, 3.1],
+    ],
+    body: '#71407a',
+    deep: '#663a72',
+    rim: '#f2937f',
+  },
+  {
+    base: 0.73,
+    amp: 0.035,
+    waves: [
+      [1.6, 4.2],
+      [3.9, 1.3],
+      [8.9, 5.5],
+    ],
+    body: '#3d3a64',
+    deep: '#35335a',
+    rim: '#d97c84',
+  },
+  {
+    base: 0.87,
+    amp: 0.03,
+    waves: [
+      [1.2, 1.1],
+      [2.9, 3.8],
+      [6.4, 2.6],
+    ],
+    body: '#1f2d40',
+    deep: '#1a2738',
+    rim: '#c76f74',
+  },
+]
+```
+
+<!-- /code -->
+
+- `SUNSET_SKY`: as its comment says, the sky's fourteen bands from the top down to the horizon:
+  night, violet, rose, coral and gold, the colours of a clear evening sky with the sun low.
+- `SUN_ROWS`: as its comment says, the sun's colours, from pale gold at its top to orange at its
+  bottom, as the low sun reddens nearer the horizon.
+- `HILLS`: as its comment says, the four lines of hills, far to near. Each nearer line sits lower
+  (`base` from 0.575 to 0.87 of the way down) and rolls more (`amp`), and its colours deepen from a
+  hazy mauve, nearly the sky's, to a dark blue-green: _aerial perspective_, the haze that makes
+  distant hills pale and near ones dark, which is what gives a flat picture its depth. Their rims go
+  from peach on the farthest to rose on the nearest.
+
+### `SUNSET`, `horizon`, `ridge()` and `herSpot()`
+
+<!-- code: apps/desktop/src/renderer/src/lib/screensaver/sunset.ts#SUNSET,horizon,ridge,herSpot -->
+
+[`src/renderer/src/lib/screensaver/sunset.ts`, lines 85–106](../../apps/desktop/src/renderer/src/lib/screensaver/sunset.ts#L85-L106)
+
+```ts
+/** Where the sun sets and where she stands, across the canvas (shares of its width). */
+export const SUNSET = { sunX: 0.6, herX: 0.4 }
+
+/** How far down the horizon is: where the sky is brightest, just under the farthest hills. */
+export const horizon = (h: number): number => Math.round(h * 0.6)
+
+/**
+ * How far down the canvas a line of hills' top is at `x` (0 is the farthest, 3 the nearest). The
+ * nearest rises to a crest where she stands.
+ */
+export function ridge(layer: number, x: number, w: number, h: number): number {
+  const top = hillTop(HILLS[layer]!, x, h)
+  if (layer < HILLS.length - 1) return top
+  const crest = h * 0.085 * Math.exp(-(((x - w * SUNSET.herX) / (h * 0.5)) ** 2))
+  return top - crest
+}
+
+/** Where she stands: on the crest of the nearest hill, left of the sun (`feet`, her soles' row). */
+export function herSpot(w: number, h: number): { x: number; feet: number } {
+  const x = Math.round(w * SUNSET.herX)
+  return { x, feet: Math.round(ridge(HILLS.length - 1, x, w, h)) + 1 }
+}
+```
+
+<!-- /code -->
+
+Where things are in the scene.
+
+- `SUNSET`: as its comment says, where the sun sets (60% of the way across) and where she stands
+  (40%): apart, so the sun isn't hidden behind her, but close enough that she's plainly watching it.
+- `horizon(h)`: as its comment says, how far down the horizon is: 60% of the way, just under the
+  farthest hills' middle, where the sky is brightest.
+- `ridge(layer, x, w, h)`: as its comment says, how far down a line of hills' top is at `x`. The
+  nearest rises to a crest where she stands: a smooth bump (`Math.exp(-(d ** 2))`, a bell curve)
+  8.5% of the canvas's height high and about half its height wide, centred on her, taken off that
+  hill's top. So she stands on a rise against the sky, rather than in a dip.
+- `herSpot(w, h)`: as its comment says, where she stands: her middle across, and `feet`, the row of
+  her soles, one below the crest's top pixel (so she stands on it, not in it). `ScreenSaverView`
+  places her frame from it, and her shadow starts there.
+
+### `sunAt()` and `stripeAt()`
+
+<!-- code: apps/desktop/src/renderer/src/lib/screensaver/sunset.ts#sunAt,stripeAt -->
+
+[`src/renderer/src/lib/screensaver/sunset.ts`, lines 108–123](../../apps/desktop/src/renderer/src/lib/screensaver/sunset.ts#L108-L123)
+
+```ts
+/** The sun at `t`: low over the hills, half behind the farthest, drifting very slightly. */
+export function sunAt(t: number, w: number, h: number): { x: number; y: number; r: number } {
+  return {
+    x: w * SUNSET.sunX + Math.sin(t / 17_000) * 1.2,
+    y: horizon(h) - h * 0.065 + Math.sin(t / 9_000) * 1.5,
+    r: h * 0.11,
+  }
+}
+
+/** Whether a row this far down the sun (-1 its top, 1 its bottom) is a stripe of sky at `t`. */
+export function stripeAt(depth: number, t: number): boolean {
+  if (depth < 0.05) return false
+  // Four to the sun's height, thicker lower down, sliding down one place every eight seconds.
+  const place = (depth * 4 - t / 8_000) % 1
+  return (place + 1) % 1 < 0.1 + depth * 0.3
+}
+```
+
+<!-- /code -->
+
+- `sunAt(t, w, h)`: as its comment says, the sun, low over the hills, half behind the farthest,
+  drifting very slightly: its middle 6.5% of the height above the horizon, with a radius of 11%,
+  so its lower part is behind the hills. Two slow waves (`t / 17_000` across, `t / 9_000` up and
+  down) move it about a pixel, so the scene is never quite still, without the sun visibly going
+  anywhere.
+- `stripeAt(depth, t)`: as its comment says, whether a row of the sun this far down it (-1 its top,
+  1 its bottom) is a stripe of sky: the bands across the lower half of the sun in retro sunsets.
+  - `if (depth < 0.05) return false`: none in its upper half.
+  - `place`: where the row falls among four stripes to the sun's height (`depth * 4`), shifted by
+    the time, one place every eight seconds (`t / 8_000`); `% 1` keeps just the part past a whole
+    place. Subtracting the time means a given place moves down the sun as `t` goes up, so the
+    stripes slide down, as the comment says.
+  - `(place + 1) % 1 < 0.1 + depth * 0.3`: a row is a stripe for the first part of each place, a
+    tenth near the middle growing to four tenths at the bottom, so the stripes thicken as they go
+    down. (`(place + 1) % 1` turns a negative remainder into the positive one it stands for.)
+
+### `Cloud`, `CLOUD_COUNT` and `cloudsAt()`
+
+<!-- code: apps/desktop/src/renderer/src/lib/screensaver/sunset.ts#Cloud,CLOUD_COUNT,cloudsAt -->
+
+[`src/renderer/src/lib/screensaver/sunset.ts`, lines 125–184](../../apps/desktop/src/renderer/src/lib/screensaver/sunset.ts#L125-L184)
+
+```ts
+/** A cloud: where its flat underside is, and the humps along it. */
+export interface Cloud {
+  x: number
+  y: number
+  /** Each hump's offset along it, length and height (pixels). */
+  humps: { dx: number; length: number; height: number }[]
+  /** Its colour, and the light underneath it (from the sun below). */
+  body: string
+  light: string
+}
+
+/** How many clouds there are. */
+export const CLOUD_COUNT = 8
+
+/**
+ * The clouds at `t`: long and low, spread down the sky from the top to near the horizon, each
+ * drifting slowly right at its own pace and round again. Purple high up, rose and coral lower,
+ * gold underneath near the sun.
+ */
+export function cloudsAt(t: number, w: number, h: number): Cloud[] {
+  const random = seeded(11)
+  const low = horizon(h)
+  return Array.from({ length: CLOUD_COUNT }, (_, k) => {
+    const y = Math.round(h * (0.1 + (0.38 * k) / (CLOUD_COUNT - 1)) + (random() - 0.5) * h * 0.04)
+    const length = Math.round(h * (0.18 + random() * 0.22))
+    const height = 3 + Math.floor(random() * 3)
+    // A pixel or two a second at this size: crossing the screen takes minutes.
+    const speed = (0.7 + random() * 1.3) * (h / 360)
+    const span = w + length * 2
+    const start = random() * span
+    const humps = [
+      { dx: 0, length, height },
+      {
+        dx: Math.round(length * (0.1 + random() * 0.15)),
+        length: Math.round(length * 0.42),
+        height: height + 3 + Math.floor(random() * 3),
+      },
+      {
+        dx: Math.round(length * (0.45 + random() * 0.15)),
+        length: Math.round(length * 0.34),
+        height: height + 2 + Math.floor(random() * 3),
+      },
+      {
+        dx: Math.round(length * (0.7 + random() * 0.1)),
+        length: Math.round(length * 0.22),
+        height: height + 1,
+      },
+    ]
+    const share = y / low
+    const [body, light] =
+      share < 0.35
+        ? ['#6a3479', '#a3568f']
+        : share < 0.6
+          ? ['#9a4279', '#df6f80']
+          : share < 0.8
+            ? ['#cf5e7a', '#f8a580']
+            : ['#ee8a72', '#ffd896']
+    return { x: ((start + (speed * t) / 1000) % span) - length, y, humps, body, light }
+  })
+}
+```
+
+<!-- /code -->
+
+- `Cloud`: as its comments say, a cloud: where its flat underside is, the humps along it (each
+  hump's offset along it, length and height), its colour and the light underneath it from the sun
+  below. Clouds at sunset are lit from beneath, which is what makes their undersides glow.
+- `CLOUD_COUNT`: eight.
+- `cloudsAt(t, w, h)`: as its comment says, the clouds at `t`, long and low, spread down the sky,
+  each drifting slowly right at its own pace and round again. Each one's numbers come from
+  `seeded(11)` in the same order every frame, so every frame has the same clouds, only further
+  along.
+  - `y`: from 10% down the sky to 48%, evenly spread (`k / (CLOUD_COUNT - 1)`), each nudged a little
+    up or down at random so they don't line up.
+  - `length` 18% to 40% of the height, and a base `height` of 3 to 5 pixels: long and thin.
+  - `speed`: as the comment says, a pixel or two a second at this size (scaled with `h`, so it's the
+    same pace on any screen): crossing the screen takes minutes, slow enough to notice only by
+    looking away and back.
+  - `span = w + length * 2`: how far a cloud goes before coming round again: right across and off
+    the far side by its length, then back in from the near side. `start` is where it is at `t = 0`.
+  - `humps`: the base, the whole length at the base height, and three humps on top, a big one
+    toward the left, a middle one and a small one toward the right, each a few pixels taller than
+    the base: a cloud's lumpy top over a flat bottom.
+  - `[body, light]`: the colours by how far down the sky it is (`share` of the way to the
+    horizon): purple high up, then rose, coral, and gold underneath near the sun, as the comment
+    says, so they match the sky behind them.
+  - `x: ((start + (speed * t) / 1000) % span) - length`: how far it has drifted, round and round.
+
+### `paintSunsetSky()` and `paintEveningStars()`
+
+<!-- code: apps/desktop/src/renderer/src/lib/screensaver/sunset.ts#paintSunsetSky,paintEveningStars -->
+
+[`src/renderer/src/lib/screensaver/sunset.ts`, lines 186–209](../../apps/desktop/src/renderer/src/lib/screensaver/sunset.ts#L186-L209)
+
+```ts
+/** The sky, behind everything (it never changes, so it's painted once). */
+export function paintSunsetSky(p: Painter, w: number, h: number): void {
+  paintBands(p, w, h, SUNSET_SKY, horizon(h))
+}
+
+/** The stars still out at the top of the sky, twinkling, fainter lower down. */
+export function paintEveningStars(p: Painter, frame: SaverFrame): void {
+  const { t, w, h } = frame
+  const random = seeded(5)
+  for (let k = 0; k < 60; k++) {
+    const x = random() * w
+    const y = random() * h * 0.3
+    const phase = random() * Math.PI * 2
+    const glow = 0.45 + 0.55 * Math.sin(t / 900 + phase) ** 2
+    const fade = 1 - y / (h * 0.3)
+    plot(p, x, y, '#fff7e6', glow * fade * 0.9)
+    if (k % 7 === 0 && glow > 0.85) {
+      plot(p, x - 1, y, '#f9d5ff', fade * 0.5)
+      plot(p, x + 1, y, '#f9d5ff', fade * 0.5)
+      plot(p, x, y - 1, '#f9d5ff', fade * 0.5)
+      plot(p, x, y + 1, '#f9d5ff', fade * 0.5)
+    }
+  }
+}
+```
+
+<!-- /code -->
+
+- `paintSunsetSky(p, w, h)`: as its comment says, the sky, behind everything: `SUNSET_SKY`'s bands
+  down to the horizon (`paintBands()`), painted once.
+- `paintEveningStars(p, frame)`: as its comment says, the stars still out at the top of the sky:
+  sixty of them, scattered over the top 30% from `seeded(5)`, each twinkling on its own
+  (`Math.sin(t / 900 + phase) ** 2`, never quite out) and fainter the lower it is (`fade`), as
+  stars are lost in the brighter sky near the sun. Every seventh flashes a cross of pink pixels
+  round it when it's brightest.
+
+### `paintSun()`
+
+<!-- code: apps/desktop/src/renderer/src/lib/screensaver/sunset.ts#paintSun -->
+
+[`src/renderer/src/lib/screensaver/sunset.ts`, lines 211–231](../../apps/desktop/src/renderer/src/lib/screensaver/sunset.ts#L211-L231)
+
+```ts
+/**
+ * The sun at `t`: its glow, breathing slowly; a haze of its light along the horizon; and the sun
+ * itself, a row at a time, stripes of sky sliding down through its lower half.
+ */
+export function paintSun(p: Painter, frame: SaverFrame): void {
+  const { t, w, h } = frame
+  const sun = sunAt(t, w, h)
+  const breath = 1 + Math.sin(t / 2_300) * 0.03
+  disc(p, sun.x, sun.y, sun.r * 3.9 * breath, sun.r * 2.4 * breath, '#ff8f7a', 0.07)
+  disc(p, sun.x, sun.y, sun.r * 2.7 * breath, sun.r * 1.9 * breath, '#ffb27a', 0.09)
+  disc(p, sun.x, sun.y, sun.r * 1.7 * breath, sun.r * 1.5 * breath, '#ffd9a0', 0.14)
+  disc(p, sun.x, horizon(h) - 3, w * 0.55, h * 0.05, '#ffd39a', 0.16)
+  const r = sun.r
+  for (let dy = -Math.floor(r); dy <= Math.floor(r); dy++) {
+    const half = r * Math.sqrt(Math.max(0, 1 - (dy / r) ** 2))
+    if (half < 0.5 || stripeAt(dy / r, t)) continue
+    const share = (dy + r) / (2 * r)
+    const colour = SUN_ROWS[Math.min(SUN_ROWS.length - 1, Math.floor(share * SUN_ROWS.length))]!
+    p.rect(Math.round(sun.x - half), Math.round(sun.y + dy), Math.round(half * 2), 1, colour, 1)
+  }
+}
+```
+
+<!-- /code -->
+
+As its comment says, the sun at `t`: its glow, breathing slowly; a haze of its light along the
+horizon; and the sun itself, a row at a time, stripes of sky sliding down through its lower half.
+
+- Three faint discs round it (`disc()`), each smaller and brighter than the last, from coral to
+  pale gold, make the glow; `breath` swells and shrinks them by 3% every few seconds.
+- `disc(p, sun.x, horizon(h) - 3, w * 0.55, h * 0.05, ...)`: a wide, flat haze of light along the
+  horizon, behind the hills.
+- The loop paints the sun a row at a time: `half` is how far the circle reaches either side at that
+  row, a row that's a stripe (`stripeAt()`) is left out so the sky shows through, and `colour` is
+  the `SUN_ROWS` colour for how far down it is.
+
+### `paintClouds()`
+
+<!-- code: apps/desktop/src/renderer/src/lib/screensaver/sunset.ts#paintClouds -->
+
+[`src/renderer/src/lib/screensaver/sunset.ts`, lines 233–252](../../apps/desktop/src/renderer/src/lib/screensaver/sunset.ts#L233-L252)
+
+```ts
+/**
+ * The clouds at `t`, each hump a row at a time from its underside up to its rounded top: lit along
+ * the bottom by the sun below, the light dithered up into the cloud's colour.
+ */
+export function paintClouds(p: Painter, frame: SaverFrame): void {
+  for (const cloud of cloudsAt(frame.t, frame.w, frame.h)) {
+    for (const hump of cloud.humps) {
+      for (let row = 0; row < hump.height; row++) {
+        const across = hump.length * Math.sqrt(1 - (row / hump.height) ** 2)
+        const left = Math.round(cloud.x + hump.dx + (hump.length - across) / 2)
+        const y = cloud.y - row
+        p.rect(left, y, Math.round(across), 1, row < 2 ? cloud.light : cloud.body, 1)
+        if (row !== 2) continue
+        for (let x = left; x < left + Math.round(across); x++) {
+          if (dither(x, y, 0.5)) p.rect(x, y, 1, 1, cloud.light, 1)
+        }
+      }
+    }
+  }
+}
+```
+
+<!-- /code -->
+
+As its comment says, the clouds at `t`, each hump a row at a time from its underside up to its
+rounded top: `across`, from a half ellipse's equation, narrows each row as it rises, centred on the
+hump. The bottom two rows are the light from below, the rest the cloud's colour, and the third row
+is half of each, dithered, so the light fades up into the cloud. Where humps overlap they paint
+over each other in the same colours, so a cloud reads as one shape.
+
+### `paintSunsetHills()`
+
+<!-- code: apps/desktop/src/renderer/src/lib/screensaver/sunset.ts#paintSunsetHills -->
+
+[`src/renderer/src/lib/screensaver/sunset.ts`, lines 254–305](../../apps/desktop/src/renderer/src/lib/screensaver/sunset.ts#L254-L305)
+
+```ts
+/**
+ * The hills (they never change, so they're painted once), far to near, each rimmed with light,
+ * brightest toward the sun; grass along the top of the nearest, a few flowers in it, and her long
+ * shadow falling toward us down its slope from where she stands.
+ */
+export function paintSunsetHills(p: Painter, w: number, h: number): void {
+  const sunX = w * SUNSET.sunX
+  const towardSun = (x: number) => Math.exp(-(((x - sunX) / (w * 0.32)) ** 2))
+  HILLS.forEach((hill, layer) => {
+    paintHill(
+      p,
+      hill,
+      w,
+      h,
+      (x) => ridge(layer, x, w, h),
+      (x) => 0.35 + 0.6 * towardSun(x),
+    )
+  })
+  const near = HILLS.length - 1
+  const hill = HILLS[near]!
+  const random = seeded(17)
+  // Grass: tufts along the top, a pixel to three high, their tips catching the light.
+  for (let x = 0; x < w; x += 2 + Math.floor(random() * 3)) {
+    const top = Math.round(ridge(near, x, w, h))
+    const tall = 1 + Math.floor(random() * 3)
+    for (let k = 1; k <= tall; k++) {
+      p.rect(x, top - k, 1, 1, k === tall ? hill.rim : hill.body, k === tall ? 0.8 : 1)
+    }
+  }
+  // Flowers in the grass, dim with the sun behind them.
+  const flowers = ['#7d4f7e', '#8e6a62', '#6e5a8a']
+  for (let k = 0; k < 70; k++) {
+    const x = Math.floor(random() * w)
+    const y = Math.round(ridge(near, x, w, h)) + 3 + Math.floor(random() * h * 0.1)
+    p.rect(x, y, 1, 1, flowers[k % flowers.length]!, 0.9)
+  }
+  // Her shadow, long in the evening light, down the slope toward us and a little to the left.
+  const { x, feet } = herSpot(w, h)
+  const length = Math.round(h * 0.1)
+  for (let k = 0; k < length; k++) {
+    const half = 4 - (k / length) * 1.5
+    const middle = x - k * 0.35
+    p.rect(
+      Math.round(middle - half),
+      feet + k,
+      Math.round(half * 2),
+      1,
+      '#0b1420',
+      0.4 * (1 - k / length),
+    )
+  }
+}
+```
+
+<!-- /code -->
+
+As its comment says, the hills, painted once, far to near, each rimmed with light, brightest toward
+the sun; grass along the top of the nearest, with a few flowers in it; and her long shadow falling
+toward us down its slope.
+
+- `towardSun(x)`: 1 right under the sun, falling away either side (a bell curve about a third of
+  the width across). Each hill's rim is `0.35 + 0.6 * towardSun(x)` bright: a faint line
+  everywhere, glowing where the sun is behind it.
+- Grass, as the comment says: tufts along the nearest hill's top every 2 to 4 pixels, 1 to 3 pixels
+  high, in the hill's colour with the tip in its rim's light, from `seeded(17)`. A ragged top edge
+  reads as grass against the sky.
+- Flowers, as the comment says: seventy single pixels in muted mauve, dusky pink and lilac, dim
+  with the sun behind them, scattered just below the hill's top.
+- Her shadow, as the comment says: long in the evening light, down the slope toward us and a little
+  to the left, from her feet. The sun is in front of her, so her shadow falls behind her, toward
+  us: a row at a time for 10% of the height, 8 pixels wide at her feet narrowing to 5, drifting left
+  (`x - k * 0.35`), and fading. It's painted with the hills, before her, so she stands on it.
+
+### `BIRD` and `paintLife()`
+
+<!-- code: apps/desktop/src/renderer/src/lib/screensaver/sunset.ts#BIRD,paintLife -->
+
+[`src/renderer/src/lib/screensaver/sunset.ts`, lines 307–350](../../apps/desktop/src/renderer/src/lib/screensaver/sunset.ts#L307-L350)
+
+```ts
+/** Two little birds' shapes: wings up, and wings down. */
+const BIRD = [
+  ['x...x', '.x.x.', '..x..'],
+  ['.....', 'xx.xx', '..x..'],
+]
+
+/**
+ * Life in the scene at `t`: three birds gliding across the sky now and then, wings beating, and
+ * fireflies drifting over the grass of the nearest hill, glowing and fading.
+ */
+export function paintLife(p: Painter, frame: SaverFrame): void {
+  const { t, w, h } = frame
+  for (let k = 0; k < 3; k++) {
+    // Across the screen in 50 s, one after another, then a while with none.
+    const crossing = 50_000
+    const cycle = 80_000
+    const along = (t + k * 1_800) % cycle
+    if (along > crossing) continue
+    const x = -10 + ((w + 20) * along) / crossing + k * 6
+    const y = h * (0.2 + k * 0.03) + Math.sin(along / 1_500 + k) * 2
+    const wings = BIRD[Math.floor((t + k * 170) / 260) % 2]!
+    wings.forEach((row, dy) =>
+      [...row].forEach((c, dx) => {
+        if (c === 'x') plot(p, x + dx - 2, y + dy - 1, '#2a1838', 0.85)
+      }),
+    )
+  }
+  const near = HILLS.length - 1
+  const random = seeded(23)
+  for (let k = 0; k < 18; k++) {
+    const homeX = random() * w
+    const homeY = ridge(near, homeX, w, h) - h * (0.01 + random() * 0.1)
+    const phase = random() * Math.PI * 2
+    const x = homeX + (noise(t / 5_000 + k * 7, 1) - 0.5) * 24
+    const y = homeY + (noise(2, t / 4_000 + k * 7) - 0.5) * 14
+    const glow = Math.max(0, Math.sin(t / 900 + phase))
+    if (glow < 0.1) continue
+    plot(p, x, y, '#fff9c4', glow)
+    plot(p, x - 1, y, '#d9f99d', glow * 0.4)
+    plot(p, x + 1, y, '#d9f99d', glow * 0.4)
+    plot(p, x, y - 1, '#d9f99d', glow * 0.4)
+    plot(p, x, y + 1, '#d9f99d', glow * 0.4)
+  }
+}
+```
+
+<!-- /code -->
+
+- `BIRD`: as its comment says, two little birds' shapes, five pixels across: wings up (a V) and
+  wings down. Swapping between them is a wing beat.
+- `paintLife(p, frame)`: as its comment says, life in the scene at `t`.
+  - Three birds: as the comment says, each crosses the screen in 50 seconds, one after another
+    (1.8 seconds apart, each a little lower than the last), then there's half a minute with none,
+    every 80 seconds. They bob a pixel or two as they glide (`Math.sin(along / 1_500 + k) * 2`) and
+    beat their wings every 0.26 seconds, out of step with each other (`k * 170`). They're dark
+    against the sky, silhouettes, as birds against a sunset are.
+  - Fireflies: eighteen over the grass of the nearest hill, each round a home of its own from
+    `seeded(23)`. Each drifts slowly about it by `noise()` (from `lib/spellMotion.ts`), a smooth
+    random wander rather than a circle, and glows and fades on its own
+    (`Math.sin(t / 900 + phase)`, out altogether for part of each round): a pale yellow pixel with a
+    soft green plus round it.
+
+## `src/renderer/src/lib/screensaver/stars.ts`: the starfall on the other screens
+
+As the comment at the top says, the screen saver's scene on the screens she isn't on: the night
+sky, stars twinkling all over it, low dark hills along its bottom, and shooting stars falling
+through it without end, like her Starfall spell's but bigger. It's quieter than her sunset, so the
+eye stays on her screen. `ScreenSaverView`'s `starfallPainter()` paints the sky and hills once and
+the stars every frame.
+
+### `NIGHT_SKY`, `NIGHT_HILLS` and `FALL`
+
+<!-- code: apps/desktop/src/renderer/src/lib/screensaver/stars.ts#NIGHT_SKY,NIGHT_HILLS,FALL -->
+
+[`src/renderer/src/lib/screensaver/stars.ts`, lines 5–51](../../apps/desktop/src/renderer/src/lib/screensaver/stars.ts#L5-L51)
+
+```ts
+// The screen saver's starfall, on the screens she isn't on (see ScreenSaverView): the night sky,
+// stars twinkling all over it, low dark hills along its bottom, and shooting stars falling through
+// it without end, like her Starfall spell's but bigger: a broader head, and a longer tail. In
+// pixels of the canvas (some 360 of them high), times in ms.
+
+/** The night sky, from the top down to the hills: deep navy to a last violet glow. */
+export const NIGHT_SKY = [
+  '#08071d',
+  '#0c0a27',
+  '#110e31',
+  '#17123b',
+  '#1e1645',
+  '#26194e',
+  '#2f1c56',
+  '#3a205d',
+] as const
+
+/** Low hills along the bottom, dark against the sky, a faint rim of starlight along each. */
+export const NIGHT_HILLS: readonly Hill[] = [
+  {
+    base: 0.87,
+    amp: 0.025,
+    waves: [
+      [1.9, 0.7],
+      [4.6, 2.9],
+      [10.1, 1.4],
+    ],
+    body: '#150e2e',
+    deep: '#120c28',
+    rim: '#4a3a85',
+  },
+  {
+    base: 0.94,
+    amp: 0.02,
+    waves: [
+      [1.3, 3.3],
+      [3.4, 0.2],
+      [7.9, 4.8],
+    ],
+    body: '#0b0820',
+    deep: '#09071b',
+    rim: '#32286a',
+  },
+]
+
+/** Shooting stars: how many start a second, how long their tails are and the longest one falls. */
+export const FALL = { perSecond: 6, tail: 44, longestMs: 2_300 }
+```
+
+<!-- /code -->
+
+- `NIGHT_SKY`: as its comment says, the night sky's eight bands from the top down to the hills:
+  deep navy to a last violet glow above them, as if the sunset on her screen were somewhere beyond
+  them.
+- `NIGHT_HILLS`: as its comment says, two low lines of hills along the bottom, dark against the
+  sky, each with a faint rim of starlight. They're the same kind of `Hill` as the sunset's, lower
+  and darker.
+- `FALL`: as its comment says, the shooting stars: six start each second, their tails are 44 pixels
+  long, and the longest one falls for 2.3 seconds.
+
+### `fallingStarsAt()`
+
+<!-- code: apps/desktop/src/renderer/src/lib/screensaver/stars.ts#fallingStarsAt -->
+
+[`src/renderer/src/lib/screensaver/stars.ts`, lines 53–83](../../apps/desktop/src/renderer/src/lib/screensaver/stars.ts#L53-L83)
+
+```ts
+/**
+ * The shooting stars falling at `t`, any time at all: FALL.perSecond start each second (each at
+ * its own moment within it), from along the top of the screen, a little above it and off its
+ * right-hand side, falling down to the left at their own speeds. Each one's numbers come from its
+ * place in the sequence, so every frame agrees.
+ */
+export function fallingStarsAt(t: number, w: number, h: number): Star[] {
+  const gap = 1000 / FALL.perSecond
+  const stars: Star[] = []
+  const first = Math.max(0, Math.floor((t - FALL.longestMs) / gap) - 1)
+  for (let k = first; k <= Math.floor(t / gap); k++) {
+    const random = seeded(k * 7919 + 101)
+    const born = k * gap + random() * gap
+    const life = 1_300 + random() * (FALL.longestMs - 1_300)
+    const startX = random() * w * 1.4
+    const startY = random() < 0.3 ? random() * h * 0.35 : -random() * h * 0.2
+    const speed = ((w + h) / 1_400) * (0.6 + random() * 0.5)
+    const colour = STAR_COLOURS[Math.floor(random() * STAR_COLOURS.length)]!
+    const age = t - born
+    if (age < 0 || age > life) continue
+    stars.push({
+      x: startX + STAR_DIRECTION.dx * speed * age,
+      y: startY + STAR_DIRECTION.dy * speed * age,
+      ...STAR_DIRECTION,
+      age,
+      life,
+      colour,
+    })
+  }
+  return stars
+}
+```
+
+<!-- /code -->
+
+As its comment says, the shooting stars falling at `t`, any time at all. Her Starfall spell's
+(`starsAt()` in `lib/spellMotion.ts`) are a fixed set for its ten seconds; these never stop, so
+they're worked out as a sequence that goes on for ever, of which only the few falling at `t` are
+made.
+
+- `gap`: the time between one star's start and the next's, a sixth of a second.
+- `first`: the first star that could still be falling: any born more than `FALL.longestMs` ago has
+  finished. So each frame looks at a dozen or so stars, however long the screen saver has been on.
+- `seeded(k * 7919 + 101)`: as the comment says, each one's numbers come from its place in the
+  sequence (`k`), so every frame agrees on where star `k` started, how fast it goes and how long it
+  lasts, without anything being kept. 7919 is a prime, which keeps neighbouring stars' seeds far
+  apart.
+- `born`: its own moment within its sixth of a second. `life`: 1.3 to 2.3 seconds.
+- `startX`, `startY`: as the comment says, from along the top of the screen, a little above it and
+  off its right-hand side: across 1.4 times the width (so some start off the right edge and fall in
+  from it), and three in ten part way down the top third rather than above the top.
+- `speed`: in proportion to the screen's size (`(w + h) / 1_400`), each at its own pace.
+- `colour`: one of the spells' star colours (`STAR_COLOURS`).
+- `if (age < 0 || age > life) continue`: only the stars falling at `t`. Each is where its speed has
+  taken it, down and to the left along `STAR_DIRECTION` (the spell's), as a `Star`, the shape the
+  spell's stars have.
+
+### `paintNight()` and `paintStarfall()`
+
+<!-- code: apps/desktop/src/renderer/src/lib/screensaver/stars.ts#paintNight,paintStarfall -->
+
+[`src/renderer/src/lib/screensaver/stars.ts`, lines 85–146](../../apps/desktop/src/renderer/src/lib/screensaver/stars.ts#L85-L146)
+
+```ts
+/** The sky and the hills (they never change, so they're painted once). */
+export function paintNight(p: Painter, w: number, h: number): void {
+  paintBands(p, w, h, NIGHT_SKY, Math.round(h * 0.9))
+  for (const hill of NIGHT_HILLS) {
+    paintHill(
+      p,
+      hill,
+      w,
+      h,
+      (x) => hillTop(hill, x, h),
+      () => 0.6,
+    )
+  }
+}
+
+/**
+ * The stars at `t`: twinkling all over the sky above the hills, a few brighter ones flashing; and
+ * the shooting stars, each with a bright head three pixels across, a glow round it, and a long
+ * tail two pixels wide behind it, white near the head and fading out in its colour.
+ */
+export function paintStarfall(p: Painter, frame: SaverFrame): void {
+  const { t, w, h } = frame
+  const random = seeded(3)
+  for (let k = 0; k < 240; k++) {
+    const x = random() * w
+    const y = random() * h * 0.85
+    const phase = random() * Math.PI * 2
+    const colour = k % 5 === 0 ? '#fde68a' : k % 7 === 0 ? '#bae6fd' : '#ffffff'
+    const glow = 0.35 + 0.65 * Math.sin(t / 700 + phase) ** 2
+    plot(p, x, y, colour, glow * 0.85)
+    if (k % 9 === 0 && glow > 0.8) {
+      for (const [dx, dy] of [
+        [1, 0],
+        [-1, 0],
+        [0, 1],
+        [0, -1],
+      ] as const) {
+        plot(p, x + dx, y + dy, colour, (glow - 0.5) * 0.9)
+      }
+    }
+  }
+  for (const star of fallingStarsAt(t, w, h)) {
+    const fade = Math.min(1, star.age / 150, (star.life - star.age) / 400)
+    for (let k = 1; k <= FALL.tail; k++) {
+      const tx = star.x - star.dx * k * 1.2
+      const ty = star.y - star.dy * k * 1.2
+      const left = 1 - k / (FALL.tail + 1)
+      plot(p, tx, ty, k < 9 ? '#ffffff' : star.colour, fade * left)
+      plot(p, tx + 1, ty, star.colour, fade * left * 0.6)
+      if (k < 14) plot(p, tx - 1, ty, star.colour, fade * left * 0.3)
+    }
+    square(p, star.x - 1, star.y - 1, 3, '#ffffff', fade)
+    for (const [dx, dy] of [
+      [2, 0],
+      [-2, 0],
+      [0, 2],
+      [0, -2],
+    ] as const) {
+      plot(p, star.x + dx, star.y + dy, star.colour, fade * 0.8)
+    }
+  }
+}
+```
+
+<!-- /code -->
+
+- `paintNight(p, w, h)`: as its comment says, the sky and the hills, painted once: `NIGHT_SKY`'s
+  bands down to 90% of the height (`paintBands()`), then each hill with an even rim of starlight
+  (`() => 0.6`: no sun to light one part more than another).
+- `paintStarfall(p, frame)`: as its comment says, the stars at `t`.
+  - The still stars: 240 of them over the top 85% from `seeded(3)`, most white, every fifth a pale
+    gold and every seventh a pale blue, as real stars differ in colour. Each twinkles on its own
+    (`glow`), and every ninth flashes a little cross when it's brightest.
+  - The shooting stars, from `fallingStarsAt()`: `fade` brings each in over 0.15 seconds and out
+    over its last 0.4. Its tail runs back along its path for `FALL.tail` pixels, fading to nothing:
+    white near the head (the first eight pixels), then its colour, two pixels wide, with a fainter
+    third beside the first stretch. The head is a white square three pixels across, with a pixel of
+    its colour two out on each side as a glow: the broader head and longer tail the comment
+    mentions, bigger than the spell's.
+
+## `src/renderer/src/lib/screensaver/her.ts`: her in the sunset
+
+As the comment at the top says, her in the screen saver's sunset, her back to us (`gazeFrames()`
+in `character/sprite.ts`), painted a row at a time on the scene's canvas, one of her sprite's pixels
+to one of its. The sun is in front of her, so she's _backlit_: her colours are dimmed toward the
+dusk and a rim of warm light runs round her edges, brightest on the sun's side. That's how a figure
+against a low sun looks, its front in shadow and its outline glowing; without it, her bright
+daytime colours would look pasted onto the scene.
+
+### `DUSK`, `RIM` and `SHADOW`
+
+<!-- code: apps/desktop/src/renderer/src/lib/screensaver/her.ts#DUSK,RIM,SHADOW -->
+
+[`src/renderer/src/lib/screensaver/her.ts`, lines 3–13](../../apps/desktop/src/renderer/src/lib/screensaver/her.ts#L3-L13)
+
+```ts
+// Her in the screen saver's sunset, her back to us (character/sprite.ts's gazeFrames), painted a
+// pixel row at a time on the scene's canvas, one of her sprite's pixels to one of its. The sun is
+// in front of her, so her colours are dimmed toward the dusk and a rim of warm light runs round
+// her edges, brightest on the sun's side.
+
+/** The colour her colours are dimmed toward with the sun behind her, and the light round her. */
+export const DUSK = '#2a1a3e'
+
+export const RIM = '#ffc58f'
+
+/** The letter of her shadow on the ground (see PALETTE in character/sprite.ts): no rim for it. */
+const SHADOW = 'x'
+```
+
+<!-- /code -->
+
+- `DUSK`, `RIM`: as their comment says, the colour her colours are dimmed toward (a deep violet, the
+  sky's colour high up), and the light round her (a warm peach, the sun's).
+- `SHADOW`: as its comment says, the letter of her shadow on the ground in `PALETTE`: it gets no
+  rim, being on the ground, not part of her.
+
+### `parseColour()` and `backlit()`
+
+<!-- code: apps/desktop/src/renderer/src/lib/screensaver/her.ts#parseColour,backlit -->
+
+[`src/renderer/src/lib/screensaver/her.ts`, lines 15–37](../../apps/desktop/src/renderer/src/lib/screensaver/her.ts#L15-L37)
+
+```ts
+/** `#rrggbb` (or `rgb(r, g, b)` / `rgba(r, g, b, a)`) as its numbers, or null if it isn't one. */
+export function parseColour(colour: string): { r: number; g: number; b: number; a: number } | null {
+  const hex = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(colour)
+  if (hex) {
+    const [r, g, b] = hex.slice(1).map((v) => parseInt(v, 16)) as [number, number, number]
+    return { r, g, b, a: 1 }
+  }
+  const rgb = /^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*(?:,\s*([\d.]+)\s*)?\)$/i.exec(
+    colour,
+  )
+  if (!rgb) return null
+  return { r: Number(rgb[1]), g: Number(rgb[2]), b: Number(rgb[3]), a: Number(rgb[4] ?? 1) }
+}
+
+/** `colour` dimmed `amount` (0 to 1) of the way toward the dusk, keeping its opacity. */
+export function backlit(colour: string, amount = 0.4): string {
+  const c = parseColour(colour)
+  const dusk = parseColour(DUSK)!
+  if (!c) return colour
+  const mix = (a: number, b: number) => Math.round(a + (b - a) * amount)
+  const [r, g, b] = [mix(c.r, dusk.r), mix(c.g, dusk.g), mix(c.b, dusk.b)]
+  return c.a >= 1 ? `rgb(${r}, ${g}, ${b})` : `rgba(${r}, ${g}, ${b}, ${c.a})`
+}
+```
+
+<!-- /code -->
+
+- `parseColour(colour)`: as its comment says, a colour written `#rrggbb`, `rgb(r, g, b)` or
+  `rgba(r, g, b, a)` as its numbers, or `null` if it's none of those. These are the forms a canvas
+  gives a colour back in, which is how `herColours()` in `ScreenSaverView` reads hers.
+- `backlit(colour, amount = 0.4)`: as its comment says, `colour` dimmed `amount` of the way toward
+  the dusk, keeping its opacity: each of red, green and blue moved 40% of the way to `DUSK`'s. Her
+  shadow, which is see-through, stays see-through (`rgba()`), and a colour it can't read is left as
+  it is.
+
+### `paintHer()`
+
+<!-- code: apps/desktop/src/renderer/src/lib/screensaver/her.ts#paintHer -->
+
+[`src/renderer/src/lib/screensaver/her.ts`, lines 39–78](../../apps/desktop/src/renderer/src/lib/screensaver/her.ts#L39-L78)
+
+```ts
+/**
+ * A frame of her (`rows` of palette letters, `.` see-through) with its top-left pixel at `x`,
+ * `y`: each run of one letter along a row in its colour from `colours` (already dimmed), then the
+ * rim of light along her edges: where the pixel beside her toward the sun (`sunSide`, 1 for
+ * right) is empty, above her, and fainter on her other side.
+ */
+export function paintHer(
+  p: Painter,
+  rows: readonly string[],
+  x: number,
+  y: number,
+  colours: Readonly<Record<string, string>>,
+  sunSide: 1 | -1,
+): void {
+  const at = (r: number, c: number) => rows[r]?.[c] ?? '.'
+  const empty = (r: number, c: number) => at(r, c) === '.' || at(r, c) === SHADOW
+  rows.forEach((row, r) => {
+    for (let c = 0; c < row.length;) {
+      const letter = row[c]!
+      let end = c + 1
+      while (end < row.length && row[end] === letter) end++
+      const colour = colours[letter]
+      if (letter !== '.' && colour) p.rect(x + c, y + r, end - c, 1, colour, 1)
+      c = end
+    }
+  })
+  rows.forEach((row, r) => {
+    for (let c = 0; c < row.length; c++) {
+      if (empty(r, c)) continue
+      const light = empty(r, c + sunSide)
+        ? 0.6
+        : empty(r - 1, c)
+          ? 0.4
+          : empty(r, c - sunSide)
+            ? 0.22
+            : 0
+      if (light > 0) p.rect(x + c, y + r, 1, 1, RIM, light)
+    }
+  })
+}
+```
+
+<!-- /code -->
+
+As its comment says, a frame of her, its top-left pixel at `x`, `y`: each run of one letter along a
+row in its colour from `colours` (already dimmed), then the rim of light along her edges.
+
+- `at(r, c)`: the letter at a row and column, or `.` (see-through) off the frame, so her edges need
+  no special care. `empty(r, c)`: see-through, or her shadow.
+- The first pass paints her: along each row, each run of the same letter is one rectangle (as
+  `framePaths()` does for the SVG), far fewer calls than one per pixel.
+- The second pass, the rim: for every pixel of her, `light` is how much rim it gets: 0.6 where the
+  pixel beside it toward the sun (`sunSide`, 1 for the right) is empty, her edge facing the sun;
+  otherwise 0.4 where the pixel above it is empty, along the tops of her hat, shoulders and arms;
+  otherwise 0.22 where the pixel on her other side is empty, a faint edge away from the sun;
+  otherwise none, so the middle of her stays in shadow. It's painted in `RIM` at that opacity, over
+  the colour already there.

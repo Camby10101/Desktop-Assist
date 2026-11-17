@@ -1003,6 +1003,31 @@ function dragged(): Key[] {
   })
 }
 
+/**
+ * Watching the sunset, her back to us (the screen saver): standing, breathing, swaying very
+ * slightly from side to side in the evening breeze, her hair and robe stirring with it, round and
+ * round every few seconds.
+ */
+function gaze(): Key[] {
+  const count = 48
+  return Array.from({ length: count }, (_, i) => {
+    const phase = (i / count) * Math.PI * 2
+    const breath = (1 - Math.cos(phase * 2)) / 2
+    const arm = { shoulder: 0.07 + breath * 0.03, elbow: 0.05 }
+    return {
+      pose: {
+        view: 'front',
+        back: true,
+        lean: Math.sin(phase) * 0.02,
+        y: Math.round(breath),
+        wind: 0.6 + Math.sin(phase + 0.8) * 1.2,
+        arms: [arm, arm],
+      },
+      ms: 100,
+    }
+  })
+}
+
 // ------------------------------------------------------------------------------------- frames
 
 const drawn = (keys: Key[]): Frame[] => keys.map(({ pose, ms }) => ({ rows: draw(pose), ms }))
@@ -1044,6 +1069,14 @@ const MAKERS: Record<Name, () => Frame[]> = {
  */
 const LEFT_MAKERS: Partial<Record<Name, () => Frame[]>> = {
   doze: () => drawn(doze(true)),
+}
+
+let gazing: Frame[] | null = null
+
+/** Her frames watching the sunset, from behind (see gaze): round and round. Drawn once, then kept. */
+export function gazeFrames(): Frame[] {
+  gazing ??= drawn(gaze())
+  return gazing
 }
 
 /** Whether a pose's animation repeats (the fidgets play once, for FIDGET_MS). */
