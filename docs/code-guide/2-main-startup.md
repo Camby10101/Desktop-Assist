@@ -2599,7 +2599,7 @@ export function isNewer(candidate: string, current: string): boolean {
 
 <!-- code: apps/desktop/src/main/updates.ts#Release,Item,isObject,releaseOf -->
 
-[`src/main/updates.ts`, lines 33–81](../../apps/desktop/src/main/updates.ts#L33-L81)
+[`src/main/updates.ts`, lines 33–99](../../apps/desktop/src/main/updates.ts#L33-L99)
 
 ```ts
 /** A release with an installer attached. */
@@ -2623,17 +2623,22 @@ const isObject = (value: unknown): value is Item =>
 
 /**
  * The release in GitHub's answer for a repository's latest release, if it's a version with an
- * installer: an `.exe` with "Setup" in its name, downloaded from `downloads` (the repository's own
- * releases, https://github.com/<owner>/<name>/releases/download/). Its signature is the file of
- * the same name plus `.sig`.
+ * installer: an `.exe` with "Setup" in its name, downloaded from the repository's own releases:
+ * `downloads` (https://github.com/<owner>/<name>/releases/download/), or, if the repository has
+ * since been renamed or moved (GitHub answers for it under the old name), wherever the release's
+ * own page says it now is (ownDownloads). Its signature is the file of the same name plus `.sig`.
+ * The installer only runs if that signature is the release key's, wherever it came from.
  */
 export function releaseOf(payload: unknown, downloads: string): Release | null {
   if (!isObject(payload) || payload['draft'] === true || payload['prerelease'] === true) return null
   const version = parseVersion(typeof payload['tag_name'] === 'string' ? payload['tag_name'] : '')
   if (!version) return null
   const assets = Array.isArray(payload['assets']) ? payload['assets'].filter(isObject) : []
+  const moved = ownDownloads(payload['html_url'], downloads)
   const fromRepo = (a: Item) =>
-    typeof a['browser_download_url'] === 'string' && a['browser_download_url'].startsWith(downloads)
+    typeof a['browser_download_url'] === 'string' &&
+    (a['browser_download_url'].startsWith(downloads) ||
+      (moved !== null && a['browser_download_url'].startsWith(moved)))
   const asset = assets.find(
     (a) => typeof a['name'] === 'string' && /setup.*\.exe$/i.test(a['name']) && fromRepo(a),
   )
@@ -2685,7 +2690,7 @@ comment says.
 
 <!-- code: apps/desktop/src/main/updates.ts#signedText,isSigned -->
 
-[`src/main/updates.ts`, lines 83–114](../../apps/desktop/src/main/updates.ts#L83-L114)
+[`src/main/updates.ts`, lines 101–132](../../apps/desktop/src/main/updates.ts#L101-L132)
 
 ```ts
 /**
@@ -2745,7 +2750,7 @@ How a signature is checked.
 
 <!-- code: apps/desktop/src/main/updates.ts#Fetch,UpdaterDeps -->
 
-[`src/main/updates.ts`, lines 116–147](../../apps/desktop/src/main/updates.ts#L116-L147)
+[`src/main/updates.ts`, lines 134–165](../../apps/desktop/src/main/updates.ts#L134-L165)
 
 ```ts
 export type Fetch = (url: string, init?: RequestInit) => Promise<Response>
@@ -2804,7 +2809,7 @@ proxy set in Windows is used. `UpdaterDeps` is everything `Updater` needs from o
 
 <!-- code: apps/desktop/src/main/updates.ts#Updater.class -->
 
-[`src/main/updates.ts`, lines 149–155](../../apps/desktop/src/main/updates.ts#L149-L155)
+[`src/main/updates.ts`, lines 167–173](../../apps/desktop/src/main/updates.ts#L167-L173)
 
 ```ts
 /**
@@ -2824,7 +2829,7 @@ The class `index.ts` and `ipc.ts` use, with the comment that sums it up.
 
 <!-- code: apps/desktop/src/main/updates.ts#Updater.state,constructor,current -->
 
-[`src/main/updates.ts`, lines 156–162](../../apps/desktop/src/main/updates.ts#L156-L162)
+[`src/main/updates.ts`, lines 174–180](../../apps/desktop/src/main/updates.ts#L174-L180)
 
 ```ts
 private state: UpdateState = { status: 'idle' }
@@ -2846,7 +2851,7 @@ get current(): UpdateState {
 
 <!-- code: apps/desktop/src/main/updates.ts#Updater.checkAndInstall -->
 
-[`src/main/updates.ts`, lines 164–199](../../apps/desktop/src/main/updates.ts#L164-L199)
+[`src/main/updates.ts`, lines 182–217](../../apps/desktop/src/main/updates.ts#L182-L217)
 
 ```ts
 /** The whole job, one click: check, and if there's an update, download and install it. */
@@ -2914,7 +2919,7 @@ The whole job, from one click, as the comment says.
 
 <!-- code: apps/desktop/src/main/updates.ts#Updater.latest -->
 
-[`src/main/updates.ts`, lines 201–211](../../apps/desktop/src/main/updates.ts#L201-L211)
+[`src/main/updates.ts`, lines 219–229](../../apps/desktop/src/main/updates.ts#L219-L229)
 
 ```ts
 private async latest(): Promise<Release | null> {
@@ -2950,7 +2955,7 @@ Asks GitHub's API for the repository's latest release.
 
 <!-- code: apps/desktop/src/main/updates.ts#Updater.download -->
 
-[`src/main/updates.ts`, lines 213–258](../../apps/desktop/src/main/updates.ts#L213-L258)
+[`src/main/updates.ts`, lines 231–276](../../apps/desktop/src/main/updates.ts#L231-L276)
 
 ```ts
 /**
@@ -3038,7 +3043,7 @@ the release's and signed with the release key, or it's never run.
 
 <!-- code: apps/desktop/src/main/updates.ts#Updater.signature -->
 
-[`src/main/updates.ts`, lines 260–270](../../apps/desktop/src/main/updates.ts#L260-L270)
+[`src/main/updates.ts`, lines 278–288](../../apps/desktop/src/main/updates.ts#L278-L288)
 
 ```ts
 /** The release's signature of its installer (64 bytes, base64 in `<installer>.sig`). */
@@ -3069,7 +3074,7 @@ Downloads the release's signature, as the comment says.
 
 <!-- code: apps/desktop/src/main/updates.ts#Updater.fail,setState -->
 
-[`src/main/updates.ts`, lines 272–293](../../apps/desktop/src/main/updates.ts#L272-L293)
+[`src/main/updates.ts`, lines 290–311](../../apps/desktop/src/main/updates.ts#L290-L311)
 
 ```ts
 private fail(doing: string, error: unknown): UpdateState {
@@ -3111,7 +3116,7 @@ private setState(state: UpdateState): UpdateState {
 
 <!-- code: apps/desktop/src/main/updates.ts#saveDownload -->
 
-[`src/main/updates.ts`, lines 296–318](../../apps/desktop/src/main/updates.ts#L296-L318)
+[`src/main/updates.ts`, lines 314–336](../../apps/desktop/src/main/updates.ts#L314-L336)
 
 ```ts
 /**
@@ -3160,7 +3165,7 @@ Saves the downloaded installer, as the comment says. `index.ts` gives it the fol
 
 <!-- code: apps/desktop/src/main/updates.ts#Busy,Mismatch,Unsigned -->
 
-[`src/main/updates.ts`, lines 320–327](../../apps/desktop/src/main/updates.ts#L320-L327)
+[`src/main/updates.ts`, lines 338–345](../../apps/desktop/src/main/updates.ts#L338-L345)
 
 ```ts
 /** GitHub turned the request away (its limit for apps that don't sign in). */

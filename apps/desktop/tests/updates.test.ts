@@ -9,6 +9,7 @@ import {
   INSTALLER_ARGS,
   isNewer,
   isSigned,
+  ownDownloads,
   parseVersion,
   releaseOf,
   saveDownload,
@@ -111,6 +112,39 @@ describe('releaseOf', () => {
     })
     expect(releaseOf(elsewhere, DOWNLOADS)).toBeNull()
     expect(releaseOf({ ...release('v1.0.1'), assets: [] }, DOWNLOADS)).toBeNull()
+  })
+
+  it('follows the repository when it has been renamed, but nowhere else', () => {
+    // GitHub answers for the old name, naming everything by the new one.
+    const NEW = 'https://github.com/Camby10101/Desktop-Wizard/releases/download/'
+    const renamed = (htmlUrl: string) => {
+      const payload = release('v1.0.1')
+      return {
+        ...payload,
+        html_url: htmlUrl,
+        assets: payload.assets.map((a) => ({
+          ...a,
+          browser_download_url: a.browser_download_url.replace(DOWNLOADS, NEW),
+        })),
+      }
+    }
+    const found = releaseOf(
+      renamed('https://github.com/Camby10101/Desktop-Wizard/releases/tag/v1.0.1'),
+      DOWNLOADS,
+    )
+    expect(found?.installer.url).toBe(`${NEW}v1.0.1/Desktop.Assist-Setup-1.0.1.exe`)
+    expect(found?.signature).toBe(`${NEW}v1.0.1/Desktop.Assist-Setup-1.0.1.exe.sig`)
+    // Files from a repository other than the one whose release it is, or off GitHub: no.
+    expect(
+      releaseOf(renamed('https://github.com/someone/else/releases/tag/v1.0.1'), DOWNLOADS),
+    ).toBeNull()
+    expect(
+      ownDownloads('https://evil.example/Camby10101/Desktop-Wizard/releases/tag/v1', DOWNLOADS),
+    ).toBeNull()
+    expect(
+      ownDownloads('https://github.com/Camby10101/Desktop-Wizard/blob/main/x', DOWNLOADS),
+    ).toBeNull()
+    expect(ownDownloads(undefined, DOWNLOADS)).toBeNull()
   })
 
   it('takes a release without a digest, to be checked by size alone', () => {

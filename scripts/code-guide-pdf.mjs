@@ -19,7 +19,7 @@ import remarkGfm from 'remark-gfm'
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const GUIDE_DIR = join(ROOT, 'docs', 'code-guide')
 const OUTPUT = join(ROOT, 'docs', 'CODE_GUIDE.pdf')
-const REPO_URL = 'https://github.com/Camby10101/Desktop-Assist/blob/main/'
+const REPO_URL = 'https://github.com/Camby10101/Desktop-Wizard/blob/main/'
 const PAGES = [
   'CODE_GUIDE.md',
   '1-shared-and-preload.md',

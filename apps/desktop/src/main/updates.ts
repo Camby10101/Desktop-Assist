@@ -49,18 +49,36 @@ const isObject = (value: unknown): value is Item =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
 /**
+ * Where a renamed or moved repository's release files are downloaded from, by the release's own
+ * page (`html_url`, https://github.com/<owner>/<name>/releases/tag/<tag>) on the same site as
+ * `downloads`; null if the page isn't one there. GitHub sends requests for a repository's old name
+ * on to its new one, but names the files in its answer by the new name.
+ */
+export function ownDownloads(htmlUrl: unknown, downloads: string): string | null {
+  const site = /^(https?:\/\/[^/]+\/)[^/]+\/[^/]+\/releases\/download\/$/.exec(downloads)?.[1]
+  if (!site || typeof htmlUrl !== 'string' || !htmlUrl.startsWith(site)) return null
+  const repo = /^([\w.-]+)\/([\w.-]+)\/releases\/tag\//.exec(htmlUrl.slice(site.length))
+  return repo ? `${site}${repo[1]}/${repo[2]}/releases/download/` : null
+}
+
+/**
  * The release in GitHub's answer for a repository's latest release, if it's a version with an
- * installer: an `.exe` with "Setup" in its name, downloaded from `downloads` (the repository's own
- * releases, https://github.com/<owner>/<name>/releases/download/). Its signature is the file of
- * the same name plus `.sig`.
+ * installer: an `.exe` with "Setup" in its name, downloaded from the repository's own releases:
+ * `downloads` (https://github.com/<owner>/<name>/releases/download/), or, if the repository has
+ * since been renamed or moved (GitHub answers for it under the old name), wherever the release's
+ * own page says it now is (ownDownloads). Its signature is the file of the same name plus `.sig`.
+ * The installer only runs if that signature is the release key's, wherever it came from.
  */
 export function releaseOf(payload: unknown, downloads: string): Release | null {
   if (!isObject(payload) || payload['draft'] === true || payload['prerelease'] === true) return null
   const version = parseVersion(typeof payload['tag_name'] === 'string' ? payload['tag_name'] : '')
   if (!version) return null
   const assets = Array.isArray(payload['assets']) ? payload['assets'].filter(isObject) : []
+  const moved = ownDownloads(payload['html_url'], downloads)
   const fromRepo = (a: Item) =>
-    typeof a['browser_download_url'] === 'string' && a['browser_download_url'].startsWith(downloads)
+    typeof a['browser_download_url'] === 'string' &&
+    (a['browser_download_url'].startsWith(downloads) ||
+      (moved !== null && a['browser_download_url'].startsWith(moved)))
   const asset = assets.find(
     (a) => typeof a['name'] === 'string' && /setup.*\.exe$/i.test(a['name']) && fromRepo(a),
   )
