@@ -5,8 +5,8 @@ sign-in), 4 (logos, favourites, service desk, light/dark, the bubble-click fix) 
 app-opening spinner; Jira and the service desk), its fixes 5.1 and 5.2 (the bubble kept in front;
 Check for updates), and features 3.1 (questions open in Claude Desktop) and 3.2 (Apps list,
 Uninstall, fixes) complete**. Version 1.0.0 is the first release (§7h). On trial (branch
-`character`): the bubble as an animated character, in a choice of sizes, with Clones in place of
-Bounce, and the app's new name, Desktop Wizard: it was Desktop Assist up to 1.0.0 (§7i). Last
+`character`): the bubble as an animated character, in a choice of sizes, with a Spells menu
+(Clones, Starfall, Teleport, Explosion) in place of Bounce, and the app's new name, Desktop Wizard: it was Desktop Assist up to 1.0.0 (§7i). Last
 updated 2026-11-17.
 
 A Windows desktop assistant that runs in the background, shows a small circular company logo
@@ -51,8 +51,8 @@ account and usage limit (§7e); the built-in chat stays available as a tenant se
   and **grows upward** as you type. Action icons stack **above** the bubble.
 - **Collapse** by clicking the bubble again, pressing Esc, or clicking anywhere else.
 - On trial since 6: the bubble is an animated character standing on the taskbar near a bottom
-  corner instead of the logo in a corner, and the Bounce icon has given way to Size and Clones
-  (§7i).
+  corner instead of the logo in a corner, and the Bounce icon has given way to Spells; light or
+  dark mode and her size are in Settings (§7i).
 - Only one copy runs at a time. Launching it again just opens the panel.
 
 ## 2. Important: which "Claude" this connects to (from M1)
@@ -90,7 +90,7 @@ against their own limit. The tenant setting `chatApp` picks `claude-desktop` or 
 - **Packaging:** **electron-builder**. NSIS installer, not yet code-signed. Electron's fuses set in the `.exe`; updates from GitHub releases, signed with a release key kept off GitHub (5.2)
 - **UI:** **React 19** + **Tailwind CSS 4** + **lucide-react** icons. Light or dark mode (its own setting since M4, dark by default; it followed Windows before)
 - **Validation:** **zod 4**. Every IPC payload, saved file and tenant config is checked at runtime
-- **Tests:** **Vitest**. Pure logic (layout, the character's wandering and clones, autosave, screenshot files, tenant config)
+- **Tests:** **Vitest**. Pure logic (layout, the character's wandering, clones and spells, autosave, screenshot files, tenant config)
 - **Quality:** ESLint 10 + typescript-eslint + Prettier
 - **Repo:** npm workspaces (`apps/*`). `apps/gateway` and `packages/shared` are added when the backend arrives
 - **_M1:_ Claude:** `@anthropic-ai/sdk`, streaming Messages API, `claude-opus-5-5`. Effort set explicitly; server-side refusal fallbacks; prompt caching
@@ -125,8 +125,8 @@ and has rougher transparent-window behaviour on WebView2. **.NET WinUI** is Wind
 ```
 
 - **Two windows, one renderer bundle** (`?view=bubble` / `?view=panel`; on the `character` branch
-  also `?view=clones` and `?view=vision`, click-through windows for the Clones action and one of
-  the character's habits, §7i). The bubble window is
+  also `?view=clones`, `?view=vision` and `?view=spell`, click-through windows for her clones, one
+  of the character's habits and her spells' effects, §7i). The bubble window is
   tiny, can't take focus and never resizes when the panel opens. That means no flicker on
   open/close and nothing large moving during a drag or a walk. The panel window has a fixed size and its empty areas pass clicks through
   to whatever is underneath (`setIgnoreMouseEvents` with forwarding, toggled whenever the pointer
@@ -204,13 +204,16 @@ Desktop-Assist/
 ├─ apps/desktop/
 │  ├─ electron.vite.config.ts   TENANT=<id> picks tenants/<id> at build time
 │  ├─ electron-builder.yml
-│  ├─ src/main/                 index (lifecycle), bubble/ (windows, layout, clones, controller),
+│  ├─ src/main/                 index (lifecycle), bubble/ (windows, layout, clones, vision,
+│  │                            spell effects, controller),
 │  │                            claudeDesktop + sendInClaude (3.1), apps/ (3.2), auth/
 │  │                            (JumpCloud sign-in), claude/ (chat), storage/, actions, notes/,
 │  │                            screenshots/, settings, tray, uninstall, ipc
 │  ├─ src/preload/              typed contextBridge API (window.assist)
-│  ├─ src/renderer/             React views: BubbleView, ClonesView, PanelView (+ components)
-│  ├─ src/shared/               IPC contract, action registry, UI geometry constants, types
+│  ├─ src/renderer/             React views: BubbleView, ClonesView, VisionView, SpellView,
+│  │                            PanelView (+ components)
+│  ├─ src/shared/               IPC contract, action registry, spells, UI geometry constants,
+│  │                            types
 │  └─ tests/                    Vitest unit tests
 ├─ tenants/morse-micro/         tenant.json (names, colours, actions, chatApp, portal, sign-in
 │                                IDs) + logo.png
@@ -229,7 +232,7 @@ Desktop-Assist/
 - **Text box**: A multi-line box. **Autosaves** about 0.5 s after you stop typing, and also when it closes and when the app quits. It's restored after a restart and shows a "Saved" indicator. Saved to `%APPDATA%\Desktop Wizard\notes.json` with atomic writes. A corrupt file is backed up and replaced with an empty one. No Claude connection yet.
 - **Screenshot**: An action icon. It hides Desktop Wizard's own windows, captures **the screen the bubble is on** at full resolution, saves `Pictures\Desktop Wizard\Screenshot YYYY-MM-DD HHMMSS.png`, reopens the panel and shows a "Screenshot saved" toast. Files are never deleted automatically.
 - **Attach latest**: A 📎 button in the text box. It adds the most recent screenshot as a **thumbnail chip** (no duplicates). Click the chip to open it full size, × to remove it. Chips are saved with the text. A chip whose file was deleted shows as missing.
-- **Bounce**: _Removed on the `character` branch, where Clones takes its place (§7i)._ An action icon. The panel collapses and the bubble moves at a constant speed, bouncing off the edges of the work area. **Clicking the bubble stops it and it glides back to the corner.**
+- **Bounce**: _Removed on the `character` branch, where her spells take its place (§7i)._ An action icon. The panel collapses and the bubble moves at a constant speed, bouncing off the edges of the work area. **Clicking the bubble stops it and it glides back to the corner.**
 
 **Extension points built in M0 (so later features are small additions):**
 
@@ -382,7 +385,7 @@ Improvements asked for after trying 3.2 day to day (merged in pull request #6):
 - **Screenshots don't change the page**: Taking a screenshot used to switch the card to the text box. Now it comes back to whatever it was showing (the Apps list, say); **Ask Claude** shows the text box when wanted.
 - **The bubble stopped responding to clicks (found and fixed)**: After clicking somewhere else, clicking the bubble sometimes did nothing at all, neither opening nor closing the panel, until the app was restarted (3.2's guess about it was wrong). Caught live on the user's PC by attaching to the running app: the bubble window was made so it could never take the focus, and in that state Windows/Chromium dropped each mouse **press** on it and only delivered the release, so the page never saw a click and nothing reached the main process. With the window allowed to take the focus, the press arrived and the panel opened. Now both windows can take the focus. Because clicking the bubble then takes the focus from an open panel (closing it as the button goes down), each click carries the time it was pressed, and a panel that closed at that press stays closed; that also means a quick click on the bubble right after clicking elsewhere now reopens it (the old 0.3 s rule ignored it). Checked with real mouse input across the user's two monitors: open/close, a slow click, and five rounds of clicking another app then the bubble (24 steps, every press delivered).
 - **No tooltip on the bubble**: The "Click to open, drag to move" note that appeared after hovering is gone.
-- **Light or dark mode button**: A new icon (a sun in dark mode, a moon in light mode) switches all of Desktop Wizard between dark and light, whatever Windows uses. It starts dark, and the choice is saved (`theme` in the preferences) and applied before the windows appear, so there's no flash of the other mode. Until now the colours followed Windows' app mode (dark on Morse Micro's PCs); the white buttons seen during testing came from the test tools, which force light mode while they drive the app.
+- **Light or dark mode button**: A new icon (a sun in dark mode, a moon in light mode) switches all of Desktop Wizard between dark and light, whatever Windows uses. It starts dark, and the choice is saved (`theme` in the preferences) and applied before the windows appear, so there's no flash of the other mode. Until now the colours followed Windows' app mode (dark on Morse Micro's PCs); the white buttons seen during testing came from the test tools, which force light mode while they drive the app. (On the `character` branch it has since moved into Settings, as a Light mode switch; §7i.)
 
 Tested with unit tests (226, including recognising images from their bytes, the octet-stream logos, a page of HTML labelled as an image, the favourites order and the logo cache) and end-to-end (44 checks for the Apps list, now including starring an app, the order surviving a restart, unstarring, and the service desk link; the 3.1 (39) and built-in chat (47, 9) runs still pass).
 
@@ -451,7 +454,7 @@ tab, as asked). IT's setup guide: [ATLASSIAN_SETUP.md](ATLASSIAN_SETUP.md).
   between two monitors can be crossed (only along the stretch where the other monitor lies
   beyond it). Checked live on that desk: the bubble went up onto the ultrawide, stayed on screen
   throughout, and a click brought it back to its corner on the laptop. (On the `character` branch
-  Bounce has since been removed, replaced by Clones; §7i.)
+  Bounce has since been removed, replaced by her spells; §7i.)
 
   These three are tested with unit tests (271 in all now: going back through the screenshots one
   click at a time, crossing between monitors, over a taskbar between stacked monitors, the walls
@@ -657,6 +660,12 @@ this was merged.)
   - **Dragged**, from the front: held up by her collar, off the ground, mouth open, arms up, legs
     kicking, swaying, hair lifted, with no shadow under her (she's in the air). Also while she falls
     after a drop.
+  - **Her spells' poses**, only when a spell is cast (or the app starts or closes): **chant**
+    (arms raised, eyes shut, lips moving, a magic circle turning under her, sparkles round her hand,
+    her hair and robe lifting; round and round for the explosion's 15 s), **vanish** (a smile, then
+    her eyes close and she dissolves into white motes, the top of her first: each pixel turns white,
+    goes, and some leave a mote that rises, sways and fades to silver; 0.9 s) and **appear** (the
+    same backwards: the motes come down and she forms out of them; 0.9 s).
 - **Which way she faces**: the middle of the screen (left from the right-hand corner); walking,
   the way she walks. Facing left is the mirror image of facing right.
 - **Where it lives**: no longer stuck in a corner, but near one of the bottom corners. It stands on
@@ -670,18 +679,33 @@ this was merged.)
 - **Anything the user does stops it where it is**: clicking it opens the panel from where it
   stands (the panel still opens toward the middle of the screen); dragging interrupts a walk or a
   fidget. Nothing happens on its own while the panel is open.
-- **Size**: a size icon opens a menu with Smaller and Bigger, in steps from half her usual size
-  to six times it (½, ¾, 1, 1.5, 2, 3, 4, 5, 6). She grows or shrinks where she stands, her feet on
-  the taskbar, with the panel's chat card and icons moving out to suit. The size is remembered
-  (`characterScale` in `preferences.json`), but she's never bigger than lets her panel, with all
-  its icons, fit her screen, so the menu can always be reached; on a smaller screen she shrinks to
-  fit, and grows back once there's room. The bigger she is, the further she strolls and the faster
-  she walks.
-- **Clones** (in place of Bounce, which has been removed): ten of her, at her size, walk about the
-  taskbar of her display for thirty seconds, each on its own timetable, stopping now and then and
-  sometimes waving when it does (one stop in five), then fade away. They're in one
-  window along the bottom of the screen that never takes the mouse or the focus, so clicks go
-  straight through them; using it again starts a new lot.
+- **Size**, in Settings (first a menu of its own, behind a size icon): Smaller and Bigger, in steps
+  from half her usual size to six times it (½, ¾, 1, 1.5, 2, 3, 4, 5, 6). She grows or shrinks where
+  she stands, her feet on the taskbar, with the panel's chat card and icons moving out to suit. The
+  size is remembered (`characterScale` in `preferences.json`), but she's never bigger than lets her
+  panel, with all its icons, fit her screen, so Settings can always be reached; on a smaller screen
+  she shrinks to fit, and grows back once there's room. The bigger she is, the further she strolls
+  and the faster she walks. **Light mode** is in Settings too, above Size, in place of its own icon.
+- **Spells** (a wand icon, in place of Bounce, which has been removed): a menu of four spells; the
+  panel closes and she casts the one picked (`castSpell` in `src/main/index.ts`).
+  - **Clones**: ten of her, at her size, walk about the taskbar of her display for thirty seconds,
+    each on its own timetable, stopping now and then and sometimes waving when it does (one stop in
+    five), then fade away, while she does her little spell. They're in one window along the bottom
+    of the screen that never takes the mouse or the focus, so clicks go straight through them;
+    casting it again starts a new lot.
+  - **Starfall**: shooting stars streak down her screen for ten seconds, under twinkling stars.
+  - **Teleport**: she vanishes into white motes, her window moves somewhere else along the taskbar
+    near her corner, and she forms out of them there.
+  - **Explosion**: she chants for fifteen seconds while a pillar of seven magic circles in her
+    colour rises above her, one after another, with a column of light and sparks streaming up it;
+    then it goes off in the middle of the screen: a white flash, a fireball with churning edges that
+    cools from white through yellow, orange and red to smoke as it rises, a shock wave and sparks.
+    Clicking her or picking her up during the chant calls it off.
+  - Starfall and the explosion are pixel art too (their pixels twice the size of hers), drawn on a
+    canvas in a click-through window over her display (`SpellEffects`, `SpellView`); with Windows'
+    reduced-motion setting they show still.
+- **Coming and going**: as the app starts she forms out of white motes, and when it's closed (the
+  Close icon, or Quit in the tray) she dissolves into them, and only then does the app quit.
 - With Windows' reduced-motion setting it still walks, but holds still otherwise (the first frame
   of each pose).
 - Her shadow on the taskbar turns the accent colour while the panel is open, and she glows softly
@@ -696,9 +720,13 @@ fidgeting only after a quiet spell, stopping when clicked with the panel where i
 while open, dangling while dragged, falling where dropped, walking back from far away, another
 display, display changes, habits never repeated back to back; her size: saved and snapped, growing
 where she stands, kept to what fits the screen, walking faster when bigger; the clones' window and
-how they wander and wave; the vision's window and timetable; the animations: every pose's frames, feet on the ground except at the top of the
+how they wander and wave; the vision's window and timetable; casting spells and the teleport;
+closing, ignoring clicks while she vanishes; the spells' window, and the explosion called off only
+during its chant; where the shooting stars, magic circles and blast are; the size steps in
+Settings; the animations: every pose's frames, feet on the ground except at the top of the
 hop and while carried (with no shadow while carried), the dozer's z's the right way round facing
-left, each habit's length matching the main process, mirroring, the rig's three
+left, each habit's and spell pose's length matching the main process, vanishing to nothing and
+appearing whole, mirroring, the rig's three
 views and face, looking up for the vision, the newer habits' crystal ball, butterfly, z's and
 flared robe, the newest habits' orbs, bubbles, wisp (hidden behind her) and sneeze sparkles only
 when asked, her long hair side on as one mass ending in clumps, the rasteriser's shading, form
@@ -706,6 +734,16 @@ shadows and outlines,
 the shadows things cast) and
 the real app: she stood on the taskbar, walked, sat down and later glanced
 about on her own, with no errors; contact sheets of every frame drawn with the real CSS.
+
+### Spells, and Light mode and Size in Settings
+
+Later on the `character` branch: the Clones icon became the **Spells** menu (a wand), with Clones
+joined by Starfall, Teleport and Explosion (above). To keep the stack short, the light or dark
+mode icon and the Size icon went into **Settings**, as its first two rows (a Light mode switch,
+and Size with − and +), leaving Morse Micro seven icons: Ask Claude, Jira, IT service desk,
+Screenshot, Settings, Spells and Close. And she now **forms out of white motes** as the app
+starts and **dissolves into them** when it's closed (Close, or Quit in the tray), the same
+`appear` and `vanish` her teleport uses.
 
 ### The new name: Desktop Wizard
 
@@ -744,7 +782,7 @@ Windows" moved only when Windows still starts the old `.exe`.
 - **5** ✅ **Jira and the service desk**: The app-opening spinner, and Atlassian ideas 1 to 9. See §7h.
 - **5.1** ✅ **The bubble on top after starting**: always-on-top that survives a full-screen app. See §7h.
 - **5.2** ✅ **The bubble kept in front, and Check for updates**: the startup front check; updating from GitHub releases, signed with a release key; the `.exe` locked down; version 1.0.0, the first release. See §7h.
-- **6** 🧪 **The character** (on trial, branch `character`): the bubble as an animated character on the taskbar near a bottom corner, in a choice of sizes, with Clones in place of Bounce. See §7i.
+- **6** 🧪 **The character** (on trial, branch `character`): the bubble as an animated character on the taskbar near a bottom corner, in a choice of sizes, with a Spells menu (Clones, Starfall, Teleport, Explosion) in place of Bounce; light or dark mode and her size in Settings; forming out of white motes at start-up and dissolving into them on Close. See §7i.
 - 7 (next): To be chosen. Candidates:
   - Shipping: code signing (no "unrecognised app" warning), silent deployment through JumpCloud (with Claude Desktop), CI on GitHub Actions (tests and the installer on every pull request, and building the release), a "What's new" note after an update
   - Bubble and screenshots: a keyboard shortcut to open the panel and to take a screenshot, snipping a region or a window, pasting an image into the text box, hiding during full-screen apps and presentations, a first-run tour
@@ -785,7 +823,7 @@ Step-by-step instructions are in [CLAUDE_DESKTOP_SETUP.md](CLAUDE_DESKTOP_SETUP.
 - Capture → the screen the bubble is on
 - Settings (M0) → Start with Windows, Open screenshots folder, Clear text box
 - Bounce → glides back to the corner when stopped (removed on the `character` branch, replaced by
-  Clones)
+  Clones, now one of her spells)
 - Close → quits immediately
 - M1 credentials → the user's own API key (replaced in M3)
 - M3 credentials → JumpCloud sign-in, with Claude reached through Workload Identity Federation

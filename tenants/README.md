@@ -14,9 +14,12 @@ A tenant folder contains:
   menu shortcut. A square PNG, at least 256×256. Without it, `logo.png` is used.
 - `logo.png` or `logo.svg`: The logo. `logo.png` is also the tray icon, and the `.exe` icon when there's no `icon.png`. If both exist, `logo.png` is used. The character's vision habit shows the logo too, coming down a light to hover over her head.
 
-Available actions: `ask`, `apps`, `jira`, `servicedesk`, `screenshot`, `theme` (light or dark
-mode), `settings`, `size` (a menu to make the character smaller or bigger), `clones` (ten clones
-of her walking about the taskbar for thirty seconds), `close`.
+Available actions: `ask`, `apps`, `jira`, `servicedesk`, `screenshot`, `settings` (the settings
+menu, which also has light or dark mode and the character's size), `spells` (a menu of her
+spells: ten clones of her walking about the taskbar for thirty seconds, a starfall across the
+screen, a teleport along the taskbar, and an explosion after a long chant), `close` (she dissolves
+into white motes, then the app quits). Morse Micro's, from the bubble upward: `ask`, `jira`,
+`servicedesk`, `screenshot`, `settings`, `spells`, `close`.
 
 `servicedesk` needs `serviceDesk`: `{ "url": "https://…" }`, the company's IT service desk (Morse
 Micro's Jira Service Management help centre), opened in the browser. With `serviceDesk.requests`

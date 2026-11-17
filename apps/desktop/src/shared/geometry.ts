@@ -144,7 +144,7 @@ export function panelWindowSize(actionCount: number, scale: number = DEFAULT_SIZ
 /**
  * The biggest of CHARACTER_SIZES she can be on a work area: standing in it with room at the
  * sides, and with the panel (its chat card and every action, above her) fitting on the screen,
- * so the size menu can always be reached to make her smaller again.
+ * so Settings can always be reached to make her smaller again.
  */
 export function largestSize(workArea: Size, actionCount: number): number {
   const fitting = CHARACTER_SIZES.filter((scale) => {

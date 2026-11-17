@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { FIDGETS, type Pose } from '@shared/character'
+import { FIDGETS, SPELL_POSES, type Pose } from '@shared/character'
 import {
   framePaths,
   framesOf,
@@ -23,7 +23,7 @@ function pathsOf(frame: Frame): ReturnType<typeof framePaths> {
 }
 
 /** Every pose, for drawing ahead of time. */
-const ALL_POSES: Pose[] = ['idle', 'walk-left', 'walk-right', 'dragged', ...FIDGETS]
+const ALL_POSES: Pose[] = ['idle', 'walk-left', 'walk-right', 'dragged', ...FIDGETS, ...SPELL_POSES]
 
 /**
  * The character: pixel art (character/sprite.ts) drawn `box` DIPs wide and a little taller, for

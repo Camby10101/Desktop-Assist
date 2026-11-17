@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { FIDGET_MS, type Pose } from '@shared/character'
+import { FIDGET_MS, SPELL_POSE_MS, type Pose } from '@shared/character'
 import { UI, type CharacterSize, type Corner, type Point, type Rect } from '@shared/geometry'
 import type { Mode } from '@shared/types'
 import {
@@ -256,6 +256,72 @@ describe('on its own', () => {
     vi.advanceTimersByTime(FIDGET_MS.sit + 100)
     expect(controller.currentPose).toBe('dragged') // the fidget's end doesn't interrupt
     controller.endDrag()
+  })
+})
+
+describe('casting spells', () => {
+  it('plays a spell’s pose for its time, then stands idle and gets on with her day', () => {
+    controller.act('chant')
+    expect(controller.currentPose).toBe('chant')
+    vi.advanceTimersByTime(SPELL_POSE_MS.chant - 100)
+    expect(controller.currentPose).toBe('chant')
+    vi.advanceTimersByTime(200)
+    expect(controller.currentPose).toBe('idle')
+    // ...and wanders again later.
+    advanceUntil(() => controller.currentPose !== 'idle')
+  })
+
+  it('stops a spell when she’s clicked, and never finishes it', () => {
+    const then = vi.fn()
+    controller.act('vanish', then)
+    controller.clickBubble()
+    expect(controller.currentMode).toBe('expanded')
+    expect(controller.currentPose).toBe('idle')
+    vi.advanceTimersByTime(SPELL_POSE_MS.vanish + 100)
+    expect(then).not.toHaveBeenCalled()
+  })
+
+  it('only acts collapsed: casting closes the panel first', () => {
+    controller.expand()
+    controller.act('chant')
+    expect(controller.currentPose).toBe('idle')
+  })
+
+  it('teleports: vanishes, moves along the taskbar near her corner, appears, then stands', () => {
+    const before = bubble.bounds!
+    controller.teleport()
+    expect(controller.currentPose).toBe('vanish')
+    expect(bubble.bounds).toEqual(before) // not yet
+    vi.advanceTimersByTime(SPELL_POSE_MS.vanish + 10)
+    expect(controller.currentPose).toBe('appear')
+    const after = bubble.bounds!
+    expect(after.y).toBe(before.y) // still on the taskbar
+    expect(Math.abs(after.x - before.x)).toBeGreaterThanOrEqual(WANDER.minWalk)
+    // The panel would open from where she is now.
+    expect(panel.bounds).toEqual(panelWindowBounds(boxOf(after), 4, 'bottom-right'))
+    vi.advanceTimersByTime(SPELL_POSE_MS.appear + 10)
+    expect(controller.currentPose).toBe('idle')
+  })
+})
+
+describe('closing', () => {
+  it('vanishes, then quits, ignoring clicks and drags meanwhile', () => {
+    controller.expand()
+    const done = vi.fn()
+    controller.farewell(done)
+    expect(controller.currentMode).toBe('collapsed')
+    expect(controller.currentPose).toBe('vanish')
+    controller.clickBubble()
+    controller.startDrag()
+    expect(controller.currentMode).toBe('collapsed')
+    expect(controller.currentPose).toBe('vanish')
+    vi.advanceTimersByTime(SPELL_POSE_MS.vanish - 10)
+    expect(done).not.toHaveBeenCalled()
+    vi.advanceTimersByTime(20)
+    expect(done).toHaveBeenCalledOnce()
+    // She does nothing more on her own.
+    vi.advanceTimersByTime(60_000)
+    expect(controller.currentPose).toBe('vanish')
   })
 })
 

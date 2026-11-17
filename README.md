@@ -54,7 +54,8 @@ GitHub repository (`Camby10101/Desktop-Assist`) keep it too, since nobody using 
   magic circle, sits on the taskbar, twirls, has a little magic butterfly land on her finger, dozes
   off and wakes with a start, glances about, juggles three glowing orbs, blows magic bubbles
   through a wand ring, watches a will-o'-wisp go round her and waves it goodbye, sneezes a burst of
-  sparkles, or dances a little jig.
+  sparkles, or dances a little jig. When the app starts she forms out of white motes, and when it's
+  closed (Close, or Quit in the tray) she dissolves into them before it quits.
 - **Drag it anywhere**, even onto another monitor: it dangles from the pointer. Let go and it drops
   onto that screen's taskbar, and from then on lives near the nearer bottom corner, walking back
   if it was dropped far away (and shrinking if she's too big for that screen). The panel opens
@@ -88,20 +89,24 @@ GitHub repository (`Camby10101/Desktop-Assist`) keep it too, since nobody using 
     kind of request, attach a screenshot, include your PC's details; helpful IT articles show
     while you type) and opens it on the service desk portal for you to send. **My requests** shows
     your IT requests and tells you (with a Windows notification) when IT replies or changes one.
-  - **Light or dark mode** (sun or moon) switches Desktop Wizard's colours. It starts dark.
   - **Screenshot** saves the screen the bubble is on to `Pictures\Desktop Wizard`.
-  - **Settings**: Start with Windows, Send in Claude automatically, Open screenshots folder,
+  - **Settings**: **Light mode** (switches Desktop Wizard's colours; it starts dark), **Size**
+    (makes the character smaller or bigger, from half her usual size to six times it, or as big as
+    fits your screen; it's remembered), Start with Windows, Send in Claude automatically, Open
+    screenshots folder,
     Clear text box, **Check for updates** (downloads a newer release from GitHub, checks it's
     signed with the release key, and installs it; Desktop Wizard closes and starts again on the
     new version) and **Uninstall Desktop Wizard**. (With the
     built-in chat: Response style (Fast / Balanced / Thorough), New conversation, and who you're
     signed in as with **Log out**.)
-  - **Size** opens a menu to make the character smaller or bigger, from half her usual size to
-    six times it (or as big as fits your screen). It's remembered.
-  - **Clones** puts ten clones of her on the taskbar for thirty seconds, walking about (and now and
-    then waving). They're only
-    pictures: clicks go straight through them.
-  - **Close** quits the app.
+  - **Spells** (a wand) opens a menu of her spells; the panel closes and she casts the one you
+    pick. **Clones** puts ten of her on the taskbar for thirty seconds, walking about (and now and
+    then waving). **Starfall** sends shooting stars across the screen for ten seconds.
+    **Teleport**: she vanishes into white motes and pops up elsewhere along the taskbar.
+    **Explosion**: she chants for fifteen seconds under a rising pillar of magic circles, then it
+    goes off in the middle of the screen. They're only pictures: clicks go straight through them,
+    and clicking her stops a spell.
+  - **Close**: she dissolves into white motes, and the app quits.
 - **Attach screenshot** adds the newest screenshot to your next question; click it again to add
   the one before, and so on (it says when there are no more). **Report to IT** turns
   what you've typed (and the screenshot) into a new IT request.
@@ -182,9 +187,10 @@ apps/desktop/
                   the built-in chat (claude/) and its JumpCloud sign-in (auth/), draft,
                   screenshots, uninstall, IPC
   src/preload/    the typed `window.assist` bridge
-  src/renderer/   React views: the bubble, her clones, and the panel (actions, settings, chat,
-                  sign-in)
-  src/shared/     code both sides use: IPC contract, action registry, layout constants, types
+  src/renderer/   React views: the bubble, her clones, vision and spells' effects, and the panel
+                  (actions, settings, spells, chat, sign-in)
+  src/shared/     code both sides use: IPC contract, action registry, spells, layout constants,
+                  types
   tests/          unit tests
 tenants/          per-business branding, enabled actions, where chats happen, sign-in settings
 ```

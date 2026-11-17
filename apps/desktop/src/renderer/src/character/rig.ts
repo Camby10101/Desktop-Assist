@@ -52,7 +52,7 @@ const LIGHT: Point = { x: -1, y: -1 }
 
 export type View = 'front' | 'diagonal' | 'side'
 export type Face =
-  'neutral' | 'blink' | 'happy' | 'surprised' | 'yawn' | 'sip' | 'down' | 'awe' | 'up'
+  'neutral' | 'blink' | 'happy' | 'surprised' | 'yawn' | 'sip' | 'down' | 'awe' | 'up' | 'chant'
 
 /** Angles in radians from hanging straight down. */
 export interface Arm {
@@ -120,6 +120,11 @@ export interface Pose {
   burst?: number
   /** Her sparkle trail as she walks: how far through her stride she is (0 to 1; none if left out). */
   trail?: number
+  /**
+   * Dissolving into white motes, from 0 (all of her) to FADE.end (nothing left, the last motes
+   * gone): see FADE. Played backwards, she forms out of them.
+   */
+  fade?: number
 }
 
 const DOWN: Arm = { shoulder: 0.08, elbow: 0 }
@@ -199,6 +204,7 @@ const MOUTHS: Record<Face, readonly string[]> = {
   sip: ['m'],
   awe: ['mm', 'mm'],
   up: ['m..m', '.mm.'],
+  chant: ['mm', 'mm'],
 }
 
 /** A four-pointed sparkle, and a smaller one. */
@@ -230,6 +236,24 @@ const WISP = ['.GG.', 'GwwG', 'GwwG', '.GG.']
  * share of the way round spent on the high arc.
  */
 export const JUGGLE = { rounds: 4, high: 28, low: 5, arc: 0.62 }
+
+/**
+ * Dissolving (Pose.fade): each of her pixels turns white `glow` before `fade` reaches its own point
+ * between 0 and 1 (dissolveAt), then goes, and becomes a white mote that rises `rise` pixels as it
+ * fades, over `life` more, so at `end` the last are gone; only `share` of them make a mote, so
+ * it's a sprinkling, not a copy of her.
+ */
+export const FADE = { glow: 0.12, life: 0.45, rise: 12, share: 0.45, end: 1.45 }
+
+/** A pixel's own random number, 0 to 1, the same every frame (`salt` for a second, different one). */
+function hash(x: number, y: number, salt = 0): number {
+  let h = Math.imul(x + 1013 * salt, 374761393) ^ Math.imul(y + 7919, 668265263)
+  h = Math.imul(h ^ (h >>> 13), 1274126177)
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296
+}
+
+/** When a pixel dissolves (0 to 1): in a random order, the top of her a little sooner. */
+const dissolveAt = (x: number, y: number) => 0.8 * hash(x, y) + 0.2 * Math.max(0, y / GRID)
 
 /**
  * Her sparkle trail (Pose.trail): how many sparkles she leaves a stride; how far each drifts back
@@ -268,7 +292,7 @@ export function wispAt(t: number): { x: number; y: number; behind: boolean } | n
 
 /** Which eyes a face uses. */
 function eyesFor(face: Face): 'open' | 'blink' | 'happy' | 'down' | 'up' {
-  if (face === 'blink' || face === 'yawn') return 'blink'
+  if (face === 'blink' || face === 'yawn' || face === 'chant') return 'blink'
   if (face === 'happy' || face === 'sip') return 'happy'
   if (face === 'down') return 'down'
   if (face === 'awe' || face === 'up') return 'up'
@@ -1208,6 +1232,34 @@ export function draw(pose: Pose): string[] {
   }
 
   castShadows(canvas)
+
+  // Dissolving: her pixels go one by one (dissolveAt), each turning white just before (so a white
+  // shimmer runs over her as she goes), and each that has a mote leaving it as a white speck that
+  // rises, sways and fades to silver, drawn only where nothing of her is left. Played backwards
+  // (fade going down), the motes come down into place and she forms out of them.
+  const fade = pose.fade ?? 0
+  if (fade > 0) {
+    const her = canvas.rows()
+    const each = (visit: (x: number, y: number, gone: number) => void) =>
+      her.forEach((row, r) =>
+        [...row].forEach((letter, x) => {
+          const y = r - canvas.top
+          if (letter !== '.') visit(x, y, fade - dissolveAt(x, y))
+        }),
+      )
+    each((x, y, gone) => {
+      if (gone >= 0) canvas.set(x, y, '.')
+      else if (gone > -FADE.glow) canvas.set(x, y, 'w')
+    })
+    each((x, y, gone) => {
+      if (gone < 0 || gone >= FADE.life || hash(x, y, 1) > FADE.share) return
+      const mote = {
+        x: x + 0.5 + Math.sin(x * 1.3 + y * 0.7) * gone * 10,
+        y: y + 0.5 - (gone / FADE.life) * FADE.rise,
+      }
+      set(mote, gone < FADE.life * 0.5 ? 'w' : 'f', '.')
+    })
+  }
   return canvas.rows()
 }
 

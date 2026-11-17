@@ -1,4 +1,5 @@
-import { useRef, type PointerEvent } from 'react'
+import { useEffect, useRef, useState, type PointerEvent } from 'react'
+import { SPELL_POSE_MS } from '@shared/character'
 import { bubbleMetrics, DEFAULT_SIZE, isLeftCorner } from '@shared/geometry'
 import type { Mode } from '@shared/types'
 import { Character } from '../components/Character'
@@ -14,6 +15,9 @@ const ACTION_LABEL: Record<Mode, string> = {
 
 /** Moving the pointer further than this while pressed turns a click into a drag. */
 const DRAG_THRESHOLD = 5
+
+/** How long she waits for word that her window is showing before she's just there (ms). */
+const ARRIVAL_WAIT_MS = 4000
 
 /**
  * The always-on-top character (the "bubble"), filling its small window. A click goes to the main
@@ -31,6 +35,24 @@ export function BubbleView() {
   // away from her corner.
   const { box, headroom } = bubbleMetrics(state?.size.scale ?? DEFAULT_SIZE)
   const corner = state?.corner ?? 'bottom-right'
+
+  // As the app starts, she forms out of white motes (her `appear` pose) before doing as she's told.
+  // Her window is shown a little after this page is ready (once the panel's is too), so she waits
+  // for word that it's showing, and until then isn't drawn at all, so she never flashes up whole
+  // first. Without the word (the page reloaded, say), she's just there after a few seconds.
+  const [arrival, setArrival] = useState<'waiting' | 'arriving' | 'here'>('waiting')
+  useEffect(() => {
+    let timer = setTimeout(() => setArrival('here'), ARRIVAL_WAIT_MS)
+    const stop = window.assist.onArrive(() => {
+      clearTimeout(timer)
+      setArrival('arriving')
+      timer = setTimeout(() => setArrival('here'), SPELL_POSE_MS.appear)
+    })
+    return () => {
+      stop()
+      clearTimeout(timer)
+    }
+  }, [])
 
   const press = useRef<{ x: number; y: number; dragging: boolean } | null>(null)
   // When the button last went down: the main process uses it to tell whether this press is what
@@ -86,12 +108,14 @@ export function BubbleView() {
       // keyboard focus and draw the accent-coloured ring round her window.
       className="block cursor-grab outline-none focus-visible:outline-none active:cursor-grabbing"
     >
-      <Character
-        pose={state?.pose ?? 'idle'}
-        facing={isLeftCorner(corner) ? 'right' : 'left'}
-        box={box}
-        expanded={mode === 'expanded'}
-      />
+      {arrival !== 'waiting' && (
+        <Character
+          pose={arrival === 'arriving' ? 'appear' : (state?.pose ?? 'idle')}
+          facing={isLeftCorner(corner) ? 'right' : 'left'}
+          box={box}
+          expanded={mode === 'expanded'}
+        />
+      )}
     </button>
   )
 }

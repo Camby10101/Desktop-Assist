@@ -3,17 +3,7 @@
   "companyName": "Morse Micro",
   "appName": "Desktop Wizard",
   "accentColor": "#9333EA",
-  "actions": [
-    "ask",
-    "jira",
-    "servicedesk",
-    "screenshot",
-    "theme",
-    "settings",
-    "size",
-    "clones",
-    "close"
-  ],
+  "actions": ["ask", "jira", "servicedesk", "screenshot", "settings", "spells", "close"],
   "chatApp": "claude-desktop",
   "startPage": "apps",
   "serviceDesk": {

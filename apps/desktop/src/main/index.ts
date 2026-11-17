@@ -19,6 +19,7 @@ import { hostname, release, version as osVersion } from 'node:os'
 import { join } from 'node:path'
 import { bubbleMetrics, panelWindowSize, type Rect } from '@shared/geometry'
 import { IPC } from '@shared/ipc'
+import type { Spell } from '@shared/spells'
 import type { AppsState, AtlassianState, AuthStatus } from '@shared/types'
 import tenantConfig from '@tenant/tenant.json'
 import { createActionHandlers } from './actions'
@@ -31,6 +32,7 @@ import { listenForRedirect } from './auth/loopback'
 import { createOidc } from './auth/oidc'
 import { BubbleController, type DisplayArea, type Displays } from './bubble/BubbleController'
 import { Clones } from './bubble/clones'
+import { SpellEffects } from './bubble/spellEffects'
 import { Vision } from './bubble/vision'
 import { runFrontCheck, watchBubbleFront } from './bubble/frontCheck'
 import {
@@ -142,11 +144,12 @@ async function start(): Promise<void> {
   }
 
   /**
-   * A window that only shows something over the screen (her clones, or her vision's light and
-   * logo): it shows once its page is drawn, behind her own window, which is put back in front.
+   * A window that only shows something over the screen (her clones, her vision's light and logo,
+   * or a spell's effects): it shows once its page is drawn, behind her own window, which is put
+   * back in front.
    */
   const openOverlay =
-    (view: 'clones' | 'vision') => (bounds: Rect, query: Record<string, string>) => {
+    (view: 'clones' | 'vision' | 'spell') => (bounds: Rect, query: Record<string, string>) => {
       const win = createOverlayWindow(view, { width: bounds.width, height: bounds.height }, query)
       win.setBounds(bounds)
       win.once('ready-to-show', () => {
@@ -157,6 +160,8 @@ async function start(): Promise<void> {
     }
   // Her vision's light and logo, over her for as long as she's having it.
   const vision = new Vision({ open: openOverlay('vision') })
+  // Her spells' effects (starfall; the explosion's pillar of magic circles, and the bang).
+  const effects = new SpellEffects({ accentColor: tenant.accentColor, open: openOverlay('spell') })
 
   const bubble = new BubbleController({
     bubble: bubbleSurface(bubbleWindow),
@@ -171,6 +176,10 @@ async function start(): Promise<void> {
       broadcast(IPC.poseChanged, pose)
       if (pose === 'vision') vision.start(bubble.standing)
       else vision.stop()
+      // The explosion is her chant: it starts with it, and it's called off if she stops chanting
+      // before it's done (someone clicked her, or picked her up).
+      if (pose === 'chant') effects.start('explosion', bubble.standing)
+      else if (effects.chanting) effects.stop()
     },
     onSizeChange: (size) => broadcast(IPC.sizeChanged, size),
     onAnchorChange: (anchor) => {
@@ -183,6 +192,28 @@ async function start(): Promise<void> {
 
   // Her clones: a window along the taskbar.
   const clones = new Clones({ accentColor: tenant.accentColor, open: openOverlay('clones') })
+
+  /** The Spells menu: the panel closes, so the spell can be seen, and she casts it. */
+  const castSpell = (spell: Spell) => {
+    bubble.collapse()
+    switch (spell) {
+      case 'clones':
+        clones.start(bubble.standing)
+        bubble.act('spell')
+        return
+      case 'starfall':
+        effects.start('starfall', bubble.standing)
+        bubble.act('spell')
+        return
+      case 'teleport':
+        bubble.teleport()
+        return
+      case 'explosion':
+        // Her chant brings the effects (onPoseChange, above).
+        bubble.act('chant')
+        return
+    }
+  }
 
   const screenshots = new ScreenshotService(screenshotsDir, () =>
     screen.getDisplayMatching(bubbleWindow.getBounds()),
@@ -382,11 +413,11 @@ async function start(): Promise<void> {
     updater,
     actions: createActionHandlers({
       controller: bubble,
-      clones,
       screenshots,
       openServiceDesk: serviceDesk ? () => shell.openExternal(serviceDesk.url) : null,
       quit: () => app.quit(),
     }),
+    castSpell,
     uninstall: () =>
       uninstall({
         isPackaged: app.isPackaged,
@@ -416,7 +447,8 @@ async function start(): Promise<void> {
     appName: tenant.appName,
     accentColor: tenant.accentColor,
     onOpen: () => bubble.expand(),
-    onQuit: () => app.quit(),
+    // As the Close icon does: she vanishes, then the app quits.
+    onQuit: () => bubble.farewell(() => app.quit()),
   })
 
   const onDisplayChange = () => bubble.displayChanged()
@@ -433,6 +465,7 @@ async function start(): Promise<void> {
     bubble.dispose()
     clones.stop()
     vision.stop()
+    effects.stop()
     for (const stop of stopKeepingOnTop) stop()
     builtIn?.chat.stop()
     void portalApps?.dispose()
@@ -446,6 +479,8 @@ async function start(): Promise<void> {
 
   await windowsReady
   bubble.start()
+  // Her window is showing now: she forms out of white motes (BubbleView).
+  bubbleWindow.webContents.send(IPC.bubbleArrive)
   // For its first ten minutes, make sure the bubble isn't stuck behind other apps' windows.
   const stopWatchingFront = watchBubbleFront({
     isResting: () => bubble.currentMode === 'collapsed',

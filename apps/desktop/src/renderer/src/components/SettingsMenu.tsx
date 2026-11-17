@@ -10,11 +10,12 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { UI, type Corner, type PanelLayout } from '@shared/geometry'
+import { UI, type CharacterSize, type Corner, type PanelLayout } from '@shared/geometry'
 import type { Branding, Effort, Settings, SignedInUser, UpdateState } from '@shared/types'
 import { useFitInWindow } from '../hooks/useFitInWindow'
 import { anchored } from '../lib/anchor'
 import { cn } from '../lib/cn'
+import { SizeControl } from './SizeControl'
 
 const CONFIRM_MS = 3000
 
@@ -32,6 +33,8 @@ export function SettingsMenu(props: {
   /** Distance from the bubble's edge of the window to the gear, so the menu lines up with it. */
   offset: number
   settings: Settings
+  /** Her size, and the biggest she can be. */
+  size: CharacterSize
   branding: Branding
   version: string
   /** Who's signed in, or null when nobody is. */
@@ -42,6 +45,8 @@ export function SettingsMenu(props: {
   /** Check for updates, as it stands. */
   update: UpdateState
   onCheckForUpdates: () => void
+  onToggleTheme: () => void
+  onSetSize: (scale: number) => void
   onToggleAutoStart: () => void
   onSetEffort: (effort: Effort) => void
   onToggleAutoSend: () => void
@@ -91,6 +96,26 @@ export function SettingsMenu(props: {
         overflowY: 'auto',
       }}
     >
+      <button
+        type="button"
+        role="menuitemcheckbox"
+        aria-checked={settings.theme === 'light'}
+        onClick={props.onToggleTheme}
+        className="flex w-full items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800"
+      >
+        <span>
+          Light mode
+          <span className="block text-[11px] text-zinc-500">
+            {settings.theme === 'light' ? 'Light windows' : 'Dark windows'}
+          </span>
+        </span>
+        <Switch on={settings.theme === 'light'} />
+      </button>
+
+      <SizeControl size={props.size} onSetSize={props.onSetSize} />
+
+      <div className="my-1 border-t border-black/10 dark:border-white/10" />
+
       <button
         type="button"
         role="menuitemcheckbox"

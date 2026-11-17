@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { FIDGET_MS, FIDGETS, type Pose as PoseName } from '@shared/character'
+import {
+  FIDGET_MS,
+  FIDGETS,
+  SPELL_POSE_MS,
+  SPELL_POSES,
+  type Pose as PoseName,
+} from '@shared/character'
 import { Canvas, Layer, limb, rotate } from '../src/renderer/src/character/raster'
 import { draw, GRID, HEADROOM, type Pose } from '../src/renderer/src/character/rig'
 import {
@@ -13,7 +19,7 @@ import {
   mirror,
 } from '../src/renderer/src/character/sprite'
 
-const POSES: PoseName[] = ['idle', 'walk-left', 'walk-right', 'dragged', ...FIDGETS]
+const POSES: PoseName[] = ['idle', 'walk-left', 'walk-right', 'dragged', ...FIDGETS, ...SPELL_POSES]
 const DOWN_ARM = { shoulder: 0.08, elbow: 0 }
 /** Her shoes and their outline: what's on the ground when she stands on it. */
 const FEET = /[bBy]/
@@ -79,6 +85,31 @@ describe('the animations', { timeout: 30_000 }, () => {
     expect(lowRows(frames[0]!.rows)).toMatch(FEET)
     expect(lowRows(frames.at(-1)!.rows)).toMatch(FEET)
     expect(lowRows(frames.at(-1)!.rows)).not.toContain('G')
+  })
+
+  it('play her spells’ poses as long as the main process waits; the chant goes round', () => {
+    for (const pose of ['vanish', 'appear'] as const) {
+      expect(animationLength(pose)).toBe(SPELL_POSE_MS[pose])
+      expect(LOOPS[pose]).toBe(false)
+    }
+    expect(LOOPS.chant).toBe(true)
+  })
+
+  it('dissolve her into white motes as she vanishes, and form her out of them as she appears', () => {
+    const empty = (rows: string[]) => rows.every((row) => /^\.+$/.test(row))
+    const vanish = framesOf('vanish', 'right')
+    const appear = framesOf('appear', 'right')
+    // Vanishing: all of her at first, nothing at the end, white motes on the way.
+    expect(empty(vanish[0]!.rows)).toBe(false)
+    expect(empty(vanish.at(-1)!.rows)).toBe(true)
+    const middle = vanish[Math.floor(vanish.length / 2)]!.rows.join('')
+    expect(middle).toMatch(/w/)
+    expect(middle.replace(/[^.]/g, '').length).toBeGreaterThan(
+      vanish[0]!.rows.join('').replace(/[^.]/g, '').length,
+    )
+    // Appearing: nothing at first, all of her (standing as usual) at the end.
+    expect(empty(appear[0]!.rows)).toBe(true)
+    expect(appear.at(-1)!.rows).toEqual(draw({ view: 'front', face: 'neutral', fade: 0 }))
   })
 
   it('play each fidget for exactly as long as the main process waits', () => {

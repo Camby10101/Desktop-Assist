@@ -20,7 +20,7 @@ export interface ClonesDeps {
 }
 
 /**
- * Her clones (the Clones action): CLONES.count of her, for CLONES.durationMs, walking about the
+ * Her clones (the Clones spell): CLONES.count of her, for CLONES.durationMs, walking about the
  * taskbar of her display at her size and stopping now and then (the page in the window decides
  * where; see ClonesView). They're all in one window along the bottom of the screen, which never
  * takes the mouse or the focus: they have no panel, and clicks go to whatever is under them. The

@@ -40,7 +40,7 @@ tests can drive them with fakes. `index.ts` is the only file that knows about al
 
 <!-- code: apps/desktop/src/main/index.ts#SHUTDOWN_TIMEOUT_MS,controller,tray,refusedSwitches -->
 
-[`src/main/index.ts`, lines 73–96](../../apps/desktop/src/main/index.ts#L73-L96)
+[`src/main/index.ts`, lines 75–98](../../apps/desktop/src/main/index.ts#L75-L98)
 
 ```ts
 const SHUTDOWN_TIMEOUT_MS = 2000
@@ -124,7 +124,7 @@ backend, the conversation and the JumpCloud sign-in) are in a separate function,
 
 <!-- code: apps/desktop/src/main/index.ts#start.tenant -->
 
-[`src/main/index.ts`, line 113](../../apps/desktop/src/main/index.ts#L113)
+[`src/main/index.ts`, line 115](../../apps/desktop/src/main/index.ts#L115)
 
 ```ts
 const tenant = await withDevOverrides(TenantSchema.parse(tenantConfig))
@@ -153,7 +153,7 @@ const tenant = await withDevOverrides(TenantSchema.parse(tenantConfig))
 
 <!-- code: apps/desktop/src/main/index.ts#start.userData,screenshotsDir,actionCount,log,notes,settings -->
 
-[`src/main/index.ts`, lines 117–128](../../apps/desktop/src/main/index.ts#L117-L128)
+[`src/main/index.ts`, lines 119–130](../../apps/desktop/src/main/index.ts#L119-L130)
 
 ```ts
 const userData = app.getPath('userData')
@@ -193,7 +193,7 @@ const settings = new SettingsService(join(userData, 'preferences.json'), screens
 
 <!-- code: apps/desktop/src/main/index.ts#start.bubbleWindow,panelWindow,windows,stopKeepingOnTop,windowsReady,broadcast -->
 
-[`src/main/index.ts`, lines 134–142](../../apps/desktop/src/main/index.ts#L134-L142)
+[`src/main/index.ts`, lines 136–144](../../apps/desktop/src/main/index.ts#L136-L144)
 
 ```ts
 const bubbleWindow = createOverlayWindow('bubble', { width: box, height: box + headroom })
@@ -232,8 +232,9 @@ included. By the time a page's request is handled, its handler has been register
   and 104 tall: her box and its padding, and 8 DIPs above them for her hat when she rises off the
   taskbar.
 - `const windows = [bubbleWindow, panelWindow]`: these two are the app's lasting windows. The
-  clones' and the vision's windows (see [Overlays that come and go](#overlays-that-come-and-go)
-  below) come and go, and aren't among them.
+  clones', the vision's and the spells' windows (see
+  [Overlays that come and go](#overlays-that-come-and-go) below) come and go, and aren't among
+  them.
 - `windows.map(keepOnTop)`: each window checks every few seconds that it's still on top of other
   apps' windows, and puts itself back if not (`bubble/windows.ts`). The functions that stop the
   checks are kept for quitting.
@@ -248,17 +249,18 @@ included. By the time a page's request is handled, its handler has been register
 
 #### Overlays that come and go
 
-<!-- code: apps/desktop/src/main/index.ts#start.openOverlay,vision -->
+<!-- code: apps/desktop/src/main/index.ts#start.openOverlay,vision,effects -->
 
-[`src/main/index.ts`, lines 144–159](../../apps/desktop/src/main/index.ts#L144-L159)
+[`src/main/index.ts`, lines 146–164](../../apps/desktop/src/main/index.ts#L146-L164)
 
 ```ts
 /**
- * A window that only shows something over the screen (her clones, or her vision's light and
- * logo): it shows once its page is drawn, behind her own window, which is put back in front.
+ * A window that only shows something over the screen (her clones, her vision's light and logo,
+ * or a spell's effects): it shows once its page is drawn, behind her own window, which is put
+ * back in front.
  */
 const openOverlay =
-  (view: 'clones' | 'vision') => (bounds: Rect, query: Record<string, string>) => {
+  (view: 'clones' | 'vision' | 'spell') => (bounds: Rect, query: Record<string, string>) => {
     const win = createOverlayWindow(view, { width: bounds.width, height: bounds.height }, query)
     win.setBounds(bounds)
     win.once('ready-to-show', () => {
@@ -270,28 +272,32 @@ const openOverlay =
 
 // Her vision's light and logo, over her for as long as she's having it.
 const vision = new Vision({ open: openOverlay('vision') })
+
+// Her spells' effects (starfall; the explosion's pillar of magic circles, and the bang).
+const effects = new SpellEffects({ accentColor: tenant.accentColor, open: openOverlay('spell') })
 ```
 
 <!-- /code -->
 
-Besides the bubble and the panel, two kinds of window appear for a while and close again: her
-clones' (the Clones action) and her vision's (the light and the logo of her `vision` habit). Both
-only show something: they never take the mouse or the focus. `Clones` and `Vision` (in
-`bubble/clones.ts` and `bubble/vision.ts`, see [The bubble](5-bubble.md)) decide when they open,
-where, and what their pages are told; like the controller, they never touch Electron, and ask for
-a window through an `open` function. `openOverlay` makes that function, the same for both. As its
-comment says, the window shows once its page is drawn, behind her own window, which is put back in
-front.
+Besides the bubble and the panel, three kinds of window appear for a while and close again: her
+clones' (her Clones spell), her vision's (the light and the logo of her `vision` habit) and her
+spells' effects (starfall, and the explosion's pillar of magic circles and its bang). All three
+only show something: they never take the mouse or the focus. `Clones`, `Vision` and `SpellEffects`
+(in `bubble/clones.ts`, `bubble/vision.ts` and `bubble/spellEffects.ts`, see
+[The bubble](5-bubble.md)) decide when they open, where, and what their pages are told; like the
+controller, they never touch Electron, and ask for a window through an `open` function.
+`openOverlay` makes that function, the same for all three. As its comment says, the window shows
+once its page is drawn, behind her own window, which is put back in front.
 
-- `(view: 'clones' | 'vision') => (bounds: Rect, query: Record<string, string>) => {`: a function
-  that returns a function. `openOverlay('clones')` is the `open` that `Clones` is given: called
-  with where the window goes and what its page needs to know (in its query string), it makes the
-  window and returns something that can close it.
+- `(view: 'clones' | 'vision' | 'spell') => (bounds: Rect, query: Record<string, string>) => {`: a
+  function that returns a function. `openOverlay('clones')` is the `open` that `Clones` is given:
+  called with where the window goes and what its page needs to know (in its query string), it makes
+  the window and returns something that can close it.
 - `createOverlayWindow(view, { width: bounds.width, height: bounds.height }, query)`: a hidden,
   frameless, transparent, always-on-top window like the other two, loading the same page with
-  `?view=clones` or `?view=vision` and `query` added to the address (`bubble/windows.ts`). These two
-  can't take the keyboard focus, and the mouse goes straight through them to whatever is
-  underneath, so they never get in the way.
+  `?view=clones`, `?view=vision` or `?view=spell` and `query` added to the address
+  (`bubble/windows.ts`). These can't take the keyboard focus, and the mouse goes straight through
+  them to whatever is underneath, so they never get in the way.
 - `win.setBounds(bounds)`: puts the window exactly where it was asked for, in DIPs, as the
   controller does for the other two.
 - `win.once('ready-to-show', () => {`: once its page has painted for the first time, so it never
@@ -300,22 +306,28 @@ front.
 - `bringToFront(bubbleWindow, false)`: the new window was shown last, so it would be in front of
   her; this puts her own window back on top of it (`bubble/windows.ts`). `false` means without
   hiding and showing it again. For the vision that matters: the light falls behind her, and the
-  logo hovers over her head.
-- `return { close: () => !win.isDestroyed() && win.destroy() }`: `Clones` or `Vision` closes the
-  window when its time is up (or sooner). `destroy()` closes it straight away; `isDestroyed()`
-  skips one that has already gone (while quitting, say).
+  logo hovers over her head. So it does for the explosion's column of light, which rises from
+  behind her.
+- `return { close: () => !win.isDestroyed() && win.destroy() }`: `Clones`, `Vision` or
+  `SpellEffects` closes the window when its time is up (or sooner). `destroy()` closes it straight
+  away; `isDestroyed()` skips one that has already gone (while quitting, say).
 - `const vision = new Vision({ open: openOverlay('vision') })`: as the comment says, her vision's
   light and logo, over her for as long as she's having it. It's made before the controller,
   because the controller's `onPoseChange` (below) starts and stops it.
+- `const effects = new SpellEffects({ accentColor: tenant.accentColor, open: openOverlay('spell') })`:
+  as the comment says, her spells' effects. The accent colour goes on to the page for the magic
+  circles. It's made before the controller too, as `onPoseChange` starts the explosion's effects
+  when she begins her chant, and `castSpell` (below) starts starfall's.
 
-Neither window is in `windows`, so they get no `keepOnTop()` check and no broadcasts: they only
-last a few seconds (the clones thirty), and everything their pages need comes in their addresses.
+None of these windows is in `windows`, so they get no `keepOnTop()` check and no broadcasts: they
+only last a few seconds (the clones thirty, the explosion under twenty), and everything their pages
+need comes in their addresses.
 
 #### The bubble controller
 
 <!-- code: apps/desktop/src/main/index.ts#start.bubble -->
 
-[`src/main/index.ts`, lines 161–180](../../apps/desktop/src/main/index.ts#L161-L180)
+[`src/main/index.ts`, lines 166–189](../../apps/desktop/src/main/index.ts#L166-L189)
 
 ```ts
 const bubble = new BubbleController({
@@ -331,6 +343,10 @@ const bubble = new BubbleController({
     broadcast(IPC.poseChanged, pose)
     if (pose === 'vision') vision.start(bubble.standing)
     else vision.stop()
+    // The explosion is her chant: it starts with it, and it's called off if she stops chanting
+    // before it's done (someone clicked her, or picked her up).
+    if (pose === 'chant') effects.start('explosion', bubble.standing)
+    else if (effects.chanting) effects.stop()
   },
   onSizeChange: (size) => broadcast(IPC.sizeChanged, size),
   onAnchorChange: (anchor) => {
@@ -354,8 +370,8 @@ here.
   this file ([`electronDisplays`](#toarea-and-electrondisplays)).
 - `initialAnchor: settings.bubbleAnchor`: the corner and display the character was dragged to last
   time, or `null` the first time.
-- `initialScale: settings.characterScale`: the size the user last chose for her in the size menu,
-  or `null` if it's never been changed (her usual size then). The controller snaps it to one of
+- `initialScale: settings.characterScale`: the size the user last chose for her under Size in the
+  settings menu, or `null` if it's never been changed (her usual size then). The controller snaps it to one of
   `CHARACTER_SIZES` and keeps it to what fits her display.
 - `onModeChange`: every mode change (collapsed, expanded, dragging and so on) is broadcast, so the
   pages can animate to match.
@@ -366,10 +382,18 @@ here.
   nothing if they aren't there). So the vision ends when the habit does, or as soon as anything
   interrupts it, such as a click or a drag. `bubble` can be used inside its own options because
   the callback only runs later, once the controller exists.
+- `if (pose === 'chant') effects.start('explosion', bubble.standing)`: as the comment says, the
+  explosion is her chant. When she starts chanting (cast from the Spells menu, below), its window
+  opens over her display, with the pillar of magic circles rising above her for the chant and the
+  bang after it.
+- `else if (effects.chanting) effects.stop()`: and it's called off if she stops chanting before
+  it's done, because someone clicked her or picked her up. `effects.chanting` is true only while
+  the explosion's window is open and its chant isn't over, so when the chant ends as it should (her
+  pose goes back to `idle`), the bang still goes off; a starfall in progress is left alone too.
 - `onSizeChange: (size) => broadcast(IPC.sizeChanged, size)`: her size (a `CharacterSize`: how big
   she is, and the biggest she can be on her display) is broadcast whenever either changes, so the
   bubble's page draws her at that size and the panel lays itself out for it. Saving the size is
-  left to the IPC handler for the size menu (see [`registerIpc()`](#registeripc)), so a size she's
+  left to the IPC handler for the size buttons (see [`registerIpc()`](#registeripc)), so a size she's
   shrunk to only because a screen is small is never saved.
 - `onDiagnostic: (message) => log(message)`: the controller notes bubble clicks it ignored, and a
   blur it ignored just after opening, in the problem log (see [The bubble](5-bubble.md)).
@@ -383,22 +407,45 @@ here.
   keyboard focus, for example when the user clicks another app. The controller then closes the
   panel (unless it has only just opened).
 
-#### Her clones
+#### Her clones, and casting spells
 
-<!-- code: apps/desktop/src/main/index.ts#start.clones -->
+<!-- code: apps/desktop/src/main/index.ts#start.clones,castSpell -->
 
-[`src/main/index.ts`, lines 184–185](../../apps/desktop/src/main/index.ts#L184-L185)
+[`src/main/index.ts`, lines 193–216](../../apps/desktop/src/main/index.ts#L193-L216)
 
 ```ts
 // Her clones: a window along the taskbar.
 const clones = new Clones({ accentColor: tenant.accentColor, open: openOverlay('clones') })
+
+/** The Spells menu: the panel closes, so the spell can be seen, and she casts it. */
+const castSpell = (spell: Spell) => {
+  bubble.collapse()
+  switch (spell) {
+    case 'clones':
+      clones.start(bubble.standing)
+      bubble.act('spell')
+      return
+    case 'starfall':
+      effects.start('starfall', bubble.standing)
+      bubble.act('spell')
+      return
+    case 'teleport':
+      bubble.teleport()
+      return
+    case 'explosion':
+      // Her chant brings the effects (onPoseChange, above).
+      bubble.act('chant')
+      return
+  }
+}
 ```
 
 <!-- /code -->
 
-`Clones` (in `bubble/clones.ts`, see [The bubble](5-bubble.md)) runs the Clones action: ten copies
+`Clones` (in `bubble/clones.ts`, see [The bubble](5-bubble.md)) runs her Clones spell: ten copies
 of the character walking about the taskbar for thirty seconds, all drawn by one page in one window
-of their own, a strip along the taskbar.
+of their own, a strip along the taskbar. Then `castSpell` casts whichever spell the user picks in
+the Spells menu.
 
 - `accentColor: tenant.accentColor`: the tenant's colour, which `Clones` passes on to the page for
   the clones' robes and hats.
@@ -406,12 +453,30 @@ of their own, a strip along the taskbar.
   [Overlays that come and go](#overlays-that-come-and-go) above). `Clones` calls it with the strip
   along the bottom of her display's work area, as tall as her window, and what its page needs to
   know (where she stands, her size, the colour and when the clones' time ends).
+- `const castSpell = (spell: Spell) => {`: as its comment says, the Spells menu. The page asks for
+  a spell (`window.assist.character.castSpell()`), and `registerIpc()` checks it's one of `SPELLS`
+  before calling this.
+- `bubble.collapse()`: first the panel closes, so the spell can be seen. The mode is `collapsed`
+  straight away (the panel only fades out), which matters because the controller plays her poses
+  on purpose only while collapsed (`BubbleController.act()`).
+- `case 'clones':`: the clones set off from where she stands, at her size (`bubble.standing` is her
+  display's work area, her window and her size), and she does her little `spell` fidget as she
+  casts them (`bubble.act('spell')`). Afterwards she stands idle and gets on with her day.
+- `case 'starfall':`: the same, but with the starfall's window over her display
+  (`effects.start('starfall', bubble.standing)`): shooting stars for ten seconds.
+- `case 'teleport':`: `bubble.teleport()` does it all in her own window: she vanishes into white
+  motes, moves a little way along the taskbar near her corner, and forms out of them again.
+- `case 'explosion':`: as the comment says, she only starts her chant (`bubble.act('chant')`); the
+  effects follow from her pose, in `onPoseChange` above. That way they're tied to the chant: if
+  someone clicks her or picks her up before it's done, the chant stops and so does the explosion.
+- `return` after each `case`: ends the function there, rather than running on into the next
+  `case`.
 
 #### Screenshots, notifications and the clipboard
 
 <!-- code: apps/desktop/src/main/index.ts#start.screenshots,notify,copyScreenshots -->
 
-[`src/main/index.ts`, lines 187–208](../../apps/desktop/src/main/index.ts#L187-L208)
+[`src/main/index.ts`, lines 218–239](../../apps/desktop/src/main/index.ts#L218-L239)
 
 ```ts
 const screenshots = new ScreenshotService(screenshotsDir, () =>
@@ -469,7 +534,7 @@ const copyScreenshots = async (paths: string[]) => {
 
 <!-- code: apps/desktop/src/main/index.ts#start.builtIn,claudeDesktop -->
 
-[`src/main/index.ts`, lines 211–240](../../apps/desktop/src/main/index.ts#L211-L240)
+[`src/main/index.ts`, lines 242–271](../../apps/desktop/src/main/index.ts#L242-L271)
 
 ```ts
 const builtIn =
@@ -548,7 +613,7 @@ exists.
 
 <!-- code: apps/desktop/src/main/index.ts#start.netFetch,updater -->
 
-[`src/main/index.ts`, lines 241–271](../../apps/desktop/src/main/index.ts#L241-L271)
+[`src/main/index.ts`, lines 272–302](../../apps/desktop/src/main/index.ts#L272-L302)
 
 ```ts
 // Electron's fetch, so a proxy set in Windows is used.
@@ -627,7 +692,7 @@ const updater = updates
 
 <!-- code: apps/desktop/src/main/index.ts#start.appsStatus,portalApps -->
 
-[`src/main/index.ts`, lines 273–295](../../apps/desktop/src/main/index.ts#L273-L295)
+[`src/main/index.ts`, lines 304–326](../../apps/desktop/src/main/index.ts#L304-L326)
 
 ```ts
 let appsStatus: AppsState['status'] = 'loading'
@@ -692,7 +757,7 @@ icon (see [Your apps](10-apps.md)). It's only set up when the tenant has a `port
 
 <!-- code: apps/desktop/src/main/index.ts#start.requests,memoryPath,atlassianStatus,atlassian,desk -->
 
-[`src/main/index.ts`, lines 300–362](../../apps/desktop/src/main/index.ts#L300-L362)
+[`src/main/index.ts`, lines 331–393](../../apps/desktop/src/main/index.ts#L331-L393)
 
 ```ts
 const requests = serviceDesk?.requests
@@ -816,7 +881,7 @@ Two statements follow:
 
 <!-- code: apps/desktop/src/main/index.ts#start.onDisplayChange -->
 
-[`src/main/index.ts`, line 422](../../apps/desktop/src/main/index.ts#L422)
+[`src/main/index.ts`, line 454](../../apps/desktop/src/main/index.ts#L454)
 
 ```ts
 const onDisplayChange = () => bubble.displayChanged()
@@ -846,11 +911,13 @@ Everything else in this part of `start()` is plain statements:
   `spawn(path, [], { detached: true, stdio: 'ignore' }).unref()`. `detached` runs it as a process
   of its own, `stdio: 'ignore'` connects nothing to it, and `unref()` tells Node not to wait for
   it, so it carries on after Desktop Wizard has quit.
-- `actions: createActionHandlers({`: the commands behind the service desk, Screenshot, Clones
-  and Close icons (`actions.ts`). It's given the controller, and `clones`, the `Clones` made above
-  (see [Her clones](#her-clones)).
+- `actions: createActionHandlers({`: the commands behind the service desk, Screenshot and Close
+  icons (`actions.ts`). It's given the controller, which Screenshot hides the windows with and
+  Close says goodbye with.
 - `openServiceDesk: serviceDesk ? () => shell.openExternal(serviceDesk.url) : null`: opens the
   service desk's address from `tenant.json` in the browser, or `null` when the tenant has none.
+- `castSpell`: the Spells menu's spells (see
+  [Her clones, and casting spells](#her-clones-and-casting-spells)).
 - `getState: () => ({`: builds the snapshot a page asks for when it first loads: the bubble's mode
   and corner, the character's pose (`bubble.currentPose`) and size (`bubble.size`), the draft, the
   settings, the branding,
@@ -860,8 +927,11 @@ Everything else in this part of `start()` is plain statements:
   `builtIn` isn't `null` (otherwise the whole expression is `undefined`), and `??` gives the value
   to use instead. So with Claude Desktop there's no sign-in status (`null`) and the chat is always
   empty: the panel shows just the text box.
-- `tray = createTray({`: adds the icon in the notification area. `onOpen` opens the panel and
-  `onQuit` quits (see [`createTray()`](#createtray)).
+- `tray = createTray({`: adds the icon in the notification area. `onOpen` opens the panel (see
+  [`createTray()`](#createtray)).
+- `onQuit: () => bubble.farewell(() => app.quit())`: as the comment says, the tray's Quit does as
+  the Close icon does: she vanishes into white motes where she stands
+  (`BubbleController.farewell()`), and once she's gone the app quits.
 - `screen.on('display-added', onDisplayChange)`: the same handler also runs for
   `display-removed` and `display-metrics-changed` (a resolution, scaling or taskbar change).
   `BubbleController.displayChanged()` stands the character back on the taskbar near its corner, or
@@ -871,7 +941,7 @@ Everything else in this part of `start()` is plain statements:
 
 <!-- code: apps/desktop/src/main/index.ts#start.shuttingDown -->
 
-[`src/main/index.ts`, lines 427–428](../../apps/desktop/src/main/index.ts#L427-L428)
+[`src/main/index.ts`, lines 459–460](../../apps/desktop/src/main/index.ts#L459-L460)
 
 ```ts
 // Save the text box before quitting. before-quit fires again after the second app.quit().
@@ -882,16 +952,18 @@ let shuttingDown = false
 
 The `app.on('before-quit', (event) => {` handler that follows makes sure the draft reaches the
 disk before the app closes. `before-quit` fires when something calls `app.quit()`: the tray's
-Quit or the Close icon. It doesn't fire when Windows shuts down or logs off, which is what the
+Quit or the Close icon, once she has vanished (just under a second), or an update or Uninstall,
+straight away. It doesn't fire when Windows shuts down or logs off, which is what the
 `session-end` handler at the end is for.
 
 - `if (shuttingDown) return`: the handler ends by calling `app.quit()` again, which fires
   `before-quit` a second time. This flag lets that second one through.
 - `event.preventDefault()`: cancels this first quit, to make time for the steps below.
-- `bubble.dispose()`, `clones.stop()`, `vision.stop()`, `builtIn?.chat.stop()`: stops the
-  bubble's animation timers, closes the clones' window if the clones are about and the vision's if
-  she's having one, and, with the built-in chat, aborts a reply that is still streaming. The loop over `stopKeepingOnTop` ends the windows' on-top
-  checks.
+- `bubble.dispose()`, `clones.stop()`, `vision.stop()`, `effects.stop()`, `builtIn?.chat.stop()`:
+  stops the bubble's animation timers, closes the clones' window if the clones are about, the
+  vision's if she's having one and a spell's effects if they're showing, and, with the built-in
+  chat, aborts a reply that is still streaming. The loop over `stopKeepingOnTop` ends the windows'
+  on-top checks.
 - `void portalApps?.dispose()`: closes the Apps list's connection to JumpCloud, and stops waiting
   for a browser sign-in if one is under way. `atlassian?.dispose()` does the same for Atlassian,
   and stops the 5-minute checks.
@@ -906,11 +978,14 @@ Quit or the Close icon. It doesn't fire when Windows shuts down or logs off, whi
 
 Finally, `await windowsReady` waits until both pages have painted, and `bubble.start()` stands the
 character on the taskbar in its corner and shows it. Waiting avoids showing a window before its
-page has drawn anything.
+page has drawn anything. Then, as the comment says, `bubbleWindow.webContents.send(IPC.bubbleArrive)`
+tells the bubble's page that her window is showing, and the page plays her forming out of white
+motes (`BubbleView`, see [The pages](7-renderer-pages.md)), so she appears rather than just being
+there, and none of it is lost before the window shows.
 
 <!-- code: apps/desktop/src/main/index.ts#start.stopWatchingFront -->
 
-[`src/main/index.ts`, lines 449–459](../../apps/desktop/src/main/index.ts#L449-L459)
+[`src/main/index.ts`, lines 484–494](../../apps/desktop/src/main/index.ts#L484-L494)
 
 ```ts
 // For its first ten minutes, make sure the bubble isn't stuck behind other apps' windows.
@@ -962,7 +1037,7 @@ was part of `start()`. It returns a [`BuiltInChat`](#builtinchat): the `AuthMana
 
 <!-- code: apps/desktop/src/main/index.ts#startBuiltInChat.devBaseUrl,lastIdToken,backend,chat -->
 
-[`src/main/index.ts`, lines 479–503](../../apps/desktop/src/main/index.ts#L479-L503)
+[`src/main/index.ts`, lines 514–538](../../apps/desktop/src/main/index.ts#L514-L538)
 
 ```ts
 // Dev runs may point at a local test server; an installed app always talks to Anthropic.
@@ -1035,7 +1110,7 @@ const chat = new ChatSession({
 
 <!-- code: apps/desktop/src/main/index.ts#startBuiltInChat.missing,localIssuer,authState,auth -->
 
-[`src/main/index.ts`, lines 505–529](../../apps/desktop/src/main/index.ts#L505-L529)
+[`src/main/index.ts`, lines 540–564](../../apps/desktop/src/main/index.ts#L540-L564)
 
 ```ts
 const missing = missingSettings(signIn, claudeAccess)
@@ -1112,7 +1187,7 @@ Two statements end the function:
 
 <!-- code: apps/desktop/src/main/index.ts#safeStorageEncryptor -->
 
-[`src/main/index.ts`, lines 535–540](../../apps/desktop/src/main/index.ts#L535-L540)
+[`src/main/index.ts`, lines 570–575](../../apps/desktop/src/main/index.ts#L570-L575)
 
 ```ts
 /** Windows DPAPI through Electron: only this Windows user can decrypt what it encrypts. */
@@ -1140,7 +1215,7 @@ The encryption `SecretStore` uses for the saved sign-in. `SecretStore` only know
 
 <!-- code: apps/desktop/src/main/index.ts#withDevOverrides -->
 
-[`src/main/index.ts`, lines 542–565](../../apps/desktop/src/main/index.ts#L542-L565)
+[`src/main/index.ts`, lines 577–600](../../apps/desktop/src/main/index.ts#L577-L600)
 
 ```ts
 /**
@@ -1196,7 +1271,7 @@ example to try the built-in chat against a test identity provider, without editi
 
 <!-- code: apps/desktop/src/main/index.ts#isLoopback -->
 
-[`src/main/index.ts`, lines 567–569](../../apps/desktop/src/main/index.ts#L567-L569)
+[`src/main/index.ts`, lines 602–604](../../apps/desktop/src/main/index.ts#L602-L604)
 
 ```ts
 function isLoopback(url: URL): boolean {
@@ -1214,7 +1289,7 @@ in `hostname`. Used only to decide whether plain `http` is allowed for a dev ide
 
 <!-- code: apps/desktop/src/main/index.ts#toArea,electronDisplays -->
 
-[`src/main/index.ts`, lines 571–586](../../apps/desktop/src/main/index.ts#L571-L586)
+[`src/main/index.ts`, lines 606–621](../../apps/desktop/src/main/index.ts#L606-L621)
 
 ```ts
 /** Electron's `screen`, in the shape the bubble controller uses. All coordinates are DIPs. */
@@ -1261,7 +1336,7 @@ method is called, which happens after `start()` has begun.
 
 <!-- code: apps/desktop/src/main/index.ts#fail -->
 
-[`src/main/index.ts`, lines 588–592](../../apps/desktop/src/main/index.ts#L588-L592)
+[`src/main/index.ts`, lines 623–627](../../apps/desktop/src/main/index.ts#L623-L627)
 
 ```ts
 function fail(error: unknown): void {
@@ -1640,7 +1715,7 @@ updates' only when it has `updates`.
 
 <!-- code: apps/desktop/src/main/ipc.ts#BuiltInChat -->
 
-[`src/main/ipc.ts`, lines 36–40](../../apps/desktop/src/main/ipc.ts#L36-L40)
+[`src/main/ipc.ts`, lines 37–41](../../apps/desktop/src/main/ipc.ts#L37-L41)
 
 ```ts
 /** The built-in chat and the JumpCloud sign-in it needs. */
@@ -1662,7 +1737,7 @@ which one exists without the other.
 
 <!-- code: apps/desktop/src/main/ipc.ts#IpcContext -->
 
-[`src/main/ipc.ts`, lines 42–65](../../apps/desktop/src/main/ipc.ts#L42-L65)
+[`src/main/ipc.ts`, lines 43–68](../../apps/desktop/src/main/ipc.ts#L43-L68)
 
 ```ts
 export interface IpcContext {
@@ -1685,6 +1760,8 @@ export interface IpcContext {
   /** Settings → Check for updates, or null when the tenant has no `updates`. */
   updater: Updater | null
   actions: ActionHandlers
+  /** The Spells menu: casts one of her spells. */
+  castSpell(spell: Spell): void
   /** Settings → Uninstall. */
   uninstall(): UninstallResult
   getState(): AppState
@@ -1697,7 +1774,7 @@ Everything the handlers need, passed in by `start()` in `index.ts`. The main pro
 are created there, so this file only needs their types, not how to build them.
 
 - `windows: BrowserWindow[]`: the bubble and panel windows; requests from any other page are
-  refused (the clones' and the vision's windows included: their pages never call in).
+  refused (the clones', the vision's and the spells' windows included: their pages never call in).
 - `builtIn: BuiltInChat | null`, `claudeDesktop: ClaudeDesktop | null`: where questions go.
   Exactly one of the two is set, depending on the tenant's `chatApp` (see
   [The chat: built in, or in Claude Desktop](#the-chat-built-in-or-in-claude-desktop)).
@@ -1707,6 +1784,8 @@ are created there, so this file only needs their types, not how to build them.
   as their comments say, Jira and Confluence, and raising IT requests with the address of the user's
   requests on the portal; each `null` when the tenant doesn't use it.
 - `updater: Updater | null`: as the comment says, Check for updates, or `null` without `updates`.
+- `castSpell(spell: Spell): void`: as the comment says, the Spells menu: casts one of her spells
+  (`castSpell` in `start()`).
 - `uninstall(): UninstallResult`: Settings → Uninstall, ready-wired in `start()`.
 - `getState(): AppState`: builds the full snapshot a page asks for when it first loads (defined
   in `start()`).
@@ -1715,7 +1794,7 @@ are created there, so this file only needs their types, not how to build them.
 
 <!-- code: apps/desktop/src/main/ipc.ts#NoArgs,FilePath,IssueKey,TimeSpent,ASK_PROBLEMS,ExternalUrl -->
 
-[`src/main/ipc.ts`, lines 67–94](../../apps/desktop/src/main/ipc.ts#L67-L94)
+[`src/main/ipc.ts`, lines 70–97](../../apps/desktop/src/main/ipc.ts#L70-L97)
 
 ```ts
 const NoArgs = z.undefined()
@@ -1777,7 +1856,7 @@ Schemas used by several channels.
 
 <!-- code: apps/desktop/src/main/ipc.ts#registerIpc -->
 
-[`src/main/ipc.ts`, lines 96–347](../../apps/desktop/src/main/ipc.ts#L96-L347)
+[`src/main/ipc.ts`, lines 99–351](../../apps/desktop/src/main/ipc.ts#L99-L351)
 
 ```ts
 /** Wires every renderer request to the main process. All arguments are validated with zod. */
@@ -1863,6 +1942,7 @@ export function registerIpc(ctx: IpcContext): void {
       return size
     },
   )
+  handle(IPC.characterCastSpell, z.enum(SPELLS), (spell) => ctx.castSpell(spell))
   handle(
     IPC.settingsSetFavoriteApp,
     z.object({ id: z.string().min(1).max(200), favorite: z.boolean() }),
@@ -2075,10 +2155,10 @@ Check for updates have inner functions of their own too.
 
 **Actions, links and the clipboard**
 
-- `z.enum(COMMAND_ACTION_IDS)`: only the `command` actions (service desk, Screenshot, Clones,
-  Close) are accepted. `ctx.actions[id]()` runs the matching handler from `actions.ts` and returns
-  its result, which the panel shows as a toast. The Settings and Size icons are `popover`
-  actions that never leave the page.
+- `z.enum(COMMAND_ACTION_IDS)`: only the `command` actions (service desk, Screenshot and Close)
+  are accepted. `ctx.actions[id]()` runs the matching handler from `actions.ts` and returns its
+  result, which the panel shows as a toast. The Settings and Spells icons are `popover` actions
+  that never leave the page; what's in their menus has channels of its own (below).
 - `shell.openExternal(url)`: opens a link from a Claude reply (or the Claude Desktop download
   page) in the default browser, after `ExternalUrl` has checked it (an email link opens the email
   app instead).
@@ -2106,8 +2186,8 @@ Check for updates have inner functions of their own too.
   `IPC.settingsSetAutoSend`: the Settings menu. Each returns the full, current settings, so the
   menu always shows what actually took effect. (The menu offers the response style only with the
   built-in chat, and "Send in Claude automatically" only with Claude Desktop.)
-- `IPC.settingsSetTheme`, `z.enum(['dark', 'light'])`: the light or dark mode icon.
-- `IPC.characterSetSize`: the Smaller and Bigger buttons in the size menu.
+- `IPC.settingsSetTheme`, `z.enum(['dark', 'light'])`: the settings menu's Light mode switch.
+- `IPC.characterSetSize`: the Smaller and Bigger buttons under Size in the settings menu.
   `z.number().refine(...)` accepts only one of `CHARACTER_SIZES` (from `src/shared/geometry.ts`);
   `CHARACTER_SIZES as readonly number[]` lets `includes()` take any number, since on the list's own
   type it would only take one of those exact sizes. `ctx.controller.setScale(scale)` resizes the
@@ -2115,6 +2195,10 @@ Check for updates have inner functions of their own too.
   `ctx.settings.setCharacterScale(scale)` saves the size asked for, not the size she may have been
   kept to, so next time she starts at that size again wherever it fits. The answer is her size as
   it now is (a `CharacterSize`).
+- `IPC.characterCastSpell`, `z.enum(SPELLS)`: a spell from the Spells menu. Only the four names in
+  `SPELLS` (`src/shared/spells.ts`) pass, and `ctx.castSpell(spell)` casts it (see
+  [Her clones, and casting spells](#her-clones-and-casting-spells)). It answers nothing; the page
+  sees what happens through her pose.
 - `IPC.settingsSetFavoriteApp`: a star in the Apps list. Its schema,
   `z.object({ id: ..., favorite: z.boolean() })`, checks an object field by field, and
   `({ id, favorite })` unpacks it.
@@ -2253,7 +2337,7 @@ is either a `popover` (opens UI inside the panel, handled entirely by the page) 
 
 <!-- code: apps/desktop/src/main/actions.ts#ActionHandlers,createActionHandlers -->
 
-[`src/main/actions.ts`, lines 7–51](../../apps/desktop/src/main/actions.ts#L7-L51)
+[`src/main/actions.ts`, lines 6–44](../../apps/desktop/src/main/actions.ts#L6-L44)
 
 ```ts
 export type ActionHandlers = Record<CommandActionId, () => Promise<ActionResult>>
@@ -2261,7 +2345,6 @@ export type ActionHandlers = Record<CommandActionId, () => Promise<ActionResult>
 /** Main-process handlers for the `command` actions in the registry (src/shared/actions.ts). */
 export function createActionHandlers(deps: {
   controller: BubbleController
-  clones: Pick<Clones, 'start'>
   screenshots: ScreenshotService
   /** Opens the company's IT service desk in the browser, or null if the tenant has none. */
   openServiceDesk: (() => Promise<void>) | null
@@ -2289,14 +2372,9 @@ export function createActionHandlers(deps: {
         return { ok: false, message: "Couldn't take a screenshot" }
       }
     },
-    async clones() {
-      // Out of the way, so the clones can be seen: they walk along the taskbar, where she stands.
-      deps.controller.collapse()
-      deps.clones.start(deps.controller.standing)
-      return { ok: true }
-    },
     async close() {
-      deps.quit()
+      // She vanishes into white motes first, then the app quits.
+      deps.controller.farewell(deps.quit)
       return { ok: true }
     },
   }
@@ -2311,12 +2389,8 @@ export function createActionHandlers(deps: {
 
 - `Record<CommandActionId, () => Promise<ActionResult>>`: `Record<K, V>` is a TypeScript type for
   an object with a `V` under every key in `K`. `CommandActionId` is the list of command actions
-  (`'servicedesk' | 'screenshot' | 'clones' | 'close'`), so if a new command is added to the
-  registry, this file won't compile until it has a handler.
-- `clones: Pick<Clones, 'start'>`: her clones (`bubble/clones.ts`, see [The bubble](5-bubble.md)).
-  `Pick<T, K>` is a TypeScript type with only the members `K` of `T`, so this file can only start
-  the clones, and any object with a matching `start()` method would do. `index.ts` passes the real
-  `Clones`.
+  (`'servicedesk' | 'screenshot' | 'close'`), so if a new command is added to the registry, this
+  file won't compile until it has a handler.
 - `openServiceDesk: (() => Promise<void>) | null`: a function that opens the service desk, or
   `null` when the tenant has none. The brackets around the function type are needed so that
   `| null` applies to the whole of it.
@@ -2330,13 +2404,12 @@ export function createActionHandlers(deps: {
   way the app isn't in its own screenshot.
 - `catch (error)`: any failure (including `whileHidden()` refusing because the panel isn't open)
   becomes a friendly message; the details go to the log.
-- `async clones()`: the Clones icon. As the comment says,
-  `deps.controller.collapse()` closes the panel first, out of the way, so the clones can be seen:
-  they walk along the taskbar, where she stands. `deps.clones.start(deps.controller.standing)`
-  then sets them off from where she stands, at her size (`standing` is her display's work area,
-  her window and her size). The handler has nothing to say, so the panel shows no toast. It's
+- `async close()`: the Close icon (a power button). As the comment says, she vanishes into white
+  motes first, then the app quits: `deps.controller.farewell(deps.quit)` closes the panel, plays
+  her `vanish` pose where she stands, and calls `deps.quit` once she's gone, just under a second
+  later. The handler returns at once, with nothing to say, so the panel shows no toast. It's
   `async` only so that it fits the type: every handler returns a promise.
-- `deps.quit()`: `app.quit()`, which goes through the `before-quit` handler in `index.ts`, so the
+- `deps.quit`: `app.quit()`, which goes through the `before-quit` handler in `index.ts`, so the
   draft is saved first.
 
 ## `src/main/uninstall.ts`: uninstalling
@@ -3865,7 +3938,7 @@ Desktop automatically, the apps starred in the Apps list, light or dark mode, th
 where the bubble was dragged to, and whether "Start with Windows" has been set up. It also reports
 the settings the
 Settings menu shows. Created in `start()`; the Settings menu reaches it through the `settings...`
-IPC channels, and the size menu through `characterSetSize`.
+IPC channels, and its size buttons through `characterSetSize`.
 
 ### `DEFAULT_EFFORT`, `PreferencesSchema` and `Preferences`
 
@@ -4117,7 +4190,7 @@ Switches every Desktop Wizard window between light and dark, and saves the choic
   `prefers-color-scheme`, which both the hand-written dark styles in `styles.css` and Tailwind's
   `dark:` classes follow. So both windows switch at once, without the pages doing anything.
 - `await this.save({ theme })`, `return this.get()`: saved for next time, and the new settings go
-  back to the panel, which updates the theme icon.
+  back to the panel, which updates the Light mode switch.
 
 ### `SettingsService.setFavoriteApp()`
 
@@ -4175,7 +4248,7 @@ settles near the other bottom corner or on another display.
 [`src/main/settings.ts`, lines 117–124](../../apps/desktop/src/main/settings.ts#L117-L124)
 
 ```ts
-/** Her size as chosen in the size menu, or null if it's never been changed. */
+/** Her size as chosen in Settings, or null if it's never been changed. */
 get characterScale(): number | null {
   return this.prefs.characterScale ?? null
 }
@@ -4188,7 +4261,7 @@ async setCharacterScale(scale: number): Promise<void> {
 <!-- /code -->
 
 The character's size, saved the same way as where she lives. As the comment says, the getter
-returns her size as chosen in the size menu, or `null` if it's never been changed; `start()` passes
+returns her size as chosen (under Size in the settings menu), or `null` if it's never been changed; `start()` passes
 it to `BubbleController` as `initialScale`, which starts her at her usual size for `null`.
 `setCharacterScale()` is called by the `characterSetSize` handler in `registerIpc()` each time the
 user makes her smaller or bigger. It saves the size the user asked for, even when her screen only

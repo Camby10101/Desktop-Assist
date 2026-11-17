@@ -4,17 +4,13 @@ import {
   Headset,
   LayoutGrid,
   MessageCircle,
-  Moon,
   Power,
-  Scaling,
   Settings,
-  Sun,
-  UsersRound,
+  WandSparkles,
   type LucideIcon,
 } from 'lucide-react'
 import { ACTIONS, type ActionId } from '@shared/actions'
 import { UI, isTopCorner, type Corner, type PanelLayout } from '@shared/geometry'
-import type { Theme } from '@shared/types'
 import { anchored } from '../lib/anchor'
 import { cn } from '../lib/cn'
 
@@ -24,10 +20,8 @@ const ICONS: Record<ActionId, LucideIcon> = {
   jira: Bell,
   servicedesk: Headset,
   screenshot: Camera,
-  theme: Sun,
   settings: Settings,
-  size: Scaling,
-  clones: UsersRound,
+  spells: WandSparkles,
   close: Power,
 }
 
@@ -42,8 +36,6 @@ export function ActionStack(props: {
   actions: ActionId[]
   open: boolean
   activeId: ActionId | null
-  /** The current mode: the theme icon shows the one it switches to. */
-  theme: Theme
   /** Icons with a small dot, e.g. Ask Claude while an unsent question is waiting behind it. */
   dotted?: ActionId[]
   /** Command icons that open a page in the panel instead (the service desk, with a form). */
@@ -60,13 +52,8 @@ export function ActionStack(props: {
       }}
     >
       {props.actions.map((id, index) => {
-        const Icon = id === 'theme' && props.theme === 'light' ? Moon : ICONS[id]
-        const label =
-          id === 'theme'
-            ? props.theme === 'dark'
-              ? 'Switch to light mode'
-              : 'Switch to dark mode'
-            : ACTIONS[id].label
+        const Icon = ICONS[id]
+        const label = ACTIONS[id].label
         const active = id === props.activeId
         return (
           <button

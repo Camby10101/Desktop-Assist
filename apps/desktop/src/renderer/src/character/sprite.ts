@@ -1,7 +1,8 @@
-import { FIDGET_MS, type Pose as Name } from '@shared/character'
+import { FIDGET_MS, SPELL_POSE_MS, type Pose as Name } from '@shared/character'
 import {
   BUBBLES,
   draw,
+  FADE,
   GRID,
   HEADROOM,
   JUGGLE,
@@ -906,6 +907,71 @@ function dance(): Key[] {
 }
 
 /**
+ * Chanting (her explosion spell), from the front: arms raised high, eyes shut and her lips moving,
+ * a magic circle turning under her, sparkles circling her hand, her hair and robe lifting in the
+ * updraft. Round and round, for as long as the chant lasts.
+ */
+function chant(): Key[] {
+  return Array.from({ length: 32 }, (_, i) => {
+    const phase = (i / 32) * Math.PI * 2
+    const sway = Math.sin(phase) * 0.06
+    return {
+      pose: {
+        view: 'front',
+        face: Math.floor(i / 3) % 2 === 1 ? 'chant' : 'blink',
+        arms: [
+          { shoulder: 2.45 + sway, elbow: -0.1 },
+          { shoulder: 2.45 - sway, elbow: -0.1 },
+        ],
+        rune: 1,
+        spin: i / 32,
+        sparkle: i / 32,
+        lift: 1.5 + Math.sin(phase * 2) * 0.8,
+        wind: Math.sin(phase) * 0.6,
+        spread: 1.5 + Math.sin(phase * 2) * 0.8,
+      },
+      ms: FRAME_MS,
+    }
+  })
+}
+
+/**
+ * `ms` long, a frame about every FRAME_MS: `pose(t)` for each, `t` going from 0 to 1, their times
+ * adding up to exactly `ms`.
+ */
+function over(ms: number, pose: (t: number) => Pose): Key[] {
+  const steps = Math.max(2, Math.round(ms / FRAME_MS))
+  return Array.from({ length: steps }, (_, i) => ({
+    pose: pose(i / (steps - 1)),
+    ms: Math.round(((i + 1) * ms) / steps) - Math.round((i * ms) / steps),
+  }))
+}
+
+/**
+ * Vanishing, from the front: a smile, then her eyes close and she dissolves into white motes that
+ * drift up and fade (see FADE in the rig), the top of her first, until there's nothing left.
+ */
+function vanish(): Key[] {
+  return over(SPELL_POSE_MS.vanish, (t) => ({
+    view: 'front',
+    face: t < 0.25 ? 'happy' : 'blink',
+    fade: t * FADE.end,
+  }))
+}
+
+/**
+ * Appearing: vanishing backwards. White motes come down out of nowhere and she forms out of them,
+ * her eyes shut, then open with a smile, standing as usual by the end.
+ */
+function appear(): Key[] {
+  return over(SPELL_POSE_MS.appear, (t) => ({
+    view: 'front',
+    face: t < 0.75 ? 'blink' : t < 0.95 ? 'happy' : 'neutral',
+    fade: (1 - t) * FADE.end,
+  }))
+}
+
+/**
  * Carried by her collar: off the ground, arms up, legs kicking, swaying, hair lifted, and no
  * shadow under her (she's in the air, wherever the pointer takes her).
  */
@@ -966,6 +1032,9 @@ const MAKERS: Record<Name, () => Frame[]> = {
   wisp: () => drawn(wisp()),
   sneeze: () => drawn(sneeze()),
   dance: () => drawn(dance()),
+  chant: () => drawn(chant()),
+  vanish: () => drawn(vanish()),
+  appear: () => drawn(appear()),
   dragged: () => drawn(dragged()),
 }
 
@@ -1003,6 +1072,10 @@ export const LOOPS: Record<Name, boolean> = {
   wisp: false,
   sneeze: false,
   dance: false,
+  // Her spells': the chant goes round for as long as it lasts; vanishing and appearing play once.
+  chant: true,
+  vanish: false,
+  appear: false,
 }
 
 export type Facing = 'left' | 'right'

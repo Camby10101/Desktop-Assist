@@ -4,8 +4,8 @@
 
 This part covers the renderer's own files: the HTML page every overlay window loads, the startup
 script, the stylesheet, two small helpers and the clones' wandering, the hooks (most of them
-connecting React to the main process), and the four views (the bubble, her clones, her vision and the panel). The building
-blocks the views use are covered in
+connecting React to the main process), and the five views (the bubble, her clones, her vision, her
+spells' effects and the panel). The building blocks the views use are covered in
 [the components part](8-renderer-components.md). If React is new to you: a React _component_ is a
 function that returns a description of what to show, written in JSX (HTML-like tags inside
 TypeScript, in `.tsx` files), and whenever the data it uses changes, React calls it again and
@@ -13,8 +13,8 @@ updates only the parts of the page that changed.
 
 ## `src/renderer/index.html`: the page every window loads
 
-The bubble window, the panel window, and the clones' and the vision's windows all load this one
-page. It's almost
+The bubble window, the panel window, and the clones', the vision's and the spells' windows all load
+this one page. It's almost
 empty: a `<div>` for React to fill and a script tag that starts the app. The interesting part is
 the security policy.
 
@@ -64,16 +64,16 @@ the security policy.
   `main.tsx` and everything it imports into plain JavaScript and, in the build, rewrites this tag to
   point at the bundled file.
 
-## `src/renderer/src/main.tsx`: choosing bubble, clones, vision or panel
+## `src/renderer/src/main.tsx`: choosing bubble, clones, vision, spell or panel
 
 The first code that runs in each window. It works out which window it's in and renders the
-matching view. `BubbleView`, `ClonesView`, `VisionView` and `PanelView` are React components: functions whose
+matching view. `BubbleView`, `ClonesView`, `VisionView`, `SpellView` and `PanelView` are React components: functions whose
 names start with a capital letter and return JSX. In JSX, `<BubbleView />` means "render the
 `BubbleView` component here".
 
 <!-- code: apps/desktop/src/renderer/src/main.tsx -->
 
-[`src/renderer/src/main.tsx`, lines 1–24](../../apps/desktop/src/renderer/src/main.tsx#L1-L24)
+[`src/renderer/src/main.tsx`, lines 1–27](../../apps/desktop/src/renderer/src/main.tsx#L1-L27)
 
 ```tsx
 import { StrictMode } from 'react'
@@ -82,6 +82,7 @@ import './styles.css'
 import { BubbleView } from './views/BubbleView'
 import { ClonesView } from './views/ClonesView'
 import { PanelView } from './views/PanelView'
+import { SpellView } from './views/SpellView'
 import { VisionView } from './views/VisionView'
 
 // Every overlay window loads this page; the query string says which one this is.
@@ -95,6 +96,8 @@ createRoot(document.getElementById('root')!).render(
       <ClonesView />
     ) : view === 'vision' ? (
       <VisionView />
+    ) : view === 'spell' ? (
+      <SpellView />
     ) : (
       <PanelView />
     )}
@@ -109,8 +112,9 @@ createRoot(document.getElementById('root')!).render(
 - `// Every overlay window loads this page`: as the comment says, the query string says which one
   this is.
 - `new URLSearchParams(window.location.search).get('view')`: reads the `view` (`bubble`, `panel`,
-  `clones` or `vision`) that `createOverlayWindow` (src/main/bubble/windows.ts) adds to the query
-  string when it loads the page. Anything other than `bubble`, `clones` or `vision` gets the panel.
+  `clones`, `vision` or `spell`) that `createOverlayWindow` (src/main/bubble/windows.ts) adds to the
+  query string when it loads the page. Anything other than `bubble`, `clones`, `vision` or `spell`
+  gets the panel.
 - `document.getElementById('root')!`: the `!` tells TypeScript "this is not null"; the div is in
   `index.html`.
 - `createRoot(`: hands that div to React, which from now on owns everything inside it. `render`
@@ -119,9 +123,9 @@ createRoot(document.getElementById('root')!).render(
   runs each effect, cleans it up, then runs it again, to expose code that doesn't clean up after
   itself. That's why every hook below has a careful cleanup. It does nothing in the installed app.
 - `{view === 'bubble' ? (`: curly braces switch from JSX back to ordinary TypeScript, here a
-  choice between the four views. Each `? :` after the first only runs when the test before it
-  fails, so it reads "the bubble, otherwise the clones, otherwise the vision, otherwise the
-  panel". The round brackets only let each view sit on a line of its own.
+  choice between the five views. Each `? :` after the first only runs when the test before it
+  fails, so it reads "the bubble, otherwise the clones, otherwise the vision, otherwise a spell's
+  effects, otherwise the panel". The round brackets only let each view sit on a line of its own.
 
 ## `src/renderer/src/env.d.ts`: telling TypeScript about `window.assist`
 
@@ -515,7 +519,7 @@ export function anchored(corner: Corner, x: number, y: number): CSSProperties {
 
 Returns a `style` object that places an element `x` pixels across and `y` pixels away from the
 screen edge, measured from the bubble's corner. `ChatBox`, `ActionStack`, `SettingsMenu` and
-`SizeMenu` call it with the offsets from `panelLayout()` (src/shared/geometry.ts) for her size, the
+`SpellsMenu` call it with the offsets from `panelLayout()` (src/shared/geometry.ts) for her size, the
 same numbers the main process uses to size the window.
 
 - `CSSProperties`: React's type for the `style` prop. Plain numbers in it mean pixels.
@@ -556,7 +560,7 @@ the bubble.
 
 ## `src/renderer/src/lib/clones.ts`: how her clones wander
 
-The Clones action fills a window along the taskbar with copies of her (see `ClonesView` below, and `Clones` in [The bubble](5-bubble.md)). This file decides where
+Her Clones spell fills a window along the taskbar with copies of her (see `ClonesView` below, and `Clones` in [The bubble](5-bubble.md)). This file decides where
 each clone goes: plain functions that take a clone and the time and return the clone a moment
 later, without touching the page. Keeping them apart from the page means `tests/clones.test.ts`
 can walk a clone across the window with made-up times and random numbers, in milliseconds. It's
@@ -845,7 +849,7 @@ the top of its body, in the same order on every render.
   the same stateful logic. Each component that calls it gets its own separate copy of the state.
 
 This file's hooks are used by the views: `useAssistState` by the bubble and the panel, and
-`useAccentColor` by those two and the clones (the vision's page uses neither). Each window is a separate page, so each keeps its own
+`useAccentColor` by those two and the clones (the vision's and the spells' pages use neither). Each window is a separate page, so each keeps its own
 copy of the state.
 
 ### `useAssistState`
@@ -926,10 +930,10 @@ later one arrives after it. Nothing is missed and nothing is applied twice.
 - `window.assist.onSizeChanged((size) => update((s) => ({ ...s, size })))`: her size
   (`CharacterSize` in src/shared/geometry.ts: her `scale`, and `max`, the biggest she can be on her
   screen). As the main process's comment puts it, it's sent when her size changes, or the biggest
-  she can be on her screen does: from the size menu, or when she's dropped on another display or
-  the screen changes, and she has to be smaller there or has room to be bigger again. The bubble's
-  page sizes her by it, and the panel lays itself out round her by it and shows it in the size
-  menu.
+  she can be on her screen does: from Size in the settings menu, or when she's dropped on another
+  display or the screen changes, and she has to be smaller there or has room to be bigger again.
+  The bubble's page sizes her by it, and the panel lays itself out round her by it and shows it
+  under Size in the settings menu.
 - `upsert(s.chat, message)`: a streaming reply arrives many times with the same id and growing
   text (from `ChatSession`, at most every 50 ms), so it replaces the old copy rather than being
   added again.
@@ -996,10 +1000,10 @@ The panel window is a large rectangle that's mostly transparent. So that clicks 
 reach whatever is underneath, the main process makes the window ignore the mouse, while still
 passing pointer movements to the page. This hook watches those movements and asks the main process
 to switch mouse input on only while the pointer is over real UI, which is any element marked
-`data-hit` (the chat card, each action icon, the settings menu and the size menu). See
+`data-hit` (the chat card, each action icon, the settings menu and the spells menu). See
 [Code Guide section 1](CODE_GUIDE.md#1-background-how-an-electron-app-is-put-together) for the
-background. Only `PanelView` uses it; the bubble window always takes the mouse, and the clones'
-and the vision's windows never do.
+background. Only `PanelView` uses it; the bubble window always takes the mouse, and the clones',
+the vision's and the spells' windows never do.
 
 ### `useClickThrough`
 
@@ -1259,12 +1263,12 @@ export function useFitInWindow(
 <!-- /code -->
 
 As the comment says, keeps a menu that opens beside the action stack (the settings menu and the
-size menu) inside the panel window. Each menu lines up with its icon: its near edge is `offset`
+spells menu) inside the panel window. Each menu lines up with its icon: its near edge is `offset`
 from the bubble's edge of the window (the window's bottom, in a bottom corner), where the icon is.
 But the icons stack away from the bubble, and a long menu beside an icon high up the stack (the
 settings menu, beside the gear) could run past the top of the window and be cut off. This hook
 moves a menu back toward the bubble just far enough to fit, and lets one taller than the whole
-window scroll. `SettingsMenu` and `SizeMenu` use it (see
+window scroll. `SettingsMenu` and `SpellsMenu` use it (see
 [the components part](8-renderer-components.md)).
 
 - `menu: RefObject<HTMLElement | null>`: as the comment says, the menu's element, from a `useRef`
@@ -1290,14 +1294,15 @@ window scroll. `SettingsMenu` and `SizeMenu` use it (see
 The page shown in the small bubble window: one button filling the window, with the character
 drawn inside it (`Character`, see [The UI components](8-renderer-components.md)). A click asks the
 main process what to do; pressing and moving drags the character. What the character is doing
-(its pose) comes from the main process too. The page used to show the tenant's logo in a round
+(its pose) comes from the main process too, but for her first moment: as the app starts, the page
+shows her forming out of white motes. The page used to show the tenant's logo in a round
 button; the logo is now only the tray icon and the `.exe` icon.
 
 ### `ACTION_LABEL`, `DRAG_THRESHOLD`
 
 <!-- code: apps/desktop/src/renderer/src/views/BubbleView.tsx#ACTION_LABEL,DRAG_THRESHOLD -->
 
-[`src/renderer/src/views/BubbleView.tsx`, lines 7–16](../../apps/desktop/src/renderer/src/views/BubbleView.tsx#L7-L16)
+[`src/renderer/src/views/BubbleView.tsx`, lines 8–17](../../apps/desktop/src/renderer/src/views/BubbleView.tsx#L8-L17)
 
 ```tsx
 const ACTION_LABEL: Record<Mode, string> = {
@@ -1319,12 +1324,14 @@ const DRAG_THRESHOLD = 5
   screen readers, such as "Open Desktop Wizard".
 - `DRAG_THRESHOLD = 5`: a press that moves no more than 5 pixels is still a click, so a slightly
   shaky click doesn't start a drag.
+- `ARRIVAL_WAIT_MS = 4000`: as its comment says, how long she waits for word that her window is
+  showing before she's just there (see `arrival`, below).
 
 ### `<BubbleView>`
 
 <!-- code: apps/desktop/src/renderer/src/views/BubbleView.tsx#BubbleView -->
 
-[`src/renderer/src/views/BubbleView.tsx`, lines 18–97](../../apps/desktop/src/renderer/src/views/BubbleView.tsx#L18-L97)
+[`src/renderer/src/views/BubbleView.tsx`, lines 22–121](../../apps/desktop/src/renderer/src/views/BubbleView.tsx#L22-L121)
 
 ```tsx
 /**
@@ -1343,6 +1350,24 @@ export function BubbleView() {
   // away from her corner.
   const { box, headroom } = bubbleMetrics(state?.size.scale ?? DEFAULT_SIZE)
   const corner = state?.corner ?? 'bottom-right'
+
+  // As the app starts, she forms out of white motes (her `appear` pose) before doing as she's told.
+  // Her window is shown a little after this page is ready (once the panel's is too), so she waits
+  // for word that it's showing, and until then isn't drawn at all, so she never flashes up whole
+  // first. Without the word (the page reloaded, say), she's just there after a few seconds.
+  const [arrival, setArrival] = useState<'waiting' | 'arriving' | 'here'>('waiting')
+  useEffect(() => {
+    let timer = setTimeout(() => setArrival('here'), ARRIVAL_WAIT_MS)
+    const stop = window.assist.onArrive(() => {
+      clearTimeout(timer)
+      setArrival('arriving')
+      timer = setTimeout(() => setArrival('here'), SPELL_POSE_MS.appear)
+    })
+    return () => {
+      stop()
+      clearTimeout(timer)
+    }
+  }, [])
 
   const press = useRef<{ x: number; y: number; dragging: boolean } | null>(null)
   // When the button last went down: the main process uses it to tell whether this press is what
@@ -1398,12 +1423,14 @@ export function BubbleView() {
       // keyboard focus and draw the accent-coloured ring round her window.
       className="block cursor-grab outline-none focus-visible:outline-none active:cursor-grabbing"
     >
-      <Character
-        pose={state?.pose ?? 'idle'}
-        facing={isLeftCorner(corner) ? 'right' : 'left'}
-        box={box}
-        expanded={mode === 'expanded'}
-      />
+      {arrival !== 'waiting' && (
+        <Character
+          pose={arrival === 'arriving' ? 'appear' : (state?.pose ?? 'idle')}
+          facing={isLeftCorner(corner) ? 'right' : 'left'}
+          box={box}
+          expanded={mode === 'expanded'}
+        />
+      )}
     </button>
   )
 }
@@ -1431,6 +1458,23 @@ the function's argument (see `Panel` below).
   the page and the window agree.
 - `const corner = state?.corner ?? 'bottom-right'`: the bottom corner she lives near, used below to
   face her away from it.
+- `const [arrival, setArrival] = useState<'waiting' | 'arriving' | 'here'>('waiting')`: as the
+  comment says, as the app starts she forms out of white motes (her `appear` pose) before doing as
+  she's told. Her window is only shown once both pages are ready (`await windowsReady` in
+  `src/main/index.ts`), a little after this one is, so timing her arrival from when this page
+  loads would lose some of it. So she's `waiting` (not drawn at all, so she never flashes up whole
+  first), then `arriving` for `SPELL_POSE_MS.appear` (0.9 seconds) once the main process says her
+  window is showing, then `here`.
+- `useEffect(() => { ... }, [])`: an effect with an empty list of dependencies runs once, after
+  the first render.
+  - `let timer = setTimeout(() => setArrival('here'), ARRIVAL_WAIT_MS)`: in case the word never
+    comes (the page reloaded after a crash, with her window already showing), she's simply there
+    after four seconds.
+  - `window.assist.onArrive(...)`: the word, sent once, just after the main process shows her
+    window (`IPC.bubbleArrive`). It cancels that timer, starts her arrival, and sets a timer to
+    end it when her `appear` pose is done.
+  - The cleanup stops listening and clears whichever timer is set, if the page goes first (and in
+    `npm run dev`, where `StrictMode` runs the effect twice).
 - `const press = useRef<{ x: number; y: number; dragging: boolean } | null>(null)`: `useRef` gives
   a box (`.current`) that keeps its contents between renders, but unlike state, changing it doesn't
   re-render. It suits values that only event handlers need: here, where the press started and
@@ -1486,8 +1530,11 @@ the function's argument (see `Panel` below).
   round her window every time she was clicked. `focus-visible:outline-none` is a utility, in
   Tailwind's `utilities` layer, so it wins over that rule, which is in the `base` layer. The
   bubble is a single control in a window of its own, so it needs no ring to show where focus is.
+- `arrival !== 'waiting' && (<Character ... />)`: no figure at all while she's waiting for her
+  window to show.
 - `<Character`: the figure, in the `pose` the main process chose (standing until the state
-  arrives).
+  arrives). `arrival === 'arriving' ? 'appear' : ...` puts that off for her first 0.9 seconds,
+  while she appears.
   - `facing={isLeftCorner(corner) ? 'right' : 'left'}`: as the comment above says, she faces the
     middle of the screen, away from her corner: right from the bottom-left corner, left from the
     bottom-right one (until the state arrives, left, from the default corner). Walking, she faces
@@ -1502,7 +1549,7 @@ the function's argument (see `Panel` below).
 
 ## `src/renderer/src/views/ClonesView.tsx`: her clones
 
-The page shown in the clones' window, which the main process opens for the Clones action (see
+The page shown in the clones' window, which the main process opens for her Clones spell (see
 `Clones` in [The bubble](5-bubble.md)). The window is a strip as wide as her screen and as tall as her window, its bottom edge on the taskbar, and it never takes the
 mouse or the focus: clicks go straight through it, and the clones have no panel. Like the vision's
 page, and unlike the bubble's and the panel's, it never asks the main process for the app state: everything it needs comes in its query
@@ -1516,7 +1563,7 @@ string, and once the window closes it's gone.
 
 ```tsx
 /**
- * Her clones (the Clones action), in a see-through window along the taskbar that never takes the
+ * Her clones (the Clones spell), in a see-through window along the taskbar that never takes the
  * mouse: CLONES.count of her, at her size, setting off from where she stands and wandering up and
  * down (see lib/clones.ts), each stopping now and then. They fade in, and fade out just before
  * the main process closes the window. Everything they need comes in the query string: where she
@@ -1937,11 +1984,157 @@ The JSX:
   at `top`. `alt=""` marks it as decoration. Two `drop-shadow` filters give it a warm glow, sized
   with her.
 
+## `src/renderer/src/views/SpellView.tsx`: her spells' effects
+
+The page shown in the spells' window, which the main process opens for starfall and for the
+explosion (see `SpellEffects` in [The bubble](5-bubble.md)). The window covers her display's work
+area, behind her own window, and never takes the mouse or the focus. Like the clones' and the
+vision's pages, it never asks the main process for anything: what it needs comes in its query
+string. Unlike them, it draws on a `<canvas>` rather than with elements: the effects are pixel art
+like her, drawn a pixel at a time by `lib/spellArt.ts` from where things are at each moment, which
+`lib/spellMotion.ts` works out (both in [The UI components](8-renderer-components.md)).
+
+### `PIXEL`
+
+<!-- code: apps/desktop/src/renderer/src/views/SpellView.tsx#PIXEL -->
+
+[`src/renderer/src/views/SpellView.tsx`, lines 6–11](../../apps/desktop/src/renderer/src/views/SpellView.tsx#L6-L11)
+
+```tsx
+/**
+ * How many DIPs one pixel of the effects is, per her size: twice one of her sprite's pixels. Never
+ * less than 2 DIPs, though, so at her smallest the explosion isn't drawn a DIP at a time over a
+ * whole screen (four times the pixels, every frame).
+ */
+const PIXEL = 2
+```
+
+<!-- /code -->
+
+As the comment says, how many DIPs one pixel of the effects is, per her size: 2, twice one of her
+sprite's pixels (which are one DIP each at her usual size: her 96-pixel grid fills her 96-DIP
+window). It's multiplied by her size below, so the effects' pixels grow with her, as hers do.
+
+### `<SpellView>`
+
+<!-- code: apps/desktop/src/renderer/src/views/SpellView.tsx#SpellView -->
+
+[`src/renderer/src/views/SpellView.tsx`, lines 13–62](../../apps/desktop/src/renderer/src/views/SpellView.tsx#L13-L62)
+
+```tsx
+/**
+ * A spell's effects (see SpellEffects in the main process): its window covers her display's work
+ * area, never takes the mouse, and closes itself when the spell is over. The query string says
+ * which spell, her size, where she stands and how far down her feet are (DIPs), when it was cast
+ * (wall-clock ms, so it keeps in time with her) and her accent colour. It draws on a small canvas,
+ * a pixel at a time (lib/spellArt.ts), stretched over the window without smoothing, so the effects
+ * are pixel art like her, their pixels twice the size of hers.
+ */
+export function SpellView() {
+  const [params] = useState(() => new URLSearchParams(window.location.search))
+  const spell: SpellEffect = params.get('spell') === 'explosion' ? 'explosion' : 'starfall'
+  const scale = snapSize(Number(params.get('scale')) || DEFAULT_SIZE)
+  const accent = /^#[0-9a-f]{6}$/i.test(params.get('accent') ?? '')
+    ? params.get('accent')!
+    : '#9333ea'
+  const canvas = useRef<HTMLCanvasElement>(null)
+  // With Windows' reduced-motion setting, nothing moves: the effects just show, still.
+  const [still] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches)
+
+  useEffect(() => {
+    const element = canvas.current
+    if (!element) return
+    const pixel = Math.max(2, PIXEL * scale)
+    const w = Math.ceil(window.innerWidth / pixel)
+    const h = Math.ceil(window.innerHeight / pixel)
+    element.width = w
+    element.height = h
+    const g = element.getContext('2d')!
+    const x = (Number(params.get('x')) || window.innerWidth / 2) / pixel
+    const feet = (Number(params.get('feet')) || window.innerHeight) / pixel
+    const starts = Number(params.get('starts')) || Date.now()
+    const draw = spell === 'explosion' ? drawExplosion : drawStarfall
+    let frame = requestAnimationFrame(function tick() {
+      const t = Date.now() - starts
+      g.clearRect(0, 0, w, h)
+      draw(g, { t, w, h, x, feet, height: (92 * scale) / pixel, accent, still })
+      if (t < SPELL_EFFECT_MS[spell]) frame = requestAnimationFrame(tick)
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [params, spell, scale, accent, still])
+
+  return (
+    <canvas
+      ref={canvas}
+      aria-hidden
+      className="block h-full w-full"
+      style={{ imageRendering: 'pixelated' }}
+    />
+  )
+}
+```
+
+<!-- /code -->
+
+As the comment says: a spell's effects, in a window over her display's work area that never takes
+the mouse and closes itself when the spell is over. Everything comes in the query string. It draws
+on a small canvas, a pixel at a time, which the page stretches over the whole window without
+smoothing, so the effects are crisp pixel art, their pixels twice the size of hers.
+
+Reading the query string (once, kept in state as in `ClonesView`):
+
+- `spell`: `explosion`, or `starfall` for anything else. `SpellEffect` (`src/shared/spells.ts`) is
+  the type of the two.
+- `scale`: her size, snapped to one of `CHARACTER_SIZES` (her usual size if it's missing).
+- `accent`: the tenant's accent colour, for the magic circles, if it's a `#` and six hex digits;
+  otherwise a purple (`#9333ea`), so nothing odd in the address reaches the drawing.
+- `const canvas = useRef<HTMLCanvasElement>(null)`: the `<canvas>` element, once React has made it.
+- `still`: as the comment says, with Windows' reduced-motion setting nothing moves: the effects just
+  show, still. It's read once, as the page loads.
+
+The effect, which sets up the canvas and draws every frame:
+
+- `const pixel = Math.max(2, PIXEL * scale)`: one of the effects' pixels, in DIPs: 2 at her
+  usual size, 4 at twice it. As `PIXEL`'s comment says, never less than 2: at half her size it
+  would be 1, and the explosion would be drawn over four times as many pixels every frame.
+- `const w = Math.ceil(window.innerWidth / pixel)`, `h`: how many of those pixels fit across and
+  down the window (rounded up, so the edges are covered). `element.width` and `element.height` make
+  the canvas exactly that many pixels; the CSS classes (`h-full w-full`) stretch it over the whole
+  window.
+- `const g = element.getContext('2d')!`: the canvas's 2D drawing context, the object everything is
+  drawn with. The `!` is because a canvas always has one.
+- `x`, `feet`: where she stands across the window and how far down her feet are, from the query
+  string, turned from DIPs into the canvas's pixels. Missing, the middle and the bottom.
+- `starts`: when the spell was cast, on the wall clock the main process and the page share.
+  Missing, now.
+- `const draw = spell === 'explosion' ? drawExplosion : drawStarfall`: this spell's drawing
+  function, from `lib/spellArt.ts`. Both take the drawing context and a `Scene`
+  (`lib/spellMotion.ts`).
+- `requestAnimationFrame(function tick() {`: every frame, `t` is how long it is since the spell was
+  cast, the canvas is cleared, and the frame for that moment is drawn from scratch. Nothing is kept
+  from one frame to the next, so a slow frame never puts the effects out of step with her chant.
+- `draw(g, { t, w, h, x, feet, height: (92 * scale) / pixel, accent, still })`: the `Scene`.
+  `height` is how tall she is in the canvas's pixels: her 92 sprite pixels from hat to boots, a DIP
+  each at her usual size, times her size, divided by the size of one of the effects' pixels. The
+  pillar uses it to start its circles above her hat.
+- `if (t < SPELL_EFFECT_MS[spell]) frame = requestAnimationFrame(tick)`: it keeps going until the
+  spell is over, when the main process closes the window anyway.
+- `return () => cancelAnimationFrame(frame)`: the cleanup cancels the next frame. With reduced
+  motion the frames still come; it's what they draw that holds still (the drawing functions check
+  `still`).
+
+The JSX:
+
+- `<canvas ref={canvas} aria-hidden ... />`: only for show, so screen readers skip it. `block`
+  stops it sitting on a line of text, which would leave a gap under it.
+- `style={{ imageRendering: 'pixelated' }}`: stretched without smoothing, so each of the canvas's
+  pixels becomes a crisp square, `pixel` DIPs across, rather than a blur.
+
 ## `src/renderer/src/views/PanelView.tsx`: everything around the bubble
 
 The page shown in the panel window: the chat card, the action icons, the settings menu and the
-size menu. All the panel's shared state and handlers live in `Panel`; the components it renders
-(`ChatBox`, `ActionStack`, `SettingsMenu`, `SizeMenu`, `SignInPanel`, `Banner`, `AppsList`,
+spells menu. All the panel's shared state and handlers live in `Panel`; the components it renders
+(`ChatBox`, `ActionStack`, `SettingsMenu`, `SpellsMenu`, `SignInPanel`, `Banner`, `AppsList`,
 `JiraPage`, `ServiceDeskPage`, `IssueView`) get their data and callbacks from it as props. Those
 are covered in [the components part](8-renderer-components.md), except `AppsList`, which is in
 [Your apps](10-apps.md), and the Jira and service desk pages, which are in
@@ -2070,7 +2263,7 @@ returns. The sections after it take its values and functions one at a time.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 66–575](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L66-L575)
+[`src/renderer/src/views/PanelView.tsx`, lines 66–579](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L66-L579)
 
 ```tsx
 function Panel({ state }: { state: AppState }) {
@@ -2084,7 +2277,7 @@ function Panel({ state }: { state: AppState }) {
   const [attachments, setAttachments] = useState(state.notes.attachments)
   const [settings, setSettings] = useState(state.settings)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [sizeOpen, setSizeOpen] = useState(false)
+  const [spellsOpen, setSpellsOpen] = useState(false)
   const [asking, setAsking] = useState(false)
   // The card shows the tenant's start page (the text box or the Apps list) when the panel opens,
   // and another page while its icon is on (Ask Claude, Your apps, Jira, the service desk).
@@ -2109,7 +2302,7 @@ function Panel({ state }: { state: AppState }) {
       window.assist.onModeChanged((mode) => {
         if (mode !== 'expanded') {
           setSettingsOpen(false)
-          setSizeOpen(false)
+          setSpellsOpen(false)
         }
         // The panel always reopens on the start page (but taking a screenshot isn't closing it).
         if (mode === 'collapsed') {
@@ -2170,14 +2363,14 @@ function Panel({ state }: { state: AppState }) {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
       if (settingsOpen) setSettingsOpen(false)
-      else if (sizeOpen) setSizeOpen(false)
+      else if (spellsOpen) setSpellsOpen(false)
       else if (issueKey) setIssueKey(null)
       else if (view !== startPage) setView(startPage)
       else window.assist.collapse()
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [settingsOpen, sizeOpen, issueKey, view, startPage])
+  }, [settingsOpen, spellsOpen, issueKey, view, startPage])
 
   // Not signed in: the chat box shows the sign-in instead of the chat. While a saved sign-in is
   // being renewed, or JumpCloud can't be reached, the chat stays (sending tries JumpCloud again).
@@ -2189,8 +2382,8 @@ function Panel({ state }: { state: AppState }) {
   const canSend = signedIn && !busy && !asking && (draft.trim() !== '' || attachments.length > 0)
 
   async function runAction(id: ActionId) {
-    // Any icon but the size menu's own closes the size menu (the settings menu's, below).
-    if (id !== 'size') setSizeOpen(false)
+    // Any icon but the spells menu's own closes the spells menu (the settings menu's, below).
+    if (id !== 'spells') setSpellsOpen(false)
     // With request types, the service desk icon opens a page for them instead of the portal.
     if (id === 'apps' || id === 'ask' || id === 'jira' || (id === 'servicedesk' && requestTypes)) {
       // Swaps the card to that page, or back again: the text box and the Apps list swap with
@@ -2202,15 +2395,9 @@ function Panel({ state }: { state: AppState }) {
       setView(view === id && !issueKey ? back : id)
       return
     }
-    if (id === 'theme') {
-      setSettings(
-        await window.assist.settings.setTheme(settings.theme === 'dark' ? 'light' : 'dark'),
-      )
-      return
-    }
-    if (id === 'size') {
+    if (id === 'spells') {
       setSettingsOpen(false)
-      setSizeOpen(!sizeOpen)
+      setSpellsOpen(!spellsOpen)
       return
     }
     if (id === 'settings') {
@@ -2354,15 +2541,19 @@ function Panel({ state }: { state: AppState }) {
     setSettings(await window.assist.settings.setAutoSend(!settings.autoSend))
   }
 
-  // Clicking anywhere else in the panel closes the settings menu, or the size menu.
+  // Clicking anywhere else in the panel closes the settings menu, or the spells menu.
   function closeMenusOnOutsideClick(event: PointerEvent) {
     if (!(event.target instanceof Element)) return
     if (settingsOpen && !event.target.closest('[data-settings-menu], [data-action="settings"]')) {
       setSettingsOpen(false)
     }
-    if (sizeOpen && !event.target.closest('[data-size-menu], [data-action="size"]')) {
-      setSizeOpen(false)
+    if (spellsOpen && !event.target.closest('[data-spells-menu], [data-action="spells"]')) {
+      setSpellsOpen(false)
     }
+  }
+
+  async function toggleTheme() {
+    setSettings(await window.assist.settings.setTheme(settings.theme === 'dark' ? 'light' : 'dark'))
   }
 
   const signInPrompt =
@@ -2416,7 +2607,7 @@ function Panel({ state }: { state: AppState }) {
   const scale = state.size.scale
   const layout = panelLayout(scale)
   const settingsIndex = branding.actions.indexOf('settings')
-  const sizeIndex = branding.actions.indexOf('size')
+  const spellsIndex = branding.actions.indexOf('spells')
   // Only keys of real projects, once the projects are known.
   const issueKeys = atlassianSite
     ? findIssueKeys(draft).filter(
@@ -2534,8 +2725,9 @@ function Panel({ state }: { state: AppState }) {
         layout={layout}
         actions={branding.actions}
         open={open}
-        activeId={settingsOpen ? 'settings' : sizeOpen ? 'size' : view !== startPage ? view : null}
-        theme={settings.theme}
+        activeId={
+          settingsOpen ? 'settings' : spellsOpen ? 'spells' : view !== startPage ? view : null
+        }
         pages={requestTypes ? ['servicedesk'] : []}
         dotted={[
           ...(view !== 'ask' && (draft.trim() !== '' || attachments.length > 0)
@@ -2552,6 +2744,7 @@ function Panel({ state }: { state: AppState }) {
           layout={layout}
           offset={actionOffset(settingsIndex, scale)}
           settings={settings}
+          size={state.size}
           branding={branding}
           version={state.version}
           user={auth?.state === 'signed-in' || auth?.state === 'offline' ? auth.user : null}
@@ -2559,6 +2752,8 @@ function Panel({ state }: { state: AppState }) {
           onDisconnectAtlassian={() => void disconnectAtlassian()}
           update={update}
           onCheckForUpdates={() => void window.assist.updates.check().then(setUpdate)}
+          onToggleTheme={() => void toggleTheme()}
+          onSetSize={(next) => void window.assist.character.setSize(next)}
           onToggleAutoStart={async () =>
             setSettings(await window.assist.settings.setAutoStart(!settings.autoStart))
           }
@@ -2571,13 +2766,15 @@ function Panel({ state }: { state: AppState }) {
           onUninstall={() => void uninstall()}
         />
       )}
-      {open && sizeOpen && sizeIndex >= 0 && (
-        <SizeMenu
+      {open && spellsOpen && spellsIndex >= 0 && (
+        <SpellsMenu
           corner={state.corner}
           layout={layout}
-          offset={actionOffset(sizeIndex, scale)}
-          size={state.size}
-          onSetSize={(next) => void window.assist.character.setSize(next)}
+          offset={actionOffset(spellsIndex, scale)}
+          onCast={(spell) => {
+            setSpellsOpen(false)
+            void window.assist.character.castSpell(spell)
+          }}
         />
       )}
     </div>
@@ -2599,8 +2796,8 @@ Props and state:
   `attachments` and `settings`, it starts from the app state but is then owned here: the panel
   updates it as you type and from the main process's replies.
 - `const [settingsOpen, setSettingsOpen] = useState(false)`: whether the settings menu is showing.
-- `const [sizeOpen, setSizeOpen] = useState(false)`: whether the size menu is showing. At most one
-  of the two menus is open at a time.
+- `const [spellsOpen, setSpellsOpen] = useState(false)`: whether the spells menu is showing. At
+  most one of the two menus is open at a time.
 - `const [asking, setAsking] = useState(false)`: true while a question is being handed to Claude
   Desktop, so it can't be sent twice. (Only for that moment: sending it in Claude carries on in
   the main process after the panel has closed.)
@@ -2630,7 +2827,7 @@ Props and state:
 
 Effects:
 
-- `window.assist.onModeChanged((mode) => {`: closes the settings menu and the size menu whenever
+- `window.assist.onModeChanged((mode) => {`: closes the settings menu and the spells menu whenever
   the panel closes, so neither is still open the next time. The arrow returns what
   `onModeChanged` returns, the unsubscribe function, which React uses as the cleanup.
 - `if (mode === 'collapsed') {`: once the panel has really closed, the next opening is on the start
@@ -2666,11 +2863,11 @@ Effects:
   `false` and the late answer is ignored.
 - `}, [open, inClaudeDesktop])`: the effect runs again when the panel opens or closes.
 - `if (event.key !== 'Escape') return`: Esc closes the settings menu if it's open, otherwise the
-  size menu if that's open, otherwise closes an open issue (back to the page under it), otherwise
+  spells menu if that's open, otherwise closes an open issue (back to the page under it), otherwise
   goes back to the start page if another page is showing, otherwise asks the main process to close
   the panel (`BubbleController.collapse`). Keys reach the panel because the main process focuses
   it when it opens.
-- `}, [settingsOpen, sizeOpen, issueKey, view, startPage])`: the listener reads these, and a
+- `}, [settingsOpen, spellsOpen, issueKey, view, startPage])`: the listener reads these, and a
   function only sees the values from the render it was created in. Listing them here makes React
   remove the old listener and add a fresh one whenever one changes.
 
@@ -2689,7 +2886,7 @@ The JSX it returns:
 - `<ChatBox`: the card. It gets what to draw (corner, toast, sign-in prompt, banner, messages, draft
   and attachments) and a callback for each thing you can do there.
 - `layout={layout}`: where things sit in the window for her size (`panelLayout()`, below).
-  `ChatBox`, `ActionStack`, `SettingsMenu` and `SizeMenu` all get it, so the card, the icons and
+  `ChatBox`, `ActionStack`, `SettingsMenu` and `SpellsMenu` all get it, so the card, the icons and
   the menus move out together when she's bigger.
 - `scale={scale}`: her size too, so the card's speech-bubble tail can reach her mouth however big
   she is (`SpeechTail` in [the components part](8-renderer-components.md)).
@@ -2708,12 +2905,11 @@ The JSX it returns:
   which get an **Open** button each, and what that button does.
 - `onReport={requestTypes ? report : null}`: **Report to IT** under the text box, only when the
   tenant lists request types.
-- `activeId={settingsOpen ? 'settings' : sizeOpen ? 'size' : view !== startPage ? view : null}`:
-  the gear stays highlighted while its menu is open, and the size icon while the size menu is;
+- `activeId={settingsOpen ? 'settings' : spellsOpen ? 'spells' : view !== startPage ? view : null}`:
+  the gear stays highlighted while its menu is open, and the wand while the spells menu is;
   otherwise the icon of the page showing, when it isn't the start page (Ask Claude while the text
   box is on, for a panel that starts on the Apps list; the bell while the Jira page is on). The
   start page itself has no icon to highlight.
-- `theme={settings.theme}`: the current mode, so the theme icon shows the mode it switches to.
 - `pages={requestTypes ? ['servicedesk'] : []}`: the service desk icon opens a page when there are
   request types, so `ActionStack` marks it as expandable like the popover icons.
 - `dotted={[...]}`: small dots on icons with something behind them: Ask Claude while there's an
@@ -2727,6 +2923,8 @@ The JSX it returns:
   confirm" on New conversation or Clear text box).
 - `offset={actionOffset(settingsIndex, scale)}`: how far the gear is from the bubble's edge of the
   window at her size, so the menu lines up with it.
+- `size={state.size}`: her size and the biggest she can be, from the app state, so Size in the menu
+  shows what she really is.
 - `user={auth?.state === 'signed-in' || auth?.state === 'offline' ? auth.user : null}`: who's
   signed in, for the menu's "Signed in as" and Log out. `auth?.state` is `undefined` when `auth`
   is `null` (Claude Desktop), so then there's no user. After the check, TypeScript knows `auth`
@@ -2737,6 +2935,10 @@ The JSX it returns:
 - `update={update}`, `onCheckForUpdates={() => void window.assist.updates.check().then(setUpdate)}`:
   the Check for updates row and its click. The answer (`checking`) shows at once; the rest of the
   progress arrives through `onUpdateState`.
+- `onToggleTheme={() => void toggleTheme()}`: the menu's Light mode switch (`toggleTheme`, below).
+- `onSetSize={(next) => void window.assist.character.setSize(next)}`: Smaller or Bigger under Size
+  asks the main process to resize her, which saves it. The panel doesn't use the answer: the new
+  size comes back through `onSizeChanged` in `useAssistState`, and with it the new `layout`.
 - `onToggleAutoStart={async () =>`: flips Start with Windows and shows the settings the main
   process returns.
 - `onToggleAutoSend={() => void toggleAutoSend()}`: the menu's "Send in Claude automatically"
@@ -2744,14 +2946,12 @@ The JSX it returns:
 - `onClearText={() => void clearText()}`: the menu's Clear text box, offered instead of New
   conversation with Claude Desktop.
 - `onUninstall={() => void uninstall()}`: the menu's Uninstall.
-- `{open && sizeOpen && sizeIndex >= 0 && (`: the size menu, drawn the same way as the settings
-  menu: only while the panel is open, its icon has toggled it on, and the tenant shows the size
-  icon. `offset={actionOffset(sizeIndex, scale)}` lines it up with the size icon.
-- `size={state.size}`: her size and the biggest she can be, from the app state, so the menu shows
-  what she really is.
-- `onSetSize={(next) => void window.assist.character.setSize(next)}`: Smaller or Bigger asks the
-  main process to resize her, which saves it. The panel doesn't use the answer: the new size comes
-  back through `onSizeChanged` in `useAssistState`, and with it the new `layout`.
+- `{open && spellsOpen && spellsIndex >= 0 && (`: the spells menu, drawn the same way as the
+  settings menu: only while the panel is open, its icon has toggled it on, and the tenant shows the
+  wand. `offset={actionOffset(spellsIndex, scale)}` lines it up with the wand.
+- `onCast={(spell) => {`: picking a spell closes the menu (`setSpellsOpen(false)`) and asks the
+  main process to cast it (`window.assist.character.castSpell(spell)`), which closes the panel too,
+  so the spell can be seen. Nothing comes back: she shows what happens.
 
 #### `signedIn`, `busy`, `canSend`
 
@@ -2795,12 +2995,12 @@ Values worked out on every render from the current state.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.runAction -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 181–215](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L181-L215)
+[`src/renderer/src/views/PanelView.tsx`, lines 181–209](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L181-L209)
 
 ```tsx
 async function runAction(id: ActionId) {
-  // Any icon but the size menu's own closes the size menu (the settings menu's, below).
-  if (id !== 'size') setSizeOpen(false)
+  // Any icon but the spells menu's own closes the spells menu (the settings menu's, below).
+  if (id !== 'spells') setSpellsOpen(false)
   // With request types, the service desk icon opens a page for them instead of the portal.
   if (id === 'apps' || id === 'ask' || id === 'jira' || (id === 'servicedesk' && requestTypes)) {
     // Swaps the card to that page, or back again: the text box and the Apps list swap with
@@ -2812,15 +3012,9 @@ async function runAction(id: ActionId) {
     setView(view === id && !issueKey ? back : id)
     return
   }
-  if (id === 'theme') {
-    setSettings(
-      await window.assist.settings.setTheme(settings.theme === 'dark' ? 'light' : 'dark'),
-    )
-    return
-  }
-  if (id === 'size') {
+  if (id === 'spells') {
     setSettingsOpen(false)
-    setSizeOpen(!sizeOpen)
+    setSpellsOpen(!spellsOpen)
     return
   }
   if (id === 'settings') {
@@ -2839,8 +3033,9 @@ async function runAction(id: ActionId) {
 
 Runs when an action icon is clicked (`ActionStack`'s `onAction`).
 
-- `if (id !== 'size') setSizeOpen(false)`: as the comment says, any icon but the size menu's own
-  closes the size menu. The settings menu is closed further down, by each branch that needs to.
+- `if (id !== 'spells') setSpellsOpen(false)`: as the comment says, any icon but the spells menu's
+  own closes the spells menu. The settings menu is closed further down, by each branch that needs
+  to.
 - `if (id === 'apps' || id === 'ask' || id === 'jira' || (id === 'servicedesk' && requestTypes))`:
   the icons that swap the card to a page. Your apps, Ask Claude and Jira are "popover" actions
   (src/shared/actions.ts); the service desk is a command, but, as the comment says, with request
@@ -2853,12 +3048,9 @@ Runs when an action icon is clicked (`ActionStack`'s `onAction`).
 - `setView(view === id && !issueKey ? back : id)`: clicking the icon of a page that isn't showing
   shows it; clicking it again goes back. With an issue open over its page, the click shows the
   page itself instead. The Apps list is fetched by the effect above as soon as it shows.
-- `if (id === 'theme') {`: the light or dark mode icon, a "switch" action. It asks the main
-  process for the other mode (`settings.setTheme()`), which switches every window at once, and
-  keeps the settings it returns, so the icon shows the new mode.
-- `if (id === 'size') {`: Size is a "popover" action: it closes the settings menu and opens the
-  size menu, or closes it if it's open. Like Settings, it never reaches the main process itself;
-  the menu's buttons do (see `SizeMenu` in [the components part](8-renderer-components.md)).
+- `if (id === 'spells') {`: Spells is a "popover" action: it closes the settings menu and opens the
+  spells menu, or closes it if it's open. Like Settings, it never reaches the main process itself;
+  the spells in the menu do (see `SpellsMenu` in [the components part](8-renderer-components.md)).
 - `if (id === 'settings') {`: Settings is a "popover" action too: it opens UI inside the panel and
   never reaches the main process.
 - `setSettingsOpen(!settingsOpen)`: setting state doesn't change the variable in this run of the
@@ -2866,14 +3058,14 @@ Runs when an action icon is clicked (`ActionStack`'s `onAction`).
   `if (!settingsOpen)` means "the menu is being opened now".
 - `setSettings(await window.assist.settings.get())`: refreshes the settings as the menu opens,
   because Start with Windows can also be changed in Windows Settings.
-- `window.assist.invokeAction(id)`: after the `apps`, `ask`, `jira`, `theme`, `size` and
-  `settings` branches return, TypeScript knows `id` is `servicedesk` (without request types),
-  `screenshot`, `clones` or `close`, which is exactly the `CommandActionId` type `invokeAction`
-  accepts. The main process runs the matching handler from src/main/actions.ts.
+- `window.assist.invokeAction(id)`: after the `apps`, `ask`, `jira`, `spells` and `settings`
+  branches return, TypeScript knows `id` is `servicedesk` (without request types), `screenshot` or
+  `close`, which is exactly the `CommandActionId` type `invokeAction` accepts. The main process
+  runs the matching handler from src/main/actions.ts.
 - `if (result.message) showToast(result.message, result.ok ? 'info' : 'error')`: for example
-  "Screenshot saved", or "Couldn't take a screenshot" in red. Clones, close and the service desk
-  return no message when they work (the service desk closes the panel as the browser opens, and so
-  does Clones, so the clones can be seen walking along the taskbar).
+  "Screenshot saved", or "Couldn't take a screenshot" in red. Close and the service desk return no
+  message when they work (the service desk closes the panel as the browser opens, and Close closes
+  it as she vanishes, before the app quits).
 - There's no change of page after a screenshot: the panel comes back showing whatever it showed
   before (the Apps list, say). The view isn't reset either, because taking a screenshot moves the
   mode through `capturing`, not `collapsed` (see the mode effect above).
@@ -2882,7 +3074,7 @@ Runs when an action icon is clicked (`ActionStack`'s `onAction`).
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.changeDraft -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 217–220](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L217-L220)
+[`src/renderer/src/views/PanelView.tsx`, lines 211–214](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L211-L214)
 
 ```tsx
 function changeDraft(next: string) {
@@ -2901,7 +3093,7 @@ writes notes.json about half a second after typing stops, so an unsent message s
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.send -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 222–234](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L222-L234)
+[`src/renderer/src/views/PanelView.tsx`, lines 216–228](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L216-L228)
 
 ```tsx
 async function send() {
@@ -2941,7 +3133,7 @@ The other two reasons, `busy` and `empty`, are ignored: `canSend` already rules 
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.askInClaudeDesktop -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 236–248](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L236-L248)
+[`src/renderer/src/views/PanelView.tsx`, lines 230–242](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L230-L242)
 
 ```tsx
 async function askInClaudeDesktop() {
@@ -2986,7 +3178,7 @@ Claude automatically" on) carries on in the main process; the panel isn't told h
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.toggleFavorite -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 250–252](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L250-L252)
+[`src/renderer/src/views/PanelView.tsx`, lines 244–246](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L244-L246)
 
 ```tsx
 async function toggleFavorite(app: PortalApp, favorite: boolean) {
@@ -3004,7 +3196,7 @@ with the starred apps first.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.openApp -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 254–265](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L254-L265)
+[`src/renderer/src/views/PanelView.tsx`, lines 248–259](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L248-L259)
 
 ```tsx
 async function openApp(app: PortalApp) {
@@ -3039,7 +3231,7 @@ panel stays open with a toast, and the portal itself is one click away at the bo
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.openIssue,report,disconnectAtlassian -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 267–287](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L267-L287)
+[`src/renderer/src/views/PanelView.tsx`, lines 261–281](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L261-L281)
 
 ```tsx
 /** Opens a Jira issue in the card if connected to Atlassian, otherwise in the browser. */
@@ -3082,7 +3274,7 @@ async function disconnectAtlassian() {
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.attachLatest,removeAttachment,openAttachment -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 289–305](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L289-L305)
+[`src/renderer/src/views/PanelView.tsx`, lines 283–299](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L283-L299)
 
 ```tsx
 async function attachLatest() {
@@ -3123,7 +3315,7 @@ result.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.copy -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 307–310](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L307-L310)
+[`src/renderer/src/views/PanelView.tsx`, lines 301–304](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L301-L304)
 
 ```tsx
 async function copy(text: string) {
@@ -3141,7 +3333,7 @@ The Copy button on Claude's replies. The main process writes the text to the cli
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.signOut,clearText,uninstall,newConversation,setEffort,toggleAutoSend -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 312–345](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L312-L345)
+[`src/renderer/src/views/PanelView.tsx`, lines 306–339](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L306-L339)
 
 ```tsx
 async function signOut() {
@@ -3208,24 +3400,24 @@ Settings menu actions.
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.closeMenusOnOutsideClick -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 347–356](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L347-L356)
+[`src/renderer/src/views/PanelView.tsx`, lines 341–350](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L341-L350)
 
 ```tsx
-// Clicking anywhere else in the panel closes the settings menu, or the size menu.
+// Clicking anywhere else in the panel closes the settings menu, or the spells menu.
 function closeMenusOnOutsideClick(event: PointerEvent) {
   if (!(event.target instanceof Element)) return
   if (settingsOpen && !event.target.closest('[data-settings-menu], [data-action="settings"]')) {
     setSettingsOpen(false)
   }
-  if (sizeOpen && !event.target.closest('[data-size-menu], [data-action="size"]')) {
-    setSizeOpen(false)
+  if (spellsOpen && !event.target.closest('[data-spells-menu], [data-action="spells"]')) {
+    setSpellsOpen(false)
   }
 }
 ```
 
 <!-- /code -->
 
-As the comment says, closes the settings menu, or the size menu, when you press anywhere else in
+As the comment says, closes the settings menu, or the spells menu, when you press anywhere else in
 the panel. The page only receives the press where the window takes the mouse, so "elsewhere" means
 the chat card, another icon or the other menu. Clicking outside the panel altogether takes focus
 away from the window, the main process closes the panel (`BubbleController.panelBlurred`), and the
@@ -3237,13 +3429,33 @@ mode effect above closes the menus.
 - `closest('[data-settings-menu], [data-action="settings"]')`: with the settings menu open, presses
   inside the menu or on the gear don't count. Without the gear exception, pressing the gear would
   close the menu on the way down and its click would open it again straight away.
-- `closest('[data-size-menu], [data-action="size"]')`: the same for the size menu and its icon.
+- `closest('[data-spells-menu], [data-action="spells"]')`: the same for the spells menu and the
+  wand.
+
+#### `toggleTheme`
+
+<!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.toggleTheme -->
+
+[`src/renderer/src/views/PanelView.tsx`, lines 352–354](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L352-L354)
+
+```tsx
+async function toggleTheme() {
+  setSettings(await window.assist.settings.setTheme(settings.theme === 'dark' ? 'light' : 'dark'))
+}
+```
+
+<!-- /code -->
+
+The settings menu's Light mode switch. It asks the main process for the other mode
+(`settings.setTheme()`), which switches every window at once (see `SettingsService.setTheme()` in
+[Main process: startup, IPC and app plumbing](2-main-startup.md)), and keeps the settings it
+returns, so the switch shows the new mode. The menu stays open, as for the other switches.
 
 #### `signInPrompt`, `banner`: sign-in or chat
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.signInPrompt,banner -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 358–403](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L358-L403)
+[`src/renderer/src/views/PanelView.tsx`, lines 356–401](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L356-L401)
 
 ```tsx
 const signInPrompt =
@@ -3338,11 +3550,11 @@ one saying Claude Desktop isn't installed. With the built-in chat, it depends on
   saved sign-in.
 - `{auth.message}`: the offline reason, written by `AuthManager`.
 
-#### `scale`, `layout`, `settingsIndex`, `sizeIndex`
+#### `scale`, `layout`, `settingsIndex`, `spellsIndex`
 
-<!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.scale,layout,settingsIndex,sizeIndex -->
+<!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.scale,layout,settingsIndex,spellsIndex -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 405–409](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L405-L409)
+[`src/renderer/src/views/PanelView.tsx`, lines 403–407](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L403-L407)
 
 ```tsx
 // Everything sits further out the bigger she is (see panelLayout).
@@ -3352,7 +3564,7 @@ const layout = panelLayout(scale)
 
 const settingsIndex = branding.actions.indexOf('settings')
 
-const sizeIndex = branding.actions.indexOf('size')
+const spellsIndex = branding.actions.indexOf('spells')
 ```
 
 <!-- /code -->
@@ -3364,7 +3576,7 @@ const sizeIndex = branding.actions.indexOf('size')
   its padding, which grow with her. At her usual size the card starts 100 px across and the stack
   100 px up; at twice her size, 188 px. The main process sizes the panel window from the same
   function, so everything fits.
-- `settingsIndex`, `sizeIndex`: where the gear and the size icon are in the tenant's list of icons
+- `settingsIndex`, `spellsIndex`: where the gear and the wand are in the tenant's list of icons
   (`actions` in tenant.json), counting from the bubble. Each is `-1` if the tenant doesn't show
   that icon, and then its menu is never drawn.
 
@@ -3372,7 +3584,7 @@ const sizeIndex = branding.actions.indexOf('size')
 
 <!-- code: apps/desktop/src/renderer/src/views/PanelView.tsx#Panel.issueKeys,unreadNotifications,requestNews,pageContent,page -->
 
-[`src/renderer/src/views/PanelView.tsx`, lines 410–486](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L410-L486)
+[`src/renderer/src/views/PanelView.tsx`, lines 408–484](../../apps/desktop/src/renderer/src/views/PanelView.tsx#L408-L484)
 
 ```tsx
 // Only keys of real projects, once the projects are known.

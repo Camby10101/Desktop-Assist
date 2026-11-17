@@ -1,4 +1,12 @@
-import { FIDGET_MS, isFidget, type Fidget, type Pose } from '@shared/character'
+import {
+  FIDGET_MS,
+  SPELL_POSE_MS,
+  isFidget,
+  isSpellPose,
+  type Fidget,
+  type Pose,
+  type SpellPose,
+} from '@shared/character'
 import {
   bubbleMetrics,
   isLeftCorner,
@@ -20,7 +28,15 @@ import {
   panelWindowBounds,
   restPosition,
 } from './layout'
-import { WANDER, activityDelay, fallDuration, fallPosition, nextActivity, walkStep } from './wander'
+import {
+  WANDER,
+  activityDelay,
+  fallDuration,
+  fallPosition,
+  nextActivity,
+  walkStep,
+  walkTarget,
+} from './wander'
 
 /** The parts of a window the controller drives. Electron windows are adapted in windows.ts. */
 export interface Surface {
@@ -138,6 +154,8 @@ export class BubbleController {
   private lastBlurCollapse = Number.NEGATIVE_INFINITY
   private expandedAt = Number.NEGATIVE_INFINITY
   private expandAfterReturn = false
+  /** She's vanishing as the app closes (farewell): she does nothing more, whatever's clicked. */
+  private leaving = false
   private readonly now: () => number
   private readonly random: () => number
 
@@ -180,8 +198,8 @@ export class BubbleController {
   }
 
   /**
-   * Where she stands, for her clones and her vision: her display's work area, her window, and her
-   * size.
+   * Where she stands, for her clones, her vision and her spells' effects: her display's work area,
+   * her window, and her size.
    */
   get standing(): { workArea: Rect; bounds: Rect; scale: number } {
     return {
@@ -212,6 +230,7 @@ export class BubbleController {
 
   /** A click on the bubble. `pressedAt` is when its mouse button went down (wall-clock ms). */
   clickBubble(pressedAt?: number): void {
+    if (this.leaving) return
     switch (this.mode) {
       case 'collapsed': {
         const closedByThisPress =
@@ -235,6 +254,7 @@ export class BubbleController {
 
   /** Opens the panel where the character stands. While she's falling, once she lands. */
   expand(): void {
+    if (this.leaving) return
     switch (this.mode) {
       case 'expanded':
         this.deps.panel.focus()
@@ -278,7 +298,7 @@ export class BubbleController {
 
   /** The mouse pressed on the character and moved: it dangles from the pointer until released. */
   startDrag(): void {
-    if (this.mode !== 'collapsed' && this.mode !== 'expanded') return
+    if (this.leaving || (this.mode !== 'collapsed' && this.mode !== 'expanded')) return
     this.cancelHide()
     this.deps.panel.hide()
     this.setMode('dragging')
@@ -309,6 +329,55 @@ export class BubbleController {
     this.fitScale()
     this.inset = insetAt(display.workArea, corner, this.position.x, this.scale)
     this.fall()
+  }
+
+  /**
+   * Plays one of her poses on purpose for its time: a spell's (SPELL_POSES), or a fidget as she
+   * casts one of the others. Then `then`, or, without one, she stands idle again and gets on with
+   * her day. As with a fidget, anything the user does stops it (and `then` never comes).
+   * Collapsed only: casting a spell closes the panel first.
+   */
+  act(pose: Fidget | SpellPose, then?: () => void): void {
+    if (this.mode !== 'collapsed') return
+    this.stopIdling()
+    this.setPose(pose)
+    this.idleTimer = setTimeout(
+      () => {
+        this.idleTimer = null
+        if (then) return then()
+        this.setPose('idle')
+        this.scheduleActivity(false)
+      },
+      isFidget(pose) ? FIDGET_MS[pose] : SPELL_POSE_MS[pose],
+    )
+  }
+
+  /**
+   * Her teleport spell: she vanishes, and appears again somewhere else along the taskbar near her
+   * corner (at least WANDER.minWalk away, when there's room), the panel moved to open from there.
+   */
+  teleport(): void {
+    this.act('vanish', () => {
+      this.inset = walkTarget(this.inset, this.zone(), this.random())
+      this.position = this.rest()
+      this.placeWindows()
+      this.act('appear')
+    })
+  }
+
+  /**
+   * Closing the app: the panel closes, and she vanishes into white motes where she is (her
+   * `vanish` pose); then `done` (which quits). From then on she does nothing more, and clicking or
+   * dragging her does nothing: she's leaving.
+   */
+  farewell(done: () => void): void {
+    if (this.leaving) return
+    this.collapse()
+    this.leaving = true
+    this.stopIdling()
+    this.stopTicker()
+    this.setPose('vanish')
+    setTimeout(done, SPELL_POSE_MS.vanish)
   }
 
   /** Hides both windows, runs `task` (a screenshot), then reopens the panel. */
@@ -426,7 +495,7 @@ export class BubbleController {
   /** Waits a while, then does something on its own (see doActivity). Collapsed only. */
   private scheduleActivity(first: boolean): void {
     this.cancelActivity()
-    if (this.mode !== 'collapsed') return
+    if (this.mode !== 'collapsed' || this.leaving) return
     this.idleTimer = setTimeout(() => this.doActivity(), activityDelay(this.random, first))
   }
 
@@ -481,11 +550,11 @@ export class BubbleController {
     this.setPose('idle')
   }
 
-  /** Stops whatever it was doing on its own: the next activity, a fidget, a walk. */
+  /** Stops whatever it was doing on its own: the next activity, a fidget or a spell, a walk. */
   private stopIdling(): void {
     this.cancelActivity()
     this.stopWalking()
-    if (isFidget(this.pose)) this.setPose('idle')
+    if (isFidget(this.pose) || isSpellPose(this.pose)) this.setPose('idle')
   }
 
   private cancelActivity(): void {

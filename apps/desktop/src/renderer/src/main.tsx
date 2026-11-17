@@ -4,6 +4,7 @@ import './styles.css'
 import { BubbleView } from './views/BubbleView'
 import { ClonesView } from './views/ClonesView'
 import { PanelView } from './views/PanelView'
+import { SpellView } from './views/SpellView'
 import { VisionView } from './views/VisionView'
 
 // Every overlay window loads this page; the query string says which one this is.
@@ -17,6 +18,8 @@ createRoot(document.getElementById('root')!).render(
       <ClonesView />
     ) : view === 'vision' ? (
       <VisionView />
+    ) : view === 'spell' ? (
+      <SpellView />
     ) : (
       <PanelView />
     )}

@@ -114,7 +114,7 @@ export class SettingsService {
     await this.save({ bubbleAnchor: anchor })
   }
 
-  /** Her size as chosen in the size menu, or null if it's never been changed. */
+  /** Her size as chosen in Settings, or null if it's never been changed. */
   get characterScale(): number | null {
     return this.prefs.characterScale ?? null
   }

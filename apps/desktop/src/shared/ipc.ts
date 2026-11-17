@@ -1,6 +1,7 @@
 import type { CommandActionId } from './actions'
 import type { Pose } from './character'
 import type { CharacterSize, Corner, Point } from './geometry'
+import type { Spell } from './spells'
 import type {
   ActionResult,
   AppsState,
@@ -53,6 +54,7 @@ export const IPC = {
   settingsSetFavoriteApp: 'assist:settings-set-favorite-app',
   settingsSetTheme: 'assist:settings-set-theme',
   characterSetSize: 'assist:character-set-size',
+  characterCastSpell: 'assist:character-cast-spell',
   authSignIn: 'assist:auth-sign-in',
   authCancel: 'assist:auth-cancel',
   authSignOut: 'assist:auth-sign-out',
@@ -93,6 +95,7 @@ export const IPC = {
   // main → renderer
   modeChanged: 'assist:mode-changed',
   poseChanged: 'assist:pose-changed',
+  bubbleArrive: 'assist:bubble-arrive',
   cornerChanged: 'assist:corner-changed',
   sizeChanged: 'assist:size-changed',
   clickThroughReset: 'assist:click-through-reset',
@@ -148,6 +151,8 @@ export interface AssistApi {
   character: {
     /** Makes her `scale` times her usual size (one of CHARACTER_SIZES); saved. */
     setSize(scale: number): Promise<CharacterSize>
+    /** Casts one of her spells: the panel closes so it can be seen. */
+    castSpell(spell: Spell): Promise<void>
   }
   auth: {
     /** Opens JumpCloud in the browser; progress arrives through `onAuthStatus`. */
@@ -242,6 +247,8 @@ export interface AssistApi {
   onModeChanged(callback: (mode: Mode) => void): () => void
   /** The character's pose changed (walking, fidgeting, dangling...). */
   onPoseChanged(callback: (pose: Pose) => void): () => void
+  /** Her window has just been shown as the app starts: time for her to appear (the bubble's page). */
+  onArrive(callback: () => void): () => void
   onCornerChanged(callback: (corner: Corner) => void): () => void
   /** Her size changed, or the biggest she can be on her screen did. */
   onSizeChanged(callback: (size: CharacterSize) => void): () => void

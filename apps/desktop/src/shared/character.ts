@@ -1,6 +1,8 @@
 // The character that stands in for the bubble: what she's doing (her pose), shared by the main
 // process (which decides) and the bubble's page (which animates it).
 
+import { EXPLOSION, TELEPORT } from './spells'
+
 /**
  * Things she does now and then, once she's been left alone for a while (each plays once):
  * - `hop`: a little jump.
@@ -52,12 +54,33 @@ export const FIDGETS = [
 export type Fidget = (typeof FIDGETS)[number]
 
 /**
+ * What she does for her spells (src/shared/spells.ts), only when one is cast:
+ * - `chant`: arms raised, eyes shut, a magic circle under her and her hair and robe lifting, as she
+ *   chants (round and round, for as long as the explosion's chant lasts).
+ * - `vanish`: she dissolves into white motes that drift up and fade (teleporting; and when the app
+ *   is closed), and `appear`: the motes come down and she forms out of them (teleporting; and
+ *   when the app starts).
+ */
+export const SPELL_POSES = ['chant', 'vanish', 'appear'] as const
+export type SpellPose = (typeof SPELL_POSES)[number]
+
+/** How long each of her spells' poses lasts (ms). */
+export const SPELL_POSE_MS: Record<SpellPose, number> = {
+  chant: EXPLOSION.chantMs,
+  vanish: TELEPORT.vanishMs,
+  appear: TELEPORT.appearMs,
+}
+
+export const isSpellPose = (pose: Pose): pose is SpellPose =>
+  (SPELL_POSES as readonly string[]).includes(pose)
+
+/**
  * - `idle`: standing, breathing, blinking now and then.
  * - `walk-left`, `walk-right`: walking along the taskbar (the window moves with her).
  * - `dragged`: dangling while she's dragged, or falling after a drop.
- * - one of the FIDGETS.
+ * - one of the FIDGETS, or one of the SPELL_POSES.
  */
-export type Pose = 'idle' | 'walk-left' | 'walk-right' | 'dragged' | Fidget
+export type Pose = 'idle' | 'walk-left' | 'walk-right' | 'dragged' | Fidget | SpellPose
 
 /** How long each fidget plays (ms): the main process goes back to idle after it. */
 export const FIDGET_MS: Record<Fidget, number> = {
@@ -100,7 +123,7 @@ export const VISION = {
 } as const
 
 /**
- * Her clones (the Clones action): how many, how long they last (ms), and how long they take to
+ * Her clones (the Clones spell): how many, how long they last (ms), and how long they take to
  * fade in and out at either end.
  */
 export const CLONES = { count: 10, durationMs: 30_000, fadeMs: 400 } as const

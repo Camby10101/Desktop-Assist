@@ -1,7 +1,6 @@
 import type { CommandActionId } from '@shared/actions'
 import type { ActionResult } from '@shared/types'
 import type { BubbleController } from './bubble/BubbleController'
-import type { Clones } from './bubble/clones'
 import type { ScreenshotService } from './screenshots/ScreenshotService'
 
 export type ActionHandlers = Record<CommandActionId, () => Promise<ActionResult>>
@@ -9,7 +8,6 @@ export type ActionHandlers = Record<CommandActionId, () => Promise<ActionResult>
 /** Main-process handlers for the `command` actions in the registry (src/shared/actions.ts). */
 export function createActionHandlers(deps: {
   controller: BubbleController
-  clones: Pick<Clones, 'start'>
   screenshots: ScreenshotService
   /** Opens the company's IT service desk in the browser, or null if the tenant has none. */
   openServiceDesk: (() => Promise<void>) | null
@@ -37,14 +35,9 @@ export function createActionHandlers(deps: {
         return { ok: false, message: "Couldn't take a screenshot" }
       }
     },
-    async clones() {
-      // Out of the way, so the clones can be seen: they walk along the taskbar, where she stands.
-      deps.controller.collapse()
-      deps.clones.start(deps.controller.standing)
-      return { ok: true }
-    },
     async close() {
-      deps.quit()
+      // She vanishes into white motes first, then the app quits.
+      deps.controller.farewell(deps.quit)
       return { ok: true }
     },
   }

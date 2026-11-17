@@ -4,10 +4,10 @@ import type { Size } from '@shared/geometry'
 import { IPC } from '@shared/ipc'
 import type { PanelSurface, Surface } from './BubbleController'
 
-export type View = 'bubble' | 'panel' | 'clones' | 'vision'
+export type View = 'bubble' | 'panel' | 'clones' | 'vision' | 'spell'
 
 /** Windows that only show something: they never take the mouse or the focus. */
-const passive = (view: View) => view === 'clones' || view === 'vision'
+const passive = (view: View) => view === 'clones' || view === 'vision' || view === 'spell'
 
 /**
  * How the overlay windows stay on top. Electron's default level for always-on-top, "floating",
@@ -23,12 +23,13 @@ export const ON_TOP_LEVEL = 'pop-up-menu'
 export const ON_TOP_CHECK_MS = 5000
 
 /**
- * Creates an overlay window: the bubble, the panel, a window of clones, or the light and logo of
- * her `vision` habit. All are frameless, transparent, always on top and hidden from the taskbar
- * and Alt+Tab. `query` adds to the page's query string (`view` says which page it is).
+ * Creates an overlay window: the bubble, the panel, a window of clones, the light and logo of
+ * her `vision` habit, or a spell's effects. All are frameless, transparent, always on top and
+ * hidden from the taskbar and Alt+Tab. `query` adds to the page's query string (`view` says which
+ * page it is).
  *
- * The clones' and the vision's windows never take the mouse or the focus: clicks go straight
- * through them, so they never get in the way.
+ * The clones', the vision's and the spells' windows never take the mouse or the focus: clicks go
+ * straight through them, so they never get in the way.
  *
  * The panel window is mostly see-through, so it's click-through: clicks on its empty areas go to
  * whatever is underneath, and the renderer turns mouse input back on while the pointer is over
@@ -60,7 +61,8 @@ export function createOverlayWindow(
     // Both can take the focus. A bubble that couldn't had its mouse presses dropped by Windows /
     // Chromium after clicking elsewhere (only the release arrived, so clicks did nothing).
     // Clicking the bubble now takes the focus from an open panel; BubbleController.clickBubble
-    // knows that press closed it. The clones' and the vision's windows never need it.
+    // knows that press closed it. The clones', the vision's and the spells' windows never need
+    // it.
     focusable: !passive(view),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),

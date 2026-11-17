@@ -6,7 +6,7 @@ import { useAccentColor } from '../hooks/useAssistState'
 import { clonePose, spawnClones, stepClone, type Clone, type Room } from '../lib/clones'
 
 /**
- * Her clones (the Clones action), in a see-through window along the taskbar that never takes the
+ * Her clones (the Clones spell), in a see-through window along the taskbar that never takes the
  * mouse: CLONES.count of her, at her size, setting off from where she stands and wandering up and
  * down (see lib/clones.ts), each stopping now and then. They fade in, and fade out just before
  * the main process closes the window. Everything they need comes in the query string: where she

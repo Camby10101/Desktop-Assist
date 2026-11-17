@@ -2,11 +2,11 @@
 
 [← Code Guide](CODE_GUIDE.md)
 
-These eight files draw almost everything that appears around the bubble when you click it. `Panel`
+These nine files draw almost everything that appears around the bubble when you click it. `Panel`
 in `PanelView.tsx` (see [The pages](7-renderer-pages.md)) renders four of them directly: the
 `ActionStack` of round icons in a column beside the bubble, the `ChatBox` card next to the bubble on
-the side facing the middle of the screen, the `SettingsMenu`, which opens beside the gear icon, and
-the `SizeMenu`, which opens beside the size icon.
+the side facing the middle of the screen, the `SettingsMenu`, which opens beside the gear icon (with
+`SizeControl`, her size, as one of its rows), and the `SpellsMenu`, which opens beside the wand icon.
 Everything else lives inside the chat card: `SignInPanel` replaces the chat while nobody is signed
 in, `MessageList` shows the conversation (using `Markdown` for Claude's replies), and an
 `AttachmentChip` above the text box stands for each attached screenshot. When questions go to Claude
@@ -21,7 +21,9 @@ One more component belongs to the bubble's page instead: `Character`, with its s
 code in `src/renderer/src/character/`: a tiny pixel rasteriser (`raster.ts`), the rig that poses
 and draws her (`rig.ts`), the parts of her drawn by hand (`pictures.ts`) and her animations
 (`sprite.ts`). `BubbleView` renders `Character`, and so does `ClonesView`, once for each of her
-clones; all of these are covered at the end of this page.
+clones; all of these are covered near the end of this page. Last come the pixel art of her spells'
+effects, which `SpellView` draws: where things are, moment by moment (`lib/spellMotion.ts`), and
+the drawing itself (`lib/spellArt.ts`).
 
 ## `src/renderer/src/components/ChatBox.tsx`: the chat card
 
@@ -197,7 +199,7 @@ it.
 through to whatever is underneath. `useClickThrough` (see [The pages](7-renderer-pages.md))
 switches mouse input on only while the pointer is over an element that is, or is inside, one
 marked `data-hit`. So every piece of real UI must carry it. Here it's the whole card, which covers
-everything inside it; in `SettingsMenu` and `SizeMenu` it's the menu, and in `ActionStack` each
+everything inside it; in `SettingsMenu` and `SpellsMenu` it's the menu, and in `ActionStack` each
 icon.
 
 **How the layout mirrors for each corner.** The layout works from any corner of the screen,
@@ -217,8 +219,7 @@ the other corners are mirror images:
 
 ```text
                                        [close]
-                                       [clones]
-                                       [size]        <- SizeMenu opens leftward, over the card
+                                       [spells]      <- SpellsMenu opens leftward, over the card
   +-----------------------------+      [settings]    <- SettingsMenu opens leftward, over the card
   | MessageList                 |      [screenshot]
   | Banner (only sometimes)     |
@@ -1333,17 +1334,18 @@ passed as `children`.
 
 The small menu that opens beside the gear icon. `Panel` renders it only while the panel is open, the
 gear has toggled it on, and the tenant's list of actions includes `settings`. Its props are the
-`corner`, `layout` and `offset` for positioning; the current `settings`, `branding` (app and
-company name, and which kind of chat), `version`, signed-in `user`, the `atlassianUser` connected
-to Atlassian and how Check for updates is going (`update`) to display; and one callback per menu
-item, `onUninstall`, `onDisconnectAtlassian` and `onCheckForUpdates` included. `Panel` closes it on
+`corner`, `layout` and `offset` for positioning; the current `settings`, her `size`, `branding` (app
+and company name, and which kind of chat), `version`, signed-in `user`, the `atlassianUser`
+connected to Atlassian and how Check for updates is going (`update`) to display; and one callback
+per menu item, `onToggleTheme`, `onSetSize`, `onUninstall`, `onDisconnectAtlassian` and
+`onCheckForUpdates` included. `Panel` closes it on
 Esc, on a click anywhere else in the panel, and when the panel closes.
 
 ### `CONFIRM_MS`, `EFFORTS`
 
 <!-- code: apps/desktop/src/renderer/src/components/SettingsMenu.tsx#CONFIRM_MS,EFFORTS -->
 
-[`src/renderer/src/components/SettingsMenu.tsx`, lines 19–25](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L19-L25)
+[`src/renderer/src/components/SettingsMenu.tsx`, lines 20–26](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L20-L26)
 
 ```tsx
 const CONFIRM_MS = 3000
@@ -1368,7 +1370,7 @@ const EFFORTS: { value: Effort; label: string; hint: string }[] = [
 
 <!-- code: apps/desktop/src/renderer/src/components/SettingsMenu.tsx#SettingsMenu -->
 
-[`src/renderer/src/components/SettingsMenu.tsx`, lines 27–243](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L27-L243)
+[`src/renderer/src/components/SettingsMenu.tsx`, lines 28–268](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L28-L268)
 
 ```tsx
 /** The menu that opens beside the gear icon, on the side facing the middle of the screen. */
@@ -1379,6 +1381,8 @@ export function SettingsMenu(props: {
   /** Distance from the bubble's edge of the window to the gear, so the menu lines up with it. */
   offset: number
   settings: Settings
+  /** Her size, and the biggest she can be. */
+  size: CharacterSize
   branding: Branding
   version: string
   /** Who's signed in, or null when nobody is. */
@@ -1389,6 +1393,8 @@ export function SettingsMenu(props: {
   /** Check for updates, as it stands. */
   update: UpdateState
   onCheckForUpdates: () => void
+  onToggleTheme: () => void
+  onSetSize: (scale: number) => void
   onToggleAutoStart: () => void
   onSetEffort: (effort: Effort) => void
   onToggleAutoSend: () => void
@@ -1438,6 +1444,26 @@ export function SettingsMenu(props: {
         overflowY: 'auto',
       }}
     >
+      <button
+        type="button"
+        role="menuitemcheckbox"
+        aria-checked={settings.theme === 'light'}
+        onClick={props.onToggleTheme}
+        className="flex w-full items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800"
+      >
+        <span>
+          Light mode
+          <span className="block text-[11px] text-zinc-500">
+            {settings.theme === 'light' ? 'Light windows' : 'Dark windows'}
+          </span>
+        </span>
+        <Switch on={settings.theme === 'light'} />
+      </button>
+
+      <SizeControl size={props.size} onSetSize={props.onSetSize} />
+
+      <div className="my-1 border-t border-black/10 dark:border-white/10" />
+
       <button
         type="button"
         role="menuitemcheckbox"
@@ -1592,8 +1618,8 @@ export function SettingsMenu(props: {
 
 <!-- /code -->
 
-Draws the menu's rows. With the built-in chat: Start with Windows, Response style, Open
-screenshots folder, New conversation, who's signed in with Log out, and the version. With Claude
+Draws the menu's rows. Every menu starts with Light mode and her Size, then a line. Then, with the
+built-in chat: Start with Windows, Response style, Open screenshots folder, New conversation, who's signed in with Log out, and the version. With Claude
 Desktop the chat and its settings live in Claude Desktop, so there's no Response style and no
 sign-in; instead there's a "Send in Claude automatically" switch, and New conversation becomes
 Clear text box. When the tenant offers it, either kind has Check for updates, and when connected
@@ -1611,6 +1637,8 @@ switches the "New conversation" (or "Clear text box") row into its "Click again"
   the stack.
 - `offset: number`: `Panel` passes `actionOffset()` of the gear's place in the icon stack, at her
   size.
+- `size: CharacterSize`: as its comment says, her size, and the biggest she can be, for the Size
+  row.
 - `...anchored(props.corner, props.layout.settingsX, fit.offset)`: `settingsX` (76 px at her
   usual size, 124 px at twice it) puts the menu 8 px past the action icons, on the side facing the
   middle of the screen. The offset makes its near edge level with the gear's: in a bottom corner
@@ -1641,6 +1669,16 @@ switches the "New conversation" (or "Clear text box") row into its "Click again"
   go and `fit.maxHeight` how tall it can be.
 - `const builtInChat = branding.chatApp === 'built-in'`: which rows to show. The rest of the menu
   checks this one value.
+- `aria-checked={settings.theme === 'light'}`: the first row, Light mode, is a `menuitemcheckbox`
+  like Start with Windows below, on while the windows are light. Clicking it calls `onToggleTheme`,
+  which asks the main process for the other mode (`Panel.toggleTheme`); every window switches at
+  once, and the menu stays open.
+- `{settings.theme === 'light' ? 'Light windows' : 'Dark windows'}`: the grey line under it says
+  which the windows are now.
+- `<SizeControl size={props.size} onSetSize={props.onSetSize} />`: the second row, her size, with
+  its Smaller and Bigger buttons (see `SizeControl` below).
+- `<div className="my-1 border-t ..." />`: a line under the two, which are about how things look,
+  setting them apart from the rest of the menu.
 - `disabled={!settings.autoStartAvailable}`: Start with Windows only works in the installed app,
   not in `npm run dev`; there the row is greyed out with a note. `onToggleAutoStart` asks the
   main process to flip it, and `Panel` keeps the settings it returns (see `settings.ts` in
@@ -1695,7 +1733,7 @@ switches the "New conversation" (or "Clear text box") row into its "Click again"
 
 <!-- code: apps/desktop/src/renderer/src/components/SettingsMenu.tsx#UpdateItem -->
 
-[`src/renderer/src/components/SettingsMenu.tsx`, lines 245–283](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L245-L283)
+[`src/renderer/src/components/SettingsMenu.tsx`, lines 270–308](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L270-L308)
 
 ```tsx
 /** Check for updates, showing how it's going: checking, downloading, installing, or the answer. */
@@ -1764,7 +1802,7 @@ whole job happens in the main process (`Updater` in `src/main/updates.ts`; see
 
 <!-- code: apps/desktop/src/renderer/src/components/SettingsMenu.tsx#MenuItem -->
 
-[`src/renderer/src/components/SettingsMenu.tsx`, lines 285–314](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L285-L314)
+[`src/renderer/src/components/SettingsMenu.tsx`, lines 310–339](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L310-L339)
 
 ```tsx
 function MenuItem(props: {
@@ -1819,7 +1857,7 @@ One row of the menu: an icon and a label, as a button.
 
 <!-- code: apps/desktop/src/renderer/src/components/SettingsMenu.tsx#Switch -->
 
-[`src/renderer/src/components/SettingsMenu.tsx`, lines 316–333](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L316-L333)
+[`src/renderer/src/components/SettingsMenu.tsx`, lines 341–358](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L341-L358)
 
 ```tsx
 function Switch({ on }: { on: boolean }) {
@@ -1851,25 +1889,23 @@ it tells screen readers whether it's on, so the switch itself is `aria-hidden`.
 - `on ? 'translate-x-4.5' : 'translate-x-0.5'`: the 16 px knob sits 2 px from the left of the
   36 px track when off and slides to 18 px when on; `transition-transform` animates the slide.
 
-## `src/renderer/src/components/SizeMenu.tsx`: the size menu
+## `src/renderer/src/components/SizeControl.tsx` and `lib/sizes.ts`: her size, in Settings
 
-The small menu that opens beside the size icon (Size), with buttons to make her smaller or
-bigger. `Panel` renders it only while the panel is open, the size icon has toggled it on, and the
-tenant's list of actions includes `size`. Its props are the `corner`, `layout` and `offset` for
-positioning, as for `SettingsMenu`; her `size` (`CharacterSize` in `src/shared/geometry.ts`: her
-`scale`, and `max`, the biggest she can be on her screen); and `onSetSize`, which asks the main
-process for another size. `Panel` closes it on Esc, on a click anywhere else in the panel, when
-another icon is clicked, and when the panel closes.
+The row near the top of the settings menu, with buttons to make her smaller or bigger. It used to
+be a menu of its own, beside a size icon; now it's one row of Settings, under Light mode.
+`SettingsMenu` renders it with her `size` (`CharacterSize` in `src/shared/geometry.ts`: her
+`scale`, and `max`, the biggest she can be on her screen) and `onSetSize`, which asks the main
+process for another size. The two small functions behind it, the label and the next size, are in
+`src/renderer/src/lib/sizes.ts`, a file of their own with no React in it, so `sizes.test.ts` can
+test them without a page.
 
-### `MENU_WIDTH`, `sizeLabel()` and `nextSize()`
+### `sizeLabel()` and `nextSize()`
 
-<!-- code: apps/desktop/src/renderer/src/components/SizeMenu.tsx#MENU_WIDTH,sizeLabel,nextSize -->
+<!-- code: apps/desktop/src/renderer/src/lib/sizes.ts#sizeLabel,nextSize -->
 
-[`src/renderer/src/components/SizeMenu.tsx`, lines 13–25](../../apps/desktop/src/renderer/src/components/SizeMenu.tsx#L13-L25)
+[`src/renderer/src/lib/sizes.ts`, lines 3–13](../../apps/desktop/src/renderer/src/lib/sizes.ts#L3-L13)
 
-```tsx
-const MENU_WIDTH = 200
-
+```ts
 /** Her size as people say it: "½×", "1.5×", "6×". */
 export function sizeLabel(scale: number): string {
   return `${scale === 0.5 ? '½' : scale === 0.75 ? '¾' : scale}×`
@@ -1885,7 +1921,6 @@ export function nextSize(scale: number, way: 1 | -1, max: number): number | null
 
 <!-- /code -->
 
-- `MENU_WIDTH = 200`: the menu's width in pixels, narrower than the settings menu.
 - `sizeLabel(scale)`: as the comment says, her size as people say it: the two fractions as `½` and
   `¾`, any other size as the number itself (`1`, `1.5`, `6`), then `×`.
 - `nextSize(scale, way, max)`: as the comment says, the next size down (`way` is `-1`) or up (`1`)
@@ -1894,77 +1929,51 @@ export function nextSize(scale: number, way: 1 | -1, max: number): number | null
   hers and `findLast()` the last one smaller. Both give `undefined` when there's none, and
   `?? null` turns that into `null`.
 
-### `SizeMenu`
+### `SizeControl`
 
-<!-- code: apps/desktop/src/renderer/src/components/SizeMenu.tsx#SizeMenu -->
+<!-- code: apps/desktop/src/renderer/src/components/SizeControl.tsx#SizeControl -->
 
-[`src/renderer/src/components/SizeMenu.tsx`, lines 27–93](../../apps/desktop/src/renderer/src/components/SizeMenu.tsx#L27-L93)
+[`src/renderer/src/components/SizeControl.tsx`, lines 6–46](../../apps/desktop/src/renderer/src/components/SizeControl.tsx#L6-L46)
 
 ```tsx
 /**
- * The menu that opens beside the size icon: buttons to make her smaller and bigger, a step of
+ * Her size, in the Settings menu: buttons to make her smaller and bigger, a step of
  * CHARACTER_SIZES at a time, from half her usual size up to six times it (or as big as fits her
  * screen, when that's less). The main process resizes her and remembers it; the new size comes
  * back in the app state, so this shows whatever she really is.
  */
-export function SizeMenu(props: {
-  corner: Corner
-  layout: PanelLayout
-  /** Distance from the bubble's edge of the window to the size icon, so the menu lines up. */
-  offset: number
-  size: CharacterSize
-  onSetSize: (scale: number) => void
-}) {
+export function SizeControl(props: { size: CharacterSize; onSetSize: (scale: number) => void }) {
   const { scale, max } = props.size
-  // Beside the size icon, but never past the top of the window.
-  const menu = useRef<HTMLDivElement>(null)
-  const fit = useFitInWindow(menu, props.offset)
   const smaller = nextSize(scale, -1, max)
   const bigger = nextSize(scale, 1, max)
   const limited = max < CHARACTER_SIZES.at(-1)!
   return (
-    <div
-      ref={menu}
-      data-hit
-      data-size-menu
-      role="group"
-      aria-label="Size"
-      className={cn(
-        'absolute rounded-xl border p-2.5 shadow-xl',
-        'border-black/10 bg-white text-zinc-800 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100',
-      )}
-      style={{
-        ...anchored(props.corner, props.layout.settingsX, fit.offset),
-        width: MENU_WIDTH,
-        maxHeight: fit.maxHeight,
-        overflowY: 'auto',
-      }}
-    >
-      <p className="mb-2 text-sm">Size</p>
-      <div className="flex items-center justify-between gap-2">
-        <SizeButton
-          label="Smaller"
-          disabled={smaller === null}
-          onClick={() => smaller !== null && props.onSetSize(smaller)}
-        >
-          <Minus size={16} aria-hidden />
-        </SizeButton>
-        <span aria-live="polite" className="min-w-12 text-center text-lg font-medium tabular-nums">
-          {sizeLabel(scale)}
+    <div role="group" aria-label="Size" className="flex items-center gap-3 px-2.5 py-1.5">
+      <span className="min-w-0 flex-1 text-sm">
+        Size
+        <span className="block text-[11px] text-zinc-500">
+          {limited && bigger === null
+            ? 'As big as fits this screen'
+            : `${sizeLabel(CHARACTER_SIZES[0])} to ${sizeLabel(limited ? max : CHARACTER_SIZES.at(-1)!)}`}
         </span>
-        <SizeButton
-          label="Bigger"
-          disabled={bigger === null}
-          onClick={() => bigger !== null && props.onSetSize(bigger)}
-        >
-          <Plus size={16} aria-hidden />
-        </SizeButton>
-      </div>
-      <p className="mt-2 text-[11px] text-zinc-500">
-        {limited && bigger === null
-          ? 'As big as fits this screen'
-          : `From ${sizeLabel(CHARACTER_SIZES[0])} to ${sizeLabel(limited ? max : CHARACTER_SIZES.at(-1)!)}`}
-      </p>
+      </span>
+      <SizeButton
+        label="Smaller"
+        disabled={smaller === null}
+        onClick={() => smaller !== null && props.onSetSize(smaller)}
+      >
+        <Minus size={14} aria-hidden />
+      </SizeButton>
+      <span aria-live="polite" className="min-w-9 text-center text-sm font-medium tabular-nums">
+        {sizeLabel(scale)}
+      </span>
+      <SizeButton
+        label="Bigger"
+        disabled={bigger === null}
+        onClick={() => bigger !== null && props.onSetSize(bigger)}
+      >
+        <Plus size={14} aria-hidden />
+      </SizeButton>
     </div>
   )
 }
@@ -1975,47 +1984,40 @@ export function SizeMenu(props: {
 As the comment says, a step of `CHARACTER_SIZES` at a time, from half her usual size up to six
 times it, or as big as fits her screen when that's less. It never resizes her itself: clicking a
 button calls `onSetSize`, the main process resizes her and saves the size, and the new size comes
-back in the app state (`onSizeChanged` in `useAssistState`), so the menu always shows what she
-really is.
+back in the app state (`onSizeChanged` in `useAssistState`), so the row always shows what she
+really is. It's laid out like the menu's other rows: the setting's name, with a grey line under
+it, on the left, and the control on the right.
 
-- `offset: number`: as the comment says, the distance from the bubble's edge of the window to the
-  size icon (`actionOffset()` of its place in the stack, at her size), so the menu lines up with
-  it.
+- `const { scale, max } = props.size`: her size now, and the biggest she can be on this screen.
 - `const smaller = nextSize(scale, -1, max)`, `const bigger = nextSize(scale, 1, max)`: the sizes
   the two buttons go to, or `null` where there's no further to go.
-- `const menu = useRef<HTMLDivElement>(null)`, `const fit = useFitInWindow(menu, props.offset)`: as
-  the comment says, beside the size icon, but never past the top of the window, as for the settings
-  menu (`ref={menu}` on its `<div>`; see `useFitInWindow` in [The pages](7-renderer-pages.md)).
 - `const limited = max < CHARACTER_SIZES.at(-1)!`: whether her screen keeps her from the biggest
   size, six times. `at(-1)` is the list's last entry; the `!` tells TypeScript it's there.
-- `data-hit`: so the menu takes the mouse (see `data-hit` under `ChatBox`).
-- `data-size-menu`: lets `Panel`'s `closeMenusOnOutsideClick` recognise a click inside the menu, so
-  it doesn't close it.
 - `role="group"`, `aria-label="Size"`: screen readers present the buttons together, under that
   name.
-- `...anchored(props.corner, props.layout.settingsX, fit.offset)`, `maxHeight`, `overflowY`: placed
-  just as the settings menu is, 8 px past the action icons on the side facing the middle of the
-  screen, but level with the size icon (moved back if it wouldn't fit), and kept within the
-  window's height. Its look (rounded corners, a border, a shadow, white or near-black) is the
-  settings menu's too.
-- `disabled={smaller === null}`: Smaller is greyed out at half her usual size, the smallest.
+- `className="flex items-center gap-3 px-2.5 py-1.5"`: one row, its parts side by side and lined up
+  on their middles, with the same padding at the sides as the menu's other rows.
+- `<span className="min-w-0 flex-1 text-sm">`: "Size", taking up whatever room the buttons leave
+  (`flex-1`), so they sit at the right-hand end.
+- The grey line under it: at the biggest that fits a screen too small for six times her size, "As
+  big as fits this screen"; otherwise the range she can be on this screen, "½× to 6×" (or to `max`
+  when that's less).
+- `disabled={smaller === null}`: Smaller (a minus) is greyed out at half her usual size, the
+  smallest.
 - `onClick={() => smaller !== null && props.onSetSize(smaller)}`: checks again that there is a
   smaller size, which also tells TypeScript `smaller` is a number here.
 - `<span aria-live="polite" ...>{sizeLabel(scale)}</span>`: her size between the two buttons, such
   as `1×`. `aria-live="polite"` makes screen readers read it out when it changes, once they've
-  finished what they're saying. `tabular-nums` gives every digit the same width, and `min-w-12`
+  finished what they're saying. `tabular-nums` gives every digit the same width, and `min-w-9`
   keeps the space between the buttons the same, so they don't move as the label changes.
-- `disabled={bigger === null}`: Bigger is greyed out at six times her size, or at the biggest that
-  fits her screen.
-- The line at the bottom: at the biggest that fits a screen too small for six times her size, "As
-  big as fits this screen"; otherwise the range she can be on this screen, "From ½× to 6×" (or to
-  `max` when that's less).
+- `disabled={bigger === null}`: Bigger (a plus) is greyed out at six times her size, or at the
+  biggest that fits her screen.
 
 ### `SizeButton`
 
-<!-- code: apps/desktop/src/renderer/src/components/SizeMenu.tsx#SizeButton -->
+<!-- code: apps/desktop/src/renderer/src/components/SizeControl.tsx#SizeButton -->
 
-[`src/renderer/src/components/SizeMenu.tsx`, lines 95–119](../../apps/desktop/src/renderer/src/components/SizeMenu.tsx#L95-L119)
+[`src/renderer/src/components/SizeControl.tsx`, lines 48–72](../../apps/desktop/src/renderer/src/components/SizeControl.tsx#L48-L72)
 
 ```tsx
 function SizeButton(props: {
@@ -2032,7 +2034,7 @@ function SizeButton(props: {
       disabled={props.disabled}
       onClick={props.onClick}
       className={cn(
-        'grid size-9 place-items-center rounded-full border outline-none',
+        'grid size-7 shrink-0 place-items-center rounded-full border outline-none',
         'focus-visible:ring-2 focus-visible:ring-accent',
         props.disabled
           ? 'cursor-default border-black/5 text-zinc-300 dark:border-white/5 dark:text-zinc-600'
@@ -2052,30 +2054,170 @@ One of the two round buttons, private to this file.
 - `title={props.label}`, `aria-label={props.label}`: "Smaller" or "Bigger", as a tooltip and for
   screen readers, since the button shows only an icon (a minus or a plus).
 - `disabled={props.disabled}`: a disabled button can't be clicked or focused.
-- `'grid size-9 place-items-center rounded-full border outline-none'`: a 36 px circle with the icon
-  in its middle. With `'focus-visible:ring-2 focus-visible:ring-accent'`, it gets the same accent
-  ring as the action icons when it has the keyboard focus.
+- `'grid size-7 shrink-0 place-items-center rounded-full border outline-none'`: a 28 px circle with
+  the icon in its middle, small enough for a row of the menu; `shrink-0` keeps it round however
+  little room the row has. With `'focus-visible:ring-2 focus-visible:ring-accent'`, it gets the
+  same accent ring as the action icons when it has the keyboard focus.
 - `props.disabled ? ... : ...`: a disabled button has a fainter border and icon and a plain arrow
   pointer; otherwise it turns grey on hover.
+
+## `src/renderer/src/components/SpellsMenu.tsx`: the spells menu
+
+The small menu that opens beside the wand icon (Spells), listing her four spells, each with a line
+saying what it does. `Panel` renders it only while the panel is open, the wand has toggled it on,
+and the tenant's list of actions includes `spells`. Its props are the `corner`, `layout` and
+`offset` for positioning, as for `SettingsMenu`, and `onCast`, through which `Panel` closes the
+menu and asks the main process to cast the spell (`window.assist.character.castSpell()`). The
+spells, and what the menu says about each, are in `src/shared/spells.ts` (see
+[Shared code and the preload bridge](1-shared-and-preload.md)); what casting one does is
+`castSpell` in `src/main/index.ts` (see
+[Main process: startup, IPC and app plumbing](2-main-startup.md)). `Panel` also closes the menu on
+Esc, on a click anywhere else in the panel, when another icon is clicked, and when the panel
+closes.
+
+### `MENU_WIDTH` and `ICONS`
+
+<!-- code: apps/desktop/src/renderer/src/components/SpellsMenu.tsx#MENU_WIDTH,ICONS -->
+
+[`src/renderer/src/components/SpellsMenu.tsx`, lines 9–16](../../apps/desktop/src/renderer/src/components/SpellsMenu.tsx#L9-L16)
+
+```tsx
+const MENU_WIDTH = 236
+
+const ICONS: Record<Spell, LucideIcon> = {
+  clones: UsersRound,
+  starfall: Sparkles,
+  teleport: Orbit,
+  explosion: Flame,
+}
+```
+
+<!-- /code -->
+
+- `MENU_WIDTH = 236`: the menu's width in pixels, with room for each spell's name and the line
+  under it.
+- `ICONS: Record<Spell, LucideIcon>`: the lucide icon beside each spell's name: two people
+  (`UsersRound`) for Clones, sparkles for Starfall, a ring round a dot (`Orbit`) for Teleport and a
+  flame for Explosion. `Record<Spell, ...>` makes TypeScript insist on one for every spell in
+  `SPELLS`.
+
+### `SpellsMenu`
+
+<!-- code: apps/desktop/src/renderer/src/components/SpellsMenu.tsx#SpellsMenu -->
+
+[`src/renderer/src/components/SpellsMenu.tsx`, lines 18–74](../../apps/desktop/src/renderer/src/components/SpellsMenu.tsx#L18-L74)
+
+```tsx
+/**
+ * The menu that opens beside the wand icon: her spells (src/shared/spells.ts), each with a line
+ * saying what it does. Picking one casts it; the main process closes the panel so it can be seen.
+ */
+export function SpellsMenu(props: {
+  corner: Corner
+  layout: PanelLayout
+  /** Distance from the bubble's edge of the window to the wand icon, so the menu lines up. */
+  offset: number
+  onCast: (spell: Spell) => void
+}) {
+  // Beside the wand icon, but never past the top of the window.
+  const menu = useRef<HTMLDivElement>(null)
+  const fit = useFitInWindow(menu, props.offset)
+  return (
+    <div
+      ref={menu}
+      data-hit
+      data-spells-menu
+      role="menu"
+      aria-label="Spells"
+      className={cn(
+        'absolute rounded-xl border p-1.5 shadow-xl',
+        'border-black/10 bg-white text-zinc-800 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100',
+      )}
+      style={{
+        ...anchored(props.corner, props.layout.settingsX, fit.offset),
+        width: MENU_WIDTH,
+        maxHeight: fit.maxHeight,
+        overflowY: 'auto',
+      }}
+    >
+      <p className="px-2.5 pt-1 pb-1.5 text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
+        Spells
+      </p>
+      {SPELLS.map((spell) => {
+        const Icon = ICONS[spell]
+        const { label, hint } = SPELL_INFO[spell]
+        return (
+          <button
+            key={spell}
+            type="button"
+            role="menuitem"
+            onClick={() => props.onCast(spell)}
+            className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800"
+          >
+            <Icon size={16} className="shrink-0 text-accent" aria-hidden />
+            <span className="min-w-0">
+              {label}
+              <span className="block text-[11px] text-zinc-500">{hint}</span>
+            </span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+```
+
+<!-- /code -->
+
+As the comment says, the menu beside the wand icon: her spells, each with a line saying what it
+does. Picking one casts it, and the main process closes the panel so it can be seen. It's built
+like the settings menu: the same look, placed the same way and kept inside the window the same way.
+
+- `offset: number`: as the comment says, the distance from the bubble's edge of the window to the
+  wand icon (`actionOffset()` of its place in the stack, at her size), so the menu lines up with
+  it.
+- `const menu = useRef<HTMLDivElement>(null)`, `const fit = useFitInWindow(menu, props.offset)`: as
+  the comment says, beside the wand icon, but never past the top of the window, as for the settings
+  menu (`ref={menu}` on its `<div>`; see `useFitInWindow` in [The pages](7-renderer-pages.md)).
+- `data-hit`: so the menu takes the mouse (see `data-hit` under `ChatBox`).
+- `data-spells-menu`: lets `Panel`'s `closeMenusOnOutsideClick` recognise a click inside the menu,
+  so it doesn't close it.
+- `role="menu"`, `aria-label="Spells"`: screen readers present it as a menu called Spells, and each
+  spell's button as one of its items (`role="menuitem"`).
+- `...anchored(props.corner, props.layout.settingsX, fit.offset)`, `maxHeight`, `overflowY`: placed
+  just as the settings menu is, 8 px past the action icons on the side facing the middle of the
+  screen, but level with the wand icon (moved back if it wouldn't fit), and kept within the
+  window's height. Its look (rounded corners, a border, a shadow, white or near-black) is the
+  settings menu's too.
+- `<p className="... uppercase">Spells</p>`: a small grey heading at the top, in capitals.
+- `{SPELLS.map((spell) => {`: one row per spell, in `SPELLS`' order: Clones, Starfall, Teleport and
+  Explosion. `key={spell}` lets React tell the rows apart.
+- `const { label, hint } = SPELL_INFO[spell]`: its name, and the line under it, such as "Starfall"
+  with "Shooting stars across the screen".
+- `onClick={() => props.onCast(spell)}`: casts it. The menu does nothing else itself: `Panel`
+  closes it and asks the main process to cast the spell, which closes the panel first.
+- `<Icon size={16} className="shrink-0 text-accent" aria-hidden />`: the spell's icon, in the
+  accent colour; `aria-hidden`, because the name beside it says the same.
+- `<span className="min-w-0">`: lets the name and its line wrap inside the row rather than pushing
+  the row wider.
 
 ## `src/renderer/src/components/ActionStack.tsx`: the action icons
 
 The column of round icon buttons that pops out of the bubble when the panel opens (for Morse
-Micro: Ask Claude, Jira, IT service desk, screenshot, light or dark mode, settings, size,
-clones and close), in the order the tenant's `tenant.json` lists them, nearest the bubble first.
-`Panel` always renders it; while closed it's simply invisible. Its props are the `corner`, the
-`layout` for her size, the tenant's `actions`, `open`, `activeId` (`settings` while the settings
-menu is open, `size` while the size menu is, otherwise the icon of the page showing when it isn't
-the start page, or `null`), `theme` (the current light or dark
-mode), `pages` (command icons that open a page in the panel instead: the service desk, when the
-tenant lists request types), `dotted` (icons that get a small dot) and `onAction`, which is
+Micro: Ask Claude, Jira, IT service desk, screenshot, settings, spells and close), in the order the
+tenant's `tenant.json` lists them, nearest the bubble first. `Panel` always renders it; while
+closed it's simply invisible. Its props are the `corner`, the `layout` for her size, the tenant's
+`actions`, `open`, `activeId` (`settings` while the settings menu is open, `spells` while the
+spells menu is, otherwise the icon of the page showing when it isn't the start page, or `null`),
+`pages` (command icons that open a page in the panel instead: the service desk, when the tenant
+lists request types), `dotted` (icons that get a small dot) and `onAction`, which is
 `Panel.runAction`.
 
 ### `ICONS`
 
 <!-- code: apps/desktop/src/renderer/src/components/ActionStack.tsx#ICONS -->
 
-[`src/renderer/src/components/ActionStack.tsx`, lines 21–32](../../apps/desktop/src/renderer/src/components/ActionStack.tsx#L21-L32)
+[`src/renderer/src/components/ActionStack.tsx`, lines 17–26](../../apps/desktop/src/renderer/src/components/ActionStack.tsx#L17-L26)
 
 ```tsx
 const ICONS: Record<ActionId, LucideIcon> = {
@@ -2084,10 +2226,8 @@ const ICONS: Record<ActionId, LucideIcon> = {
   jira: Bell,
   servicedesk: Headset,
   screenshot: Camera,
-  theme: Sun,
   settings: Settings,
-  size: Scaling,
-  clones: UsersRound,
+  spells: WandSparkles,
   close: Power,
 }
 ```
@@ -2096,10 +2236,8 @@ const ICONS: Record<ActionId, LucideIcon> = {
 
 Which lucide icon each action shows. Ask Claude is `MessageCircle`, a speech bubble; Apps is
 `LayoutGrid`, a grid of four squares, the usual sign for "apps"; Jira is `Bell`, for its
-notifications; and the IT service desk is `Headset`, as for a help desk. The size icon is `Scaling`, a
-box with a diagonal arrow stretching out of its corner, and the clones are `UsersRound`, two
-people, one behind the other. The theme
-icon is `Sun`, but see below: it changes with the mode.
+notifications; and the IT service desk is `Headset`, as for a help desk. Spells is
+`WandSparkles`, a magic wand with sparkles, and Close is `Power`, a power button.
 
 - `Record<ActionId, LucideIcon>`: an object with exactly one entry for every action id. If a new
   id is added to `ACTION_IDS` in `src/shared/actions.ts` without an icon here, TypeScript reports
@@ -2109,7 +2247,7 @@ icon is `Sun`, but see below: it changes with the mode.
 
 <!-- code: apps/desktop/src/renderer/src/components/ActionStack.tsx#ActionStack -->
 
-[`src/renderer/src/components/ActionStack.tsx`, lines 34–116](../../apps/desktop/src/renderer/src/components/ActionStack.tsx#L34-L116)
+[`src/renderer/src/components/ActionStack.tsx`, lines 28–103](../../apps/desktop/src/renderer/src/components/ActionStack.tsx#L28-L103)
 
 ```tsx
 /**
@@ -2123,8 +2261,6 @@ export function ActionStack(props: {
   actions: ActionId[]
   open: boolean
   activeId: ActionId | null
-  /** The current mode: the theme icon shows the one it switches to. */
-  theme: Theme
   /** Icons with a small dot, e.g. Ask Claude while an unsent question is waiting behind it. */
   dotted?: ActionId[]
   /** Command icons that open a page in the panel instead (the service desk, with a form). */
@@ -2141,13 +2277,8 @@ export function ActionStack(props: {
       }}
     >
       {props.actions.map((id, index) => {
-        const Icon = id === 'theme' && props.theme === 'light' ? Moon : ICONS[id]
-        const label =
-          id === 'theme'
-            ? props.theme === 'dark'
-              ? 'Switch to light mode'
-              : 'Switch to dark mode'
-            : ACTIONS[id].label
+        const Icon = ICONS[id]
+        const label = ACTIONS[id].label
         const active = id === props.activeId
         return (
           <button
@@ -2212,25 +2343,22 @@ Lays the icons out in a column beside the bubble and animates them in and out.
   her size; only where they start moves (at twice her size, 76 px across and 188 px up).
 - `gap: UI.actionGap`: 8 px between icons. The main process sizes the panel window from the same
   numbers (`panelWindowSize` in `src/shared/geometry.ts`, for her size), so the stack always fits.
-- `const Icon = id === 'theme' && props.theme === 'light' ? Moon : ICONS[id]`: the theme icon shows
-  what clicking it switches to: a sun while dark (switch to light), a moon while light.
-- `const label = id === 'theme' ? ... : ACTIONS[id].label`: the tooltip and screen-reader name,
-  from the action registry, except for the theme icon, which says what it will do ("Switch to
-  light mode" or "Switch to dark mode").
+- `const Icon = ICONS[id]`: the action's icon component, in a capitalised variable so it can be
+  written as a JSX tag (as in `MenuItem`).
+- `const label = ACTIONS[id].label`: the tooltip and screen-reader name, from the action registry.
 - `data-hit`: on each button, not on the column, so the gaps between icons stay click-through.
 - `data-action={id}`: `Panel.closeMenusOnOutsideClick` looks for `[data-action="settings"]` and
-  `[data-action="size"]`, so clicking the gear or the size icon toggles its menu instead of
-  counting as a click outside it.
+  `[data-action="spells"]`, so clicking the gear or the wand toggles its menu instead of counting
+  as a click outside it.
 - `aria-expanded={ACTIONS[id].kind === 'popover' || props.pages?.includes(id) ? active : undefined}`:
-  for a popover action (Settings, Size, Ask Claude, Apps and Jira), or an icon that opens a
+  for a popover action (Settings, Spells, Ask Claude, Apps and Jira), or an icon that opens a
   page (the service desk, with request types), it tells screen readers whether what it opens is
-  showing. `undefined` leaves the attribute off the others, the theme icon included, which opens
+  showing. `undefined` leaves the attribute off the others (Screenshot and Close), which open
   nothing.
 - `onClick={() => props.onAction(id)}`: `Panel.runAction` toggles the menu for Settings and
-  Size, switches the card's page for Ask Claude, Apps, Jira and (with request types) the service
-  desk, flips light or dark mode for the theme icon, and asks the main process to run any other
-  action, such as the clones (see `src/main/actions.ts` in
-  [Main process: startup, IPC and app plumbing](2-main-startup.md)).
+  Spells, switches the card's page for Ask Claude, Apps, Jira and (with request types) the service
+  desk, and asks the main process to run any other action, such as Screenshot (see
+  `src/main/actions.ts` in [Main process: startup, IPC and app plumbing](2-main-startup.md)).
 - ``transitionDelay: props.open ? `${index * 30}ms` : '0ms'``: each icon starts its animation 30
   ms after the one before, so they pop out one after another. Closing has no delay, so they all go
   together.
@@ -2239,8 +2367,8 @@ Lays the icons out in a column beside the bubble and animates them in and out.
   (explained under `ChatBox`) move it to its place at full size when the panel opens.
 - `outline-none`: together with `'focus-visible:ring-2 focus-visible:ring-accent'`, swaps the
   usual square focus outline for an accent ring that follows the round button.
-- `active`: the active action (the gear or the size icon while its menu is open, or a page's icon
-  while its page is showing) is filled with the accent colour.
+- `active`: the active action (the gear or the wand while its menu is open, or a page's icon while
+  its page is showing) is filled with the accent colour.
 - `'relative grid ...'`: `relative` makes each button the reference box for the dot below.
 - `{props.dotted?.includes(id) && !active && (`: a small accent-coloured dot in the icon's corner
   (`absolute top-1 right-1`), with a ring in the button's own colour so it stands out. `Panel` puts
@@ -3013,13 +3141,13 @@ const LIGHT: Point = { x: -1, y: -1 }
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#View,Face,Arm,Leg,Pose,DOWN,STAND,LEG_LENGTH -->
 
-[`src/renderer/src/character/rig.ts`, lines 53–129](../../apps/desktop/src/renderer/src/character/rig.ts#L53-L129)
+[`src/renderer/src/character/rig.ts`, lines 53–134](../../apps/desktop/src/renderer/src/character/rig.ts#L53-L134)
 
 ```ts
 export type View = 'front' | 'diagonal' | 'side'
 
 export type Face =
-  'neutral' | 'blink' | 'happy' | 'surprised' | 'yawn' | 'sip' | 'down' | 'awe' | 'up'
+  'neutral' | 'blink' | 'happy' | 'surprised' | 'yawn' | 'sip' | 'down' | 'awe' | 'up' | 'chant'
 
 /** Angles in radians from hanging straight down. */
 export interface Arm {
@@ -3088,6 +3216,11 @@ export interface Pose {
   burst?: number
   /** Her sparkle trail as she walks: how far through her stride she is (0 to 1; none if left out). */
   trail?: number
+  /**
+   * Dissolving into white motes, from 0 (all of her) to FADE.end (nothing left, the last motes
+   * gone): see FADE. Played backwards, she forms out of them.
+   */
+  fade?: number
 }
 
 const DOWN: Arm = { shoulder: 0.08, elbow: 0 }
@@ -3108,8 +3241,9 @@ What a pose is made of.
   spins.
 - `Face`: her expression: `neutral`, `blink` (eyes shut), `happy` (smiling eyes and mouth),
   `surprised` (mouth open, while she's carried), `yawn`, `sip` (eyes closed contentedly, lips on
-  the cup), `down` (looking down at her book), and, for her vision, `awe` (looking up, mouth open
-  in wonder) and `up` (looking up, smiling).
+  the cup), `down` (looking down at her book), for her vision, `awe` (looking up, mouth open in
+  wonder) and `up` (looking up, smiling), and, for her explosion spell, `chant` (eyes shut, her
+  mouth a little open as she chants).
 - `Arm` and `Leg`: as the comment says, angles in radians from hanging straight down. The shoulder
   (or hip) is the upper limb's angle, and the elbow (or knee) bends the lower limb from there. A
   knee bends the other way to an elbow: a positive `knee` swings the shin back
@@ -3135,11 +3269,11 @@ What a pose is made of.
   - `sitting`: sitting on the taskbar with her knees up under her robe.
   - `shadow`: as its comment says, her shadow on the taskbar, drawn unless this is `false`, which
     it is only while she's carried.
-  - `rune` and `spin`: the magic circle under her as she levitates: `rune` its size, from 0 (none)
-    to 1, and `spin` how far its runes have turned, in whole turns, which also says how far its
-    sparks have risen. The crystal ball's wisp of light turns with `spin` too.
+  - `rune` and `spin`: the magic circle under her as she levitates (or chants): `rune` its size,
+    from 0 (none) to 1, and `spin` how far its runes have turned, in whole turns, which also says
+    how far its sparks have risen. The crystal ball's wisp of light turns with `spin` too.
   - `spread`: as its comment says, her robe's hem held or flung out, this many pixels wider each
-    side, for a curtsy or a twirl.
+    side, for a curtsy or a twirl (or lifting in the updraft as she chants).
   - `butterfly`: as its comment says, a little butterfly's flight, from 0 to 1: coming to her
     raised hand, resting on it, and flying off. Left out (or 0), there's none.
   - `zzz`: as its comment says, z's floating up from her as she dozes, from 0 to 1 (none at 0).
@@ -3158,6 +3292,9 @@ What a pose is made of.
     poses (`mix()` in `sprite.ts`), so the sneeze can be written as a few key poses.
   - `trail`: as its comment says, her sparkle trail as she walks: how far through her stride she
     is, from 0 to 1. Left out (as in every pose but walking), there's no trail.
+  - `fade`: as its comment says, dissolving into white motes, from 0 (all of her) to `FADE.end`
+    (nothing left, the last motes gone); see `FADE` below. Played backwards, from `FADE.end` down to
+    0, she forms out of them. Her `vanish` and `appear` poses (`sprite.ts`) are made of it.
 - `DOWN` and `STAND`: the arms (hanging, very slightly away from her body) and legs (straight) of a
   pose that doesn't give them.
 - `LEG_LENGTH`: as its comment says, her thigh and her shin are 16.5 pixels each, so standing
@@ -3168,7 +3305,7 @@ What a pose is made of.
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#EYES,MOUTHS,SPARKLE,TWINKLE,BUTTERFLY_OPEN,BUTTERFLY_SHUT,Z_BIG,Z_SMALL,ORBS,BUBBLE_SMALL,BUBBLE_BIG,WAND_RING,WISP -->
 
-[`src/renderer/src/character/rig.ts`, lines 131–225](../../apps/desktop/src/renderer/src/character/rig.ts#L131-L225)
+[`src/renderer/src/character/rig.ts`, lines 136–231](../../apps/desktop/src/renderer/src/character/rig.ts#L136-L231)
 
 ```ts
 // Face pictures, facing right; `.` is see-through. Eyes have a thick upper lid, a dark-to-light
@@ -3242,6 +3379,7 @@ const MOUTHS: Record<Face, readonly string[]> = {
   sip: ['m'],
   awe: ['mm', 'mm'],
   up: ['m..m', '.mm.'],
+  chant: ['mm', 'mm'],
 }
 
 /** A four-pointed sparkle, and a smaller one. */
@@ -3314,8 +3452,8 @@ As the comment says, they face right; frames facing left are mirrored with every
   - `as const` keeps the object's exact shape, so TypeScript knows every view has every kind of
     eye.
 - `MOUTHS`: small on purpose: two pixels (`mm`) for most faces, a little U for `happy`, two by two
-  for `surprised`, a rounded four by four for `yawn`, and one pixel for `sip`. `awe` has the same
-  open mouth as `surprised`, and `up` the same smile as `happy`. `Record<Face, ...>` makes
+  for `surprised`, a rounded four by four for `yawn`, and one pixel for `sip`. `awe` and `chant`
+  have the same small open mouth as `surprised`, and `up` the same smile as `happy`. `Record<Face, ...>` makes
   TypeScript insist on a mouth for every face.
 - `SPARKLE` and `TWINKLE`: as the comment says, a four-pointed sparkle, five pixels across, white
   at its heart (`w`) and paler then golden toward its points (`l`, `j`), and a smaller one, three
@@ -3340,7 +3478,7 @@ As the comment says, they face right; frames facing left are mirrored with every
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#TRAIL,JUGGLE,BUBBLES,wispAt -->
 
-[`src/renderer/src/character/rig.ts`, lines 227–267](../../apps/desktop/src/renderer/src/character/rig.ts#L227-L267)
+[`src/renderer/src/character/rig.ts`, lines 233–291](../../apps/desktop/src/renderer/src/character/rig.ts#L233-L291)
 
 ```ts
 /**
@@ -3427,16 +3565,66 @@ puff before each bubble, her eyes following the wisp).
     up, faster and faster (`away * away`), to the top of her window. It's in front of her all the
     way.
 
+### `FADE`, `hash()` and `dissolveAt()`
+
+<!-- code: apps/desktop/src/renderer/src/character/rig.ts#FADE,hash,dissolveAt -->
+
+[`src/renderer/src/character/rig.ts`, lines 240–256](../../apps/desktop/src/renderer/src/character/rig.ts#L240-L256)
+
+```ts
+/**
+ * Dissolving (Pose.fade): each of her pixels turns white `glow` before `fade` reaches its own point
+ * between 0 and 1 (dissolveAt), then goes, and becomes a white mote that rises `rise` pixels as it
+ * fades, over `life` more, so at `end` the last are gone; only `share` of them make a mote, so
+ * it's a sprinkling, not a copy of her.
+ */
+export const FADE = { glow: 0.12, life: 0.45, rise: 12, share: 0.45, end: 1.45 }
+
+/** A pixel's own random number, 0 to 1, the same every frame (`salt` for a second, different one). */
+function hash(x: number, y: number, salt = 0): number {
+  let h = Math.imul(x + 1013 * salt, 374761393) ^ Math.imul(y + 7919, 668265263)
+  h = Math.imul(h ^ (h >>> 13), 1274126177)
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296
+}
+
+/** When a pixel dissolves (0 to 1): in a random order, the top of her a little sooner. */
+const dissolveAt = (x: number, y: number) => 0.8 * hash(x, y) + 0.2 * Math.max(0, y / GRID)
+```
+
+<!-- /code -->
+
+The numbers and the randomness behind her dissolving into white motes (`Pose.fade`), as she
+vanishes or appears. `draw()` uses them at its very end (below).
+
+- `FADE`: as the comment says, each of her pixels turns white for the last `glow` (0.12) of `fade`
+  before its own moment comes (`dissolveAt`), then goes, and becomes a white mote that rises and
+  fades over `life` (0.45) more. The last pixel goes at about 1 and its mote is gone by 1 + 0.45,
+  which is why `end` is 1.45: `fade` runs from 0, all of her, to `end`, nothing at all. Only
+  `share` (0.45) of her pixels make a mote, so it's a sprinkling, not a copy of her. `rise` (26) is
+  how fast a mote rises: `rise` pixels for every whole unit of `fade` since it left her, so about 12
+  pixels by the time it's gone. `sprite.ts` imports `FADE` for `end`.
+- `hash(x, y, salt)`: as the comment says, a pixel's own random number from 0 to 1, the same every
+  frame, so each pixel goes at the same moment in every frame and the dissolve doesn't flicker. It
+  mixes the two coordinates by multiplying them by large odd numbers (`Math.imul`, a 32-bit
+  multiply) and folding the bits over (`^` and `>>>`); `>>> 0` makes the result a positive 32-bit
+  whole number, and dividing by 2³² (4294967296) turns it into a fraction. `salt` gives a second,
+  different number for the same pixel: `draw()` uses it to pick which pixels make a mote,
+  separately from when they go.
+- `dissolveAt(x, y)`: as the comment says, when a pixel dissolves, from 0 to 1, in a random order,
+  the top of her a little sooner: mostly its own random moment (`0.8 * hash(x, y)`), plus a little
+  for how far down her it is (`0.2 * y / GRID`). `Math.max(0, ...)` keeps the headroom rows above
+  the grid (a negative `y`) from going before 0.
+
 ### `eyesFor()`
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#eyesFor -->
 
-[`src/renderer/src/character/rig.ts`, lines 269–276](../../apps/desktop/src/renderer/src/character/rig.ts#L269-L276)
+[`src/renderer/src/character/rig.ts`, lines 293–300](../../apps/desktop/src/renderer/src/character/rig.ts#L293-L300)
 
 ```ts
 /** Which eyes a face uses. */
 function eyesFor(face: Face): 'open' | 'blink' | 'happy' | 'down' | 'up' {
-  if (face === 'blink' || face === 'yawn') return 'blink'
+  if (face === 'blink' || face === 'yawn' || face === 'chant') return 'blink'
   if (face === 'happy' || face === 'sip') return 'happy'
   if (face === 'down') return 'down'
   if (face === 'awe' || face === 'up') return 'up'
@@ -3446,14 +3634,14 @@ function eyesFor(face: Face): 'open' | 'blink' | 'happy' | 'down' | 'up' {
 
 <!-- /code -->
 
-Which eyes go with a face. A yawn shuts them like a blink, a sip closes them happily, and `awe`
-and `up` both look up (their mouths are what differ).
+Which eyes go with a face. A yawn and a chant shut them like a blink, a sip closes them happily,
+and `awe` and `up` both look up (their mouths are what differ).
 
 ### `draw()`
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#draw -->
 
-[`src/renderer/src/character/rig.ts`, lines 278–1212](../../apps/desktop/src/renderer/src/character/rig.ts#L278-L1212)
+[`src/renderer/src/character/rig.ts`, lines 302–1264](../../apps/desktop/src/renderer/src/character/rig.ts#L302-L1264)
 
 ```ts
 /** Draws one pose as rows of palette letters. */
@@ -4389,6 +4577,34 @@ export function draw(pose: Pose): string[] {
   }
 
   castShadows(canvas)
+
+  // Dissolving: her pixels go one by one (dissolveAt), each turning white just before (so a white
+  // shimmer runs over her as she goes), and each that has a mote leaving it as a white speck that
+  // rises, sways and fades to silver, drawn only where nothing of her is left. Played backwards
+  // (fade going down), the motes come down into place and she forms out of them.
+  const fade = pose.fade ?? 0
+  if (fade > 0) {
+    const her = canvas.rows()
+    const each = (visit: (x: number, y: number, gone: number) => void) =>
+      her.forEach((row, r) =>
+        [...row].forEach((letter, x) => {
+          const y = r - canvas.top
+          if (letter !== '.') visit(x, y, fade - dissolveAt(x, y))
+        }),
+      )
+    each((x, y, gone) => {
+      if (gone >= 0) canvas.set(x, y, '.')
+      else if (gone > -FADE.glow) canvas.set(x, y, 'w')
+    })
+    each((x, y, gone) => {
+      if (gone < 0 || gone >= FADE.life || hash(x, y, 1) > FADE.share) return
+      const mote = {
+        x: x + 0.5 + Math.sin(x * 1.3 + y * 0.7) * gone * 10,
+        y: y + 0.5 - (gone / FADE.life) * FADE.rise,
+      }
+      set(mote, gone < FADE.life * 0.5 ? 'w' : 'f', '.')
+    })
+  }
   return canvas.rows()
 }
 ```
@@ -4402,7 +4618,7 @@ is stamped onto its face (the eyes and mouth painted over with skin first, then 
 From the front and side on, each part is a `Layer`, inked onto the frame (`Canvas.ink()`) from the
 back to the front, so later parts cover earlier ones; smaller details are set pixel by pixel on
 top. Whichever way she's seen, `castShadows()` (below) then adds the shadows things cast on what's
-just below them. In order:
+just below them, and last, as she vanishes or appears, she's dissolved into white motes. In order:
 
 **Setting up**
 
@@ -4787,13 +5003,34 @@ Math.PI) % 2`), which turn with `spin`. Six white runes (`w`) go round the outer
   goes from 0 to 1 over the spell's frames, they circle her hand once.
 - `castShadows(canvas)`: whichever way she's seen, the shadows things cast on what's below them
   (below).
+- Dissolving, when `pose.fade` is above 0, as she vanishes or appears: as the comment says, her
+  pixels go one by one (`dissolveAt`), each turning white just before, so a white shimmer runs over
+  her as she goes, and each one that has a mote leaves it as a white speck that rises, sways and
+  fades to silver, drawn only where nothing of her is left. It comes after everything else, her
+  shadow included, so all of her goes. Played backwards (`fade` going down, in `appear()`), the
+  motes come down into place and she forms out of them.
+  - `const her = canvas.rows()`: a copy of the finished frame, so the two passes below see her as
+    she was, not as the first pass leaves her.
+  - `each(visit)`: calls `visit` for every pixel of hers that isn't see-through, with how long ago
+    it went: `fade - dissolveAt(x, y)`, negative while it's still to go. `y = r - canvas.top` turns
+    a row of `rows()` (headroom first) back into the canvas's `y`.
+  - The first pass: a pixel whose moment has come (`gone >= 0`) is cleared (`.`), and one due
+    within `FADE.glow` turns white (`w`) first.
+  - The second pass, the motes: only pixels that have gone, less than `FADE.life` ago, and are
+    among the `FADE.share` that their second random number (`hash(x, y, 1)`) picks, make one. Each
+    rises as it fades, `FADE.rise` pixels over its `FADE.life` (`gone / FADE.life` of the way),
+    and sways sideways, more the higher it gets
+    (`Math.sin(x * 1.3 + y * 0.7) * gone * 10`, each mote its own way). It's white for the first
+    half of its life and silver (`f`, the trim's colour) for the second, then gone.
+    `set(mote, ..., '.')` draws it only on an empty pixel, so a mote never covers what's left of
+    her.
 - `return canvas.rows()`: the finished frame.
 
 ### `castShadows()`, `HAT`, `HAIR` and `ROBE`
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#HAT,HAIR,ROBE,castShadows -->
 
-[`src/renderer/src/character/rig.ts`, lines 1214–1246](../../apps/desktop/src/renderer/src/character/rig.ts#L1214-L1246)
+[`src/renderer/src/character/rig.ts`, lines 1266–1298](../../apps/desktop/src/renderer/src/character/rig.ts#L1266-L1298)
 
 ```ts
 /** Letters by part, for castShadows. */
@@ -4969,7 +5206,7 @@ kept, and `Character` (below) plays them.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#SPRITE_SIZE,SPRITE_HEADROOM,PALETTE -->
 
-[`src/renderer/src/character/sprite.ts`, lines 15–74](../../apps/desktop/src/renderer/src/character/sprite.ts#L15-L74)
+[`src/renderer/src/character/sprite.ts`, lines 16–75](../../apps/desktop/src/renderer/src/character/sprite.ts#L16-L75)
 
 ```ts
 // The character's animations: for each pose, a list of frames drawn by the rig (rig.ts) from key
@@ -5062,7 +5299,7 @@ export const PALETTE: Record<string, string> = {
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#Frame,Key -->
 
-[`src/renderer/src/character/sprite.ts`, lines 76–89](../../apps/desktop/src/renderer/src/character/sprite.ts#L76-L89)
+[`src/renderer/src/character/sprite.ts`, lines 77–90](../../apps/desktop/src/renderer/src/character/sprite.ts#L77-L90)
 
 ```ts
 /**
@@ -5093,7 +5330,7 @@ interface Key {
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#smooth,lerp,mixArm,mixLeg,ARM_DOWN,LEG_STAND,mix -->
 
-[`src/renderer/src/character/sprite.ts`, lines 91–132](../../apps/desktop/src/renderer/src/character/sprite.ts#L91-L132)
+[`src/renderer/src/character/sprite.ts`, lines 92–133](../../apps/desktop/src/renderer/src/character/sprite.ts#L92-L133)
 
 ```ts
 // ------------------------------------------------------------------------------------- tweening
@@ -5173,7 +5410,7 @@ _Tweening_: working out the poses between two key poses.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#FRAME_MS,tween,hold,crouch -->
 
-[`src/renderer/src/character/sprite.ts`, lines 134–160](../../apps/desktop/src/renderer/src/character/sprite.ts#L134-L160)
+[`src/renderer/src/character/sprite.ts`, lines 135–161](../../apps/desktop/src/renderer/src/character/sprite.ts#L135-L161)
 
 ```ts
 /** In-betweens come about this often (ms): 25 frames a second. */
@@ -5235,7 +5472,7 @@ function crouch(depth: number): [Leg, Leg] {
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#FRONT,DIAGONAL,idle -->
 
-[`src/renderer/src/character/sprite.ts`, lines 162–184](../../apps/desktop/src/renderer/src/character/sprite.ts#L162-L184)
+[`src/renderer/src/character/sprite.ts`, lines 163–185](../../apps/desktop/src/renderer/src/character/sprite.ts#L163-L185)
 
 ```ts
 // ----------------------------------------------------------------------------------- the poses
@@ -5282,7 +5519,7 @@ function idle(): Key[] {
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#walk -->
 
-[`src/renderer/src/character/sprite.ts`, lines 186–217](../../apps/desktop/src/renderer/src/character/sprite.ts#L186-L217)
+[`src/renderer/src/character/sprite.ts`, lines 187–218](../../apps/desktop/src/renderer/src/character/sprite.ts#L187-L218)
 
 ```ts
 /**
@@ -5353,7 +5590,7 @@ a cycle ahead: positive while that leg swings forward, negative while it pushes 
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#hop -->
 
-[`src/renderer/src/character/sprite.ts`, lines 219–277](../../apps/desktop/src/renderer/src/character/sprite.ts#L219-L277)
+[`src/renderer/src/character/sprite.ts`, lines 220–278](../../apps/desktop/src/renderer/src/character/sprite.ts#L220-L278)
 
 ```ts
 /** A hop: crouch, spring up with her arms flung up, float, fall, land with a bounce. */
@@ -5442,7 +5679,7 @@ named, and `tween()` eases from each to the next, about 30 frames altogether.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#wave -->
 
-[`src/renderer/src/character/sprite.ts`, lines 279–299](../../apps/desktop/src/renderer/src/character/sprite.ts#L279-L299)
+[`src/renderer/src/character/sprite.ts`, lines 280–300](../../apps/desktop/src/renderer/src/character/sprite.ts#L280-L300)
 
 ```ts
 /** A wave, seen diagonally: her hand up, waving to and fro, head tilted, smiling. */
@@ -5485,7 +5722,7 @@ As the comment says, a wave, seen diagonally, smiling, with her head tilted.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#stretch -->
 
-[`src/renderer/src/character/sprite.ts`, lines 301–324](../../apps/desktop/src/renderer/src/character/sprite.ts#L301-L324)
+[`src/renderer/src/character/sprite.ts`, lines 302–325](../../apps/desktop/src/renderer/src/character/sprite.ts#L302-L325)
 
 ```ts
 /** A stretch: arms up, a yawn, a lean one way and the other, arms down. */
@@ -5527,7 +5764,7 @@ As the comment says, a stretch, from the front.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#sip -->
 
-[`src/renderer/src/character/sprite.ts`, lines 326–358](../../apps/desktop/src/renderer/src/character/sprite.ts#L326-L358)
+[`src/renderer/src/character/sprite.ts`, lines 327–359](../../apps/desktop/src/renderer/src/character/sprite.ts#L327-L359)
 
 ```ts
 /** A sip of tea, seen diagonally: the cup up to her mouth, a sip, down, a contented smile. */
@@ -5582,7 +5819,7 @@ As the comment says, a sip of tea, seen diagonally.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#read -->
 
-[`src/renderer/src/character/sprite.ts`, lines 360–390](../../apps/desktop/src/renderer/src/character/sprite.ts#L360-L390)
+[`src/renderer/src/character/sprite.ts`, lines 361–391](../../apps/desktop/src/renderer/src/character/sprite.ts#L361-L391)
 
 ```ts
 /** Reading her spellbook, seen diagonally: head down, turning a page, a smile at something. */
@@ -5635,7 +5872,7 @@ As the comment says, reading her spellbook, seen diagonally.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#spell -->
 
-[`src/renderer/src/character/sprite.ts`, lines 392–415](../../apps/desktop/src/renderer/src/character/sprite.ts#L392-L415)
+[`src/renderer/src/character/sprite.ts`, lines 393–416](../../apps/desktop/src/renderer/src/character/sprite.ts#L393-L416)
 
 ```ts
 /** A little spell: her hand up, sparkles circling it, then gone with a smile. */
@@ -5680,7 +5917,7 @@ As the comment says, a little spell, seen diagonally.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#vision -->
 
-[`src/renderer/src/character/sprite.ts`, lines 417–451](../../apps/desktop/src/renderer/src/character/sprite.ts#L417-L451)
+[`src/renderer/src/character/sprite.ts`, lines 418–452](../../apps/desktop/src/renderer/src/character/sprite.ts#L418-L452)
 
 ```ts
 /**
@@ -5749,7 +5986,7 @@ blinking once; she watches it rise away, then settles and blinks.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#levitate -->
 
-[`src/renderer/src/character/sprite.ts`, lines 453–503](../../apps/desktop/src/renderer/src/character/sprite.ts#L453-L503)
+[`src/renderer/src/character/sprite.ts`, lines 454–504](../../apps/desktop/src/renderer/src/character/sprite.ts#L454-L504)
 
 ```ts
 /**
@@ -5826,7 +6063,7 @@ As the comment says, she levitates, from the front.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#sit -->
 
-[`src/renderer/src/character/sprite.ts`, lines 505–545](../../apps/desktop/src/renderer/src/character/sprite.ts#L505-L545)
+[`src/renderer/src/character/sprite.ts`, lines 506–546](../../apps/desktop/src/renderer/src/character/sprite.ts#L506-L546)
 
 ```ts
 /** Sitting on the taskbar, her robe spread round her, swaying gently, looking about, then up again. */
@@ -5890,7 +6127,7 @@ As the comment says, sitting on the taskbar with her robe spread round her, the 
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#curtsy -->
 
-[`src/renderer/src/character/sprite.ts`, lines 547–572](../../apps/desktop/src/renderer/src/character/sprite.ts#L547-L572)
+[`src/renderer/src/character/sprite.ts`, lines 548–573](../../apps/desktop/src/renderer/src/character/sprite.ts#L548-L573)
 
 ```ts
 /** A curtsy, from the front: her robe held out at the sides, a dip with her head tilted, smiling. */
@@ -5941,7 +6178,7 @@ tilted, smiling.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#orb -->
 
-[`src/renderer/src/character/sprite.ts`, lines 574–607](../../apps/desktop/src/renderer/src/character/sprite.ts#L574-L607)
+[`src/renderer/src/character/sprite.ts`, lines 575–608](../../apps/desktop/src/renderer/src/character/sprite.ts#L575-L608)
 
 ```ts
 /**
@@ -6001,7 +6238,7 @@ sees and puts it away.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#twirl -->
 
-[`src/renderer/src/character/sprite.ts`, lines 609–645](../../apps/desktop/src/renderer/src/character/sprite.ts#L609-L645)
+[`src/renderer/src/character/sprite.ts`, lines 610–646](../../apps/desktop/src/renderer/src/character/sprite.ts#L610-L646)
 
 ```ts
 /**
@@ -6069,7 +6306,7 @@ frame, and it reuses a few drawings.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#butterfly -->
 
-[`src/renderer/src/character/sprite.ts`, lines 647–671](../../apps/desktop/src/renderer/src/character/sprite.ts#L647-L671)
+[`src/renderer/src/character/sprite.ts`, lines 648–672](../../apps/desktop/src/renderer/src/character/sprite.ts#L648-L672)
 
 ```ts
 /**
@@ -6122,7 +6359,7 @@ every frame is its own pose, rather than key poses with in-betweens.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#doze -->
 
-[`src/renderer/src/character/sprite.ts`, lines 673–724](../../apps/desktop/src/renderer/src/character/sprite.ts#L673-L724)
+[`src/renderer/src/character/sprite.ts`, lines 674–725](../../apps/desktop/src/renderer/src/character/sprite.ts#L674-L725)
 
 ```ts
 /**
@@ -6207,7 +6444,7 @@ one way and the other, and blinks. Like `butterfly()`, every frame is its own po
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#look -->
 
-[`src/renderer/src/character/sprite.ts`, lines 726–748](../../apps/desktop/src/renderer/src/character/sprite.ts#L726-L748)
+[`src/renderer/src/character/sprite.ts`, lines 727–749](../../apps/desktop/src/renderer/src/character/sprite.ts#L727-L749)
 
 ```ts
 /**
@@ -6252,7 +6489,7 @@ used again.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#between,juggle -->
 
-[`src/renderer/src/character/sprite.ts`, lines 750–784](../../apps/desktop/src/renderer/src/character/sprite.ts#L750-L784)
+[`src/renderer/src/character/sprite.ts`, lines 751–785](../../apps/desktop/src/renderer/src/character/sprite.ts#L751-L785)
 
 ```ts
 /** Between 0 and 1: how far `t` is from `from` to `to`, eased in and out. */
@@ -6331,7 +6568,7 @@ Like `butterfly()`, every frame is its own pose, worked out from how far through
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#bubbles -->
 
-[`src/renderer/src/character/sprite.ts`, lines 786–815](../../apps/desktop/src/renderer/src/character/sprite.ts#L786-L815)
+[`src/renderer/src/character/sprite.ts`, lines 787–816](../../apps/desktop/src/renderer/src/character/sprite.ts#L787-L816)
 
 ```ts
 /**
@@ -6390,7 +6627,7 @@ rig's `bubbles`, and the rig places the bubbles and the wand from that.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#wisp -->
 
-[`src/renderer/src/character/sprite.ts`, lines 817–844](../../apps/desktop/src/renderer/src/character/sprite.ts#L817-L844)
+[`src/renderer/src/character/sprite.ts`, lines 818–845](../../apps/desktop/src/renderer/src/character/sprite.ts#L818-L845)
 
 ```ts
 /**
@@ -6447,7 +6684,7 @@ pose: 120 frames of 40 ms, `FIDGET_MS.wisp` (4800 ms). The rig draws the wisp fr
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#sneeze -->
 
-[`src/renderer/src/character/sprite.ts`, lines 846–874](../../apps/desktop/src/renderer/src/character/sprite.ts#L846-L874)
+[`src/renderer/src/character/sprite.ts`, lines 847–875](../../apps/desktop/src/renderer/src/character/sprite.ts#L847-L875)
 
 ```ts
 /**
@@ -6508,7 +6745,7 @@ to 1, and the rig draws them big, then as twinkles, then as glints.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#dance -->
 
-[`src/renderer/src/character/sprite.ts`, lines 876–906](../../apps/desktop/src/renderer/src/character/sprite.ts#L876-L906)
+[`src/renderer/src/character/sprite.ts`, lines 877–907](../../apps/desktop/src/renderer/src/character/sprite.ts#L877-L907)
 
 ```ts
 /**
@@ -6567,11 +6804,143 @@ in-betweens again.
 - She stands (0.16 s), dances seven beats (2.66 s), comes back to standing (0.26 s) and stands
   (0.12 s). 3200 ms, `FIDGET_MS.dance`.
 
+### `chant()`
+
+<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#chant -->
+
+[`src/renderer/src/character/sprite.ts`, lines 909–936](../../apps/desktop/src/renderer/src/character/sprite.ts#L909-L936)
+
+```ts
+/**
+ * Chanting (her explosion spell), from the front: arms raised high, eyes shut and her lips moving,
+ * a magic circle turning under her, sparkles circling her hand, her hair and robe lifting in the
+ * updraft. Round and round, for as long as the chant lasts.
+ */
+function chant(): Key[] {
+  return Array.from({ length: 32 }, (_, i) => {
+    const phase = (i / 32) * Math.PI * 2
+    const sway = Math.sin(phase) * 0.06
+    return {
+      pose: {
+        view: 'front',
+        face: Math.floor(i / 3) % 2 === 1 ? 'chant' : 'blink',
+        arms: [
+          { shoulder: 2.45 + sway, elbow: -0.1 },
+          { shoulder: 2.45 - sway, elbow: -0.1 },
+        ],
+        rune: 1,
+        spin: i / 32,
+        sparkle: i / 32,
+        lift: 1.5 + Math.sin(phase * 2) * 0.8,
+        wind: Math.sin(phase) * 0.6,
+        spread: 1.5 + Math.sin(phase * 2) * 0.8,
+      },
+      ms: FRAME_MS,
+    }
+  })
+}
+```
+
+<!-- /code -->
+
+As the comment says, her chant, for the explosion spell, from the front: arms raised high, eyes
+shut and her lips moving, a magic circle turning under her, sparkles circling her hand, and her
+hair and robe lifting in the updraft. Unlike the fidgets, it isn't key poses with in-betweens: it's
+32 frames, each worked out on its own, making one round (1.28 seconds) that plays round and round
+(`LOOPS`) for as long as the chant lasts, 15 seconds, until the main process changes her pose.
+
+- `Array.from({ length: 32 }, (_, i) => {`: one frame for each `i` from 0 to 31, each `FRAME_MS`
+  (40 ms) long.
+- `phase`: how far round the loop the frame is, as an angle: a whole turn (2π) over the 32 frames,
+  so the sines below come back to where they started, and the loop joins up.
+- `sway`: her arms sway a little, one up as the other goes down (`2.45 + sway`, `2.45 - sway`).
+- `face: Math.floor(i / 3) % 2 === 1 ? 'chant' : 'blink'`: her eyes stay shut, and her mouth opens
+  and closes every three frames (`chant`, then `blink`): her lips moving as she chants.
+- `arms`: both raised high over her head (`shoulder: 2.45`, about 140° from hanging down), almost
+  straight (`elbow: -0.1`).
+- `rune: 1`, `spin: i / 32`: the magic circle under her, at its full size, its runes turning once a
+  round, as when she levitates.
+- `sparkle: i / 32`: sparkles circling her raised hand once a round, as in her little spell.
+- `lift`, `wind`, `spread`: the updraft of her magic: her hair raised and her hem lifting and
+  settling twice a round (`phase * 2`), and her hair and robe swaying from side to side once.
+
+### `over()`, `vanish()` and `appear()`
+
+<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#over,vanish,appear -->
+
+[`src/renderer/src/character/sprite.ts`, lines 938–972](../../apps/desktop/src/renderer/src/character/sprite.ts#L938-L972)
+
+```ts
+/**
+ * `ms` long, a frame about every FRAME_MS: `pose(t)` for each, `t` going from 0 to 1, their times
+ * adding up to exactly `ms`.
+ */
+function over(ms: number, pose: (t: number) => Pose): Key[] {
+  const steps = Math.max(2, Math.round(ms / FRAME_MS))
+  return Array.from({ length: steps }, (_, i) => ({
+    pose: pose(i / (steps - 1)),
+    ms: Math.round(((i + 1) * ms) / steps) - Math.round((i * ms) / steps),
+  }))
+}
+
+/**
+ * Vanishing, from the front: a smile, then her eyes close and she dissolves into white motes that
+ * drift up and fade (see FADE in the rig), the top of her first, until there's nothing left.
+ */
+function vanish(): Key[] {
+  return over(SPELL_POSE_MS.vanish, (t) => ({
+    view: 'front',
+    face: t < 0.25 ? 'happy' : 'blink',
+    fade: t * FADE.end,
+  }))
+}
+
+/**
+ * Appearing: vanishing backwards. White motes come down out of nowhere and she forms out of them,
+ * her eyes shut, then open with a smile, standing as usual by the end.
+ */
+function appear(): Key[] {
+  return over(SPELL_POSE_MS.appear, (t) => ({
+    view: 'front',
+    face: t < 0.75 ? 'blink' : t < 0.95 ? 'happy' : 'neutral',
+    fade: (1 - t) * FADE.end,
+  }))
+}
+```
+
+<!-- /code -->
+
+Vanishing and appearing, her teleport (and how she leaves when the app is closed, and arrives when
+it starts). Each is one smooth change rather than key poses: `fade` going steadily up or down, which
+the rig turns into her dissolving (see `FADE` in `rig.ts`).
+
+- `over(ms, pose)`: as its comment says, `ms` long, a frame about every `FRAME_MS`: `pose(t)` for
+  each, `t` going from 0 to 1, their times adding up to exactly `ms`.
+  - `steps`: how many frames: one per `FRAME_MS`, rounded (23 for 900 ms), and never fewer than
+    two, so there's a first and a last.
+  - `pose(i / (steps - 1))`: the first frame is `t` = 0, and the last exactly 1.
+  - `ms: Math.round(((i + 1) * ms) / steps) - Math.round((i * ms) / steps)`: each frame's share of
+    `ms`, in whole milliseconds. Taking the difference of two running totals, rather than rounding
+    each share on its own, means the roundings never add up: the frames last exactly `ms`, which a
+    test checks for `vanish` and `appear` against `SPELL_POSE_MS`.
+- `vanish()`: as its comment says, vanishing, from the front: a smile, then her eyes close and she
+  dissolves into white motes that drift up and fade, the top of her first, until there's nothing
+  left. It lasts `SPELL_POSE_MS.vanish` (0.9 seconds).
+  - `face: t < 0.25 ? 'happy' : 'blink'`: smiling for the first quarter, then her eyes shut.
+  - `fade: t * FADE.end`: from 0, all of her, to `FADE.end`, the last mote gone.
+- `appear()`: as its comment says, vanishing backwards: white motes come down out of nowhere and
+  she forms out of them, her eyes shut, then open with a smile, standing as usual by the end. It
+  lasts `SPELL_POSE_MS.appear` (0.9 seconds).
+  - `face: t < 0.75 ? 'blink' : t < 0.95 ? 'happy' : 'neutral'`: eyes shut for three quarters of
+    it, then a smile, and her usual face for the last frame, so it ends just as standing begins.
+  - `fade: (1 - t) * FADE.end`: from `FADE.end` down to 0. In the last frame `t` is exactly 1, so
+    `fade` is 0 and she's whole: a test checks that frame is the same as her standing.
+
 ### `dragged()`
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#dragged -->
 
-[`src/renderer/src/character/sprite.ts`, lines 908–938](../../apps/desktop/src/renderer/src/character/sprite.ts#L908-L938)
+[`src/renderer/src/character/sprite.ts`, lines 974–1004](../../apps/desktop/src/renderer/src/character/sprite.ts#L974-L1004)
 
 ```ts
 /**
@@ -6624,7 +6993,7 @@ Twelve frames of 55 ms, round and round.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#drawn,MAKERS,LEFT_MAKERS,LOOPS -->
 
-[`src/renderer/src/character/sprite.ts`, lines 940–1006](../../apps/desktop/src/renderer/src/character/sprite.ts#L940-L1006)
+[`src/renderer/src/character/sprite.ts`, lines 1006–1079](../../apps/desktop/src/renderer/src/character/sprite.ts#L1006-L1079)
 
 ```ts
 // ------------------------------------------------------------------------------------- frames
@@ -6656,6 +7025,9 @@ const MAKERS: Record<Name, () => Frame[]> = {
   wisp: () => drawn(wisp()),
   sneeze: () => drawn(sneeze()),
   dance: () => drawn(dance()),
+  chant: () => drawn(chant()),
+  vanish: () => drawn(vanish()),
+  appear: () => drawn(appear()),
   dragged: () => drawn(dragged()),
 }
 
@@ -6693,6 +7065,10 @@ export const LOOPS: Record<Name, boolean> = {
   wisp: false,
   sneeze: false,
   dance: false,
+  // Her spells': the chant goes round for as long as it lasts; vanishing and appearing play once.
+  chant: true,
+  vanish: false,
+  appear: false,
 }
 ```
 
@@ -6704,13 +7080,16 @@ export const LOOPS: Record<Name, boolean> = {
   TypeScript insist on every pose. Both walks make the same right-facing frames; `framesOf()`
   mirrors them for `walk-left`. `look` and `twirl` make their frames themselves. Every fidget has
   its maker here, the five newest (`juggle`, `bubbles`, `wisp`, `sneeze`, `dance`) included; like
-  most, they make key poses, which `drawn()` turns into frames.
+  most, they make key poses, which `drawn()` turns into frames. So do her spells' three poses
+  (`chant`, `vanish` and `appear`).
 - `LEFT_MAKERS`: as the comment says, poses with letters in them, drawn the other way round for
   facing left, so they read right once the frame is mirrored. Only the dozer's z's so far:
   `doze(true)`. `Partial<Record<...>>` lets it list only the poses that need it.
 - `LOOPS`: as the comment says, which poses go round and round (idle, the walks and dangling) and
   which play once (all twenty fidgets, the five newest included: their last frame stays until the
-  main process changes the pose, which it does just as `FIDGET_MS` runs out).
+  main process changes the pose, which it does just as `FIDGET_MS` runs out). Of her spells'
+  poses, as the comment says, the chant goes round for as long as it lasts, and vanishing and
+  appearing play once (`SPELL_POSE_MS` times them; after vanishing, her last frame is empty).
   `Record<Name, boolean>` makes TypeScript insist on an answer for every pose, so a new habit can't
   be left out.
 
@@ -6718,7 +7097,7 @@ export const LOOPS: Record<Name, boolean> = {
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#Facing,made,framesOf -->
 
-[`src/renderer/src/character/sprite.ts`, lines 1008–1030](../../apps/desktop/src/renderer/src/character/sprite.ts#L1008-L1030)
+[`src/renderer/src/character/sprite.ts`, lines 1081–1103](../../apps/desktop/src/renderer/src/character/sprite.ts#L1081-L1103)
 
 ```ts
 export type Facing = 'left' | 'right'
@@ -6762,7 +7141,7 @@ export function framesOf(pose: Name, facing: Facing): Frame[] {
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#animationLength,mirror -->
 
-[`src/renderer/src/character/sprite.ts`, lines 1032–1039](../../apps/desktop/src/renderer/src/character/sprite.ts#L1032-L1039)
+[`src/renderer/src/character/sprite.ts`, lines 1105–1112](../../apps/desktop/src/renderer/src/character/sprite.ts#L1105-L1112)
 
 ```ts
 /** How long a pose's frames last altogether (a fidget's must match FIDGET_MS). */
@@ -6788,7 +7167,7 @@ export function mirror(rows: string[]): string[] {
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#framePaths -->
 
-[`src/renderer/src/character/sprite.ts`, lines 1041–1065](../../apps/desktop/src/renderer/src/character/sprite.ts#L1041-L1065)
+[`src/renderer/src/character/sprite.ts`, lines 1114–1138](../../apps/desktop/src/renderer/src/character/sprite.ts#L1114-L1138)
 
 ```ts
 /**
@@ -6862,7 +7241,7 @@ function pathsOf(frame: Frame): ReturnType<typeof framePaths> {
 }
 
 /** Every pose, for drawing ahead of time. */
-const ALL_POSES: Pose[] = ['idle', 'walk-left', 'walk-right', 'dragged', ...FIDGETS]
+const ALL_POSES: Pose[] = ['idle', 'walk-left', 'walk-right', 'dragged', ...FIDGETS, ...SPELL_POSES]
 
 /**
  * The character: pixel art (character/sprite.ts) drawn `box` DIPs wide and a little taller, for
@@ -6915,7 +7294,7 @@ export function Character(props: { pose: Pose; facing: Facing; box: number; expa
   `ReturnType<typeof framePaths>` means "whatever `framePaths()` returns", so the type isn't
   written out twice.
 - `ALL_POSES`: every pose, for drawing ahead of time: the four that aren't fidgets, then
-  `...FIDGETS`.
+  `...FIDGETS`, then her spells' poses, `...SPELL_POSES`.
 - `Character({ pose, facing, box, expanded })`: the component itself. As the comment says, it draws
   her `box` DIPs wide and a little taller, for the room above her hat (`SPRITE_HEADROOM`), her feet
   on its bottom edge. In the bubble that fills its window, which the main process keeps on the
@@ -7192,3 +7571,932 @@ The character's colours: a rule per palette class, as the comment says.
   (`data-expanded`), it's the accent colour at 70%, a hint that she's the one that's open.
 - `button:hover .character`: when the pointer is over the bubble's button, a soft white glow round
   her (`drop-shadow` follows the shape of the drawing, not its box), fading in over 0.15 s.
+
+## `src/renderer/src/lib/spellMotion.ts`: where things are in her spells' effects
+
+As the comment at the top says, where things are in her spells' effects, moment by moment:
+starfall's shooting stars, the explosion's magic circles, and how big its blast is.
+`lib/spellArt.ts` (next) draws them, for `SpellView` (see [The pages](7-renderer-pages.md)).
+Everything is in the effects' pixels, twice the size of hers, and every time is in milliseconds
+since the spell was cast. Two ideas run through it:
+
+- **Each frame from scratch.** Nothing moves a star on a little each frame: where it is comes from
+  `t` alone. So any moment can be drawn, a slow frame never puts things out of step, and the page
+  keeps nothing from one frame to the next.
+- **Random, but the same every frame.** The stars, sparks and smoke are scattered at random, but
+  from a _seeded_ generator, which gives the same numbers every time it starts from the same seed.
+  Each frame starts it afresh, so each frame has the same stars in the same places, only further
+  along.
+
+Nothing here draws, so `tests/spellMotion.test.ts` can test it without a page.
+
+### `Scene`
+
+<!-- code: apps/desktop/src/renderer/src/lib/spellMotion.ts#Scene -->
+
+[`src/renderer/src/lib/spellMotion.ts`, lines 3–25](../../apps/desktop/src/renderer/src/lib/spellMotion.ts#L3-L25)
+
+```ts
+// Where things are in her spells' effects, moment by moment (see lib/spellArt.ts, which draws
+// them): starfall's shooting stars, the explosion's magic circles and how big its blast is. In the
+// effects' pixels (twice the size of hers), times in ms since the spell was cast. Anything random
+// comes from a seeded generator, so each frame has the same stars, sparks and smoke. Nothing here
+// draws, so it can be tested away from a page.
+
+/** What a frame is drawn from. */
+export interface Scene {
+  /** Since the spell was cast (ms). */
+  t: number
+  /** The canvas's size (pixels). */
+  w: number
+  h: number
+  /** Where she stands across it, and how far down her feet are (pixels). */
+  x: number
+  feet: number
+  /** How many canvas pixels she is tall (her 92 sprite pixels, hat to boots). */
+  height: number
+  /** Her accent colour (the robe, the magic circles). */
+  accent: string
+  /** Windows' reduced-motion setting: nothing moves; things just show. */
+  still: boolean
+}
+```
+
+<!-- /code -->
+
+As its comment says, what a frame is drawn from. `SpellView` builds one every frame and hands it to
+`drawStarfall()` or `drawExplosion()`.
+
+- `t`: as its comment says, the time since the spell was cast.
+- `w`, `h`: the canvas's size, in its own pixels.
+- `x`, `feet`: where she stands across the canvas, and how far down it her feet are.
+- `height`: as its comment says, how many canvas pixels tall she is, from hat to boots. Her 92
+  sprite pixels make 46 of the effects' pixels, whatever her size, since both grow with her.
+- `accent`: her accent colour, the colour of her robe, which the magic circles are drawn in.
+- `still`: as its comment says, Windows' reduced-motion setting: nothing moves; things just show.
+
+### `seeded()`, `clamp01`, `easeOut` and `between`
+
+<!-- code: apps/desktop/src/renderer/src/lib/spellMotion.ts#seeded,clamp01,easeOut,between -->
+
+[`src/renderer/src/lib/spellMotion.ts`, lines 27–44](../../apps/desktop/src/renderer/src/lib/spellMotion.ts#L27-L44)
+
+```ts
+/** A seeded random number generator (mulberry32): the same numbers, 0 to 1, every time. */
+export function seeded(seed: number): () => number {
+  let a = seed >>> 0
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0
+    let t = a
+    t = Math.imul(t ^ (t >>> 15), t | 1)
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+/** `v` kept between 0 and 1. */
+export const clamp01 = (v: number) => Math.min(1, Math.max(0, v))
+
+/** Fast at first, slowing to a stop. */
+export const easeOut = (t: number) => 1 - (1 - clamp01(t)) ** 3
+
+/** 0 before `from`, 1 after `to`, in between in a straight line. */
+export const between = (t: number, from: number, to: number) => clamp01((t - from) / (to - from))
+```
+
+<!-- /code -->
+
+- `seeded(seed)`: as its comment says, a seeded random number generator: the function it returns
+  gives numbers from 0 to 1, and the same ones, in the same order, every time it's made with the
+  same seed. It's _mulberry32_, a well-known tiny generator. `a` is its state, a 32-bit whole
+  number moved on by a fixed odd step (`0x6d2b79f5`) at each call; the lines after scramble it
+  (`Math.imul` is a 32-bit multiply, and `^` and `>>>` mix the bits), and dividing by 2³²
+  (4294967296) turns the result into a fraction. `>>> 0` keeps each value a positive 32-bit number.
+  A test checks two generators with the same seed agree.
+- `clamp01(v)`: as its comment says, `v` kept between 0 and 1.
+- `easeOut(t)`: as its comment says, fast at first, slowing to a stop: `1 - (1 - t)³` rises steeply
+  from 0 and flattens out as it reaches 1. It's for things that burst out and settle: a magic
+  circle growing, the fireball, the shock wave.
+- `between(t, from, to)`: as its comment says, 0 before `from`, 1 after `to`, and in a straight line
+  in between: how far through a stretch of time `t` is. Most of the timings in `spellArt.ts` are
+  written with it.
+
+### `lattice()` and `noise()`
+
+<!-- code: apps/desktop/src/renderer/src/lib/spellMotion.ts#lattice,noise -->
+
+[`src/renderer/src/lib/spellMotion.ts`, lines 46–64](../../apps/desktop/src/renderer/src/lib/spellMotion.ts#L46-L64)
+
+```ts
+/** A lattice point's random number, for noise. */
+function lattice(x: number, y: number): number {
+  let h = Math.imul(x, 374761393) ^ Math.imul(y, 668265263)
+  h = Math.imul(h ^ (h >>> 13), 1274126177)
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296
+}
+
+/** Smooth value noise, 0 to 1: turbulence for fire and smoke. */
+export function noise(x: number, y: number): number {
+  const x0 = Math.floor(x)
+  const y0 = Math.floor(y)
+  const fx = x - x0
+  const fy = y - y0
+  const sx = fx * fx * (3 - 2 * fx)
+  const sy = fy * fy * (3 - 2 * fy)
+  const top = lattice(x0, y0) + (lattice(x0 + 1, y0) - lattice(x0, y0)) * sx
+  const bottom = lattice(x0, y0 + 1) + (lattice(x0 + 1, y0 + 1) - lattice(x0, y0 + 1)) * sx
+  return top + (bottom - top) * sy
+}
+```
+
+<!-- /code -->
+
+- `lattice(x, y)`: as its comment says, a random number for a point on a grid of whole numbers,
+  the same every time, made the same way as the rig's `hash()`.
+- `noise(x, y)`: as its comment says, smooth _value noise_, from 0 to 1: random numbers at the
+  grid's points, blended smoothly in between, so it changes gradually as `x` and `y` change rather
+  than jumping about as plain random numbers do. It's the turbulence that gives the fireball its
+  ragged, churning edges.
+  - `x0`, `y0`: the top-left corner of the grid square the point is in; `fx`, `fy` how far past it
+    the point is.
+  - `sx`, `sy`: those fractions eased (`f * f * (3 - 2 * f)`, the _smoothstep_ curve, as in
+    `VisionView`), so the blend has no corners where it crosses a grid line.
+  - `top`, `bottom`: blended across, between the square's two top corners and its two bottom ones;
+    then `top + (bottom - top) * sy` blends down between those.
+
+### `Star`, `STAR_COLOURS`, `STAR_DIRECTION` and `starsAt()`
+
+<!-- code: apps/desktop/src/renderer/src/lib/spellMotion.ts#Star,STAR_COLOURS,STAR_DIRECTION,starsAt -->
+
+[`src/renderer/src/lib/spellMotion.ts`, lines 66–113](../../apps/desktop/src/renderer/src/lib/spellMotion.ts#L66-L113)
+
+```ts
+/** A shooting star in the sky: where its head is, which way it's going, and how old it is. */
+export interface Star {
+  x: number
+  y: number
+  /** Its direction (a unit vector: down and to the left). */
+  dx: number
+  dy: number
+  /** How long it's been falling, and how long it falls for (ms). */
+  age: number
+  life: number
+  colour: string
+}
+
+/** The shooting stars' colours, and the way they all fall: down, and a little to the left. */
+export const STAR_COLOURS = ['#fff7d6', '#fde68a', '#bae6fd', '#fbcfe8', '#ddd6fe']
+
+export const STAR_DIRECTION = { dx: -0.5, dy: 0.866 }
+
+/**
+ * The shooting stars falling at `t`: STARFALL.perSecond start each second (each up to 0.3 s
+ * late), from along the top of the screen and off its right-hand side, each falling down to the
+ * left for a second or so, at its own speed.
+ */
+export function starsAt(t: number, w: number, h: number): Star[] {
+  const random = seeded(7)
+  const count = Math.floor((STARFALL.durationMs / 1000) * STARFALL.perSecond)
+  const stars: Star[] = []
+  for (let i = 0; i < count; i++) {
+    // Every number is drawn whether or not the star is falling yet, so each keeps its own.
+    const born = (i / STARFALL.perSecond) * 1000 + random() * 300
+    const life = 900 + random() * 700
+    const startX = random() * w * 1.4
+    const startY = -random() * h * 0.25
+    const speed = ((w + h) / 1400) * (0.7 + random() * 0.6)
+    const colour = STAR_COLOURS[Math.floor(random() * STAR_COLOURS.length)]!
+    const age = t - born
+    // None starts too late to be gone by the end.
+    if (age < 0 || age > life || born + 1600 > STARFALL.durationMs - 100) continue
+    stars.push({
+      x: startX + STAR_DIRECTION.dx * speed * age,
+      y: startY + STAR_DIRECTION.dy * speed * age,
+      ...STAR_DIRECTION,
+      age,
+      life,
+      colour,
+    })
+  }
+  return stars
+}
+```
+
+<!-- /code -->
+
+- `Star`: as its comment says, a shooting star in the sky: where its head is (`x`, `y`), which way
+  it's going (`dx`, `dy`, a unit vector: a step of length 1), how long it's been falling (`age`) and
+  how long it falls for (`life`), and its colour.
+- `STAR_COLOURS`: as the comment says, the shooting stars' colours: pale cream, gold, blue, pink and
+  violet.
+- `STAR_DIRECTION`: the way they all fall. `dx: -0.5, dy: 0.866` is 60° below level, to the left
+  (0.866 is √3/2, so the step is 1 long).
+- `starsAt(t, w, h)`: as its comment says, the shooting stars falling at `t`. It goes through every
+  star the spell will have, works each one out from scratch, and keeps those falling now.
+  - `const random = seeded(7)`: the same seed every call, so every frame draws the same numbers for
+    the same stars.
+  - `count`: how many stars in all: 10 seconds at 7 a second, 70.
+  - `// Every number is drawn whether or not the star is falling yet`: as the comment says, each
+    star takes its numbers in turn, so each keeps its own whatever the time. Skipping the ones not
+    yet falling would hand later stars different numbers from frame to frame.
+  - `born`: when star `i` starts: `i / perSecond` seconds in, so 7 a second, and up to 0.3 seconds
+    later at random, so they don't come like clockwork.
+  - `life`: how long it falls, 0.9 to 1.6 seconds.
+  - `startX`, `startY`: where it starts: anywhere from the left edge to 1.4 times the width across
+    (off the right-hand side, so stars come in from there too), and up to a quarter of the height
+    above the top.
+  - `speed`: how fast, in pixels a millisecond: `(w + h) / 1400`, for the screen's size, so they
+    cross a big screen as quickly as a small one, times 0.7 to 1.3 for each star's own speed.
+  - `colour`: one of `STAR_COLOURS`, at random. The `!` tells TypeScript the index is in range.
+  - `if (age < 0 || age > life || born + 1600 > STARFALL.durationMs - 100) continue`: a star is
+    left out if it hasn't started, has finished, or, as the comment says, would start too late to be
+    gone by the end (one can fall for up to 1.6 seconds, and the window closes at 10). So no star
+    starts after 8.3 seconds, and the last have gone before the window closes; a test checks there
+    are none after the spell.
+  - `x: startX + STAR_DIRECTION.dx * speed * age`, `y`: where its head is now: as far along its
+    direction as it has gone at its speed.
+
+### `Circle` and `pillarCircles()`
+
+<!-- code: apps/desktop/src/renderer/src/lib/spellMotion.ts#Circle,pillarCircles -->
+
+[`src/renderer/src/lib/spellMotion.ts`, lines 115–152](../../apps/desktop/src/renderer/src/lib/spellMotion.ts#L115-L152)
+
+```ts
+/** One of the pillar's magic circles: where it is, how big, when it comes, and which way it turns. */
+export interface Circle {
+  cx: number
+  cy: number
+  rx: number
+  ry: number
+  born: number
+  turn: 1 | -1
+}
+
+/**
+ * The pillar's magic circles, EXPLOSION.circles of them, stacked up from just above her hat to
+ * near the top of the screen: flat ellipses (seen from the side, like the one under her feet),
+ * every other one a little bigger and turning the other way, coming one after another over the
+ * first two thirds of the chant.
+ */
+export function pillarCircles(scene: Pick<Scene, 'w' | 'h' | 'x' | 'feet' | 'height'>): Circle[] {
+  const n = EXPLOSION.circles
+  const size = Math.min(scene.w * 0.2, Math.max(20, scene.height * 1.25))
+  // The lowest clear of her hat (the biggest circles are 1.2 × size across, and 0.3 as deep).
+  const bottom = scene.feet - scene.height - size * 0.36 - 3
+  const top = Math.min(bottom - 6 * (n - 1), Math.max(10, scene.h * 0.08))
+  const gap = (bottom - top) / (n - 1)
+  // Above her, but with most of every circle on the screen (80% of the bigger ones, which are 1.2
+  // times as wide), even with her right in a corner.
+  const cx = Math.min(Math.max(scene.x, size * 0.96), scene.w - size * 0.96)
+  return Array.from({ length: n }, (_, i) => {
+    const rx = size * (i % 2 === 0 ? 1 : 1.2)
+    return {
+      cx,
+      cy: bottom - i * gap,
+      rx,
+      ry: rx * 0.3,
+      born: 500 + i * ((EXPLOSION.chantMs * 0.66) / n),
+      turn: i % 2 === 0 ? 1 : -1,
+    }
+  })
+}
+```
+
+<!-- /code -->
+
+- `Circle`: as its comment says, one of the pillar's magic circles: its middle (`cx`, `cy`), its two
+  radii (`rx` across and `ry` up and down, as it's flat), when it comes (`born`, ms into the chant)
+  and which way it turns (`turn`).
+- `pillarCircles(scene)`: as its comment says, the pillar's `EXPLOSION.circles` (7) magic circles,
+  stacked from just above her hat to near the top of the screen: flat ellipses, as if seen from the
+  side, like the one under her feet; every other one a little bigger and turning the other way; and
+  coming one after another over the first two thirds of the chant. `Pick<Scene, ...>` asks only for
+  the parts of a `Scene` it needs, which keeps it simple to test.
+  - `size`: the smaller circles' radius across: 1.25 times her height (at least 20 pixels), but
+    never more than a fifth of the screen's width.
+  - `bottom`: as the comment says, the lowest circle's middle, clear of her hat: up from her feet by
+    her height, to the top of her hat, then far enough again for the biggest circle's lower edge to
+    clear it (0.36 of `size` below its middle: it's 1.2 times as wide, and 0.3 as deep), and 3
+    pixels more.
+  - `top`: the highest circle's middle: 8% of the way down the screen (at least 10 pixels), unless
+    that would bunch them closer than 6 pixels apart; then 6 pixels a circle above the lowest.
+  - `gap`: from one circle's middle to the next, spread evenly between the two.
+  - `cx`: as the comment says, above her, but with most of every circle on the screen (80% of the
+    bigger ones), even with her right in a corner: her `x`, kept at least 0.96 of `size` from either
+    edge. A test checks that.
+  - `rx = size * (i % 2 === 0 ? 1 : 1.2)`: every other circle 1.2 times as big.
+  - `ry: rx * 0.3`: three tenths as deep as it is wide, a flat ellipse.
+  - `born: 500 + i * ((EXPLOSION.chantMs * 0.66) / n)`: the first half a second into the chant, then
+    one every 1.4 seconds or so, the last about 9 seconds in, before two thirds of the 15-second
+    chant is over.
+  - `turn: i % 2 === 0 ? 1 : -1`: every other circle turns the other way.
+
+### `blastAt()`
+
+<!-- code: apps/desktop/src/renderer/src/lib/spellMotion.ts#blastAt -->
+
+[`src/renderer/src/lib/spellMotion.ts`, lines 154–160](../../apps/desktop/src/renderer/src/lib/spellMotion.ts#L154-L160)
+
+```ts
+/** The explosion's size at `b` ms after the bang: its fireball's radius, and its shock wave's. */
+export function blastAt(b: number, w: number, h: number): { fire: number; shock: number } {
+  const full = Math.min(w, h) * 0.36
+  const fire = full * (easeOut(b / 650) + 0.25 * between(b, 650, EXPLOSION.boomMs))
+  const shock = full * 2.6 * easeOut(b / 1000)
+  return { fire, shock }
+}
+```
+
+<!-- /code -->
+
+As its comment says, the explosion's size `b` milliseconds after the bang: its fireball's radius,
+and its shock wave's.
+
+- `full`: 36% of the screen's shorter side, the fireball's size once it has burst.
+- `fire`: it bursts out to `full` in the first 0.65 seconds, fast and then slowing (`easeOut`),
+  then grows by a quarter as much again, slowly and steadily, until the bang is over: a fireball
+  that billows on as it cools. A test checks it bursts out fast, then grows slowly.
+- `shock`: the shock wave races out to 2.6 times `full` over the first second, slowing as it goes.
+
+## `src/renderer/src/lib/spellArt.ts`: drawing her spells' effects
+
+As the comment at the top says, the pixel art of her spells' effects, which `SpellView` draws each
+frame: starfall's shooting stars, and the explosion's pillar of magic circles and its bang.
+Everything is drawn a pixel at a time on a small canvas that the page stretches over its window
+without smoothing, so it's crisp pixel art like her. Where things are, moment by moment, comes
+from `lib/spellMotion.ts` (above).
+
+**Drawing on a canvas.** `g` is the canvas's 2D drawing context, the object everything is drawn
+through. `g.fillStyle` is the colour to paint with, `g.globalAlpha` how opaque (from 0, clear, to
+1), and `g.fillRect(x, y, width, height)` paints a rectangle: a 1 by 1 rectangle is one pixel. Each
+frame starts on a cleared canvas (`SpellView`), and whatever is drawn later in a frame goes over
+what came before.
+
+### `plot()`, `twinkle()`, `line()` and `ring()`
+
+<!-- code: apps/desktop/src/renderer/src/lib/spellArt.ts#plot,twinkle,line,ring -->
+
+[`src/renderer/src/lib/spellArt.ts`, lines 15–92](../../apps/desktop/src/renderer/src/lib/spellArt.ts#L15-L92)
+
+```ts
+// The pixel art of her spells' effects (see SpellView): starfall's shooting stars, and the
+// explosion's pillar of magic circles and its bang. Everything is drawn a pixel at a time on a
+// small canvas that the page stretches over its window without smoothing, so it's crisp pixel art
+// like her. Where things are, moment by moment, comes from lib/spellMotion.ts.
+
+/** Sets one pixel, if it's on the canvas. */
+function plot(g: CanvasRenderingContext2D, x: number, y: number, colour: string, alpha = 1) {
+  if (alpha <= 0) return
+  g.globalAlpha = Math.min(1, alpha)
+  g.fillStyle = colour
+  g.fillRect(Math.round(x), Math.round(y), 1, 1)
+}
+
+/** A plus-shaped twinkle: a pixel and its four neighbours, the middle brighter. */
+function twinkle(g: CanvasRenderingContext2D, x: number, y: number, colour: string, alpha = 1) {
+  plot(g, x, y, '#ffffff', alpha)
+  for (const [dx, dy] of [
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1],
+  ] as const) {
+    plot(g, x + dx, y + dy, colour, alpha * 0.8)
+  }
+}
+
+/** A straight line of pixels (Bresenham's). */
+function line(
+  g: CanvasRenderingContext2D,
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+  colour: string,
+  alpha = 1,
+) {
+  let x = Math.round(from.x)
+  let y = Math.round(from.y)
+  const x1 = Math.round(to.x)
+  const y1 = Math.round(to.y)
+  const dx = Math.abs(x1 - x)
+  const dy = -Math.abs(y1 - y)
+  const sx = x < x1 ? 1 : -1
+  const sy = y < y1 ? 1 : -1
+  let error = dx + dy
+  for (let i = 0; i < 2000; i++) {
+    plot(g, x, y, colour, alpha)
+    if (x === x1 && y === y1) return
+    const e2 = 2 * error
+    if (e2 >= dy) {
+      error += dy
+      x += sx
+    }
+    if (e2 <= dx) {
+      error += dx
+      y += sy
+    }
+  }
+}
+
+/** An ellipse's outline, a pixel at a time; `gap` leaves every other `gap` radians out (dashes). */
+function ring(
+  g: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  rx: number,
+  ry: number,
+  colour: string,
+  alpha = 1,
+  turn = 0,
+  gap = 0,
+) {
+  if (rx < 0.5) return
+  const steps = Math.max(8, Math.ceil(Math.PI * 2 * Math.max(rx, ry)))
+  for (let k = 0; k < steps; k++) {
+    const a = (k / steps) * Math.PI * 2
+    if (gap && Math.floor((a + turn) / gap) % 2 === 1) continue
+    plot(g, cx + Math.cos(a) * rx, cy + Math.sin(a) * ry, colour, alpha)
+  }
+}
+```
+
+<!-- /code -->
+
+The four ways everything is drawn.
+
+- `plot(g, x, y, colour, alpha)`: as its comment says, sets one pixel, in `colour` at `alpha`
+  opacity (fully opaque if left out), on the nearest whole pixel (`Math.round`). Nothing is drawn
+  for an `alpha` of 0 or less, so callers can fade things out without checking first, and above 1
+  it's kept to 1. A pixel off the canvas the canvas itself leaves out.
+- `twinkle(g, x, y, colour, alpha)`: as its comment says, a plus-shaped twinkle: a white pixel in
+  the middle, and its four neighbours in `colour`, a little fainter (80%).
+- `line(g, from, to, colour, alpha)`: as its comment says, a straight line of pixels, by
+  _Bresenham's algorithm_, the classic way to draw a line on a grid. It steps a pixel at a time from
+  one end toward the other, keeping a running `error`, how far the pixels have strayed from the true
+  line, and steps across (`x += sx`), down (`y += sy`) or both, whichever keeps closest. So the line
+  has no gaps and no doubled pixels. `sx` and `sy` are which way to step (1 or -1). It stops at the
+  far end; `i < 2000` is only a safety limit, so a bad number can never make it loop for ever.
+- `ring(g, cx, cy, rx, ry, colour, alpha, turn, gap)`: as its comment says, an ellipse's outline, a
+  pixel at a time: `rx` across and `ry` up and down from its middle.
+  - `if (rx < 0.5) return`: too small to draw.
+  - `steps`: how many points to plot round it: about one per pixel round the circle of its longer
+    radius (2π × the radius), and at least 8, so it has no gaps.
+  - `a`: each point's angle; `Math.cos(a) * rx` and `Math.sin(a) * ry` put it on the ellipse.
+  - `gap`: as the comment says, leaves every other `gap` radians out, for a dashed ring, and `turn`
+    turns the dashes round it. `Math.floor((a + turn) / gap) % 2 === 1` is true for every other
+    stretch of `gap` radians.
+
+### `drawStarfall()`
+
+<!-- code: apps/desktop/src/renderer/src/lib/spellArt.ts#drawStarfall -->
+
+[`src/renderer/src/lib/spellArt.ts`, lines 94–127](../../apps/desktop/src/renderer/src/lib/spellArt.ts#L94-L127)
+
+```ts
+// --------------------------------------------------------------------------------- starfall
+
+/** Starfall: twinkling stars over the top of the screen, and shooting stars streaking down it. */
+export function drawStarfall(g: CanvasRenderingContext2D, scene: Scene): void {
+  const { t, w, h, still } = scene
+  const shown = still ? 1 : Math.min(1, t / 600, (STARFALL.durationMs - t) / 1000)
+  // Twinkles, over the top two thirds of the screen, each brightening and dimming in its time.
+  const random = seeded(3)
+  for (let i = 0; i < 130; i++) {
+    const x = random() * w
+    const y = random() * h * 0.66
+    const phase = random() * Math.PI * 2
+    const glow = still ? 0.7 : 0.5 + 0.5 * Math.sin(t / 260 + phase)
+    if (glow > 0.75) twinkle(g, x, y, '#fde68a', shown * glow)
+    else plot(g, x, y, '#ffffff', shown * glow)
+  }
+  if (still) return
+  for (const star of starsAt(t, w, h)) {
+    const fading = Math.min(1, (star.life - star.age) / 300) * shown
+    // Its tail: back along its path, fading to nothing, with a fainter glow beside it.
+    for (let k = 1; k <= 30; k++) {
+      const tx = star.x - star.dx * k * 1.3
+      const ty = star.y - star.dy * k * 1.3
+      const left = 1 - k / 31
+      plot(g, tx, ty, k < 6 ? '#ffffff' : star.colour, fading * left)
+      plot(g, tx + 1, ty, star.colour, fading * left * 0.35)
+    }
+    // Its head: a bright square with a twinkle round it.
+    twinkle(g, star.x, star.y, star.colour, fading)
+    plot(g, star.x + 1, star.y, '#ffffff', fading)
+    plot(g, star.x, star.y + 1, '#ffffff', fading)
+    plot(g, star.x + 1, star.y + 1, '#ffffff', fading)
+  }
+}
+```
+
+<!-- /code -->
+
+As its comment says, starfall: twinkling stars over the top of the screen, and shooting stars
+streaking down it.
+
+- `shown`: how much of it shows: fading in over the first 0.6 seconds and out over the last second
+  (the smallest of the three), or all of it with reduced motion.
+- The twinkles: as the comment says, 130 of them over the top two thirds of the screen, each
+  brightening and dimming in its time. `seeded(3)` scatters them the same way every frame. `glow`
+  swings between 0 and 1 (a sine wave, a full swing about every 1.6 seconds, each starting at its
+  own `phase`); a bright one (`glow > 0.75`) is a gold twinkle round a white middle, and the rest a
+  single white pixel, as faint as their glow. With reduced motion each holds still at 0.7.
+- `if (still) return`: with reduced motion there are no shooting stars, only the still twinkles.
+- `for (const star of starsAt(t, w, h))`: the shooting stars falling now (`spellMotion.ts`).
+- `fading`: each fades out over its last 0.3 seconds, and with the whole spell.
+- Its tail: as the comment says, back along its path, fading to nothing, with a fainter glow beside
+  it: 30 pixels, 1.3 pixels apart, back the way it came (`- star.dx * k * 1.3`), each fainter than
+  the last (`left`). The first five are white and the rest its colour, and each has a faint pixel of
+  its colour beside it (`tx + 1`), so the tail is a little thicker.
+- Its head: as the comment says, a bright square (two white pixels by two) with a twinkle round it
+  in its colour.
+
+### `magicCircle()`
+
+<!-- code: apps/desktop/src/renderer/src/lib/spellArt.ts#magicCircle -->
+
+[`src/renderer/src/lib/spellArt.ts`, lines 129–185](../../apps/desktop/src/renderer/src/lib/spellArt.ts#L129-L185)
+
+```ts
+// --------------------------------------------------------------------------------- explosion
+
+/** One magic circle at `t`: rings, a turning ring of runes, a six-pointed star, a bright heart. */
+function magicCircle(
+  g: CanvasRenderingContext2D,
+  c: Circle,
+  t: number,
+  power: number,
+  accent: string,
+) {
+  const age = t - c.born
+  if (age < 0) return
+  const grown = easeOut(age / 450)
+  const flash = 1 - between(age, 450, 900)
+  const rx = c.rx * grown
+  const ry = c.ry * grown
+  const spin = (c.turn * age * (0.0008 + power * 0.004)) % (Math.PI * 2)
+  const bright = 0.75 + power * 0.25
+  // A soft glow filling it, in her colour.
+  g.globalAlpha = 0.1 + power * 0.12
+  g.fillStyle = accent
+  for (let dy = -Math.floor(ry); dy <= Math.floor(ry); dy++) {
+    const half = rx * Math.sqrt(Math.max(0, 1 - (dy / Math.max(1, ry)) ** 2))
+    g.fillRect(Math.round(c.cx - half), Math.round(c.cy + dy), Math.round(half * 2), 1)
+  }
+  // Its rings: the outer one in her colour (white as it forms), a dashed one inside it turning.
+  ring(g, c.cx, c.cy, rx, ry, flash > 0.3 ? '#ffffff' : accent, bright)
+  ring(g, c.cx, c.cy, rx * 0.93, ry * 0.93, accent, bright * 0.7)
+  ring(g, c.cx, c.cy, rx * 0.8, ry * 0.8, '#fde68a', bright, spin, 0.18)
+  ring(g, c.cx, c.cy, rx * 0.58, ry * 0.58, accent, bright * 0.85)
+  // Its runes: little marks round it, turning.
+  for (let k = 0; k < 16; k++) {
+    const a = (k / 16) * Math.PI * 2 + spin
+    const x = c.cx + Math.cos(a) * rx * 0.69
+    const y = c.cy + Math.sin(a) * ry * 0.69
+    plot(g, x, y, '#fff7d6', bright)
+    if (k % 2 === 0) plot(g, x, y - 1, '#fde68a', bright * 0.8)
+  }
+  // A six-pointed star inside it (two triangles), turning the other way.
+  const points = Array.from({ length: 6 }, (_, k) => {
+    const a = (k / 6) * Math.PI * 2 - spin * 1.5
+    return { x: c.cx + Math.cos(a) * rx * 0.55, y: c.cy + Math.sin(a) * ry * 0.55 }
+  })
+  for (let k = 0; k < 6; k++) line(g, points[k]!, points[(k + 2) % 6]!, '#fde68a', bright * 0.8)
+  plot(g, c.cx, c.cy, '#ffffff', bright)
+  // As it forms, a flash of light round it.
+  if (flash > 0)
+    ring(
+      g,
+      c.cx,
+      c.cy,
+      rx * (1 + (1 - flash) * 0.3),
+      ry * (1 + (1 - flash) * 0.3),
+      '#ffffff',
+      flash * 0.8,
+    )
+}
+```
+
+<!-- /code -->
+
+As its comment says, one magic circle at `t`: rings, a turning ring of runes, a six-pointed star
+and a bright heart. `power` is how strong the magic is now, from 0 to 1 (see `drawPillar()`), which
+makes it brighter and turn faster.
+
+- `age`: how long since it came; before then it isn't drawn.
+- `grown`: it grows from nothing to its full size over its first 0.45 seconds, fast and then
+  slowing (`easeOut`); `rx` and `ry` are its size now.
+- `flash`: 1 until it has grown, then fading to 0 over the next 0.45 seconds: a flash of white as it
+  forms.
+- `spin`: how far it has turned, in radians: faster as the magic grows (`0.0008 + power * 0.004`
+  radians a millisecond), its own way round (`c.turn`), kept within one turn (`% (Math.PI * 2)`).
+- `bright`: how bright its lines are: three quarters to full, with the magic.
+- The glow: as the comment says, a soft glow filling it, in her colour, faint (10% to 22% opaque):
+  a row of pixels for each pixel of its height, as wide as the ellipse is at that height (`half`,
+  from the ellipse's equation).
+- Its rings: as the comment says, the outer one in her colour (white while it flashes as it forms),
+  a fainter one just inside it, a dashed gold ring that turns (`spin`, with dashes 0.18 radians
+  long), and an inner ring in her colour.
+- Its runes: as the comment says, little marks round it, turning: 16 cream pixels round it between
+  the dashed ring and the inner one, every other one with a gold pixel above it.
+- The star: as the comment says, a six-pointed star inside it (two triangles), turning the other
+  way (`- spin * 1.5`): six points round it, each joined to the point two along
+  (`points[(k + 2) % 6]`), which draws the two triangles. The `!`s tell TypeScript the points are
+  there.
+- `plot(g, c.cx, c.cy, '#ffffff', bright)`: its bright heart, one white pixel in the middle.
+- `if (flash > 0)`: as the comment says, as it forms, a flash of light round it: a white ring that
+  spreads out to 1.3 times its size as it fades.
+
+### `drawPillar()`
+
+<!-- code: apps/desktop/src/renderer/src/lib/spellArt.ts#drawPillar -->
+
+[`src/renderer/src/lib/spellArt.ts`, lines 187–253](../../apps/desktop/src/renderer/src/lib/spellArt.ts#L187-L253)
+
+```ts
+/**
+ * The chant's pillar, from the moment she starts chanting: a magic circle under her feet, then the
+ * circles above her one after another, a column of light rising through them and growing
+ * brighter, sparks streaming up it, and in the last moments everything brighter and faster, the
+ * column white.
+ */
+function drawPillar(g: CanvasRenderingContext2D, scene: Scene): void {
+  const { feet, accent, still } = scene
+  const t = still ? EXPLOSION.chantMs * 0.8 : scene.t
+  const circles = pillarCircles(scene)
+  const x = circles[0]!.cx
+  const top = circles.at(-1)!.cy - circles.at(-1)!.ry - 8
+  // How strong the magic is: growing through the chant, surging at the end.
+  const power =
+    between(t, 1500, EXPLOSION.chantMs - 1500) * 0.6 +
+    between(t, EXPLOSION.chantMs - 1500, EXPLOSION.chantMs) * 0.4
+  const surge = between(t, EXPLOSION.chantMs - 1500, EXPLOSION.chantMs)
+  const flicker = still ? 1 : 0.85 + 0.15 * Math.sin(t / (60 - surge * 40))
+
+  // The column of light: brightest in the middle, from her feet up past the top circle.
+  const width = circles[0]!.rx * (0.5 + power * 0.3)
+  const columnTop = top - (scene.feet - top) * 0.1
+  for (let dx = -Math.ceil(width); dx <= Math.ceil(width); dx++) {
+    const edge = 1 - Math.abs(dx) / width
+    if (edge <= 0) continue
+    g.globalAlpha = clamp01(edge * edge * (0.12 + power * 0.5) * flicker)
+    g.fillStyle = surge > 0.7 || Math.abs(dx) < width * 0.25 ? '#ffffff' : '#fde68a'
+    g.fillRect(Math.round(x + dx), Math.round(columnTop), 1, Math.round(feet - columnTop))
+  }
+
+  // The circle under her feet, turning, there from the start.
+  const ground = {
+    cx: x,
+    cy: feet - 1,
+    rx: circles[0]!.rx * 0.9,
+    ry: circles[0]!.rx * 0.2,
+    born: 0,
+    turn: 1 as const,
+  }
+  magicCircle(g, ground, t, power, accent)
+  for (const circle of circles) magicCircle(g, circle, t, power, accent)
+
+  // Sparks streaming up the column, more as the magic grows, each looping back to the bottom.
+  const random = seeded(11)
+  const height = feet - columnTop
+  for (let k = 0; k < 110; k++) {
+    const offset = (random() - 0.5) * width * 2.2
+    const speed = 0.04 + random() * 0.08
+    const phase = random() * height
+    const colour = k % 3 === 0 ? accent : k % 3 === 1 ? '#fde68a' : '#ffffff'
+    if (k > 20 + power * 90) continue
+    const y = feet - ((t * speed + phase) % height)
+    const sway = Math.sin(t / 300 + k) * 2
+    const alpha = (0.4 + 0.6 * ((feet - y) / height)) * flicker
+    if (k % 5 === 0) twinkle(g, x + offset + sway, y, colour, alpha)
+    else plot(g, x + offset + sway, y, colour, alpha)
+  }
+
+  // At the very end, a white flash up the whole column.
+  const flare = between(t, EXPLOSION.chantMs - 200, EXPLOSION.chantMs)
+  if (flare > 0) {
+    g.globalAlpha = flare * 0.9
+    g.fillStyle = '#ffffff'
+    g.fillRect(Math.round(x - width), 0, Math.round(width * 2), Math.round(feet))
+  }
+  g.globalAlpha = 1
+}
+```
+
+<!-- /code -->
+
+As its comment says, the chant's pillar, from the moment she starts chanting: a magic circle under
+her feet, then the circles above her one after another, a column of light rising through them and
+growing brighter, sparks streaming up it, and in the last moments everything brighter and faster,
+the column white.
+
+- `const t = still ? EXPLOSION.chantMs * 0.8 : scene.t`: with reduced motion, the pillar as it is
+  four fifths of the way through the chant, every circle up, held there.
+- `circles`, `x`, `top`: the circles (`pillarCircles()`), the middle of the pillar, and 8 pixels
+  above the top circle.
+- `power`: as the comment says, how strong the magic is: growing steadily to 0.6 from 1.5 seconds in
+  until 1.5 seconds before the end, then surging to 1 in those last 1.5 seconds.
+- `surge`: just that last surge, from 0 to 1.
+- `flicker`: the light flickering a little (between 70% and full), faster in the surge (a sine wave
+  whose swing shortens from about 0.38 seconds to 0.13). With reduced motion, none.
+- The column: as the comment says, brightest in the middle, from her feet up past the top circle.
+  It's a row of strips a pixel wide, `width` either side of the middle (half to four fifths of the
+  lowest circle's radius, widening with the magic), each fainter toward the edges (`edge * edge`),
+  brighter with the magic, and flickering. The middle quarter is white and the rest gold; in the
+  surge, all of it white. `columnTop` is a tenth of its height above `top`.
+- The ground circle: as the comment says, the circle under her feet, turning, there from the start
+  (`born: 0`), a little smaller than the lowest circle above her and flatter (`ry` a fifth of `rx`,
+  not three tenths). Then each circle above her, each from its own time.
+- The sparks: as the comment says, streaming up the column, more as the magic grows, each looping
+  back to the bottom. Of 110, only the first `20 + power * 90` are drawn: 20 at first and all of
+  them in the surge. Each has its own place across the column, speed and starting height (from
+  `seeded(11)`, all drawn before the check, so each keeps its own), and climbs at its speed, back to
+  the bottom when it reaches the top (`% height`). They sway a little, are brighter the higher they
+  are, and come in her colour, gold and white; every fifth is a twinkle.
+- `flare`: as the comment says, at the very end, a white flash up the whole column, from the top of
+  the screen to her feet, over the chant's last 0.2 seconds, just before the bang.
+- `g.globalAlpha = 1`: leaves the opacity as it found it.
+
+### `FIRE`, `fireCanvas` and `drawBoom()`
+
+<!-- code: apps/desktop/src/renderer/src/lib/spellArt.ts#FIRE,fireCanvas,drawBoom -->
+
+[`src/renderer/src/lib/spellArt.ts`, lines 255–354](../../apps/desktop/src/renderer/src/lib/spellArt.ts#L255-L354)
+
+```ts
+/** The explosion's palette, hottest first: white, yellow, orange, red, deep red, then smoke. */
+const FIRE: [number, [number, number, number]][] = [
+  [1.05, [255, 252, 232]],
+  [0.82, [253, 224, 71]],
+  [0.6, [251, 146, 60]],
+  [0.38, [239, 68, 68]],
+  [0.18, [127, 29, 29]],
+  [0.0, [64, 52, 64]],
+]
+
+let fireCanvas: HTMLCanvasElement | null = null
+
+/**
+ * The explosion, `b` ms after the bang, in the middle of the screen: a white flash across the
+ * screen, a fireball that bursts out with ragged, churning edges, cools from white through
+ * yellow, orange and red to smoke as it rises, a shock wave racing out round it, and sparks
+ * thrown out and falling.
+ */
+function drawBoom(g: CanvasRenderingContext2D, scene: Scene, b: number): void {
+  const { w, h, still } = scene
+  const at = still ? 700 : b
+  const cx = w / 2
+  const cy = h * 0.45 - (at / 1000) * Math.min(w, h) * 0.05
+  const { fire, shock } = blastAt(at, w, h)
+  const gone = 1 - between(at, EXPLOSION.boomMs - 800, EXPLOSION.boomMs)
+
+  // The flash.
+  if (!still && b < 220) {
+    g.globalAlpha = 0.75 * (1 - b / 220)
+    g.fillStyle = '#ffffff'
+    g.fillRect(0, 0, w, h)
+  }
+
+  // The fireball, drawn a pixel at a time at half size (chunkier pixels) and stretched on.
+  const size = Math.ceil(fire * 1.5) + 2
+  if (size > 2) {
+    fireCanvas ??= document.createElement('canvas')
+    fireCanvas.width = size
+    fireCanvas.height = size
+    const fg = fireCanvas.getContext('2d')!
+    const image = fg.createImageData(size, size)
+    const cooling = between(at, 450, EXPLOSION.boomMs) * 1.25
+    for (let j = 0; j < size; j++) {
+      for (let i = 0; i < size; i++) {
+        const dx = (i - size / 2) * 2
+        const dy = (j - size / 2) * 2
+        const d = Math.hypot(dx, dy * 1.1)
+        const churn = noise(dx * 0.06 + at / 400, dy * 0.06 - at / 250)
+        const n = d / Math.max(1, fire) + (churn - 0.5) * 0.5
+        const heat = (1 - n) * 1.7 - cooling + (churn - 0.5) * 0.3
+        if (n >= 1 || heat <= -0.05) continue
+        const [, [r, gr, bl]] = FIRE.find(([limit]) => heat >= limit) ?? FIRE.at(-1)!
+        const smoke = heat < 0.18
+        const o = (j * size + i) * 4
+        image.data[o] = r
+        image.data[o + 1] = gr
+        image.data[o + 2] = bl
+        image.data[o + 3] = Math.round(255 * gone * (smoke ? clamp01(0.5 + heat * 3) : 1))
+      }
+    }
+    fg.putImageData(image, 0, 0)
+    g.globalAlpha = 1
+    g.imageSmoothingEnabled = false
+    g.drawImage(fireCanvas, Math.round(cx - size), Math.round(cy - size), size * 2, size * 2)
+  }
+
+  if (still) return
+  // The shock wave: a ring racing out, fading.
+  const wave = 1 - between(b, 0, 1000)
+  if (wave > 0) {
+    ring(g, cx, cy, shock, shock * 0.8, '#fff7d6', wave * 0.9)
+    ring(g, cx, cy, shock * 0.97, shock * 0.8 * 0.97, '#fde68a', wave * 0.6)
+  }
+  // Sparks: thrown out in every direction, falling, with short tails, fading.
+  const random = seeded(23)
+  for (let k = 0; k < 90; k++) {
+    const angle = random() * Math.PI * 2
+    const speed = (0.08 + random() * 0.2) * (Math.min(w, h) / 300)
+    const life = 900 + random() * 900
+    if (b > life) continue
+    const fade = 1 - b / life
+    const sx = cx + Math.cos(angle) * speed * b
+    const sy = cy + Math.sin(angle) * speed * b + 0.00006 * b * b * (Math.min(w, h) / 300)
+    const colour = k % 3 === 0 ? '#ffffff' : k % 3 === 1 ? '#fde047' : '#fb923c'
+    plot(g, sx, sy, colour, fade)
+    plot(g, sx + 1, sy, colour, fade)
+    plot(g, sx, sy + 1, colour, fade)
+    plot(g, sx + 1, sy + 1, colour, fade)
+    for (let k2 = 1; k2 <= 3; k2++) {
+      plot(
+        g,
+        sx - Math.cos(angle) * k2 * 1.5,
+        sy - Math.sin(angle) * k2 * 1.5,
+        colour,
+        fade * (0.6 - k2 * 0.15),
+      )
+    }
+  }
+  g.globalAlpha = 1
+}
+```
+
+<!-- /code -->
+
+- `FIRE`: as its comment says, the explosion's palette, hottest first: white, yellow, orange, red,
+  deep red, then smoke (a dark grey-purple). Each entry is the least heat for that colour, then the
+  colour as red, green and blue from 0 to 255; a pixel takes the first entry its heat reaches.
+- `fireCanvas`: a second, small canvas the fireball is drawn on, made the first time it's needed
+  and kept for every frame after.
+- `drawBoom(g, scene, b)`: as its comment says, the explosion, `b` milliseconds after the bang, in
+  the middle of the screen: a white flash across the screen, a fireball that bursts out with ragged,
+  churning edges and cools from white through yellow, orange and red to smoke as it rises, a shock
+  wave racing out round it, and sparks thrown out and falling.
+  - `at`: the moment to draw: with reduced motion, the fireball as it is 0.7 seconds in, held
+    still.
+  - `cx`, `cy`: its middle: halfway across the screen, a little above halfway down (45%), and rising
+    as it goes (by 5% of the screen's shorter side a second).
+  - `fire`, `shock`: how big the fireball and the shock wave are now (`blastAt()`).
+  - `gone`: the fireball fading away over the bang's last 0.8 seconds.
+  - The flash: the whole screen white, three quarters opaque, fading over the first 0.22 seconds.
+    Not with reduced motion.
+  - The fireball: as the comment says, drawn a pixel at a time at half size (chunkier pixels), and
+    stretched on. `size` is the small canvas's width and height: room for the fireball at half
+    size, and some to spare.
+  - `fg.createImageData(size, size)`: a block of raw pixels, four numbers each (red, green, blue and
+    opacity, from 0 to 255), much quicker to fill pixel by pixel than painting each with
+    `fillRect`.
+  - `cooling`: how far it has cooled: not at all for the first 0.45 seconds, then more and more
+    until the bang is over.
+  - For each pixel, `dx` and `dy`: how far it is from the middle, in full-size pixels (two of the
+    small canvas's); `d`, the distance, a little squashed up and down (`dy * 1.1`), so the ball is a
+    touch wider than tall.
+  - `churn`: the turbulence there, `noise()` at that spot, moving with time (`+ at / 400`,
+    `- at / 250`), so the edges roil.
+  - `n`: how far out the pixel is, as a share of the fireball's radius, pushed in or out by the
+    churn, which makes the edge ragged. At 1 or more, it's outside the ball.
+  - `heat`: hottest in the middle, falling off toward the edge, less as it cools, and churned a
+    little too. Outside the ball, or too cold even for smoke, the pixel is left clear.
+  - `FIRE.find(([limit]) => heat >= limit) ?? FIRE.at(-1)!`: its colour, the first in the palette
+    its heat reaches (smoke if none).
+  - `smoke`: below the deep red it's smoke, which fades as it cools (`clamp01(0.5 + heat * 3)`),
+    where fire is fully opaque. Everything fades with `gone`.
+  - `image.data[o]` to `image.data[o + 3]`: the pixel's red, green, blue and opacity; `o`, which is
+    `(j * size + i) * 4`, is where its four numbers start.
+  - `fg.putImageData(image, 0, 0)`: puts the pixels on the small canvas.
+  - `g.imageSmoothingEnabled = false`, `g.drawImage(fireCanvas, ..., size * 2, size * 2)`: draws it
+    on the effects' canvas at twice its size, centred on the middle, without smoothing, so each of
+    its pixels is a crisp block 2 by 2: chunkier than the rest of the effects, as fire is in pixel
+    art.
+  - `if (still) return`: with reduced motion, no shock wave or sparks, only the still fireball.
+  - The shock wave: as the comment says, a ring racing out, fading: a cream ring and a gold one just
+    inside it, `shock` across and four fifths as tall, fading over the first second.
+  - The sparks: as the comment says, thrown out in every direction, falling, with short tails,
+    fading. 90 of them, each with its own angle, speed (for the screen's size) and life (0.9 to 1.8
+    seconds), from `seeded(23)`. Each flies out along its angle and falls faster and faster
+    (`0.00006 * b * b`, like gravity), fading over its life: a square of 2 by 2 in white, yellow or
+    orange, with a three-pixel tail back along its path.
+
+### `drawExplosion()`
+
+<!-- code: apps/desktop/src/renderer/src/lib/spellArt.ts#drawExplosion -->
+
+[`src/renderer/src/lib/spellArt.ts`, lines 356–360](../../apps/desktop/src/renderer/src/lib/spellArt.ts#L356-L360)
+
+```ts
+/** The explosion spell: the pillar while she chants, then the bang. */
+export function drawExplosion(g: CanvasRenderingContext2D, scene: Scene): void {
+  if (scene.t < EXPLOSION.chantMs) drawPillar(g, scene)
+  else drawBoom(g, scene, scene.t - EXPLOSION.chantMs)
+}
+```
+
+<!-- /code -->
+
+As its comment says, the explosion spell: the pillar while she chants, then the bang, with `b`
+counted from the end of the chant. `SpellView` calls it every frame for the whole 18.6 seconds.

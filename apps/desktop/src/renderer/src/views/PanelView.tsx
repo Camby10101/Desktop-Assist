@@ -23,7 +23,7 @@ import { IssueView } from '../components/IssueView'
 import { JiraPage } from '../components/JiraPage'
 import { ServiceDeskPage, type ServiceDeskTab } from '../components/ServiceDeskPage'
 import { SettingsMenu } from '../components/SettingsMenu'
-import { SizeMenu } from '../components/SizeMenu'
+import { SpellsMenu } from '../components/SpellsMenu'
 import { SignInPanel } from '../components/SignInPanel'
 import { useAccentColor, useAssistState } from '../hooks/useAssistState'
 import { useClickThrough } from '../hooks/useClickThrough'
@@ -74,7 +74,7 @@ function Panel({ state }: { state: AppState }) {
   const [attachments, setAttachments] = useState(state.notes.attachments)
   const [settings, setSettings] = useState(state.settings)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [sizeOpen, setSizeOpen] = useState(false)
+  const [spellsOpen, setSpellsOpen] = useState(false)
   const [asking, setAsking] = useState(false)
   // The card shows the tenant's start page (the text box or the Apps list) when the panel opens,
   // and another page while its icon is on (Ask Claude, Your apps, Jira, the service desk).
@@ -99,7 +99,7 @@ function Panel({ state }: { state: AppState }) {
       window.assist.onModeChanged((mode) => {
         if (mode !== 'expanded') {
           setSettingsOpen(false)
-          setSizeOpen(false)
+          setSpellsOpen(false)
         }
         // The panel always reopens on the start page (but taking a screenshot isn't closing it).
         if (mode === 'collapsed') {
@@ -160,14 +160,14 @@ function Panel({ state }: { state: AppState }) {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
       if (settingsOpen) setSettingsOpen(false)
-      else if (sizeOpen) setSizeOpen(false)
+      else if (spellsOpen) setSpellsOpen(false)
       else if (issueKey) setIssueKey(null)
       else if (view !== startPage) setView(startPage)
       else window.assist.collapse()
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [settingsOpen, sizeOpen, issueKey, view, startPage])
+  }, [settingsOpen, spellsOpen, issueKey, view, startPage])
 
   // Not signed in: the chat box shows the sign-in instead of the chat. While a saved sign-in is
   // being renewed, or JumpCloud can't be reached, the chat stays (sending tries JumpCloud again).
@@ -179,8 +179,8 @@ function Panel({ state }: { state: AppState }) {
   const canSend = signedIn && !busy && !asking && (draft.trim() !== '' || attachments.length > 0)
 
   async function runAction(id: ActionId) {
-    // Any icon but the size menu's own closes the size menu (the settings menu's, below).
-    if (id !== 'size') setSizeOpen(false)
+    // Any icon but the spells menu's own closes the spells menu (the settings menu's, below).
+    if (id !== 'spells') setSpellsOpen(false)
     // With request types, the service desk icon opens a page for them instead of the portal.
     if (id === 'apps' || id === 'ask' || id === 'jira' || (id === 'servicedesk' && requestTypes)) {
       // Swaps the card to that page, or back again: the text box and the Apps list swap with
@@ -192,15 +192,9 @@ function Panel({ state }: { state: AppState }) {
       setView(view === id && !issueKey ? back : id)
       return
     }
-    if (id === 'theme') {
-      setSettings(
-        await window.assist.settings.setTheme(settings.theme === 'dark' ? 'light' : 'dark'),
-      )
-      return
-    }
-    if (id === 'size') {
+    if (id === 'spells') {
       setSettingsOpen(false)
-      setSizeOpen(!sizeOpen)
+      setSpellsOpen(!spellsOpen)
       return
     }
     if (id === 'settings') {
@@ -344,15 +338,19 @@ function Panel({ state }: { state: AppState }) {
     setSettings(await window.assist.settings.setAutoSend(!settings.autoSend))
   }
 
-  // Clicking anywhere else in the panel closes the settings menu, or the size menu.
+  // Clicking anywhere else in the panel closes the settings menu, or the spells menu.
   function closeMenusOnOutsideClick(event: PointerEvent) {
     if (!(event.target instanceof Element)) return
     if (settingsOpen && !event.target.closest('[data-settings-menu], [data-action="settings"]')) {
       setSettingsOpen(false)
     }
-    if (sizeOpen && !event.target.closest('[data-size-menu], [data-action="size"]')) {
-      setSizeOpen(false)
+    if (spellsOpen && !event.target.closest('[data-spells-menu], [data-action="spells"]')) {
+      setSpellsOpen(false)
     }
+  }
+
+  async function toggleTheme() {
+    setSettings(await window.assist.settings.setTheme(settings.theme === 'dark' ? 'light' : 'dark'))
   }
 
   const signInPrompt =
@@ -406,7 +404,7 @@ function Panel({ state }: { state: AppState }) {
   const scale = state.size.scale
   const layout = panelLayout(scale)
   const settingsIndex = branding.actions.indexOf('settings')
-  const sizeIndex = branding.actions.indexOf('size')
+  const spellsIndex = branding.actions.indexOf('spells')
   // Only keys of real projects, once the projects are known.
   const issueKeys = atlassianSite
     ? findIssueKeys(draft).filter(
@@ -524,8 +522,9 @@ function Panel({ state }: { state: AppState }) {
         layout={layout}
         actions={branding.actions}
         open={open}
-        activeId={settingsOpen ? 'settings' : sizeOpen ? 'size' : view !== startPage ? view : null}
-        theme={settings.theme}
+        activeId={
+          settingsOpen ? 'settings' : spellsOpen ? 'spells' : view !== startPage ? view : null
+        }
         pages={requestTypes ? ['servicedesk'] : []}
         dotted={[
           ...(view !== 'ask' && (draft.trim() !== '' || attachments.length > 0)
@@ -542,6 +541,7 @@ function Panel({ state }: { state: AppState }) {
           layout={layout}
           offset={actionOffset(settingsIndex, scale)}
           settings={settings}
+          size={state.size}
           branding={branding}
           version={state.version}
           user={auth?.state === 'signed-in' || auth?.state === 'offline' ? auth.user : null}
@@ -549,6 +549,8 @@ function Panel({ state }: { state: AppState }) {
           onDisconnectAtlassian={() => void disconnectAtlassian()}
           update={update}
           onCheckForUpdates={() => void window.assist.updates.check().then(setUpdate)}
+          onToggleTheme={() => void toggleTheme()}
+          onSetSize={(next) => void window.assist.character.setSize(next)}
           onToggleAutoStart={async () =>
             setSettings(await window.assist.settings.setAutoStart(!settings.autoStart))
           }
@@ -561,13 +563,15 @@ function Panel({ state }: { state: AppState }) {
           onUninstall={() => void uninstall()}
         />
       )}
-      {open && sizeOpen && sizeIndex >= 0 && (
-        <SizeMenu
+      {open && spellsOpen && spellsIndex >= 0 && (
+        <SpellsMenu
           corner={state.corner}
           layout={layout}
-          offset={actionOffset(sizeIndex, scale)}
-          size={state.size}
-          onSetSize={(next) => void window.assist.character.setSize(next)}
+          offset={actionOffset(spellsIndex, scale)}
+          onCast={(spell) => {
+            setSpellsOpen(false)
+            void window.assist.character.castSpell(spell)
+          }}
         />
       )}
     </div>
