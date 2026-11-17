@@ -5,9 +5,10 @@
 The _main process_ is the Node.js side of an Electron app: the single process that owns the
 windows, the files, the tray icon and the network. This page covers how it starts and how the
 pages talk to it. `index.ts` creates every service and wires them together, `ipc.ts` answers the
-pages' requests, and the smaller files hold the problem log, the tenant config, the user's
-preferences, the commands behind the action icons, uninstalling, checking for updates (and signing
-releases for it), refusing to start with debugging on, and the tray icon. The services
+pages' requests, and the smaller files hold the problem log, what's carried over from the app's
+old name (Desktop Assist), the tenant config, the user's preferences, the commands behind the
+action icons, uninstalling, checking for updates (and signing releases for it), refusing to start
+with debugging on, and the tray icon. The services
 themselves (sign-in, Claude, the bubble, the draft and screenshots, Claude Desktop, the Apps list,
 Jira and the service desk) each have their own page.
 
@@ -37,15 +38,12 @@ tests can drive them with fakes. `index.ts` is the only file that knows about al
 
 ### Module-level code
 
-<!-- code: apps/desktop/src/main/index.ts#SHUTDOWN_TIMEOUT_MS,PRODUCT_NAME,controller,tray,refusedSwitches -->
+<!-- code: apps/desktop/src/main/index.ts#SHUTDOWN_TIMEOUT_MS,controller,tray,refusedSwitches -->
 
-[`src/main/index.ts`, lines 70–91](../../apps/desktop/src/main/index.ts#L70-L91)
+[`src/main/index.ts`, lines 75–98](../../apps/desktop/src/main/index.ts#L75-L98)
 
 ```ts
 const SHUTDOWN_TIMEOUT_MS = 2000
-
-/** The installer's product name (electron-builder.cjs): its uninstaller is named after it. */
-const PRODUCT_NAME = 'Desktop Assist'
 
 let controller: BubbleController | null = null
 
@@ -61,21 +59,29 @@ const refusedSwitches = app.isPackaged
 <!-- /code -->
 
 This runs the moment Electron loads the file, before the app is ready. The block shows only the
-five declarations. Two `if` statements sit among them (they can't be shown on their own), so
+four declarations. Two `if` statements sit among them (they can't be shown on their own), so
 they're quoted in the bullets below, in the order they run.
 
 - `SHUTDOWN_TIMEOUT_MS = 2000`: the longest quitting will wait for the draft to be saved (see
   [Quitting](#quitting) below).
-- `PRODUCT_NAME = 'Desktop Assist'`: the installer's product name, set in `electron-builder.cjs`.
-  The installer names its uninstaller after it ("Uninstall Desktop Assist.exe"), which is how
-  Settings → Uninstall finds it (see [`src/main/uninstall.ts`](#srcmainuninstallts-uninstalling)).
-- `if (!app.isPackaged)`: `app.isPackaged` is true for an installed build and false for
-  `npm run dev`. Dev runs move their _userData_ folder (Electron's per-app data folder, normally
-  `%APPDATA%\Desktop Assist`) to `Desktop Assist (Dev)`, so they don't share the draft, the saved
-  sign-in or the single-instance lock with an installed copy.
+- `if (app.isPackaged) { ... } else { ... }`: as the comment above it says, this settles the data
+  folder. `app.isPackaged` is true for an installed build and false for `npm run dev`. The
+  _userData_ folder is Electron's per-app data folder, where the draft, the preferences, the saved
+  sign-ins and the log are kept. `app.setPath('userData', …)` has to run before anything reads that
+  path, which is why this is at the very top of the file.
+- `adoptFormerData(app.getPath('appData'), PRODUCT_NAME, FORMER_NAME)`: an installed copy's folder
+  is `%APPDATA%\Desktop Wizard`. The app was called Desktop Assist up to 1.0.0, so the first time a
+  copy updated from then starts, its old `%APPDATA%\Desktop Assist` folder is renamed to the new
+  name, and nothing is lost (see
+  [`src/main/formerName.ts`](#srcmainformernamets-carrying-things-over-from-the-old-name), where
+  `PRODUCT_NAME` and `FORMER_NAME` come from too).
+- `` `${app.getName()} (Dev)` ``: dev runs use a folder of their own, `Desktop Wizard (Dev)`
+  (`app.getName()` is `productName` in `apps/desktop/package.json`), so they don't share the
+  draft, the saved sign-in or the single-instance lock with an installed copy. They carry over an
+  old `Desktop Assist (Dev)` folder the same way.
 - `process.env['DESKTOP_ASSIST_DEV_USER_DATA'] ||`: the automated tests name a folder of their
-  own in this environment variable, so they never touch your dev data. `app.setPath('userData', …)`
-  has to run before anything reads that path, which is why this is at the very top of the file.
+  own in this environment variable, so they never touch your dev data. It keeps its old name, like
+  the other `DESKTOP_ASSIST_*` variables, since only the tests and developers use it.
 - `let controller`: the bubble controller, kept at module level so the `second-instance` handler
   below can reach it. It stays `null` until `start()` has created it.
 - `let tray`: if JavaScript frees the `Tray` object (garbage collection, which happens once
@@ -118,7 +124,7 @@ backend, the conversation and the JumpCloud sign-in) are in a separate function,
 
 <!-- code: apps/desktop/src/main/index.ts#start.tenant -->
 
-[`src/main/index.ts`, line 108](../../apps/desktop/src/main/index.ts#L108)
+[`src/main/index.ts`, line 115](../../apps/desktop/src/main/index.ts#L115)
 
 ```ts
 const tenant = await withDevOverrides(TenantSchema.parse(tenantConfig))
@@ -139,13 +145,15 @@ const tenant = await withDevOverrides(TenantSchema.parse(tenantConfig))
 - `app.setAppUserModelId('com.morsemicro.desktopassist')`: the _AppUserModelID_ is how Windows
   identifies an app, for example to label its notifications (such as the "Screenshot copied"
   one when a question goes to Claude Desktop). It matches `appId` in `electron-builder.cjs`, the
-  ID the installer registers.
+  ID the installer registers. It still says `desktopassist`, from the app's old name: Windows knows
+  the install by it, so it mustn't change (see
+  [`src/main/formerName.ts`](#srcmainformernamets-carrying-things-over-from-the-old-name)).
 
 #### Folders, the draft and preferences
 
 <!-- code: apps/desktop/src/main/index.ts#start.userData,screenshotsDir,actionCount,log,notes,settings -->
 
-[`src/main/index.ts`, lines 112–123](../../apps/desktop/src/main/index.ts#L112-L123)
+[`src/main/index.ts`, lines 119–130](../../apps/desktop/src/main/index.ts#L119-L130)
 
 ```ts
 const userData = app.getPath('userData')
@@ -154,8 +162,8 @@ const screenshotsDir = join(app.getPath('pictures'), tenant.appName)
 
 const actionCount = tenant.actions.length
 
-// Problems go to %APPDATA%\Desktop Assist\logs, so an installed copy can be diagnosed too.
-const log = createLog(join(userData, 'logs', 'desktop-assist.log'))
+// Problems go to %APPDATA%\Desktop Wizard\logs, so an installed copy can be diagnosed too.
+const log = createLog(join(userData, 'logs', 'desktop-wizard.log'))
 
 const notes = new NotesStore(join(userData, 'notes.json'), {
   onError: (error) => log('Saving the text box failed:', error),
@@ -168,9 +176,9 @@ const settings = new SettingsService(join(userData, 'preferences.json'), screens
 
 - `app.getPath('pictures')`: the user's Pictures folder. Screenshots go in a subfolder named
   after the app (`appName` in `tenant.json`).
-- `createLog(join(userData, 'logs', 'desktop-assist.log'))`: the problem log (see
+- `createLog(join(userData, 'logs', 'desktop-wizard.log'))`: the problem log (see
   [`src/main/log.ts`](#srcmainlogts-the-problem-log)). `log` is a function: `log(message, detail)`
-  appends a line to `%APPDATA%\Desktop Assist\logs\desktop-assist.log` and prints it to the
+  appends a line to `%APPDATA%\Desktop Wizard\logs\desktop-wizard.log` and prints it to the
   terminal. An installed copy has no terminal, so this file is the only record of what went wrong.
 - `new NotesStore(join(userData, 'notes.json'), ...)`: the unsent draft in the text box. It's
   followed by `await notes.load()`, which reads the saved draft before anything can ask for it.
@@ -178,18 +186,17 @@ const settings = new SettingsService(join(userData, 'preferences.json'), screens
   [The draft, screenshots and safe files](6-drafts-and-screenshots.md)).
 - `new SettingsService(join(userData, 'preferences.json'), screenshotsDir)`: the user's
   preferences, followed by `await settings.init()`, which loads them and, on an installed build's
-  first run, turns on "Start with Windows" (see [`SettingsService.init()`](#settingsserviceinit)).
+  first run, turns on "Start with Windows" (and keeps it on for a copy updated from Desktop Assist;
+  see [`SettingsService.init()`](#settingsserviceinit)).
 
 #### The two windows
 
 <!-- code: apps/desktop/src/main/index.ts#start.bubbleWindow,panelWindow,windows,stopKeepingOnTop,windowsReady,broadcast -->
 
-[`src/main/index.ts`, lines 126–136](../../apps/desktop/src/main/index.ts#L126-L136)
+[`src/main/index.ts`, lines 136–144](../../apps/desktop/src/main/index.ts#L136-L144)
 
 ```ts
-// The windows are created after the last `await`: from here to registerIpc() below nothing
-// waits, so the pages can't ask for the app state before there's anything to answer them.
-const bubbleWindow = createOverlayWindow('bubble', { width: BUBBLE_BOX, height: BUBBLE_BOX })
+const bubbleWindow = createOverlayWindow('bubble', { width: box, height: box + headroom })
 
 const panelWindow = createOverlayWindow('panel', panelWindowSize(actionCount))
 
@@ -207,16 +214,27 @@ const broadcast = (channel: string, payload?: unknown) => {
 
 <!-- /code -->
 
-The windows are created only now, after the last `await`, and the comment above them says why. A
-page starts loading as soon as its window exists, and its first request is for the app state
-(`getState`). From here down to `registerIpc()`, `start()` never waits, so JavaScript runs it all
-in one go and can't handle anything else in between, a page's request included. By the time a
-page's request is handled, its handler has been registered.
+The windows are created only now, after the last `await`, and a comment just above them in the
+source says why. A page starts loading as soon as its window exists, and its first request is for
+the app state (`getState`). From here down to `registerIpc()`, `start()` never waits, so
+JavaScript runs it all in one go and can't handle anything else in between, a page's request
+included. By the time a page's request is handled, its handler has been registered.
 
 - `createOverlayWindow('bubble', ...)`: creates a hidden, frameless, transparent, always-on-top
   window and starts loading the page into it (`bubble/windows.ts`, see
   [The bubble](5-bubble.md)). The bubble window is just big enough for the bubble; the panel
-  window's size depends on how many action icons the tenant has (`panelWindowSize()`).
+  window's size depends on how many action icons the tenant has (`panelWindowSize()`). Both are
+  created at the character's usual size: before it shows them, the controller below sizes and
+  places them for the size she really is (which may have been saved bigger or smaller).
+- `{ width: box, height: box + headroom }`: `box` and `headroom` come from the line just before,
+  `const { box, headroom } = bubbleMetrics()` (no scale, so her usual size; see `bubbleMetrics()`
+  in [Shared code and the preload bridge](1-shared-and-preload.md)). The window is 96 DIPs wide
+  and 104 tall: her box and its padding, and 8 DIPs above them for her hat when she rises off the
+  taskbar.
+- `const windows = [bubbleWindow, panelWindow]`: these two are the app's lasting windows. The
+  clones', the vision's and the spells' windows (see
+  [Overlays that come and go](#overlays-that-come-and-go) below) come and go, and aren't among
+  them.
 - `windows.map(keepOnTop)`: each window checks every few seconds that it's still on top of other
   apps' windows, and puts itself back if not (`bubble/windows.ts`). The functions that stop the
   checks are kept for quitting.
@@ -229,11 +247,87 @@ page's request is handled, its handler has been registered.
   functions, see [Shared code and the preload bridge](1-shared-and-preload.md)). `isDestroyed()`
   skips a window that has already been closed, which happens while quitting.
 
+#### Overlays that come and go
+
+<!-- code: apps/desktop/src/main/index.ts#start.openOverlay,vision,effects -->
+
+[`src/main/index.ts`, lines 146–164](../../apps/desktop/src/main/index.ts#L146-L164)
+
+```ts
+/**
+ * A window that only shows something over the screen (her clones, her vision's light and logo,
+ * or a spell's effects): it shows once its page is drawn, behind her own window, which is put
+ * back in front.
+ */
+const openOverlay =
+  (view: 'clones' | 'vision' | 'spell') => (bounds: Rect, query: Record<string, string>) => {
+    const win = createOverlayWindow(view, { width: bounds.width, height: bounds.height }, query)
+    win.setBounds(bounds)
+    win.once('ready-to-show', () => {
+      win.showInactive()
+      bringToFront(bubbleWindow, false)
+    })
+    return { close: () => !win.isDestroyed() && win.destroy() }
+  }
+
+// Her vision's light and logo, over her for as long as she's having it.
+const vision = new Vision({ open: openOverlay('vision') })
+
+// Her spells' effects (starfall; the explosion's pillar of magic circles, and the bang).
+const effects = new SpellEffects({ accentColor: tenant.accentColor, open: openOverlay('spell') })
+```
+
+<!-- /code -->
+
+Besides the bubble and the panel, three kinds of window appear for a while and close again: her
+clones' (her Clones spell), her vision's (the light and the logo of her `vision` habit) and her
+spells' effects (starfall, and the explosion's pillar of magic circles and its bang). All three
+only show something: they never take the mouse or the focus. `Clones`, `Vision` and `SpellEffects`
+(in `bubble/clones.ts`, `bubble/vision.ts` and `bubble/spellEffects.ts`, see
+[The bubble](5-bubble.md)) decide when they open, where, and what their pages are told; like the
+controller, they never touch Electron, and ask for a window through an `open` function.
+`openOverlay` makes that function, the same for all three. As its comment says, the window shows
+once its page is drawn, behind her own window, which is put back in front.
+
+- `(view: 'clones' | 'vision' | 'spell') => (bounds: Rect, query: Record<string, string>) => {`: a
+  function that returns a function. `openOverlay('clones')` is the `open` that `Clones` is given:
+  called with where the window goes and what its page needs to know (in its query string), it makes
+  the window and returns something that can close it.
+- `createOverlayWindow(view, { width: bounds.width, height: bounds.height }, query)`: a hidden,
+  frameless, transparent, always-on-top window like the other two, loading the same page with
+  `?view=clones`, `?view=vision` or `?view=spell` and `query` added to the address
+  (`bubble/windows.ts`). These can't take the keyboard focus, and the mouse goes straight through
+  them to whatever is underneath, so they never get in the way.
+- `win.setBounds(bounds)`: puts the window exactly where it was asked for, in DIPs, as the
+  controller does for the other two.
+- `win.once('ready-to-show', () => {`: once its page has painted for the first time, so it never
+  shows empty.
+- `win.showInactive()`: shows it without taking the focus from whatever the user is doing.
+- `bringToFront(bubbleWindow, false)`: the new window was shown last, so it would be in front of
+  her; this puts her own window back on top of it (`bubble/windows.ts`). `false` means without
+  hiding and showing it again. For the vision that matters: the light falls behind her, and the
+  logo hovers over her head. So it does for the explosion's column of light, which rises from
+  behind her.
+- `return { close: () => !win.isDestroyed() && win.destroy() }`: `Clones`, `Vision` or
+  `SpellEffects` closes the window when its time is up (or sooner). `destroy()` closes it straight
+  away; `isDestroyed()` skips one that has already gone (while quitting, say).
+- `const vision = new Vision({ open: openOverlay('vision') })`: as the comment says, her vision's
+  light and logo, over her for as long as she's having it. It's made before the controller,
+  because the controller's `onPoseChange` (below) starts and stops it.
+- `const effects = new SpellEffects({ accentColor: tenant.accentColor, open: openOverlay('spell') })`:
+  as the comment says, her spells' effects. The accent colour goes on to the page for the magic
+  circles. It's made before the controller too, as `onPoseChange` starts the explosion's effects
+  when she begins her chant, and `castSpell` (below) starts starfall's.
+
+None of these windows is in `windows`, so they get no `keepOnTop()` check and no broadcasts: they
+only last a few seconds (the clones thirty, the explosion under twenty), and everything their pages
+need comes in their addresses.
+
 #### The bubble controller
 
 <!-- code: apps/desktop/src/main/index.ts#start.bubble -->
 
-[`src/main/index.ts`, lines 138–150](../../apps/desktop/src/main/index.ts#L138-L150)
+[`src/main/index.ts`, lines 166–189](../../apps/desktop/src/main/index.ts#L166-L189)
 
 ```ts
 const bubble = new BubbleController({
@@ -242,8 +336,19 @@ const bubble = new BubbleController({
   displays: electronDisplays,
   actionCount,
   initialAnchor: settings.bubbleAnchor,
+  initialScale: settings.characterScale,
   onDiagnostic: (message) => log(message),
   onModeChange: (mode) => broadcast(IPC.modeChanged, mode),
+  onPoseChange: (pose) => {
+    broadcast(IPC.poseChanged, pose)
+    if (pose === 'vision') vision.start(bubble.standing)
+    else vision.stop()
+    // The explosion is her chant: it starts with it, and it's called off if she stops chanting
+    // before it's done (someone clicked her, or picked her up).
+    if (pose === 'chant') effects.start('explosion', bubble.standing)
+    else if (effects.chanting) effects.stop()
+  },
+  onSizeChange: (size) => broadcast(IPC.sizeChanged, size),
   onAnchorChange: (anchor) => {
     broadcast(IPC.cornerChanged, anchor.corner)
     void settings.setBubbleAnchor(anchor) // remembered for next time
@@ -254,22 +359,47 @@ const bubble = new BubbleController({
 <!-- /code -->
 
 `BubbleController` is the bubble's state machine: it decides when the panel opens, where the
-bubble sits, and moves and shows the windows to match (see [The bubble](5-bubble.md)). It never
-touches Electron directly; everything it needs is passed in here.
+character stands and what it's doing, and moves and shows the windows to match (see
+[The bubble](5-bubble.md)). It never touches Electron directly; everything it needs is passed in
+here.
 
 - `bubbleSurface(bubbleWindow)`, `panelSurface(panelWindow)`: small adapters (in
   `bubble/windows.ts`) that give the controller just "set bounds, show, hide, focus" for each
   window.
 - `displays: electronDisplays`: the adapter for Electron's `screen` module, defined further down
   this file ([`electronDisplays`](#toarea-and-electrondisplays)).
-- `initialAnchor: settings.bubbleAnchor`: the corner and display the bubble was dragged to last
+- `initialAnchor: settings.bubbleAnchor`: the corner and display the character was dragged to last
   time, or `null` the first time.
+- `initialScale: settings.characterScale`: the size the user last chose for her under Size in the
+  settings menu, or `null` if it's never been changed (her usual size then). The controller snaps it to one of
+  `CHARACTER_SIZES` and keeps it to what fits her display.
 - `onModeChange`: every mode change (collapsed, expanded, dragging and so on) is broadcast, so the
   pages can animate to match.
+- `onPoseChange: (pose) => {`: every change of the character's pose (standing, walking, a fidget,
+  dangling) is broadcast too (`IPC.poseChanged`), and the bubble's page animates the character to
+  match. When the pose becomes `vision`, `vision.start(bubble.standing)` opens the light and the
+  logo over where she stands, at her size; any other pose closes them (`vision.stop()`, which does
+  nothing if they aren't there). So the vision ends when the habit does, or as soon as anything
+  interrupts it, such as a click or a drag. `bubble` can be used inside its own options because
+  the callback only runs later, once the controller exists.
+- `if (pose === 'chant') effects.start('explosion', bubble.standing)`: as the comment says, the
+  explosion is her chant. When she starts chanting (cast from the Spells menu, below), its window
+  opens over her display, with the pillar of magic circles rising above her for the chant and the
+  bang after it.
+- `else if (effects.chanting) effects.stop()`: and it's called off if she stops chanting before
+  it's done, because someone clicked her or picked her up. `effects.chanting` is true only while
+  the explosion's window is open and its chant isn't over, so when the chant ends as it should (her
+  pose goes back to `idle`), the bang still goes off; a starfall in progress is left alone too.
+- `onSizeChange: (size) => broadcast(IPC.sizeChanged, size)`: her size (a `CharacterSize`: how big
+  she is, and the biggest she can be on her display) is broadcast whenever either changes, so the
+  bubble's page draws her at that size and the panel lays itself out for it. Saving the size is
+  left to the IPC handler for the size buttons (see [`registerIpc()`](#registeripc)), so a size she's
+  shrunk to only because a screen is small is never saved.
 - `onDiagnostic: (message) => log(message)`: the controller notes bubble clicks it ignored, and a
   blur it ignored just after opening, in the problem log (see [The bubble](5-bubble.md)).
-- `onAnchorChange`: when the bubble settles in a new corner, the panel is told (it lays itself out
-  to open away from that corner) and the new anchor is saved. `void` in front of a promise means
+- `onAnchorChange`: when the character settles near the other bottom corner or on another display,
+  both pages are told (the panel lays itself out to open away from that corner, and the character
+  turns to face the middle of the screen) and the new anchor is saved. `void` in front of a promise means
   "start this and don't wait for it"; it also tells the linter the missing `await` is deliberate.
 - `controller = bubble` (the next line): makes the controller reachable from the module-level
   `second-instance` handler.
@@ -277,11 +407,76 @@ touches Electron directly; everything it needs is passed in here.
   keyboard focus, for example when the user clicks another app. The controller then closes the
   panel (unless it has only just opened).
 
+#### Her clones, and casting spells
+
+<!-- code: apps/desktop/src/main/index.ts#start.clones,castSpell -->
+
+[`src/main/index.ts`, lines 193–216](../../apps/desktop/src/main/index.ts#L193-L216)
+
+```ts
+// Her clones: a window along the taskbar.
+const clones = new Clones({ accentColor: tenant.accentColor, open: openOverlay('clones') })
+
+/** The Spells menu: the panel closes, so the spell can be seen, and she casts it. */
+const castSpell = (spell: Spell) => {
+  bubble.collapse()
+  switch (spell) {
+    case 'clones':
+      clones.start(bubble.standing)
+      bubble.act('spell')
+      return
+    case 'starfall':
+      effects.start('starfall', bubble.standing)
+      bubble.act('spell')
+      return
+    case 'teleport':
+      bubble.teleport()
+      return
+    case 'explosion':
+      // Her chant brings the effects (onPoseChange, above).
+      bubble.act('chant')
+      return
+  }
+}
+```
+
+<!-- /code -->
+
+`Clones` (in `bubble/clones.ts`, see [The bubble](5-bubble.md)) runs her Clones spell: ten copies
+of the character walking about the taskbar for thirty seconds, all drawn by one page in one window
+of their own, a strip along the taskbar. Then `castSpell` casts whichever spell the user picks in
+the Spells menu.
+
+- `accentColor: tenant.accentColor`: the tenant's colour, which `Clones` passes on to the page for
+  the clones' robes and hats.
+- `open: openOverlay('clones')`: how it gets its window (see
+  [Overlays that come and go](#overlays-that-come-and-go) above). `Clones` calls it with the strip
+  along the bottom of her display's work area, as tall as her window, and what its page needs to
+  know (where she stands, her size, the colour and when the clones' time ends).
+- `const castSpell = (spell: Spell) => {`: as its comment says, the Spells menu. The page asks for
+  a spell (`window.assist.character.castSpell()`), and `registerIpc()` checks it's one of `SPELLS`
+  before calling this.
+- `bubble.collapse()`: first the panel closes, so the spell can be seen. The mode is `collapsed`
+  straight away (the panel only fades out), which matters because the controller plays her poses
+  on purpose only while collapsed (`BubbleController.act()`).
+- `case 'clones':`: the clones set off from where she stands, at her size (`bubble.standing` is her
+  display's work area, her window and her size), and she does her little `spell` fidget as she
+  casts them (`bubble.act('spell')`). Afterwards she stands idle and gets on with her day.
+- `case 'starfall':`: the same, but with the starfall's window over her display
+  (`effects.start('starfall', bubble.standing)`): shooting stars for ten seconds.
+- `case 'teleport':`: `bubble.teleport()` does it all in her own window: she vanishes into white
+  motes, moves a little way along the taskbar near her corner, and forms out of them again.
+- `case 'explosion':`: as the comment says, she only starts her chant (`bubble.act('chant')`); the
+  effects follow from her pose, in `onPoseChange` above. That way they're tied to the chant: if
+  someone clicks her or picks her up before it's done, the chant stops and so does the explosion.
+- `return` after each `case`: ends the function there, rather than running on into the next
+  `case`.
+
 #### Screenshots, notifications and the clipboard
 
 <!-- code: apps/desktop/src/main/index.ts#start.screenshots,notify,copyScreenshots -->
 
-[`src/main/index.ts`, lines 154–175](../../apps/desktop/src/main/index.ts#L154-L175)
+[`src/main/index.ts`, lines 218–239](../../apps/desktop/src/main/index.ts#L218-L239)
 
 ```ts
 const screenshots = new ScreenshotService(screenshotsDir, () =>
@@ -339,7 +534,7 @@ const copyScreenshots = async (paths: string[]) => {
 
 <!-- code: apps/desktop/src/main/index.ts#start.builtIn,claudeDesktop -->
 
-[`src/main/index.ts`, lines 178–207](../../apps/desktop/src/main/index.ts#L178-L207)
+[`src/main/index.ts`, lines 242–271](../../apps/desktop/src/main/index.ts#L242-L271)
 
 ```ts
 const builtIn =
@@ -418,7 +613,7 @@ exists.
 
 <!-- code: apps/desktop/src/main/index.ts#start.netFetch,updater -->
 
-[`src/main/index.ts`, lines 208–238](../../apps/desktop/src/main/index.ts#L208-L238)
+[`src/main/index.ts`, lines 272–302](../../apps/desktop/src/main/index.ts#L272-L302)
 
 ```ts
 // Electron's fetch, so a proxy set in Windows is used.
@@ -477,7 +672,7 @@ const updater = updates
 - `publicKey: updates.publicKey`: the release key's public half from `tenant.json`. Only an
   installer signed with the key's private half, which stays off GitHub, is ever run.
 - `saveDownload(join(app.getPath('temp'), ...), name, chunks)`: the installer is saved in a folder
-  of its own in Windows' temporary folder, `%TEMP%\Desktop Assist update`.
+  of its own in Windows' temporary folder, `%TEMP%\Desktop Wizard update`.
 - `install: app.isPackaged ? (path) => spawn(path, INSTALLER_ARGS, ...).unref() : null`: as the
   comment says, the installer runs on its own: it waits for this app to quit, replaces it, and
   starts the new version. It's started like the uninstaller (below): `detached`, with nothing
@@ -497,7 +692,7 @@ const updater = updates
 
 <!-- code: apps/desktop/src/main/index.ts#start.appsStatus,portalApps -->
 
-[`src/main/index.ts`, lines 240–262](../../apps/desktop/src/main/index.ts#L240-L262)
+[`src/main/index.ts`, lines 304–326](../../apps/desktop/src/main/index.ts#L304-L326)
 
 ```ts
 let appsStatus: AppsState['status'] = 'loading'
@@ -537,7 +732,7 @@ icon (see [Your apps](10-apps.md)). It's only set up when the tenant has a `port
 - `let appsStatus`: the list's previous status, for the same reason as `authState` in the built-in
   chat's sign-in: inside `onState`, the new one has already arrived.
 - `mcpConnector({ serverUrl: portal.appsServer, ... })`: the real connection to JumpCloud's apps
-  server, through the MCP SDK (`mcp/connector.ts`). `client` is how Desktop Assist introduces itself
+  server, through the MCP SDK (`mcp/connector.ts`). `client` is how Desktop Wizard introduces itself
   to the server: its name and version.
 - `new SecretStore(join(userData, 'jumpcloud-apps.bin'), safeStorageEncryptor)`: where the
   connection to the portal (the app's registration and the user's tokens) is kept between runs,
@@ -562,7 +757,7 @@ icon (see [Your apps](10-apps.md)). It's only set up when the tenant has a `port
 
 <!-- code: apps/desktop/src/main/index.ts#start.requests,memoryPath,atlassianStatus,atlassian,desk -->
 
-[`src/main/index.ts`, lines 267–329](../../apps/desktop/src/main/index.ts#L267-L329)
+[`src/main/index.ts`, lines 331–393](../../apps/desktop/src/main/index.ts#L331-L393)
 
 ```ts
 const requests = serviceDesk?.requests
@@ -686,7 +881,7 @@ Two statements follow:
 
 <!-- code: apps/desktop/src/main/index.ts#start.onDisplayChange -->
 
-[`src/main/index.ts`, line 386](../../apps/desktop/src/main/index.ts#L386)
+[`src/main/index.ts`, line 454](../../apps/desktop/src/main/index.ts#L454)
 
 ```ts
 const onDisplayChange = () => bubble.displayChanged()
@@ -710,35 +905,43 @@ Everything else in this part of `start()` is plain statements:
 - `updater`: Check for updates, or `null` without `updates`.
 - `uninstall: () => uninstall({`: Settings → Uninstall (see
   [`uninstall()`](#uninstall)). Everything it needs from Electron and Node is passed in: where the
-  running `.exe` is (`app.getPath('exe')`), `existsSync` to check the uninstaller is there,
+  running `.exe` is (`app.getPath('exe')`), the product name the uninstaller is named after
+  (`PRODUCT_NAME`, from `formerName.ts`), `existsSync` to check the uninstaller is there,
   turning off Start with Windows, and starting the uninstaller with
   `spawn(path, [], { detached: true, stdio: 'ignore' }).unref()`. `detached` runs it as a process
   of its own, `stdio: 'ignore'` connects nothing to it, and `unref()` tells Node not to wait for
-  it, so it carries on after Desktop Assist has quit.
-- `actions: createActionHandlers({`: the commands behind the service desk, Screenshot, Bounce
-  and Close icons (`actions.ts`).
+  it, so it carries on after Desktop Wizard has quit.
+- `actions: createActionHandlers({`: the commands behind the service desk, Screenshot and Close
+  icons (`actions.ts`). It's given the controller, which Screenshot hides the windows with and
+  Close says goodbye with.
 - `openServiceDesk: serviceDesk ? () => shell.openExternal(serviceDesk.url) : null`: opens the
   service desk's address from `tenant.json` in the browser, or `null` when the tenant has none.
+- `castSpell`: the Spells menu's spells (see
+  [Her clones, and casting spells](#her-clones-and-casting-spells)).
 - `getState: () => ({`: builds the snapshot a page asks for when it first loads: the bubble's mode
-  and corner, the draft, the settings, the branding, the app version (`app.getVersion()`, from
-  `package.json`), the sign-in status and the chat so far. After that the page keeps up through
-  the broadcasts above.
+  and corner, the character's pose (`bubble.currentPose`) and size (`bubble.size`), the draft, the
+  settings, the branding,
+  the app version (`app.getVersion()`, from `package.json`), the sign-in status and the chat so far.
+  After that the page keeps up through the broadcasts above.
 - `auth: builtIn?.auth.status ?? null`, `chat: builtIn?.chat.list() ?? []`: `?.` reads on only if
   `builtIn` isn't `null` (otherwise the whole expression is `undefined`), and `??` gives the value
   to use instead. So with Claude Desktop there's no sign-in status (`null`) and the chat is always
   empty: the panel shows just the text box.
-- `tray = createTray({`: adds the icon in the notification area. `onOpen` opens the panel and
-  `onQuit` quits (see [`createTray()`](#createtray)).
+- `tray = createTray({`: adds the icon in the notification area. `onOpen` opens the panel (see
+  [`createTray()`](#createtray)).
+- `onQuit: () => bubble.farewell(() => app.quit())`: as the comment says, the tray's Quit does as
+  the Close icon does: she vanishes into white motes where she stands
+  (`BubbleController.farewell()`), and once she's gone the app quits.
 - `screen.on('display-added', onDisplayChange)`: the same handler also runs for
   `display-removed` and `display-metrics-changed` (a resolution, scaling or taskbar change).
-  `BubbleController.displayChanged()` moves the bubble back into its corner, or onto the main
-  display if its own display was unplugged.
+  `BubbleController.displayChanged()` stands the character back on the taskbar near its corner, or
+  on the main display if its own display was unplugged.
 
 #### Quitting
 
 <!-- code: apps/desktop/src/main/index.ts#start.shuttingDown -->
 
-[`src/main/index.ts`, lines 391–392](../../apps/desktop/src/main/index.ts#L391-L392)
+[`src/main/index.ts`, lines 459–460](../../apps/desktop/src/main/index.ts#L459-L460)
 
 ```ts
 // Save the text box before quitting. before-quit fires again after the second app.quit().
@@ -749,15 +952,18 @@ let shuttingDown = false
 
 The `app.on('before-quit', (event) => {` handler that follows makes sure the draft reaches the
 disk before the app closes. `before-quit` fires when something calls `app.quit()`: the tray's
-Quit or the Close icon. It doesn't fire when Windows shuts down or logs off, which is what the
+Quit or the Close icon, once she has vanished (just under a second), or an update or Uninstall,
+straight away. It doesn't fire when Windows shuts down or logs off, which is what the
 `session-end` handler at the end is for.
 
 - `if (shuttingDown) return`: the handler ends by calling `app.quit()` again, which fires
   `before-quit` a second time. This flag lets that second one through.
 - `event.preventDefault()`: cancels this first quit, to make time for the steps below.
-- `bubble.dispose()`, `builtIn?.chat.stop()`: stops the bubble's animation timers and, with the
-  built-in chat, aborts a reply that is still streaming. The loop over `stopKeepingOnTop` ends the
-  windows' on-top checks.
+- `bubble.dispose()`, `clones.stop()`, `vision.stop()`, `effects.stop()`, `builtIn?.chat.stop()`:
+  stops the bubble's animation timers, closes the clones' window if the clones are about, the
+  vision's if she's having one and a spell's effects if they're showing, and, with the built-in
+  chat, aborts a reply that is still streaming. The loop over `stopKeepingOnTop` ends the windows'
+  on-top checks.
 - `void portalApps?.dispose()`: closes the Apps list's connection to JumpCloud, and stops waiting
   for a browser sign-in if one is under way. `atlassian?.dispose()` does the same for Atlassian,
   and stops the 5-minute checks.
@@ -770,13 +976,16 @@ Quit or the Close icon. It doesn't fire when Windows shuts down or logs off, whi
   it doesn't wait for asynchronous work, so `session-end` (a Windows-only window event) saves the
   draft with a blocking write instead.
 
-Finally, `await windowsReady` waits until both pages have painted, and `bubble.start()` puts the
-bubble in its corner and shows it. Waiting avoids showing a window before its page has drawn
-anything.
+Finally, `await windowsReady` waits until both pages have painted, and `bubble.start()` stands the
+character on the taskbar in its corner and shows it. Waiting avoids showing a window before its
+page has drawn anything. Then, as the comment says, `bubbleWindow.webContents.send(IPC.bubbleArrive)`
+tells the bubble's page that her window is showing, and the page plays her forming out of white
+motes (`BubbleView`, see [The pages](7-renderer-pages.md)), so she appears rather than just being
+there, and none of it is lost before the window shows.
 
 <!-- code: apps/desktop/src/main/index.ts#start.stopWatchingFront -->
 
-[`src/main/index.ts`, lines 411–421](../../apps/desktop/src/main/index.ts#L411-L421)
+[`src/main/index.ts`, lines 484–494](../../apps/desktop/src/main/index.ts#L484-L494)
 
 ```ts
 // For its first ten minutes, make sure the bubble isn't stuck behind other apps' windows.
@@ -798,8 +1007,9 @@ Then, for its first ten minutes, the app makes sure the bubble isn't stuck behin
 windows (`bubble/frontCheck.ts`, see [The bubble](5-bubble.md)). Started by Windows at sign-in,
 after other apps, the bubble could end up behind them even though its window was always on top.
 
-- `isResting: () => bubble.currentMode === 'collapsed'`: only a bubble resting in its corner is
-  checked; while the panel is open, or the bubble is being dragged or bouncing, the user can see it.
+- `isResting: () => bubble.currentMode === 'collapsed'`: only a character standing on the taskbar
+  (or strolling along it, which is still `collapsed`) is checked; while the panel is open, or the
+  character is being dragged or falling, the user can see it.
 - `getNativeWindowHandle().readBigUInt64LE(0).toString()`: the bubble window's Windows handle
   (`HWND`), which the check gives Windows to ask about that window. Electron hands it over as the
   bytes of a 64-bit number.
@@ -827,7 +1037,7 @@ was part of `start()`. It returns a [`BuiltInChat`](#builtinchat): the `AuthMana
 
 <!-- code: apps/desktop/src/main/index.ts#startBuiltInChat.devBaseUrl,lastIdToken,backend,chat -->
 
-[`src/main/index.ts`, lines 441–465](../../apps/desktop/src/main/index.ts#L441-L465)
+[`src/main/index.ts`, lines 514–538](../../apps/desktop/src/main/index.ts#L514-L538)
 
 ```ts
 // Dev runs may point at a local test server; an installed app always talks to Anthropic.
@@ -900,7 +1110,7 @@ const chat = new ChatSession({
 
 <!-- code: apps/desktop/src/main/index.ts#startBuiltInChat.missing,localIssuer,authState,auth -->
 
-[`src/main/index.ts`, lines 467–491](../../apps/desktop/src/main/index.ts#L467-L491)
+[`src/main/index.ts`, lines 540–564](../../apps/desktop/src/main/index.ts#L540-L564)
 
 ```ts
 const missing = missingSettings(signIn, claudeAccess)
@@ -977,7 +1187,7 @@ Two statements end the function:
 
 <!-- code: apps/desktop/src/main/index.ts#safeStorageEncryptor -->
 
-[`src/main/index.ts`, lines 497–502](../../apps/desktop/src/main/index.ts#L497-L502)
+[`src/main/index.ts`, lines 570–575](../../apps/desktop/src/main/index.ts#L570-L575)
 
 ```ts
 /** Windows DPAPI through Electron: only this Windows user can decrypt what it encrypts. */
@@ -1005,7 +1215,7 @@ The encryption `SecretStore` uses for the saved sign-in. `SecretStore` only know
 
 <!-- code: apps/desktop/src/main/index.ts#withDevOverrides -->
 
-[`src/main/index.ts`, lines 504–527](../../apps/desktop/src/main/index.ts#L504-L527)
+[`src/main/index.ts`, lines 577–600](../../apps/desktop/src/main/index.ts#L577-L600)
 
 ```ts
 /**
@@ -1061,7 +1271,7 @@ example to try the built-in chat against a test identity provider, without editi
 
 <!-- code: apps/desktop/src/main/index.ts#isLoopback -->
 
-[`src/main/index.ts`, lines 529–531](../../apps/desktop/src/main/index.ts#L529-L531)
+[`src/main/index.ts`, lines 602–604](../../apps/desktop/src/main/index.ts#L602-L604)
 
 ```ts
 function isLoopback(url: URL): boolean {
@@ -1079,7 +1289,7 @@ in `hostname`. Used only to decide whether plain `http` is allowed for a dev ide
 
 <!-- code: apps/desktop/src/main/index.ts#toArea,electronDisplays -->
 
-[`src/main/index.ts`, lines 533–549](../../apps/desktop/src/main/index.ts#L533-L549)
+[`src/main/index.ts`, lines 606–621](../../apps/desktop/src/main/index.ts#L606-L621)
 
 ```ts
 /** Electron's `screen`, in the shape the bubble controller uses. All coordinates are DIPs. */
@@ -1091,7 +1301,6 @@ const toArea = (display: Electron.Display): DisplayArea => ({
 
 const electronDisplays: Displays = {
   primary: () => toArea(screen.getPrimaryDisplay()),
-  all: () => screen.getAllDisplays().map(toArea),
   byId: (id) => {
     const display = screen.getAllDisplays().find((d) => d.id === id)
     return display && toArea(display)
@@ -1109,13 +1318,12 @@ uses (see [The bubble](5-bubble.md)). Keeping Electron behind this small interfa
 `tests/bubbleController.test.ts` run the controller with two fake displays.
 
 - `toArea`: keeps only what the controller needs from a display: its ID, its bounds (the whole
-  screen) and its work area (the screen minus the taskbar).
+  screen, which nothing reads at the moment) and its work area (the screen minus the taskbar).
 - `DIPs`: device-independent pixels. On a display scaled to 150%, one DIP is 1.5 physical pixels.
   Electron's window positions and display sizes are all in DIPs, so the controller never has to
   think about scaling.
-- `screen.getAllDisplays().map(toArea)`: every connected display, for Bounce, which roams across
-  them all.
-- `return display && toArea(display)`: if no display has that ID any more (it was unplugged),
+- `screen.getAllDisplays().find((d) => d.id === id)`: the connected display with that ID.
+  `return display && toArea(display)`: if no display has that ID any more (it was unplugged),
   this returns `undefined` rather than throwing.
 - `Math.round(point.x)`: the bubble's position can be fractional while it animates, but this
   Electron call takes whole numbers.
@@ -1128,12 +1336,12 @@ method is called, which happens after `start()` has begun.
 
 <!-- code: apps/desktop/src/main/index.ts#fail -->
 
-[`src/main/index.ts`, lines 551–555](../../apps/desktop/src/main/index.ts#L551-L555)
+[`src/main/index.ts`, lines 623–627](../../apps/desktop/src/main/index.ts#L623-L627)
 
 ```ts
 function fail(error: unknown): void {
   console.error(error)
-  dialog.showErrorBox('Desktop Assist could not start', String(error))
+  dialog.showErrorBox('Desktop Wizard could not start', String(error))
   app.exit(1)
 }
 ```
@@ -1152,8 +1360,8 @@ preferences file, and so on. Errors after `start()` has finished don't come here
 
 ## `src/main/log.ts`: the problem log
 
-A small log of problems, written to `%APPDATA%\Desktop Assist\logs\desktop-assist.log` (in a dev
-run, the `Desktop Assist (Dev)` folder) and printed to the terminal as well. An installed copy has
+A small log of problems, written to `%APPDATA%\Desktop Wizard\logs\desktop-wizard.log` (in a dev
+run, the `Desktop Wizard (Dev)` folder) and printed to the terminal as well. An installed copy has
 no terminal, so without this file there would be no way to see why something failed on a user's PC,
 for example why Anthropic refused their sign-in. `start()` in `index.ts` creates the one log and
 gives it to the error callbacks of `NotesStore`, `ClaudeDesktop`, `PortalApps`, `Atlassian`,
@@ -1177,7 +1385,7 @@ export type Log = (message: string, detail?: unknown) => void
 <!-- /code -->
 
 - `MAX_LOG_BYTES = 1_000_000`: about 1 MB. Past that, the file is renamed to
-  `desktop-assist.log.old` (replacing any older one) and a new log is started, so the two files
+  `desktop-wizard.log.old` (replacing any older one) and a new log is started, so the two files
   together stay around 2 MB at most.
 - `type Log = (message: string, detail?: unknown) => void`: the type of a function. Callers pass a
   short message and, optionally, the thing that went wrong (usually an error).
@@ -1309,6 +1517,179 @@ Turns the `detail` into one line of text. Errors need special handling: `JSON.st
   written as JSON. `JSON.stringify` throws for some values (an object that refers to itself, for
   example), and `String(detail)` is used instead.
 
+## `src/main/formerName.ts`: carrying things over from the old name
+
+Desktop Wizard was called Desktop Assist up to version 1.0.0. Renaming it changed the installer's
+product name, and with it the names of the `.exe`, the uninstaller, the Start menu shortcut, the
+installer file and the data folder in `%APPDATA%`. A copy updated from 1.0.0 still has two things
+under the old name: its data (the preferences, the text box, the saved sign-ins, the log) in
+`%APPDATA%\Desktop Assist`, and, with "Start with Windows" on, a startup entry for
+`Desktop Assist.exe`, which the update has deleted. This small file carries both over, once, so
+updating loses nothing. `index.ts` calls `adoptFormerData()` before anything reads the data folder
+(see [Module-level code](#module-level-code)), and `SettingsService.init()` calls
+`adoptFormerLoginItem()` (see [`SettingsService.init()`](#settingsserviceinit)). What they need
+from the disk and from Windows is passed in, so `tests/formerName.test.ts` checks both with fakes.
+
+It doesn't move the screenshots. They go in a folder in Pictures named after the tenant's
+`appName`, now `Pictures\Desktop Wizard`; those taken before the update stay in
+`Pictures\Desktop Assist`.
+
+Some names deliberately stay as they were, because copies of 1.0.0 depend on them:
+
+- The app ID, `com.morsemicro.desktopassist` (`appId` in `electron-builder.cjs`, and the
+  AppUserModelID `start()` sets). Windows knows the install by it, so a new version installs over
+  the old one rather than beside it, and the installer renames the old shortcuts as it goes.
+- The install folder, `desktop-assist` in `%LOCALAPPDATA%\Programs` (`extraMetadata.name` in
+  `electron-builder.cjs`).
+- The text an update's signature signs, `desktop-assist-update <version> sha256:<hash>` (see
+  [`signedText()`](#signedtext-and-issigned)). A copy of 1.0.0 checks an update against exactly
+  that text, so changing it would cut those copies off from updates.
+- The release key's file on the PC that builds releases (`.desktop-assist\release-key.pem`), the
+  `DESKTOP_ASSIST_*` environment variables (for the release key, and for dev runs and tests), the
+  npm package names (`@desktop-assist/desktop`) and the GitHub repository
+  (`Camby10101/Desktop-Assist`). Nobody using the app sees these, so there's nothing to gain from
+  moving them.
+
+### `PRODUCT_NAME` and `FORMER_NAME`
+
+<!-- code: apps/desktop/src/main/formerName.ts#PRODUCT_NAME,FORMER_NAME -->
+
+[`src/main/formerName.ts`, lines 4–13](../../apps/desktop/src/main/formerName.ts#L4-L13)
+
+```ts
+// Desktop Wizard was called Desktop Assist up to version 1.0.0. The installer's product name
+// changed with it, and so did the names of its .exe, its uninstaller, its shortcuts and its data
+// folder. Its app ID, its install folder and its update signatures didn't, so a new version still
+// installs over the old one (renaming the shortcuts as it goes). These carry over what a copy
+// updated from then had under the old name.
+
+/** The installer's product name (electron-builder.cjs): its .exe and uninstaller are named after it. */
+export const PRODUCT_NAME = 'Desktop Wizard'
+
+/** What it was called up to 1.0.0. */
+export const FORMER_NAME = 'Desktop Assist'
+```
+
+<!-- /code -->
+
+The comment at the top of the file is the story above in brief: what changed name with the
+installer's product name, what didn't, and that this file carries over what a copy updated from
+1.0.0 had under the old name.
+
+- `PRODUCT_NAME = 'Desktop Wizard'`: the installer's product name, as `productName` in
+  `electron-builder.cjs` sets it. As the comment says, the `.exe` and the uninstaller are named
+  after it ("Desktop Wizard.exe", "Uninstall Desktop Wizard.exe"). `index.ts` uses it twice: as the
+  name of the data folder, and to find the uninstaller for Settings → Uninstall (see
+  [`src/main/uninstall.ts`](#srcmainuninstallts-uninstalling)).
+- `FORMER_NAME = 'Desktop Assist'`: as its comment says, what it was called up to 1.0.0: the name
+  of the old data folder and of the old `.exe`.
+
+### `Folders`, `disk` and `adoptFormerData()`
+
+<!-- code: apps/desktop/src/main/formerName.ts#Folders,disk,adoptFormerData -->
+
+[`src/main/formerName.ts`, lines 15–44](../../apps/desktop/src/main/formerName.ts#L15-L44)
+
+```ts
+/** The bits of the file system adoptFormerData uses (the real ones unless a test gives others). */
+export interface Folders {
+  exists(path: string): boolean
+  rename(from: string, to: string): void
+}
+
+const disk: Folders = { exists: existsSync, rename: renameSync }
+
+/**
+ * The data folder to use: `name` in `appData` (its preferences, the text box, the sign-in, logs).
+ * The first time, when there's no such folder yet but there is one by its old name (`formerName`),
+ * the old one is renamed, so nothing is lost. If that fails (another program has a file in it
+ * open), the old one stays in use.
+ */
+export function adoptFormerData(
+  appData: string,
+  name: string,
+  formerName: string,
+  folders: Folders = disk,
+): string {
+  const current = join(appData, name)
+  const former = join(appData, formerName)
+  if (folders.exists(current) || !folders.exists(former)) return current
+  try {
+    folders.rename(former, current)
+    return current
+  } catch {
+    return former
+  }
+}
+```
+
+<!-- /code -->
+
+- `Folders`: as its comment says, the two things it needs from the file system: whether a folder
+  exists, and renaming one. `disk` is the real thing, Node's `existsSync` and `renameSync`, and it's
+  the default for the last parameter, so `index.ts` leaves it out while the tests pass in a fake.
+- `adoptFormerData(appData, name, formerName)`: as the comment says, the data folder to use:
+  `name` in `appData` (`%APPDATA%`). `index.ts` gives it `PRODUCT_NAME` and `FORMER_NAME` for an
+  installed copy, and the same names with ` (Dev)` after them for a dev run.
+- `if (folders.exists(current) || !folders.exists(former)) return current`: the usual case. If the
+  new folder is there already (every start after the first), or there's no old one (a PC that never
+  had Desktop Assist), there's nothing to carry over, and the new folder is the one.
+- `folders.rename(former, current)`: otherwise this is the first start after the update, so the old
+  folder is renamed to the new name. Renaming moves the whole folder at once, without copying
+  anything: the preferences, the text box, the logs and the saved sign-ins, which still open,
+  because their encryption belongs to the Windows account, not to the folder's name.
+- `catch { return former }`: as the comment says, the rename fails if another program has a file in
+  the old folder open (a virus scan, say). Then the old folder stays in use for this run, so
+  nothing is lost, and the next start tries again.
+
+### `LoginItems` and `adoptFormerLoginItem()`
+
+<!-- code: apps/desktop/src/main/formerName.ts#LoginItems,adoptFormerLoginItem -->
+
+[`src/main/formerName.ts`, lines 46–64](../../apps/desktop/src/main/formerName.ts#L46-L64)
+
+```ts
+/** Windows' list of programs it starts at sign-in, as adoptFormerLoginItem uses it. */
+export interface LoginItems {
+  /** Whether Windows starts `exePath` at sign-in (this .exe, left out). */
+  startsAtLogin(exePath?: string): boolean
+  /** Has Windows start this .exe at sign-in. */
+  startAtLogin(): void
+}
+
+/**
+ * Keeps "Start with Windows" on through the rename: if Windows still starts the old .exe at sign-in
+ * ("Desktop Assist.exe", beside this one; the update removed it), it starts this one instead.
+ * Returns whether it changed anything.
+ */
+export function adoptFormerLoginItem(exePath: string, items: LoginItems): boolean {
+  const former = join(dirname(exePath), `${FORMER_NAME}.exe`)
+  if (items.startsAtLogin() || !items.startsAtLogin(former)) return false
+  items.startAtLogin()
+  return true
+}
+```
+
+<!-- /code -->
+
+- `LoginItems`: as its comment says, Windows' list of programs it starts at sign-in, as far as this
+  needs it: whether an `.exe` is on it (this one, if none is named), and putting this one on it.
+  `SettingsService.init()` passes in Electron's `app.getLoginItemSettings()` and
+  `app.setLoginItemSettings()`.
+- `adoptFormerLoginItem(exePath, items)`: as the comment says, keeps "Start with Windows" on
+  through the rename. The update replaced `Desktop Assist.exe` with `Desktop Wizard.exe` in the
+  same folder, but Windows' startup entry still names the old `.exe`, which isn't there any more.
+  Left like that, the app would stop starting with Windows after the update, and Settings would
+  show the switch off.
+- `former`: the old `.exe`'s path: the same folder as this one (`dirname(exePath)`), and
+  `Desktop Assist.exe`.
+- `if (items.startsAtLogin() || !items.startsAtLogin(former)) return false`: nothing to do if
+  Windows already starts this `.exe`, or doesn't start the old one: either the user had turned
+  "Start with Windows" off, which stays off, or this copy was never Desktop Assist.
+- `items.startAtLogin()`: otherwise, Windows is told to start this `.exe` instead. Electron names
+  the app's startup entry after its app ID, which didn't change, so this replaces the old entry
+  rather than adding a second one. It returns `true`, for the tests.
+
 ## `src/main/ipc.ts`: handling requests from the pages
 
 _IPC_ (inter-process communication) is how the pages, which run in separate renderer processes,
@@ -1334,7 +1715,7 @@ updates' only when it has `updates`.
 
 <!-- code: apps/desktop/src/main/ipc.ts#BuiltInChat -->
 
-[`src/main/ipc.ts`, lines 35–39](../../apps/desktop/src/main/ipc.ts#L35-L39)
+[`src/main/ipc.ts`, lines 37–41](../../apps/desktop/src/main/ipc.ts#L37-L41)
 
 ```ts
 /** The built-in chat and the JumpCloud sign-in it needs. */
@@ -1356,7 +1737,7 @@ which one exists without the other.
 
 <!-- code: apps/desktop/src/main/ipc.ts#IpcContext -->
 
-[`src/main/ipc.ts`, lines 41–64](../../apps/desktop/src/main/ipc.ts#L41-L64)
+[`src/main/ipc.ts`, lines 43–68](../../apps/desktop/src/main/ipc.ts#L43-L68)
 
 ```ts
 export interface IpcContext {
@@ -1379,6 +1760,8 @@ export interface IpcContext {
   /** Settings → Check for updates, or null when the tenant has no `updates`. */
   updater: Updater | null
   actions: ActionHandlers
+  /** The Spells menu: casts one of her spells. */
+  castSpell(spell: Spell): void
   /** Settings → Uninstall. */
   uninstall(): UninstallResult
   getState(): AppState
@@ -1391,7 +1774,7 @@ Everything the handlers need, passed in by `start()` in `index.ts`. The main pro
 are created there, so this file only needs their types, not how to build them.
 
 - `windows: BrowserWindow[]`: the bubble and panel windows; requests from any other page are
-  refused.
+  refused (the clones', the vision's and the spells' windows included: their pages never call in).
 - `builtIn: BuiltInChat | null`, `claudeDesktop: ClaudeDesktop | null`: where questions go.
   Exactly one of the two is set, depending on the tenant's `chatApp` (see
   [The chat: built in, or in Claude Desktop](#the-chat-built-in-or-in-claude-desktop)).
@@ -1401,6 +1784,8 @@ are created there, so this file only needs their types, not how to build them.
   as their comments say, Jira and Confluence, and raising IT requests with the address of the user's
   requests on the portal; each `null` when the tenant doesn't use it.
 - `updater: Updater | null`: as the comment says, Check for updates, or `null` without `updates`.
+- `castSpell(spell: Spell): void`: as the comment says, the Spells menu: casts one of her spells
+  (`castSpell` in `start()`).
 - `uninstall(): UninstallResult`: Settings → Uninstall, ready-wired in `start()`.
 - `getState(): AppState`: builds the full snapshot a page asks for when it first loads (defined
   in `start()`).
@@ -1409,7 +1794,7 @@ are created there, so this file only needs their types, not how to build them.
 
 <!-- code: apps/desktop/src/main/ipc.ts#NoArgs,FilePath,IssueKey,TimeSpent,ASK_PROBLEMS,ExternalUrl -->
 
-[`src/main/ipc.ts`, lines 66–93](../../apps/desktop/src/main/ipc.ts#L66-L93)
+[`src/main/ipc.ts`, lines 70–97](../../apps/desktop/src/main/ipc.ts#L70-L97)
 
 ```ts
 const NoArgs = z.undefined()
@@ -1471,7 +1856,7 @@ Schemas used by several channels.
 
 <!-- code: apps/desktop/src/main/ipc.ts#registerIpc -->
 
-[`src/main/ipc.ts`, lines 95–337](../../apps/desktop/src/main/ipc.ts#L95-L337)
+[`src/main/ipc.ts`, lines 99–351](../../apps/desktop/src/main/ipc.ts#L99-L351)
 
 ```ts
 /** Wires every renderer request to the main process. All arguments are validated with zod. */
@@ -1548,6 +1933,16 @@ export function registerIpc(ctx: IpcContext): void {
   )
   handle(IPC.settingsSetAutoSend, z.boolean(), (autoSend) => ctx.settings.setAutoSend(autoSend))
   handle(IPC.settingsSetTheme, z.enum(['dark', 'light']), (theme) => ctx.settings.setTheme(theme))
+  handle(
+    IPC.characterSetSize,
+    z.number().refine((scale) => (CHARACTER_SIZES as readonly number[]).includes(scale)),
+    async (scale) => {
+      const size = ctx.controller.setScale(scale)
+      await ctx.settings.setCharacterScale(scale)
+      return size
+    },
+  )
+  handle(IPC.characterCastSpell, z.enum(SPELLS), (spell) => ctx.castSpell(spell))
   handle(
     IPC.settingsSetFavoriteApp,
     z.object({ id: z.string().min(1).max(200), favorite: z.boolean() }),
@@ -1760,10 +2155,10 @@ Check for updates have inner functions of their own too.
 
 **Actions, links and the clipboard**
 
-- `z.enum(COMMAND_ACTION_IDS)`: only the `command` actions (service desk, Screenshot, Bounce, Close)
+- `z.enum(COMMAND_ACTION_IDS)`: only the `command` actions (service desk, Screenshot and Close)
   are accepted. `ctx.actions[id]()` runs the matching handler from `actions.ts` and returns its
-  result, which the panel shows as a toast. The Settings icon is a `popover` action that never
-  leaves the page.
+  result, which the panel shows as a toast. The Settings and Spells icons are `popover` actions
+  that never leave the page; what's in their menus has channels of its own (below).
 - `shell.openExternal(url)`: opens a link from a Claude reply (or the Claude Desktop download
   page) in the default browser, after `ExternalUrl` has checked it (an email link opens the email
   app instead).
@@ -1791,7 +2186,19 @@ Check for updates have inner functions of their own too.
   `IPC.settingsSetAutoSend`: the Settings menu. Each returns the full, current settings, so the
   menu always shows what actually took effect. (The menu offers the response style only with the
   built-in chat, and "Send in Claude automatically" only with Claude Desktop.)
-- `IPC.settingsSetTheme`, `z.enum(['dark', 'light'])`: the light or dark mode icon.
+- `IPC.settingsSetTheme`, `z.enum(['dark', 'light'])`: the settings menu's Light mode switch.
+- `IPC.characterSetSize`: the Smaller and Bigger buttons under Size in the settings menu.
+  `z.number().refine(...)` accepts only one of `CHARACTER_SIZES` (from `src/shared/geometry.ts`);
+  `CHARACTER_SIZES as readonly number[]` lets `includes()` take any number, since on the list's own
+  type it would only take one of those exact sizes. `ctx.controller.setScale(scale)` resizes the
+  character (or makes her as big as fits her display, if that's smaller), and
+  `ctx.settings.setCharacterScale(scale)` saves the size asked for, not the size she may have been
+  kept to, so next time she starts at that size again wherever it fits. The answer is her size as
+  it now is (a `CharacterSize`).
+- `IPC.characterCastSpell`, `z.enum(SPELLS)`: a spell from the Spells menu. Only the four names in
+  `SPELLS` (`src/shared/spells.ts`) pass, and `ctx.castSpell(spell)` casts it (see
+  [Her clones, and casting spells](#her-clones-and-casting-spells)). It answers nothing; the page
+  sees what happens through her pose.
 - `IPC.settingsSetFavoriteApp`: a star in the Apps list. Its schema,
   `z.object({ id: ..., favorite: z.boolean() })`, checks an object field by field, and
   `({ id, favorite })` unpacks it.
@@ -1930,7 +2337,7 @@ is either a `popover` (opens UI inside the panel, handled entirely by the page) 
 
 <!-- code: apps/desktop/src/main/actions.ts#ActionHandlers,createActionHandlers -->
 
-[`src/main/actions.ts`, lines 6–47](../../apps/desktop/src/main/actions.ts#L6-L47)
+[`src/main/actions.ts`, lines 6–44](../../apps/desktop/src/main/actions.ts#L6-L44)
 
 ```ts
 export type ActionHandlers = Record<CommandActionId, () => Promise<ActionResult>>
@@ -1965,12 +2372,9 @@ export function createActionHandlers(deps: {
         return { ok: false, message: "Couldn't take a screenshot" }
       }
     },
-    async bounce() {
-      deps.controller.startBounce()
-      return { ok: true }
-    },
     async close() {
-      deps.quit()
+      // She vanishes into white motes first, then the app quits.
+      deps.controller.farewell(deps.quit)
       return { ok: true }
     },
   }
@@ -1985,8 +2389,8 @@ export function createActionHandlers(deps: {
 
 - `Record<CommandActionId, () => Promise<ActionResult>>`: `Record<K, V>` is a TypeScript type for
   an object with a `V` under every key in `K`. `CommandActionId` is the list of command actions
-  (`'servicedesk' | 'screenshot' | 'bounce' | 'close'`), so if a new command is added to the
-  registry, this file won't compile until it has a handler.
+  (`'servicedesk' | 'screenshot' | 'close'`), so if a new command is added to the registry, this
+  file won't compile until it has a handler.
 - `openServiceDesk: (() => Promise<void>) | null`: a function that opens the service desk, or
   `null` when the tenant has none. The brackets around the function type are needed so that
   `| null` applies to the whole of it.
@@ -2000,14 +2404,17 @@ export function createActionHandlers(deps: {
   way the app isn't in its own screenshot.
 - `catch (error)`: any failure (including `whileHidden()` refusing because the panel isn't open)
   becomes a friendly message; the details go to the log.
-- `async bounce()`: starts the bubble bouncing around the screen. It's `async` only so that it
-  fits the type: every handler returns a promise.
-- `deps.quit()`: `app.quit()`, which goes through the `before-quit` handler in `index.ts`, so the
+- `async close()`: the Close icon (a power button). As the comment says, she vanishes into white
+  motes first, then the app quits: `deps.controller.farewell(deps.quit)` closes the panel, plays
+  her `vanish` pose where she stands, and calls `deps.quit` once she's gone, just under a second
+  later. The handler returns at once, with nothing to say, so the panel shows no toast. It's
+  `async` only so that it fits the type: every handler returns a promise.
+- `deps.quit`: `app.quit()`, which goes through the `before-quit` handler in `index.ts`, so the
   draft is saved first.
 
 ## `src/main/uninstall.ts`: uninstalling
 
-Settings → **Uninstall Desktop Assist** removes the app from the PC without a trip to Windows
+Settings → **Uninstall Desktop Wizard** removes the app from the PC without a trip to Windows
 Settings. The installer (electron-builder's NSIS installer, see `electron-builder.cjs`) puts an
 uninstaller next to the app's `.exe`; this file finds it, starts it, and quits so it can delete
 the app's files. Everything that touches Windows is passed in, so `tests/uninstall.test.ts`
@@ -2047,13 +2454,13 @@ export function uninstallerPath(exePath: string, productName: string): string {
 <!-- /code -->
 
 - `isPackaged`: a dev run has no uninstaller, so there's nothing to do.
-- `exePath`: the running `Desktop Assist.exe`, whose folder holds the uninstaller.
+- `exePath`: the running `Desktop Wizard.exe`, whose folder holds the uninstaller.
 - `stopStartingWithWindows()`: as the comment says, so Windows isn't left with a startup entry
   for an `.exe` that no longer exists.
 - `runDetached(path)`: starts the uninstaller as a separate process that keeps running after this
   one quits.
 - `uninstallerPath()`: `join(dirname(exePath), ...)`, the `.exe`'s folder plus
-  `Uninstall Desktop Assist.exe`, the name the installer gives it.
+  `Uninstall Desktop Wizard.exe`, the name the installer gives it.
 
 ### `uninstall()`
 
@@ -2063,9 +2470,9 @@ export function uninstallerPath(exePath: string, productName: string): string {
 
 ```ts
 /**
- * Removes Desktop Assist from this PC: starts its uninstaller (which shows its own progress and
+ * Removes Desktop Wizard from this PC: starts its uninstaller (which shows its own progress and
  * takes the app, its Start menu shortcut and its uninstall entry away), then quits so the files
- * can be deleted. The data folder (%APPDATA%\Desktop Assist: preferences, the text box, logs) and
+ * can be deleted. The data folder (%APPDATA%\Desktop Wizard: preferences, the text box, logs) and
  * the screenshots in Pictures are kept, as with any uninstall from Windows Settings.
  */
 export function uninstall(deps: UninstallDeps): UninstallResult {
@@ -2104,7 +2511,7 @@ uninstalling from Windows Settings.
 
 Settings → **Check for updates** keeps the app up to date without a trip to an installer. New
 versions are published as _releases_ of the tenant's GitHub repository (`updates.repo`): each one is
-tagged with its version, such as `v1.0.1`, and has the installer (`Desktop Assist-Setup-1.0.1.exe`)
+tagged with its version, such as `v2.0.1`, and has the installer (`Desktop Wizard-Setup-2.0.1.exe`)
 attached. One click does the whole job: ask GitHub's API for the latest release; if it's newer than
 this copy (`app.getVersion()`), download its installer, check it's exactly the file GitHub has (its
 size and SHA-256) and that it's signed with the _release key_, and run it as an update. The
@@ -2278,13 +2685,14 @@ comment says.
 
 <!-- code: apps/desktop/src/main/updates.ts#signedText,isSigned -->
 
-[`src/main/updates.ts`, lines 83–113](../../apps/desktop/src/main/updates.ts#L83-L113)
+[`src/main/updates.ts`, lines 83–114](../../apps/desktop/src/main/updates.ts#L83-L114)
 
 ```ts
 /**
  * What a release's signature signs: the version and the installer's SHA-256. Signing the version
  * too means a genuine older installer can't be passed off as a newer release.
- * scripts/release-signing.mjs signs the same text.
+ * scripts/release-signing.mjs signs the same text. It still says "desktop-assist", from the app's
+ * old name: copies from then check updates against exactly this text.
  */
 export function signedText(version: string, sha256: string): string {
   return `desktop-assist-update ${version} sha256:${sha256}`
@@ -2323,7 +2731,9 @@ How a signature is checked.
   SHA-256 instead of the whole file means the check needs no second pass over a 100 MB download.
   Signing the version too means a genuine older installer (with its own genuine signature) can't
   be attached to a new release to put copies back on an old version.
-  `scripts/release-signing.mjs` builds the same text, and a test checks the two agree.
+  `scripts/release-signing.mjs` builds the same text, and a test checks the two agree. As the
+  comment says, it still starts `desktop-assist`, from the app's old name: copies of 1.0.0 check
+  updates against exactly this text, so it must never change.
 - `isSigned(publicKey, version, sha256, signature)`: `createPublicKey` reads the public half from
   `tenant.json`: base64 of the key in the standard _SPKI_ form (`format: 'der'` is that form's
   binary encoding). The key must be an _Ed25519_ key, a modern signature scheme with short keys
@@ -2335,7 +2745,7 @@ How a signature is checked.
 
 <!-- code: apps/desktop/src/main/updates.ts#Fetch,UpdaterDeps -->
 
-[`src/main/updates.ts`, lines 115–146](../../apps/desktop/src/main/updates.ts#L115-L146)
+[`src/main/updates.ts`, lines 116–147](../../apps/desktop/src/main/updates.ts#L116-L147)
 
 ```ts
 export type Fetch = (url: string, init?: RequestInit) => Promise<Response>
@@ -2394,7 +2804,7 @@ proxy set in Windows is used. `UpdaterDeps` is everything `Updater` needs from o
 
 <!-- code: apps/desktop/src/main/updates.ts#Updater.class -->
 
-[`src/main/updates.ts`, lines 148–154](../../apps/desktop/src/main/updates.ts#L148-L154)
+[`src/main/updates.ts`, lines 149–155](../../apps/desktop/src/main/updates.ts#L149-L155)
 
 ```ts
 /**
@@ -2414,7 +2824,7 @@ The class `index.ts` and `ipc.ts` use, with the comment that sums it up.
 
 <!-- code: apps/desktop/src/main/updates.ts#Updater.state,constructor,current -->
 
-[`src/main/updates.ts`, lines 155–161](../../apps/desktop/src/main/updates.ts#L155-L161)
+[`src/main/updates.ts`, lines 156–162](../../apps/desktop/src/main/updates.ts#L156-L162)
 
 ```ts
 private state: UpdateState = { status: 'idle' }
@@ -2436,7 +2846,7 @@ get current(): UpdateState {
 
 <!-- code: apps/desktop/src/main/updates.ts#Updater.checkAndInstall -->
 
-[`src/main/updates.ts`, lines 163–198](../../apps/desktop/src/main/updates.ts#L163-L198)
+[`src/main/updates.ts`, lines 164–199](../../apps/desktop/src/main/updates.ts#L164-L199)
 
 ```ts
 /** The whole job, one click: check, and if there's an update, download and install it. */
@@ -2470,7 +2880,7 @@ async checkAndInstall(): Promise<UpdateState> {
   }
   this.deps.notify({
     title: `Updating to ${version}`,
-    body: 'Desktop Assist will close and start again in a moment.',
+    body: 'Desktop Wizard will close and start again in a moment.',
   })
   this.deps.quit()
   return this.state
@@ -2504,7 +2914,7 @@ The whole job, from one click, as the comment says.
 
 <!-- code: apps/desktop/src/main/updates.ts#Updater.latest -->
 
-[`src/main/updates.ts`, lines 200–210](../../apps/desktop/src/main/updates.ts#L200-L210)
+[`src/main/updates.ts`, lines 201–211](../../apps/desktop/src/main/updates.ts#L201-L211)
 
 ```ts
 private async latest(): Promise<Release | null> {
@@ -2540,7 +2950,7 @@ Asks GitHub's API for the repository's latest release.
 
 <!-- code: apps/desktop/src/main/updates.ts#Updater.download -->
 
-[`src/main/updates.ts`, lines 212–257](../../apps/desktop/src/main/updates.ts#L212-L257)
+[`src/main/updates.ts`, lines 213–258](../../apps/desktop/src/main/updates.ts#L213-L258)
 
 ```ts
 /**
@@ -2628,7 +3038,7 @@ the release's and signed with the release key, or it's never run.
 
 <!-- code: apps/desktop/src/main/updates.ts#Updater.signature -->
 
-[`src/main/updates.ts`, lines 259–269](../../apps/desktop/src/main/updates.ts#L259-L269)
+[`src/main/updates.ts`, lines 260–270](../../apps/desktop/src/main/updates.ts#L260-L270)
 
 ```ts
 /** The release's signature of its installer (64 bytes, base64 in `<installer>.sig`). */
@@ -2659,7 +3069,7 @@ Downloads the release's signature, as the comment says.
 
 <!-- code: apps/desktop/src/main/updates.ts#Updater.fail,setState -->
 
-[`src/main/updates.ts`, lines 271–292](../../apps/desktop/src/main/updates.ts#L271-L292)
+[`src/main/updates.ts`, lines 272–293](../../apps/desktop/src/main/updates.ts#L272-L293)
 
 ```ts
 private fail(doing: string, error: unknown): UpdateState {
@@ -2701,7 +3111,7 @@ private setState(state: UpdateState): UpdateState {
 
 <!-- code: apps/desktop/src/main/updates.ts#saveDownload -->
 
-[`src/main/updates.ts`, lines 295–317](../../apps/desktop/src/main/updates.ts#L295-L317)
+[`src/main/updates.ts`, lines 296–318](../../apps/desktop/src/main/updates.ts#L296-L318)
 
 ```ts
 /**
@@ -2732,7 +3142,7 @@ export async function saveDownload(
 <!-- /code -->
 
 Saves the downloaded installer, as the comment says. `index.ts` gives it the folder
-`%TEMP%\Desktop Assist update`.
+`%TEMP%\Desktop Wizard update`.
 
 - `basename(name)`: only the file's own name is used, so a name with folders in it (`..\x.exe`,
   say) can't write anywhere but `dir`.
@@ -2750,7 +3160,7 @@ Saves the downloaded installer, as the comment says. `index.ts` gives it the fol
 
 <!-- code: apps/desktop/src/main/updates.ts#Busy,Mismatch,Unsigned -->
 
-[`src/main/updates.ts`, lines 319–326](../../apps/desktop/src/main/updates.ts#L319-L326)
+[`src/main/updates.ts`, lines 320–327](../../apps/desktop/src/main/updates.ts#L320-L327)
 
 ```ts
 /** GitHub turned the request away (its limit for apps that don't sign in). */
@@ -2806,10 +3216,10 @@ export function signInstaller(privateKey, version, installer) {
 
 - `KEY`: where the private half is: `%USERPROFILE%\.desktop-assist\release-key.pem`, outside the
   repository so it can't be committed by mistake, or the file named in
-  `DESKTOP_ASSIST_RELEASE_KEY`.
-- `signedText(version, sha256)`: the same text as `signedText()` in `updates.ts`. The script can't
-  import the app's TypeScript, so it's written twice; `tests/updates.test.ts` signs with this
-  script and checks with the app, so the two can't drift apart unnoticed.
+  `DESKTOP_ASSIST_RELEASE_KEY`. Both keep the app's old name, so the key stays where it was.
+- `signedText(version, sha256)`: the same text as `signedText()` in `updates.ts`, old name and all.
+  The script can't import the app's TypeScript, so it's written twice; `tests/updates.test.ts`
+  signs with this script and checks with the app, so the two can't drift apart unnoticed.
 - `publicKeyOf(key)`: a key's public half as `tenant.json` has it: the SPKI form, base64.
 - `signInstaller(privateKey, version, installer)`: the SHA-256 of the installer's bytes, then
   Node's `sign()` over the text, as base64: what goes in the `.sig` file.
@@ -2831,7 +3241,7 @@ function makeKey() {
   })
   console.log(`Made the release key: ${KEY}`)
   console.log('Keep a copy somewhere safe, such as a password manager. Without it, copies of')
-  console.log("Desktop Assist can't be updated from Settings; with it, anyone can sign an update.")
+  console.log("Desktop Wizard can't be updated from Settings; with it, anyone can sign an update.")
   console.log(`\nIts public half, for "updates": { "publicKey": ... } in tenant.json:`)
   console.log(publicKeyOf(privateKey))
 }
@@ -3205,7 +3615,7 @@ Micro, `tenant.json` has `"updates": { "repo": "Camby10101/Desktop-Assist", "pub
 
 ```ts
 /**
- * Command-line switches that would let another program on the PC look inside Desktop Assist or
+ * Command-line switches that would let another program on the PC look inside Desktop Wizard or
  * drive it: Chromium's remote debugging (the pages, whose bridge reaches Jira with the user's
  * sign-in) and Node's inspector (the main process). An installed copy refuses to start with any
  * of them. Node's are also switched off in the .exe itself (the fuses in electron-builder.cjs).
@@ -3229,7 +3639,7 @@ export function debugSwitches(hasSwitch: (name: string) => boolean): string[] {
 
 The switches an installed copy refuses to start with, as the comment says. Started with
 `--remote-debugging-port=9222`, an Electron app lets any program on the PC connect to that port
-and run code in its pages. Desktop Assist's panel has the `window.assist` bridge, which can search
+and run code in its pages. Desktop Wizard's panel has the `window.assist` bridge, which can search
 Jira and read issues as the user, so that would hand another program the user's Jira through the
 app. `--remote-debugging-pipe` does the same over a pipe. `--inspect` and its relatives start
 Node's debugger in the main process; the fuses in `electron-builder.cjs` already make the `.exe`
@@ -3269,9 +3679,9 @@ and `AnthropicBackend.ts` use these types.
 ```ts
 /**
  * Where conversations with Claude happen.
- * - `claude-desktop`: Desktop Assist hands the question to the Claude Desktop app, so it uses the
+ * - `claude-desktop`: Desktop Wizard hands the question to the Claude Desktop app, so it uses the
  *   person's own Claude (Team/Enterprise) account and counts against their own usage limit. No
- *   sign-in in Desktop Assist.
+ *   sign-in in Desktop Wizard.
  * - `built-in`: the chat runs in the panel, through the Claude API, after a JumpCloud sign-in
  *   (`signIn` and `claudeAccess`). Usage is billed to the company's Claude Console account.
  */
@@ -3524,16 +3934,17 @@ changes.
 
 `SettingsService` keeps the user's preferences in `preferences.json` in the userData folder: the
 reply effort (Fast, Balanced, Thorough) for the built-in chat, whether questions are sent in Claude
-Desktop automatically, the apps starred in the Apps list, light or dark mode, where the bubble was
-dragged to, and whether "Start with Windows" has been set up. It also reports the settings the
+Desktop automatically, the apps starred in the Apps list, light or dark mode, the character's size,
+where the bubble was dragged to, and whether "Start with Windows" has been set up. It also reports
+the settings the
 Settings menu shows. Created in `start()`; the Settings menu reaches it through the `settings...`
-IPC channels.
+IPC channels, and its size buttons through `characterSetSize`.
 
 ### `DEFAULT_EFFORT`, `PreferencesSchema` and `Preferences`
 
 <!-- code: apps/desktop/src/main/settings.ts#DEFAULT_EFFORT,PreferencesSchema,Preferences -->
 
-[`src/main/settings.ts`, lines 7–27](../../apps/desktop/src/main/settings.ts#L7-L27)
+[`src/main/settings.ts`, lines 8–30](../../apps/desktop/src/main/settings.ts#L8-L30)
 
 ```ts
 /** Fast answers by default; Balanced and Thorough think longer. */
@@ -3548,6 +3959,8 @@ const PreferencesSchema = z.object({
   theme: z.enum(['dark', 'light']).optional(),
   /** Apps starred in the Apps list (their IDs), shown first. */
   favoriteApps: z.array(z.string().min(1).max(200)).max(500).optional(),
+  /** How big she is, as a multiple of her usual size (see CHARACTER_SIZES). */
+  characterScale: z.number().min(0.1).max(10).optional(),
   /** Where the bubble was dragged to: a corner of a particular display. */
   bubbleAnchor: z
     .object({
@@ -3571,15 +3984,21 @@ type Preferences = z.infer<typeof PreferencesSchema>
 - `autoSend`: "Send in Claude automatically", for Claude Desktop. As the comment says, it's on
   unless the user has turned it off: a missing value counts as on (see `get()`), so it's on for
   everyone who installed before the setting existed too.
+- `characterScale`: as the comment says, how big the character is, as a multiple of her usual size
+  (one of `CHARACTER_SIZES` in `src/shared/geometry.ts`). The schema only asks for a number from
+  0.1 to 10, so a damaged file can't hold anything absurd; `BubbleController` snaps whatever is
+  there to the nearest of her sizes (`snapSize()`).
 - `bubbleAnchor`: a display ID and one of the four corners (`BubbleAnchor` in
-  `BubbleController.ts`).
+  `BubbleController.ts`). The character only ever saves a bottom corner, but the schema still
+  accepts all four, so a top corner saved by an older version still loads; the controller then
+  takes it as the bottom corner below it.
 - `type Preferences = z.infer<typeof PreferencesSchema>`: the type derived from the schema.
 
 ### `SettingsService`
 
 <!-- code: apps/desktop/src/main/settings.ts#SettingsService.prefs,saving,constructor -->
 
-[`src/main/settings.ts`, lines 30–36](../../apps/desktop/src/main/settings.ts#L30-L36)
+[`src/main/settings.ts`, lines 33–39](../../apps/desktop/src/main/settings.ts#L33-L39)
 
 ```ts
 private prefs: Preferences = {}
@@ -3609,10 +4028,13 @@ constructor(
 
 <!-- code: apps/desktop/src/main/settings.ts#SettingsService.init -->
 
-[`src/main/settings.ts`, lines 38–48](../../apps/desktop/src/main/settings.ts#L38-L48)
+[`src/main/settings.ts`, lines 41–60](../../apps/desktop/src/main/settings.ts#L41-L60)
 
 ```ts
-/** Loads preferences. The first time an installed build runs, turns on "Start with Windows". */
+/**
+ * Loads preferences. The first time an installed build runs, turns on "Start with Windows"; after
+ * an update from Desktop Assist (its old name), keeps it on for the renamed .exe.
+ */
 async init(): Promise<void> {
   const result = await readJsonFile(this.preferencesPath, PreferencesSchema)
   this.prefs = result.status === 'ok' ? result.value : {}
@@ -3621,6 +4043,12 @@ async init(): Promise<void> {
   if (app.isPackaged && !this.prefs.autoStartInitialized) {
     this.setAutoStart(true)
     await this.save({ autoStartInitialized: true })
+  } else if (app.isPackaged) {
+    // Updated from Desktop Assist, Windows may still start the old .exe at sign-in.
+    adoptFormerLoginItem(app.getPath('exe'), {
+      startsAtLogin: (path) => app.getLoginItemSettings(path ? { path } : undefined).openAtLogin,
+      startAtLogin: () => app.setLoginItemSettings({ openAtLogin: true }),
+    })
   }
 }
 ```
@@ -3637,6 +4065,15 @@ Loads the file once at startup (called from `start()`).
 - `if (app.isPackaged && !this.prefs.autoStartInitialized)`: the first time an installed build
   runs, "Start with Windows" is switched on and `autoStartInitialized` is saved. Because of that
   flag it happens only once: if the user turns it off later, it stays off.
+- `else if (app.isPackaged)`: every later start of an installed build, including the first after an
+  update from Desktop Assist (its preferences, flag and all, came across with its data folder). As
+  the comment says, Windows may still start the old `.exe` at sign-in, so `adoptFormerLoginItem()`
+  moves "Start with Windows" over to this one (see
+  [`adoptFormerLoginItem()`](#loginitems-and-adoptformerloginitem)); otherwise it changes nothing.
+  It's given Electron's startup list: `startsAtLogin(path)` asks
+  `app.getLoginItemSettings({ path })` whether Windows starts that `.exe` (this one when there's no
+  `path`), and `startAtLogin()` turns it on for this one with
+  `app.setLoginItemSettings({ openAtLogin: true })`.
 - `nativeTheme.themeSource = this.get().theme`: applies the saved light or dark mode (see
   [`setTheme()`](#settingsservicesettheme)). `init()` runs before the windows are created, so, as
   the comment says, no window ever shows in the other mode first.
@@ -3645,7 +4082,7 @@ Loads the file once at startup (called from `start()`).
 
 <!-- code: apps/desktop/src/main/settings.ts#SettingsService.get -->
 
-[`src/main/settings.ts`, lines 50–63](../../apps/desktop/src/main/settings.ts#L50-L63)
+[`src/main/settings.ts`, lines 62–75](../../apps/desktop/src/main/settings.ts#L62-L75)
 
 ```ts
 get(): Settings {
@@ -3684,7 +4121,7 @@ The current settings, as the Settings menu shows them (`Settings` in `src/shared
 
 <!-- code: apps/desktop/src/main/settings.ts#SettingsService.setAutoStart -->
 
-[`src/main/settings.ts`, lines 65–68](../../apps/desktop/src/main/settings.ts#L65-L68)
+[`src/main/settings.ts`, lines 77–80](../../apps/desktop/src/main/settings.ts#L77-L80)
 
 ```ts
 setAutoStart(enabled: boolean): Settings {
@@ -3704,7 +4141,7 @@ settings, so the menu shows what actually happened; in a dev run that's still "o
 
 <!-- code: apps/desktop/src/main/settings.ts#SettingsService.setEffort,setAutoSend -->
 
-[`src/main/settings.ts`, lines 70–78](../../apps/desktop/src/main/settings.ts#L70-L78)
+[`src/main/settings.ts`, lines 82–90](../../apps/desktop/src/main/settings.ts#L82-L90)
 
 ```ts
 async setEffort(effort: Effort): Promise<Settings> {
@@ -3729,11 +4166,11 @@ dependency each time it hands a question over.
 
 <!-- code: apps/desktop/src/main/settings.ts#SettingsService.setTheme -->
 
-[`src/main/settings.ts`, lines 80–88](../../apps/desktop/src/main/settings.ts#L80-L88)
+[`src/main/settings.ts`, lines 92–100](../../apps/desktop/src/main/settings.ts#L92-L100)
 
 ```ts
 /**
- * Light or dark mode for every Desktop Assist window, whatever Windows uses: Electron's
+ * Light or dark mode for every Desktop Wizard window, whatever Windows uses: Electron's
  * `themeSource` sets what the pages see as prefers-color-scheme, which the styles follow.
  */
 async setTheme(theme: Theme): Promise<Settings> {
@@ -3745,7 +4182,7 @@ async setTheme(theme: Theme): Promise<Settings> {
 
 <!-- /code -->
 
-Switches every Desktop Assist window between light and dark, and saves the choice.
+Switches every Desktop Wizard window between light and dark, and saves the choice.
 
 - `nativeTheme.themeSource = theme`: Electron's `nativeTheme.themeSource` decides which mode the
   app's pages are told the system is in: `'dark'` or `'light'` overrides Windows' own setting
@@ -3753,13 +4190,13 @@ Switches every Desktop Assist window between light and dark, and saves the choic
   `prefers-color-scheme`, which both the hand-written dark styles in `styles.css` and Tailwind's
   `dark:` classes follow. So both windows switch at once, without the pages doing anything.
 - `await this.save({ theme })`, `return this.get()`: saved for next time, and the new settings go
-  back to the panel, which updates the theme icon.
+  back to the panel, which updates the Light mode switch.
 
 ### `SettingsService.setFavoriteApp()`
 
 <!-- code: apps/desktop/src/main/settings.ts#SettingsService.setFavoriteApp -->
 
-[`src/main/settings.ts`, lines 90–95](../../apps/desktop/src/main/settings.ts#L90-L95)
+[`src/main/settings.ts`, lines 102–107](../../apps/desktop/src/main/settings.ts#L102-L107)
 
 ```ts
 /** Stars an app in the Apps list, or takes its star away. */
@@ -3784,7 +4221,7 @@ list, which the panel adopts.
 
 <!-- code: apps/desktop/src/main/settings.ts#SettingsService.bubbleAnchor,setBubbleAnchor -->
 
-[`src/main/settings.ts`, lines 97–103](../../apps/desktop/src/main/settings.ts#L97-L103)
+[`src/main/settings.ts`, lines 109–115](../../apps/desktop/src/main/settings.ts#L109-L115)
 
 ```ts
 get bubbleAnchor(): BubbleAnchor | null {
@@ -3798,17 +4235,43 @@ async setBubbleAnchor(anchor: BubbleAnchor): Promise<void> {
 
 <!-- /code -->
 
-Where the bubble rests. `get bubbleAnchor()` is a _getter_: it's read like a property
-(`settings.bubbleAnchor`, in `start()`), but runs this code. It returns `null` if the bubble has
-never been moved, and `BubbleController.start()` then uses the bottom-right corner of the main
-display. `setBubbleAnchor()` is called by `onAnchorChange` in `start()` each time the bubble
-settles in a new corner.
+Where the character lives. `get bubbleAnchor()` is a _getter_: it's read like a property
+(`settings.bubbleAnchor`, in `start()`), but runs this code. It returns `null` if the character
+has never been moved, and `BubbleController` then uses the bottom-right corner of the main
+display. `setBubbleAnchor()` is called by `onAnchorChange` in `start()` each time the character
+settles near the other bottom corner or on another display.
+
+### `SettingsService.characterScale` and `SettingsService.setCharacterScale()`
+
+<!-- code: apps/desktop/src/main/settings.ts#SettingsService.characterScale,setCharacterScale -->
+
+[`src/main/settings.ts`, lines 117–124](../../apps/desktop/src/main/settings.ts#L117-L124)
+
+```ts
+/** Her size as chosen in Settings, or null if it's never been changed. */
+get characterScale(): number | null {
+  return this.prefs.characterScale ?? null
+}
+
+async setCharacterScale(scale: number): Promise<void> {
+  await this.save({ characterScale: scale })
+}
+```
+
+<!-- /code -->
+
+The character's size, saved the same way as where she lives. As the comment says, the getter
+returns her size as chosen (under Size in the settings menu), or `null` if it's never been changed; `start()` passes
+it to `BubbleController` as `initialScale`, which starts her at her usual size for `null`.
+`setCharacterScale()` is called by the `characterSetSize` handler in `registerIpc()` each time the
+user makes her smaller or bigger. It saves the size the user asked for, even when her screen only
+has room for less.
 
 ### `SettingsService.save()`
 
 <!-- code: apps/desktop/src/main/settings.ts#SettingsService.save -->
 
-[`src/main/settings.ts`, lines 105–112](../../apps/desktop/src/main/settings.ts#L105-L112)
+[`src/main/settings.ts`, lines 126–133](../../apps/desktop/src/main/settings.ts#L126-L133)
 
 ```ts
 private async save(changes: Preferences): Promise<void> {
@@ -3844,8 +4307,8 @@ Writes are queued: each one starts only after the previous one has finished.
 The icon in the Windows notification area (by the clock). Clicking it opens the panel, and its
 right-click menu has Open and Quit. It matters because the app has no taskbar button or window
 frame: this is the one place that always shows the app is running and offers a way to quit. The
-icon is the tenant's logo, the same image as the bubble, or a plain circle in the accent colour
-if the tenant has no `logo.png`.
+icon is the tenant's logo, or a plain circle in the accent colour if the tenant has no
+`logo.png`.
 
 ### `logos`, `logoPath`, `TRAY_SIZE` and `SCALE_FACTORS`
 
@@ -3854,7 +4317,7 @@ if the tenant has no `logo.png`.
 [`src/main/tray.ts`, lines 4–15](../../apps/desktop/src/main/tray.ts#L4-L15)
 
 ```ts
-// The tenant's logo, the same image as the bubble. Only a PNG can be used: Windows can't draw a
+// The tenant's logo. Only a PNG can be used: Windows can't draw a
 // tray icon from SVG. `?asset` makes the build copy the file and gives its path at runtime.
 const logos = import.meta.glob<string>('@tenant/logo.png', {
   query: '?asset',

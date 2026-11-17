@@ -6,7 +6,7 @@ Milestone 5 brings Jira and the IT service desk into the card beside the bubble.
 through **Atlassian's Remote MCP server** (`https://mcp.atlassian.com/v1/mcp`), the MCP server
 Atlassian runs for its cloud sites. Like JumpCloud's apps server ([Your apps](10-apps.md)), it
 offers named tools (`searchJiraIssuesUsingJql`, `getJiraIssue`, `addCommentToJiraIssue` and so on)
-and only answers a signed-in user. So each person connects Desktop Assist to Atlassian once, in
+and only answers a signed-in user. So each person connects Desktop Wizard to Atlassian once, in
 the browser: Atlassian's sign-in sends them through the company's JumpCloud single sign-on, they
 agree, and the browser comes back to the app. The connecting is the same `McpAccount` code as the
 Apps list's, with a file (`atlassian.bin`) and a port of its own. No token ever reaches the page.
@@ -61,7 +61,7 @@ see `AtlassianSchema` and `ServiceDeskSchema` in
    `assist:service-desk-raise` → `ServiceDesk.raise()`. It copies the text box's screenshots to the
    clipboard, builds the portal's create-request address with the summary and description in it
    (`requestFormUrl()`), and opens it in the browser; the panel closes. The user checks the form,
-   pastes the screenshot, and sends it on the portal, signed in as themselves. Desktop Assist never
+   pastes the screenshot, and sends it on the portal, signed in as themselves. Desktop Wizard never
    creates the request itself, so nothing is raised that the user hasn't seen.
 
 The pages themselves (`JiraPage`, `IssueView`, `ServiceDeskPage`) are in
@@ -1058,7 +1058,7 @@ against a fake Atlassian. `start()` in `index.ts` creates the one instance when 
 [`src/main/atlassian/Atlassian.ts`, lines 50–62](../../apps/desktop/src/main/atlassian/Atlassian.ts#L50-L62)
 
 ```ts
-/** The tools of Atlassian's Remote MCP server that Desktop Assist uses. */
+/** The tools of Atlassian's Remote MCP server that Desktop Wizard uses. */
 export const TOOLS = {
   user: 'atlassianUserInfo',
   sites: 'getAccessibleAtlassianResources',

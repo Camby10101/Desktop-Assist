@@ -1,13 +1,13 @@
 # Setting up the Apps list (for IT)
 
-Since feature 3.2, Desktop Assist shows the apps the person sees in their **JumpCloud User
+Since feature 3.2, Desktop Wizard shows the apps the person sees in their **JumpCloud User
 Portal**, with their logos: for Morse Micro the panel opens on them (the text box for asking
 Claude is behind the **Ask Claude** icon). Clicking an app opens it in their
 default browser, signed in through JumpCloud just as it would be from the portal.
 
 The list comes from JumpCloud's **MCP Server for Users**, the documented way for an app on the
 user's PC to see their portal: it lists the apps that user can access and gives each app's sign-in
-link. Each person connects Desktop Assist to it once, in their browser. There's no API key or
+link. Each person connects Desktop Wizard to it once, in their browser. There's no API key or
 secret in the app, and it only ever sees what that person could see in their own portal.
 
 ## 1. Turn on the MCP Server for users (once, JumpCloud admin)
@@ -22,7 +22,7 @@ switch under **Settings → Features**). If it's nowhere, check your admin role 
 for the full **Administrator with Billing** role) or ask JumpCloud support whether your plan
 includes the MCP Server for users.
 
-Nothing else is needed in JumpCloud: Desktop Assist registers itself with the server the first
+Nothing else is needed in JumpCloud: Desktop Wizard registers itself with the server the first
 time someone connects. Which apps each person sees is decided as always, by the groups assigned
 to each app in JumpCloud (and "Show in User Portal").
 
@@ -31,9 +31,9 @@ to each app in JumpCloud (and "Show in User Portal").
 1. Click the bubble. (Where the panel opens on the text box instead, click the **Apps** icon, the
    grid.)
 2. Click **Sign in with JumpCloud**. Their browser opens JumpCloud; if they're already signed in
-   there, they just approve Desktop Assist. The browser then says they can close the tab.
+   there, they just approve Desktop Wizard. The browser then says they can close the tab.
 3. The Apps list appears. A star on an app's logo keeps it at the top (saved on that PC). From then on it opens straight away; the connection is saved encrypted
-   for their Windows account only (`%APPDATA%\Desktop Assist\jumpcloud-apps.bin`, Windows DPAPI)
+   for their Windows account only (`%APPDATA%\Desktop Wizard\jumpcloud-apps.bin`, Windows DPAPI)
    and renewed by itself.
 
 People can see and revoke the connection in their User Portal (JumpCloud lists active MCP
@@ -42,7 +42,7 @@ connections there). After revoking, the Apps list asks them to sign in again.
 ## How it works
 
 ```
- Desktop Assist ── sign in (browser, PKCE, once) ────────▶ JumpCloud MCP Server for Users
+ Desktop Wizard ── sign in (browser, PKCE, once) ────────▶ JumpCloud MCP Server for Users
                 ◀─ access + refresh token (saved, DPAPI)
                 ── list_applications ───────────────────▶ the user's portal apps
                 ── launch_application (on click) ───────▶ the app's sign-in link
@@ -73,12 +73,14 @@ connections there). After revoking, the Apps list asks them to sign in again.
   image. Logos uploaded in JumpCloud come labelled as plain files rather than images; Desktop
   Assist recognises the image itself, so check the uploaded logo is a PNG, JPEG, GIF, WebP, ICO,
   BMP or SVG under 300 KB.
-- **"Couldn't read your apps list":** JumpCloud answered in a form Desktop Assist doesn't know. The
-  log (`%APPDATA%\Desktop Assist\logs\desktop-assist.log`) names the fields it got.
+- **"Couldn't read your apps list":** JumpCloud answered in a form Desktop Wizard doesn't know. The
+  log (`%APPDATA%\Desktop Wizard\logs\desktop-wizard.log`) names the fields it got.
 
 ## Removing access
 
-- **One person:** remove them from the app groups as usual, or revoke the Desktop Assist
-  connection in their User Portal.
+- **One person:** remove them from the app groups as usual, or revoke the Desktop Wizard
+  connection in their User Portal. Someone who connected before the app was renamed (up to 1.0.0)
+  may see it under its old name, Desktop Assist, since the connection keeps the name it was made
+  with.
 - **Everyone:** turn off **MCP Server for users** (step 1). The Apps list then says it isn't
-  turned on; the rest of Desktop Assist keeps working.
+  turned on; the rest of Desktop Wizard keeps working.

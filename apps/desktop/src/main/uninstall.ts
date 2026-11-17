@@ -23,9 +23,9 @@ export function uninstallerPath(exePath: string, productName: string): string {
 }
 
 /**
- * Removes Desktop Assist from this PC: starts its uninstaller (which shows its own progress and
+ * Removes Desktop Wizard from this PC: starts its uninstaller (which shows its own progress and
  * takes the app, its Start menu shortcut and its uninstall entry away), then quits so the files
- * can be deleted. The data folder (%APPDATA%\Desktop Assist: preferences, the text box, logs) and
+ * can be deleted. The data folder (%APPDATA%\Desktop Wizard: preferences, the text box, logs) and
  * the screenshots in Pictures are kept, as with any uninstall from Windows Settings.
  */
 export function uninstall(deps: UninstallDeps): UninstallResult {

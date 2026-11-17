@@ -7,25 +7,38 @@ import {
   Square,
   Ticket,
 } from 'lucide-react'
-import { useEffect, useRef, type KeyboardEvent, type ReactNode } from 'react'
-import { PANEL_LAYOUT, UI, isLeftCorner, isTopCorner, type Corner } from '@shared/geometry'
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import {
+  UI,
+  bubbleMetrics,
+  isLeftCorner,
+  isTopCorner,
+  type Corner,
+  type PanelLayout,
+} from '@shared/geometry'
 import type { Attachment, ChatMessage } from '@shared/types'
 import type { ToastMessage } from '../hooks/useToast'
 import { anchored, originClass } from '../lib/anchor'
 import { cn } from '../lib/cn'
+import { SPRITE_SIZE } from '../character/sprite'
 import { AttachmentChip } from './AttachmentChip'
 import { MessageList } from './MessageList'
 
 /**
- * The card beside the bubble, on the side facing the middle of the screen. It's anchored at the
- * bubble's edge (bottom in a bottom corner, top in a top corner), so it starts as just the text
- * box and grows away from that edge as the conversation gets longer, then scrolls. When nobody is
+ * The card beside the bubble, on the side facing the middle of the screen: a speech bubble, its
+ * tail pointing at her mouth (see SpeechTail). It's anchored at the bubble's edge (bottom in a
+ * bottom corner, top in a top corner), so it starts as just the text box and grows away from that
+ * edge as the conversation gets longer, then scrolls. When nobody is
  * signed in, `signInPrompt` is shown instead of the chat. With `inClaudeDesktop`, it's only the
  * text box, and sending opens the question in Claude Desktop. While a page's icon is on (Apps,
  * Jira, the service desk), the page shows instead.
  */
 export function ChatBox(props: {
   corner: Corner
+  /** Where things sit for her size: the card goes beside her. */
+  layout: PanelLayout
+  /** Her size (see CHARACTER_SIZES), for the tail to reach her mouth. */
+  scale: number
   open: boolean
   toast: ToastMessage | null
   /** Sending hands the question to Claude Desktop instead of the chat in the panel. */
@@ -57,8 +70,20 @@ export function ChatBox(props: {
   /** Turns the text (and screenshots) into an IT request; null without a service desk form. */
   onReport: (() => void) | null
 }) {
+  // The card's height, for the tail to stay on it however short it is.
+  const card = useRef<HTMLDivElement>(null)
+  const [cardHeight, setCardHeight] = useState(0)
+  useEffect(() => {
+    const element = card.current
+    if (!element) return
+    const observer = new ResizeObserver(() => setCardHeight(element.offsetHeight))
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [])
+
   return (
     <div
+      ref={card}
       data-hit
       className={cn(
         'absolute flex flex-col rounded-2xl border shadow-xl',
@@ -69,11 +94,17 @@ export function ChatBox(props: {
         'motion-reduce:transition-none',
       )}
       style={{
-        ...anchored(props.corner, PANEL_LAYOUT.chatX, PANEL_LAYOUT.chatY),
+        ...anchored(props.corner, props.layout.chatX, props.layout.chatY),
         width: UI.panelWidth,
         maxHeight: UI.panelMaxHeight,
       }}
     >
+      <SpeechTail
+        corner={props.corner}
+        layout={props.layout}
+        scale={props.scale}
+        cardHeight={cardHeight}
+      />
       {props.toast && (
         <div
           key={props.toast.id}
@@ -107,6 +138,93 @@ export function ChatBox(props: {
         </>
       )}
     </div>
+  )
+}
+
+/** Her mouth, in sprite pixels down from the top of her window (rig.ts draws it there). */
+const MOUTH_ROW = 33.5
+/** How far from her middle the tail would reach (sprite pixels): just short of her face and hair. */
+const TAIL_REACH = 11
+/** How much of the way from the card to her mouth it goes, so it's short, aimed at her mouth. */
+const TAIL_SHARE = 0.55
+/** The card's corner radius (`rounded-2xl`), which the tail's base keeps clear of. */
+const CARD_RADIUS = 16
+
+/**
+ * The speech bubble's tail: from the card's side nearest her, pointing at her mouth, at her
+ * height and size, so it points at her mouth however big she is (her mouth is at MOUTH_ROW of her
+ * 96-pixel grid, scaled with her). Its sides curve out of the card's edge in rounded joins and
+ * narrow to a sharp point at her mouth, like a drawn speech bubble's. Its base slides along the card's edge to stay level with her
+ * mouth, but never into the card's rounded corners, so on a card shorter than her mouth is high
+ * (just the text box, at a big size) it slants up to her instead. It's drawn in the card's own
+ * colours and border, overlapping the card's edge by a pixel so the two read as one shape, and it
+ * ignores the mouse, so it never gets between the pointer and her.
+ */
+function SpeechTail(props: {
+  corner: Corner
+  layout: PanelLayout
+  scale: number
+  cardHeight: number
+}) {
+  const { scale, layout } = props
+  const { box } = bubbleMetrics(scale)
+  // Where her mouth is: how far out from the card's edge (stopping just short of her face) and how
+  // high above the card's near edge (its bottom, in a bottom corner).
+  const reach = Math.max(8, layout.chatX - (box / 2 + TAIL_REACH * scale))
+  const mouth = (SPRITE_SIZE - MOUTH_ROW) * scale - layout.chatY
+  // Half the base's width, and how far along the card's edge, beyond it, each side curves in
+  // from, so the tail grows out of the card in a rounded join; both grow with her.
+  const half = 9 + 2 * scale
+  const curve = half * 0.7
+  const lowest = CARD_RADIUS + half + curve
+  const highest = Math.max(lowest, props.cardHeight - CARD_RADIUS - half - curve)
+  const base = Math.min(Math.max(mouth, lowest), highest)
+  // The tip: TAIL_SHARE of the way from the middle of the base towards her mouth, so the tail is
+  // short, but points at her mouth wherever on the card it starts.
+  const out = reach * TAIL_SHARE
+  const up = base + (mouth - base) * TAIL_SHARE
+  const width = out + 2
+  const height = Math.max(up, base + half + curve) + 2
+  // A point `x` out from the card's edge and `u` up from its near edge, in the drawing's terms.
+  const at = (x: number, u: number) => `${x.toFixed(1)} ${(height - u).toFixed(1)}`
+  // Each side's direction from its end of the base to the tip, and how far that is.
+  const toTip = (from: number) => {
+    const length = Math.hypot(out, up - from)
+    return { x: out / length, u: (up - from) / length, pull: length * 0.45 }
+  }
+  const upper = toTip(base + half)
+  const lower = toTip(base - half)
+  const sides = [
+    `M${at(0, base + half + curve)}`,
+    // Out of the card's edge, leaving it along the edge, to the tip, arriving straight at it.
+    `C${at(0, base + half)} ${at(out - upper.x * upper.pull, up - upper.u * upper.pull)} ${at(out, up)}`,
+    // From the tip back to the card's edge, the same way round: the two sides meet in a point.
+    `C${at(out - lower.x * lower.pull, up - lower.u * lower.pull)} ${at(0, base - half)} ${at(0, base - half - curve)}`,
+  ].join(' ')
+  const left = isLeftCorner(props.corner)
+  const top = isTopCorner(props.corner)
+  return (
+    <svg
+      aria-hidden
+      width={width}
+      height={height}
+      viewBox={`0 0 ${width} ${height}`}
+      className="pointer-events-none absolute overflow-visible"
+      style={{
+        // On the side towards her, over the card's border by a pixel.
+        [left ? 'right' : 'left']: 'calc(100% - 1px)',
+        [top ? 'top' : 'bottom']: 0,
+        // Drawn going right from a bottom edge; mirrored for the other sides.
+        transform: `scale(${left ? -1 : 1}, ${top ? -1 : 1})`,
+      }}
+    >
+      {/* Filled up to a pixel inside the card, over its border, so the join doesn't show. */}
+      <path
+        d={`${sides} L${at(-1, base - half - curve)} L${at(-1, base + half + curve)} Z`}
+        className="fill-white dark:fill-zinc-900"
+      />
+      <path d={sides} fill="none" className="stroke-black/10 dark:stroke-white/10" />
+    </svg>
   )
 }
 

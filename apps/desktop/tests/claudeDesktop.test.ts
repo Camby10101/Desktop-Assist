@@ -14,7 +14,7 @@ import type { SendOutcome } from '../src/main/sendInClaude'
 function attachment(name: string): Attachment {
   return {
     id: name,
-    path: `C:\\Pictures\\Desktop Assist\\${name}`,
+    path: `C:\\Pictures\\Desktop Wizard\\${name}`,
     fileName: name,
     addedAt: '2026-10-09T10:00:00.000Z',
   }

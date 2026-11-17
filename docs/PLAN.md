@@ -1,10 +1,13 @@
-# Desktop Assist: Plan & Tech Stack
+# Desktop Wizard: Plan & Tech Stack
 
 Status: **Milestones 0 (Foundation), 1 (Chat with Claude), 2.1 (bubble fixes), 3 (JumpCloud
 sign-in), 4 (logos, favourites, service desk, light/dark, the bubble-click fix) and 5 (the
 app-opening spinner; Jira and the service desk), its fixes 5.1 and 5.2 (the bubble kept in front;
 Check for updates), and features 3.1 (questions open in Claude Desktop) and 3.2 (Apps list,
-Uninstall, fixes) complete**. Version 1.0.0 is the first release (§7h). Last updated 2026-10-16.
+Uninstall, fixes) complete**. Version 1.0.0 is the first release (§7h). Version 2.0.0 (the
+`character` branch, merged into `main`): the bubble as an animated character, in a choice of sizes,
+with a Spells menu (Clones, Starfall, Teleport, Explosion) in place of Bounce, and the app's new
+name, Desktop Wizard: it was Desktop Assist up to 1.0.0 (§7i). Last updated 2026-11-17.
 
 A Windows desktop assistant that runs in the background, shows a small circular company logo
 in the bottom-right corner of the screen, and opens a panel when clicked. It's built for Morse
@@ -47,6 +50,9 @@ account and usage limit (§7e); the built-in chat stays available as a tenant se
   The text box opens to its **left**, aligned to its bottom edge,
   and **grows upward** as you type. Action icons stack **above** the bubble.
 - **Collapse** by clicking the bubble again, pressing Esc, or clicking anywhere else.
+- On trial since 6: the bubble is an animated character standing on the taskbar near a bottom
+  corner instead of the logo in a corner, and the Bounce icon has given way to Spells; light or
+  dark mode and her size are in Settings (§7i).
 - Only one copy runs at a time. Launching it again just opens the panel.
 
 ## 2. Important: which "Claude" this connects to (from M1)
@@ -70,8 +76,8 @@ identity is checked every time the app gets Claude access (see §5). Their claud
 and projects are **not** available to the app, and all usage is billed to one Console account.
 
 **3.1: questions open in Claude Desktop.** Morse Micro gives each person a usage limit in
-claude.ai (through their group), and wanted Desktop Assist to use that limit. Only Anthropic's
-own apps draw on it, so Desktop Assist now hands each question to the **Claude Desktop** app
+claude.ai (through their group), and wanted Desktop Wizard to use that limit. Only Anthropic's
+own apps draw on it, so Desktop Wizard now hands each question to the **Claude Desktop** app
 with its documented `claude://` link (§7e). The conversation then happens in the person's own
 claude.ai account, with their history, projects and organization instructions, and counts
 against their own limit. The tenant setting `chatApp` picks `claude-desktop` or `built-in`.
@@ -84,7 +90,7 @@ against their own limit. The tenant setting `chatApp` picks `claude-desktop` or 
 - **Packaging:** **electron-builder**. NSIS installer, not yet code-signed. Electron's fuses set in the `.exe`; updates from GitHub releases, signed with a release key kept off GitHub (5.2)
 - **UI:** **React 19** + **Tailwind CSS 4** + **lucide-react** icons. Light or dark mode (its own setting since M4, dark by default; it followed Windows before)
 - **Validation:** **zod 4**. Every IPC payload, saved file and tenant config is checked at runtime
-- **Tests:** **Vitest**. Pure logic (layout, bounce physics, autosave, screenshot files, tenant config)
+- **Tests:** **Vitest**. Pure logic (layout, the character's wandering, clones and spells, autosave, screenshot files, tenant config)
 - **Quality:** ESLint 10 + typescript-eslint + Prettier
 - **Repo:** npm workspaces (`apps/*`). `apps/gateway` and `packages/shared` are added when the backend arrives
 - **_M1:_ Claude:** `@anthropic-ai/sdk`, streaming Messages API, `claude-opus-5-5`. Effort set explicitly; server-side refusal fallbacks; prompt caching
@@ -105,8 +111,8 @@ and has rougher transparent-window behaviour on WebView2. **.NET WinUI** is Wind
 ```
 ┌─────────────────────────── Main process (Node) ───────────────────────────┐
 │ BubbleController: mode state machine                                       │
-│   collapsed ⇄ expanded, bouncing → returning → collapsed, capturing         │
-│ Bubble window (72×72, never resizes, moves while bouncing)                  │
+│   collapsed ⇄ expanded, dragging → returning → collapsed, capturing         │
+│ Bubble window (her size; moves when she is dragged, walks or falls)         │
 │ Panel window  (fixed size, shown/hidden; transparent areas click-through)   │
 │ NotesStore (autosave) · ScreenshotService · Settings · Tray · IPC (zod)     │
 └──────────────▲───────────────────────────────────────────▲────────────────┘
@@ -118,9 +124,11 @@ and has rougher transparent-window behaviour on WebView2. **.NET WinUI** is Wind
                                                 └──────────────────────┘
 ```
 
-- **Two windows, one renderer bundle** (`?view=bubble` / `?view=panel`). The bubble window is
-  tiny, can't take focus and never resizes. That means no flicker on open/close and nothing large
-  moving during Bounce. The panel window has a fixed size and its empty areas pass clicks through
+- **Two windows, one renderer bundle** (`?view=bubble` / `?view=panel`; on the `character` branch
+  also `?view=clones`, `?view=vision` and `?view=spell`, click-through windows for her clones, one
+  of the character's habits and her spells' effects, §7i). The bubble window is
+  tiny, can't take focus and never resizes when the panel opens. That means no flicker on
+  open/close and nothing large moving during a drag or a walk. The panel window has a fixed size and its empty areas pass clicks through
   to whatever is underneath (`setIgnoreMouseEvents` with forwarding, toggled whenever the pointer
   is over real UI, and reset each time the panel is shown). The bubble window is never
   click-through: relying on mouse forwarding there let clicks occasionally fall through it.
@@ -145,7 +153,7 @@ Two designs were considered:
   gateway.
 
 ```
- Desktop Assist ── 1. sign in (browser, PKCE) ──────────▶ JumpCloud
+ Desktop Wizard ── 1. sign in (browser, PKCE) ──────────▶ JumpCloud
                 ◀─ refresh token (saved, DPAPI) + ID token
                 ── 2. POST /v1/oauth/token (ID token) ──▶ Anthropic: the federation
                 ◀─ Claude access token (short-lived)        rule checks the ID token
@@ -157,7 +165,7 @@ The desktop talks to a `ChatBackend` interface, so a gateway can still be added 
 ### Claude Desktop (3.1): no Claude access in the app at all
 
 ```
- Desktop Assist ── claude://claude.ai/new?q=<question> ──▶ Claude Desktop, signed in to the
+ Desktop Wizard ── claude://claude.ai/new?q=<question> ──▶ Claude Desktop, signed in to the
                 ── screenshots → clipboard (one image)       person's own claude.ai account:
                 ── notification: "press Ctrl+V"               their usage, their limit
 ```
@@ -174,7 +182,7 @@ registered. With Claude Desktop, `AppState.auth` is null and the panel shows onl
    progress. The PC is usually already signed in to JumpCloud in the browser, so this is
    near-instant. State and nonce are checked, and openid-client validates the ID token.
 2. The **refresh token** (`offline_access`) is saved encrypted with `safeStorage` (Windows DPAPI)
-   in `%APPDATA%\Desktop Assist\jumpcloud-session.bin`. Nothing else is saved. At every start the
+   in `%APPDATA%\Desktop Wizard\jumpcloud-session.bin`. Nothing else is saved. At every start the
    app renews it silently. JumpCloud may hand back a new refresh token each time; the newest is
    saved.
 3. **Claude access.** Anthropic accepts each ID token only once (its `jti` is single-use), so
@@ -196,13 +204,16 @@ Desktop-Assist/
 ├─ apps/desktop/
 │  ├─ electron.vite.config.ts   TENANT=<id> picks tenants/<id> at build time
 │  ├─ electron-builder.yml
-│  ├─ src/main/                 index (lifecycle), bubble/ (windows, layout, bounce, controller),
+│  ├─ src/main/                 index (lifecycle), bubble/ (windows, layout, clones, vision,
+│  │                            spell effects, controller),
 │  │                            claudeDesktop + sendInClaude (3.1), apps/ (3.2), auth/
 │  │                            (JumpCloud sign-in), claude/ (chat), storage/, actions, notes/,
 │  │                            screenshots/, settings, tray, uninstall, ipc
 │  ├─ src/preload/              typed contextBridge API (window.assist)
-│  ├─ src/renderer/             React views: BubbleView, PanelView (+ components)
-│  ├─ src/shared/               IPC contract, action registry, UI geometry constants, types
+│  ├─ src/renderer/             React views: BubbleView, ClonesView, VisionView, SpellView,
+│  │                            PanelView (+ components)
+│  ├─ src/shared/               IPC contract, action registry, spells, UI geometry constants,
+│  │                            types
 │  └─ tests/                    Vitest unit tests
 ├─ tenants/morse-micro/         tenant.json (names, colours, actions, chatApp, portal, sign-in
 │                                IDs) + logo.png
@@ -218,10 +229,10 @@ Desktop-Assist/
 - **Action icons**: Built from the action registry, stacking upward from the bubble: **Screenshot, Settings, Bounce, Close**. Order and visibility come from `tenant.json`.
 - **Settings**: A menu next to the gear. **Start with Windows** is a toggle, turned on by default the first time an installed build runs. It's disabled in dev builds. **Open screenshots folder** opens Explorer. **Clear text box** asks you to click again to confirm, then clears the text and chips (the image files are kept). The app version is shown at the bottom.
 - **Close**: Quits immediately with no confirmation. It's the icon furthest from the bubble so it's hard to hit by accident. Pending text is saved first. Auto-start brings the app back at next login.
-- **Text box**: A multi-line box. **Autosaves** about 0.5 s after you stop typing, and also when it closes and when the app quits. It's restored after a restart and shows a "Saved" indicator. Saved to `%APPDATA%\Desktop Assist\notes.json` with atomic writes. A corrupt file is backed up and replaced with an empty one. No Claude connection yet.
-- **Screenshot**: An action icon. It hides Desktop Assist's own windows, captures **the screen the bubble is on** at full resolution, saves `Pictures\Desktop Assist\Screenshot YYYY-MM-DD HHMMSS.png`, reopens the panel and shows a "Screenshot saved" toast. Files are never deleted automatically.
+- **Text box**: A multi-line box. **Autosaves** about 0.5 s after you stop typing, and also when it closes and when the app quits. It's restored after a restart and shows a "Saved" indicator. Saved to `%APPDATA%\Desktop Wizard\notes.json` with atomic writes. A corrupt file is backed up and replaced with an empty one. No Claude connection yet.
+- **Screenshot**: An action icon. It hides Desktop Wizard's own windows, captures **the screen the bubble is on** at full resolution, saves `Pictures\Desktop Wizard\Screenshot YYYY-MM-DD HHMMSS.png`, reopens the panel and shows a "Screenshot saved" toast. Files are never deleted automatically.
 - **Attach latest**: A 📎 button in the text box. It adds the most recent screenshot as a **thumbnail chip** (no duplicates). Click the chip to open it full size, × to remove it. Chips are saved with the text. A chip whose file was deleted shows as missing.
-- **Bounce**: An action icon. The panel collapses and the bubble moves at a constant speed, bouncing off the edges of the work area. **Clicking the bubble stops it and it glides back to the corner.**
+- **Bounce**: _Removed on the `character` branch, where her spells take its place (§7i)._ An action icon. The panel collapses and the bubble moves at a constant speed, bouncing off the edges of the work area. **Clicking the bubble stops it and it glides back to the corner.**
 
 **Extension points built in M0 (so later features are small additions):**
 
@@ -234,7 +245,7 @@ Desktop-Assist/
 
 ## 7b. Milestone 1 spec: Chat with Claude
 
-- **API key**: _Replaced by JumpCloud sign-in in M3, which also deletes the saved key file._ Used the user's own Claude API key. **Every time the app starts it tests the saved key** (a free call that fetches the model's details). If there's no key, or Anthropic rejects it, the chat box asks for one before anything else. A new key is checked with Anthropic first and saved only if it works, encrypted with Windows DPAPI (`%APPDATA%\Desktop Assist\claude-api-key.bin`). It never reaches the UI. If Anthropic can't be reached at startup, the key is kept, chat stays available, and a banner offers Retry. A key revoked mid-conversation brings the key form back with an explanation. Settings → Change API key also offers Forget saved key.
+- **API key**: _Replaced by JumpCloud sign-in in M3, which also deletes the saved key file._ Used the user's own Claude API key. **Every time the app starts it tests the saved key** (a free call that fetches the model's details). If there's no key, or Anthropic rejects it, the chat box asks for one before anything else. A new key is checked with Anthropic first and saved only if it works, encrypted with Windows DPAPI (`%APPDATA%\Desktop Wizard\claude-api-key.bin`). It never reaches the UI. If Anthropic can't be reached at startup, the key is kept, chat stays available, and a banner offers Retry. A key revoked mid-conversation brings the key form back with an explanation. Settings → Change API key also offers Forget saved key.
 - **Chat**: The text box becomes the chat input. Enter sends; Shift+Enter adds a line. Replies stream in as Markdown with highlighted code; links open in the browser. "Thinking…" shows until text arrives. Stop cancels a reply and keeps what arrived. Each reply has Copy. The card grows upward to 520px, then scrolls.
 - **Screenshots**: Attached screenshots are sent with the next message, scaled to at most 1568px and JPEG-encoded, and shown as thumbnails on the sent message.
 - **Errors**: Plain-English messages for offline, busy, rate limits, no credit, a declined request, and a reply cut off at the length limit. Temporary errors get Retry.
@@ -269,8 +280,8 @@ Federation (§4, §5).
 - **Not set up**: Until IT fills in `tenant.json`, the chat box says sign-in isn't set up and lists the missing settings. Nothing is contacted.
 - **Config**: `tenant.json` gains `signIn` (issuer, client ID, redirect port) and `claudeAccess` (organization, federation rule, service account and optional workspace IDs). None of them are secret. Dev runs can override them from a file named by `DESKTOP_ASSIST_DEV_CONFIG`.
 - **Focus ring**: Keyboard focus is now purple everywhere, instead of following the Windows accent colour.
-- **Icons**: The tray icon and the `.exe` icon (also used for the Start menu shortcut and the installer) are the bubble's logo.
-- **Diagnostics**: Errors show Anthropic's request reference, and the full details go to `%APPDATA%\Desktop Assist\logs\desktop-assist.log` (and the terminal in dev runs). When Anthropic refuses the sign-in swap, the log also records a summary of the ID token that was sent (issuer, audience, email, lifetime, signing key; never the token), to compare with the federation rule.
+- **Icons**: The tray icon and the `.exe` icon (also used for the Start menu shortcut and the installer) are the tenant's logo (also the bubble's, until the character in §7i).
+- **Diagnostics**: Errors show Anthropic's request reference, and the full details go to `%APPDATA%\Desktop Wizard\logs\desktop-wizard.log` (and the terminal in dev runs). When Anthropic refuses the sign-in swap, the log also records a summary of the ID token that was sent (issuer, audience, email, lifetime, signing key; never the token), to compare with the federation rule.
 
 Tested with unit tests (159, including the sign-in manager, the loopback listener and the fallback rule) and an
 end-to-end run of the real app (47 checks) against a local mock JumpCloud and a mock Anthropic
@@ -306,14 +317,14 @@ The Code Guide is also available as one PDF, `docs/CODE_GUIDE.pdf` (`npm run doc
 ## 7e. Feature 3.1 spec: questions open in Claude Desktop
 
 Each person's questions should come out of their own usage limit, which Morse sets per group in
-claude.ai. The API can't do that (§2), so Desktop Assist hands the question to Claude Desktop.
+claude.ai. The API can't do that (§2), so Desktop Wizard hands the question to Claude Desktop.
 
-- **Ask**: Enter (or the **Ask in Claude** button) opens a new Claude Desktop chat with the question filled in, using `claude://claude.ai/new?q=…`. The panel closes and the text box is cleared. It works with the app closed (Windows starts it). Claude Desktop shows its own caution notice above a question that arrives by link; that can't be turned off from Desktop Assist.
-- **Sent for you**: The link only fills the question in (Anthropic documents no way to send it), so with **Send in Claude automatically** on (the default) Desktop Assist then presses the keys: Ctrl+V for a screenshot, then Enter. A hidden Windows PowerShell helper uses Windows UI Automation and presses a key only while the focused text box belongs to Claude Desktop **and** already shows the question, so nothing lands in another app or another Claude box (this same window can hold a Claude Code session). It waits up to 20 s for that, gives a pasted screenshot 2.5 s, and presses Enter again (up to 3 times) only while the question is still in the box. If it can't (Claude didn't come forward, the focus moved, PowerShell is blocked), a notification says what's left: "Press Enter in Claude to send it", or to paste the screenshot first; the reason goes to the log. A screenshot with no question is never sent for the user: there'd be no question to find in Claude's box. With the setting off, the person presses Enter in Claude themselves.
+- **Ask**: Enter (or the **Ask in Claude** button) opens a new Claude Desktop chat with the question filled in, using `claude://claude.ai/new?q=…`. The panel closes and the text box is cleared. It works with the app closed (Windows starts it). Claude Desktop shows its own caution notice above a question that arrives by link; that can't be turned off from Desktop Wizard.
+- **Sent for you**: The link only fills the question in (Anthropic documents no way to send it), so with **Send in Claude automatically** on (the default) Desktop Wizard then presses the keys: Ctrl+V for a screenshot, then Enter. A hidden Windows PowerShell helper uses Windows UI Automation and presses a key only while the focused text box belongs to Claude Desktop **and** already shows the question, so nothing lands in another app or another Claude box (this same window can hold a Claude Code session). It waits up to 20 s for that, gives a pasted screenshot 2.5 s, and presses Enter again (up to 3 times) only while the question is still in the box. If it can't (Claude didn't come forward, the focus moved, PowerShell is blocked), a notification says what's left: "Press Enter in Claude to send it", or to paste the screenshot first; the reason goes to the log. A screenshot with no question is never sent for the user: there'd be no question to find in Claude's box. With the setting off, the person presses Enter in Claude themselves.
 - **Screenshots**: A link can't carry images, so the attached screenshots are copied to the clipboard as one image: several are scaled to the narrowest one's width (at most 2560px) and stacked top to bottom with a grey band between (the clipboard holds one). They're pasted for the user when the question is sent for them; otherwise a Windows notification says "Screenshot copied. In Claude, press Ctrl+V to add it to your message, then send." The panel says which under the attached screenshots before sending.
-- **Not installed**: Each time the panel opens, Desktop Assist checks that something on the PC opens `claude://` links. If not, a line above the text box says "Claude Desktop isn't installed on this PC, and Desktop Assist opens your questions in it. Ask IT to install it, or download it." with a **Download** button (`https://claude.com/download`). Asking anyway says the same and opens nothing.
+- **Not installed**: Each time the panel opens, Desktop Wizard checks that something on the PC opens `claude://` links. If not, a line above the text box says "Claude Desktop isn't installed on this PC, and Desktop Wizard opens your questions in it. Ask IT to install it, or download it." with a **Download** button (`https://claude.com/download`). Asking anyway says the same and opens nothing.
 - **Limits and errors**: Questions over 12,000 characters are refused with an explanation (Claude Desktop cuts a link's question off at about 14,000). A deleted screenshot, or Windows failing to open the link, says so and keeps the draft; the reason goes to the log.
-- **No sign-in**: Desktop Assist doesn't sign in or contact Anthropic. At start it deletes the JumpCloud sign-in the built-in chat saved. Settings has Start with Windows, **Send in Claude automatically** (on by default), Open screenshots folder and **Clear text box** (click twice); Response style, New conversation and Log out belong to the built-in chat.
+- **No sign-in**: Desktop Wizard doesn't sign in or contact Anthropic. At start it deletes the JumpCloud sign-in the built-in chat saved. Settings has Start with Windows, **Send in Claude automatically** (on by default), Open screenshots folder and **Clear text box** (click twice); Response style, New conversation and Log out belong to the built-in chat.
 - **Config**: `tenant.json` gains `chatApp`: `claude-desktop` (Morse Micro) or `built-in` (the default, M1–M3). `signIn` and `claudeAccess` are only needed for `built-in`. Dev runs can switch it with `DESKTOP_ASSIST_DEV_CONFIG`.
 - **For IT**: [CLAUDE_DESKTOP_SETUP.md](CLAUDE_DESKTOP_SETUP.md): install Claude Desktop, have people sign in to the Morse Micro organization (`forceLoginOrgUUID` recommended), limits stay in claude.ai, and company context goes in claude.ai's Organization instructions.
 
@@ -322,7 +333,7 @@ Options considered (from Anthropic's documentation, October 2026):
 - **Use the claude.ai limit from the app directly**: not possible. Anthropic doesn't let other apps sign in to claude.ai or use its limits without its approval, and offers no way to.
 - **A Console workspace per person** with its own spend limit (WIF can map each person to their workspace): a real per-person limit, but a separate one from claude.ai's, and 100 workspaces at most by default.
 - **A nightly job** lowering each person's claude.ai limit by what they spent through the API: needs a server with two admin keys, turns group limits into per-person ones, and lags a day.
-- **Claude Desktop** (chosen): uses the real limit with no server. The `claude://` link and Claude Desktop's Windows support are documented; sending the question (and pasting screenshots) for the user is Desktop Assist pressing the keys, guarded as above. Quick Entry's screenshot tools are Mac-only.
+- **Claude Desktop** (chosen): uses the real limit with no server. The `claude://` link and Claude Desktop's Windows support are documented; sending the question (and pasting screenshots) for the user is Desktop Wizard pressing the keys, guarded as above. Quick Entry's screenshot tools are Mac-only.
 
 Tested with unit tests (194, including the link encoding, the hand-over order and its errors,
 sending in Claude and what's said when it can't, the PowerShell helper's script, and stacking
@@ -344,37 +355,37 @@ seconds after clicking Ask, with no notification needed.
 
 **Apps list**
 
-- **Opens on the apps**: For Morse Micro the panel opens on the Apps list (`startPage: "apps"` in `tenant.json`), and the text box for asking Claude is behind a new **Ask Claude** icon (a speech bubble, nearest the bubble). Clicking it swaps the card to the text box; clicking it again, or Esc, swaps back; Esc on the apps closes the panel. The panel always reopens on the apps. Taking a screenshot leaves the card on the page it was showing (Milestone 4: it used to switch to the text box). While an unsent question or screenshot waits behind the icon, a dot on it says so. The list loads in the background when Desktop Assist starts, so it's there as soon as the panel opens (this never opens the browser). Tenants that start on the text box (`startPage: "ask"`, the default) can show the list behind an **Apps** icon (a grid, "Your apps") instead.
+- **Opens on the apps**: For Morse Micro the panel opens on the Apps list (`startPage: "apps"` in `tenant.json`), and the text box for asking Claude is behind a new **Ask Claude** icon (a speech bubble, nearest the bubble). Clicking it swaps the card to the text box; clicking it again, or Esc, swaps back; Esc on the apps closes the panel. The panel always reopens on the apps. Taking a screenshot leaves the card on the page it was showing (Milestone 4: it used to switch to the text box). While an unsent question or screenshot waits behind the icon, a dot on it says so. The list loads in the background when Desktop Wizard starts, so it's there as soon as the panel opens (this never opens the browser). Tenants that start on the text box (`startPage: "ask"`, the default) can show the list behind an **Apps** icon (a grid, "Your apps") instead.
 - **The list**: The same apps the user sees in their JumpCloud User Portal, by name, with their logos (or the first letter on the accent colour), in a grid; a search box appears above 8 apps. **Refresh** reloads it; **Open the JumpCloud portal** opens the User Portal. Clicking an app opens its sign-in link in the default browser and closes the panel.
-- **Where it comes from**: JumpCloud's **MCP Server for Users** (`usermcp.jumpcloud.com`), documented by JumpCloud for apps on the user's own PC: `list_applications` gives the apps the user can access, `launch_application` each one's sign-in link. Each user connects once: **Sign in with JumpCloud** opens the browser (OAuth with PKCE, Desktop Assist registers itself as a public client, loopback redirect `http://127.0.0.1:47622/callback`, a refresh token). There's no secret in the app. The connection is saved with Windows DPAPI (`jumpcloud-apps.bin`) and renewed by itself. The browser is only opened by that button, never just by looking at the list. JumpCloud documents the tools but not their exact fields, so the reader is tolerant: it looks for the usual names, skips apps hidden from the portal, takes only `https` links, and logs the field names if it can't find a list.
+- **Where it comes from**: JumpCloud's **MCP Server for Users** (`usermcp.jumpcloud.com`), documented by JumpCloud for apps on the user's own PC: `list_applications` gives the apps the user can access, `launch_application` each one's sign-in link. Each user connects once: **Sign in with JumpCloud** opens the browser (OAuth with PKCE, Desktop Wizard registers itself as a public client, loopback redirect `http://127.0.0.1:47622/callback`, a refresh token). There's no secret in the app. The connection is saved with Windows DPAPI (`jumpcloud-apps.bin`) and renewed by itself. The browser is only opened by that button, never just by looking at the list. JumpCloud documents the tools but not their exact fields, so the reader is tolerant: it looks for the usual names, skips apps hidden from the portal, takes only `https` links, and logs the field names if it can't find a list.
 - **Errors**: Not turned on by IT ("The apps list isn't turned on for your company yet"), offline, a cancelled or refused sign-in (with JumpCloud's reason), an unreadable answer; each with Retry or the sign-in button. Logos are fetched in the main process (https, images only, at most 300 KB) and handed to the page as `data:` URLs, so the page's content policy stays strict.
 - **Config**: `tenant.json` gains `portal` (`name`, `url`, `appsServer`, `redirectPort`), required for the `apps` action or `startPage: "apps"`, and `startPage` (`ask` or `apps`; starting on the apps needs the `ask` action). Morse Micro: JumpCloud, US region, opening on the apps. IT turns on the MCP Server for users once: [APPS_SETUP.md](APPS_SETUP.md).
 
 Options considered: the User Portal's own API is internal and wants the user's password; JumpCloud's admin API needs an admin key or service-account secret (not on PCs); an IT-exported list filtered by the user's groups would go stale and miss direct assignments. The MCP Server for Users is the one documented, user-scoped way.
 
-**Uninstall**: Settings → **Uninstall Desktop Assist** (click twice). It turns "Start with Windows" off, starts the installer's own uninstaller (`Uninstall Desktop Assist.exe`, next to the app) and quits. Like uninstalling from Windows Settings, it keeps `%APPDATA%\Desktop Assist` (preferences, the text box, logs) and the screenshots. Only in the installed app; in `npm run dev` it's greyed out.
+**Uninstall**: Settings → **Uninstall Desktop Wizard** (click twice). It turns "Start with Windows" off, starts the installer's own uninstaller (`Uninstall Desktop Wizard.exe`, next to the app) and quits. Like uninstalling from Windows Settings, it keeps `%APPDATA%\Desktop Wizard` (preferences, the text box, logs) and the screenshots. Only in the installed app; in `npm run dev` it's greyed out.
 
 **Fixes**
 
 - **Clicking the bubble sometimes did nothing** after handing a question to Claude Desktop and clicking into Claude. (Milestone 4 found the real cause, see §7g; what follows was the first attempt.) It couldn't be reproduced on demand (about six runs with real mouse input, including the installed build under a click logger, all opened normally), but once it was caught stuck: the bubble took the hover but clicks didn't open the panel. The likeliest cause is another app taking the focus back as the panel opens, which closed it again at once. Now a blur within 0.4 s of opening doesn't close the panel, and a click on the bubble that doesn't open it is written to the log with the reason, so a next occurrence can be pinned down.
-- **The notification covered the bubble**: Windows shows notifications in the bottom-right corner, over the bubble there, for about 5 s, so clicks hit the notification. Clicking a Desktop Assist notification now opens the panel.
+- **The notification covered the bubble**: Windows shows notifications in the bottom-right corner, over the bubble there, for about 5 s, so clicks hit the notification. Clicking a Desktop Wizard notification now opens the panel.
 - **Auto-send could send an old draft too**: Claude adds a linked question to whatever is already in its new-chat box, and the send step only checked that the box contained the question. It now presses keys only when the box holds exactly the question (compared through a SHA-256 of the whitespace-evened text, so the whole question never goes on a command line). Otherwise it presses nothing, and a notification says Claude's box already had text in it, to check it.
 
 Tested with unit tests (219, including reading JumpCloud's answers, connecting, opening an app, a forged sign-in being refused, Uninstall, the open-blur rule and the exact-match rule) and an end-to-end run of the real app (25 checks) against a local stand-in for JumpCloud's MCP server doing a real OAuth sign-in (client registration, PKCE, code for tokens): the Apps icon and list, nothing opened just by looking, signing in through the browser, the apps by name with hidden ones left out, the saved connection encrypted, opening an app through `launch_application`, the list remembered and refreshed, Esc, the portal link, Uninstall greyed out in dev, and the saved connection used after a restart. The send step was checked against a stand-in text box: exactly the question gets the paste and Enter; an old draft plus the question, or other text, gets nothing. The 3.1 (39 checks) and built-in chat (47 and 9) runs still pass.
 
-Tried for real: with the MCP Server for users turned on, the user connected Desktop Assist to Morse Micro's JumpCloud and the list of their portal apps worked. The start page and Ask Claude icon were then added at their request (end-to-end: 33 checks for 3.2, with the 3.1 (39) and built-in chat (47, 9) runs still passing; 221 unit tests). Still to try: one more auto-send in Claude Desktop with the exact-match rule.
+Tried for real: with the MCP Server for users turned on, the user connected Desktop Wizard to Morse Micro's JumpCloud and the list of their portal apps worked. The start page and Ask Claude icon were then added at their request (end-to-end: 33 checks for 3.2, with the 3.1 (39) and built-in chat (47, 9) runs still passing; 221 unit tests). Still to try: one more auto-send in Claude Desktop with the exact-match rule.
 
 ## 7g. Milestone 4
 
 Improvements asked for after trying 3.2 day to day (merged in pull request #6):
 
-- **App logos**: Some apps showed a letter instead of their logo. Watching the installed app's requests showed why: JumpCloud serves the logos a company uploads itself (`assets.jumpcloud.com/images/applications/…`) labelled `application/octet-stream`, while its catalogue logos (`static.jumpcloud.com`) are labelled `image/png`, and only image labels were accepted. The files are ordinary PNGs and JPEGs, so Desktop Assist now recognises the image from its first bytes (PNG, JPEG, GIF, WebP, ICO, BMP, SVG) and still refuses anything that isn't one, whatever its label says. Checked against Morse Micro's real logos. Logos are also kept between refreshes.
+- **App logos**: Some apps showed a letter instead of their logo. Watching the installed app's requests showed why: JumpCloud serves the logos a company uploads itself (`assets.jumpcloud.com/images/applications/…`) labelled `application/octet-stream`, while its catalogue logos (`static.jumpcloud.com`) are labelled `image/png`, and only image labels were accepted. The files are ordinary PNGs and JPEGs, so Desktop Wizard now recognises the image from its first bytes (PNG, JPEG, GIF, WebP, ICO, BMP, SVG) and still refuses anything that isn't one, whatever its label says. Checked against Morse Micro's real logos. Logos are also kept between refreshes.
 - **Favourites**: A small star on each app logo's top-right corner, faint until hovered. Clicking it stars the app (filled, gold) and moves it to the top of the list; clicking again takes the star away. Starred apps keep their name order among themselves. Saved in the preferences (`favoriteApps`), so they survive restarts.
 - **Service desk**: A new icon (a headset, "IT service desk") opens the company's service desk in the default browser and closes the panel. For Morse Micro: `https://morsemicro.atlassian.net/servicedesk/customer/portals` (`serviceDesk.url` in `tenant.json`, with the `servicedesk` action).
 - **Screenshots don't change the page**: Taking a screenshot used to switch the card to the text box. Now it comes back to whatever it was showing (the Apps list, say); **Ask Claude** shows the text box when wanted.
 - **The bubble stopped responding to clicks (found and fixed)**: After clicking somewhere else, clicking the bubble sometimes did nothing at all, neither opening nor closing the panel, until the app was restarted (3.2's guess about it was wrong). Caught live on the user's PC by attaching to the running app: the bubble window was made so it could never take the focus, and in that state Windows/Chromium dropped each mouse **press** on it and only delivered the release, so the page never saw a click and nothing reached the main process. With the window allowed to take the focus, the press arrived and the panel opened. Now both windows can take the focus. Because clicking the bubble then takes the focus from an open panel (closing it as the button goes down), each click carries the time it was pressed, and a panel that closed at that press stays closed; that also means a quick click on the bubble right after clicking elsewhere now reopens it (the old 0.3 s rule ignored it). Checked with real mouse input across the user's two monitors: open/close, a slow click, and five rounds of clicking another app then the bubble (24 steps, every press delivered).
 - **No tooltip on the bubble**: The "Click to open, drag to move" note that appeared after hovering is gone.
-- **Light or dark mode button**: A new icon (a sun in dark mode, a moon in light mode) switches all of Desktop Assist between dark and light, whatever Windows uses. It starts dark, and the choice is saved (`theme` in the preferences) and applied before the windows appear, so there's no flash of the other mode. Until now the colours followed Windows' app mode (dark on Morse Micro's PCs); the white buttons seen during testing came from the test tools, which force light mode while they drive the app.
+- **Light or dark mode button**: A new icon (a sun in dark mode, a moon in light mode) switches all of Desktop Wizard between dark and light, whatever Windows uses. It starts dark, and the choice is saved (`theme` in the preferences) and applied before the windows appear, so there's no flash of the other mode. Until now the colours followed Windows' app mode (dark on Morse Micro's PCs); the white buttons seen during testing came from the test tools, which force light mode while they drive the app. (On the `character` branch it has since moved into Settings, as a Light mode switch; §7i.)
 
 Tested with unit tests (226, including recognising images from their bytes, the octet-stream logos, a page of HTML labelled as an image, the favourites order and the logo cache) and end-to-end (44 checks for the Apps list, now including starring an app, the order surviving a restart, unstarring, and the service desk link; the 3.1 (39) and built-in chat (47, 9) runs still pass).
 
@@ -385,7 +396,7 @@ tab, as asked). IT's setup guide: [ATLASSIAN_SETUP.md](ATLASSIAN_SETUP.md).
 
 - **A spinner while an app opens**: Clicking an app in the Apps list could seem to do nothing for a few seconds while JumpCloud gives its sign-in link. Now a loading circle spins over that app's logo from the click until the browser is opening (then the panel closes as before). Opening is also quicker: the launch tool's details are remembered, so each open is one request to JumpCloud instead of two. If JumpCloud takes more than 15 s, the sign-in link the list itself gave is used, so the spinner can't go on for ever. Tested with unit tests (the single request, the slow-JumpCloud fallback) and end-to-end against a stand-in that takes 1.5 s to answer (53 checks: the tile spins, only that tile, gone once the panel closes).
 
-- **Connecting to Atlassian**: Each person connects Desktop Assist to Jira and Confluence once,
+- **Connecting to Atlassian**: Each person connects Desktop Wizard to Jira and Confluence once,
   in the browser (**Connect to Atlassian**), through Atlassian's Remote MCP server
   (`mcp.atlassian.com`); the sign-in goes through JumpCloud, so it's usually one Accept click. It's
   the same kind of connection as the Apps list's (client registration, PKCE, no secret, refresh
@@ -442,7 +453,8 @@ tab, as asked). IT's setup guide: [ATLASSIAN_SETUP.md](ATLASSIAN_SETUP.md).
   only the work areas (screens minus taskbars) counted, so that taskbar was a wall. Now a taskbar
   between two monitors can be crossed (only along the stretch where the other monitor lies
   beyond it). Checked live on that desk: the bubble went up onto the ultrawide, stayed on screen
-  throughout, and a click brought it back to its corner on the laptop.
+  throughout, and a click brought it back to its corner on the laptop. (On the `character` branch
+  Bounce has since been removed, replaced by her spells; §7i.)
 
   These three are tested with unit tests (271 in all now: going back through the screenshots one
   click at a time, crossing between monitors, over a taskbar between stacked monitors, the walls
@@ -450,7 +462,7 @@ tab, as asked). IT's setup guide: [ATLASSIAN_SETUP.md](ATLASSIAN_SETUP.md).
   mid-bounce) and end-to-end (attaching twice, the placeholder, and Bounce onto the other monitor
   and home again on the real screens: 10 checks).
 
-- **The bubble could start behind other windows**: If Desktop Assist started while a full-screen
+- **The bubble could start behind other windows**: If Desktop Wizard started while a full-screen
   window was open (at sign-in, Windows can start it after other apps), the bubble sat behind the
   user's windows until they were minimised and restored. Electron's default always-on-top level
   tucks a window just behind the taskbar, and while a full-screen app is in front the taskbar isn't
@@ -460,7 +472,7 @@ tab, as asked). IT's setup guide: [ATLASSIAN_SETUP.md](ATLASSIAN_SETUP.md).
   that they still are. Checked the same way: both on top, and back on top within five seconds when
   something took it away. The bubble now also shows over full-screen apps.
 
-Found along the way: Atlassian's Rovo search (`search`) uses Rovo credits, so Desktop Assist only
+Found along the way: Atlassian's Rovo search (`search`) uses Rovo credits, so Desktop Wizard only
 uses the Jira (JQL) and Confluence (CQL) searches; Jira can find mentions of the user with
 `comment ~ currentUser()`, and the comments themselves (in Jira's own format) say whose account was
 mentioned and by whom; the IT portal is portal 1 of project ISD. Tested with unit tests (259, the
@@ -472,11 +484,11 @@ still pass, without contacting the real Atlassian.
 
 ### Jira and Atlassian: ideas
 
-Staff sign in to Atlassian (morsemicro.atlassian.net) through JumpCloud. Atlassian's remote MCP server (`mcp.atlassian.com`) offers the same kind of per-person connection as JumpCloud's apps server: dynamic client registration, PKCE, a public client with no secret, and refresh tokens. So Desktop Assist could connect each person to Jira and Confluence once, in the browser, where JumpCloud's single sign-on usually makes it an approve click, reusing the Apps list's connection code. An Atlassian admin may need to allow it for the site.
+Staff sign in to Atlassian (morsemicro.atlassian.net) through JumpCloud. Atlassian's remote MCP server (`mcp.atlassian.com`) offers the same kind of per-person connection as JumpCloud's apps server: dynamic client registration, PKCE, a public client with no secret, and refresh tokens. So Desktop Wizard could connect each person to Jira and Confluence once, in the browser, where JumpCloud's single sign-on usually makes it an approve click, reusing the Apps list's connection code. An Atlassian admin may need to allow it for the site.
 
 Quick wins, no connection needed:
 
-1. **Report a problem to IT**: the service desk button (or a new one) opens the request form with the problem typed in the bubble, the screenshot copied for Ctrl+V, and the PC's details (Windows version, Desktop Assist version, PC name) added. Whether Jira Service Management can fill the form's fields from a link needs checking; if not, the details go on the clipboard.
+1. **Report a problem to IT**: the service desk button (or a new one) opens the request form with the problem typed in the bubble, the screenshot copied for Ctrl+V, and the PC's details (Windows version, Desktop Wizard version, PC name) added. Whether Jira Service Management can fill the form's fields from a link needs checking; if not, the details go on the clipboard.
 2. **Open a ticket by its key**: typing a key such as `HW-1234` in the text box offers **Open in Jira**.
 3. **Ask Claude about a ticket**: quick prompts such as "Summarise HW-1234" or "Draft a reply to HW-1234", handed to Claude Desktop, whose own Atlassian connector (if the organisation turns it on) reads the ticket.
 4. **Search Jira and Confluence** from the bubble, opening Atlassian's search page with the words.
@@ -506,7 +518,7 @@ if it was covered or cloaked), checks again, and logs what it found and whether 
 is well, it logs nothing. Checked for real by covering the screen with another always-on-top window
 just after starting: the 5 s check found the bubble "behind electron", brought it back in front, and
 the screen showed the bubble. The next sign-in where it happens will say in the log
-(`%APPDATA%\Desktop Assist\logs\desktop-assist.log`, "Bubble check …") what had covered it.
+(`%APPDATA%\Desktop Wizard\logs\desktop-wizard.log`, "Bubble check …") what had covered it.
 Unit tests: 280 (296 with the updater below).
 
 ### 5.2 also: Check for updates, and version 1.0.0
@@ -540,7 +552,7 @@ led to four changes:
 - **No debugging in an installed copy**: started with `--remote-debugging-port`,
   `--remote-debugging-pipe` or Node's inspector switches, it logs why and exits before any window
   or connection exists (`src/main/debugging.ts`). Together with the fuses, another program on the
-  PC can't use Desktop Assist to run its own code or drive its pages (and through them Jira).
+  PC can't use Desktop Wizard to run its own code or drive its pages (and through them Jira).
 - **Signed updates**: Check for updates only installs an installer signed with the release key
   (Ed25519). The key's private half is a file on the PC that builds releases, never on GitHub;
   `tenant.json` has the public half (`updates.publicKey`, required). The signature covers the
@@ -562,6 +574,202 @@ and `--inspect`, with nothing ever listening on the port; `ELECTRON_RUN_AS_NODE`
 code doesn't run; and a copy with one letter of its code changed in `app.asar` stops with "ASAR
 Integrity Violation".
 
+## 7i. On trial: the bubble as an animated character (branch `character`)
+
+The logo bubble becomes a small character standing on the taskbar: **anime-style pixel art**, an
+original design drawn in code (no image files): an elf mage about five heads tall, with long
+pointed ears, long silver-white hair down her back (a fringe in clumps, side locks and a shine
+band), amber eyes, a wide-brimmed crooked hat with a silver band, and a long flared
+robe in the tenant's accent colour with bell sleeves, silver trim, a sash and a teal gem brooch,
+over dark stockings and boots. She's about 88 pixels tall with her hat on a 96 × 96 grid, with 8
+rows more above it so her hat isn't cut off when she rises off the taskbar, one pixel a DIP at her
+usual size, in a window 96 DIP wide and 104 tall (the bubble's box is now 80 DIP, so the panel's
+layout moved out a little to match).
+
+She's drawn by a small **pixel rig** (`src/renderer/src/character/`): her body parts are shapes
+(polygons, ellipses and tapered lines) posed by joint angles, drawn straight onto the pixel grid
+with no smoothing, then cel-shaded (the side away from the light in shade, the edge toward it lit)
+and outlined, each part in a dark shade of its own colour. So she doesn't look flat, her hair,
+face, robe, hat, stockings and boots also have a broad two-tone shadow across the side away from
+the light, things cast a pixel of shadow on what's just below them (her hat's brim on her hair, her
+fringe on her forehead, the sash and sleeves on her robe, the hem on her stockings and boots), her
+skirt falls in folds, and from the front her nose casts a pixel of shade. Her face (eyes, blush,
+mouth) is hand-placed pixels. Seen diagonally she's one hand-drawn picture, and side on her face is
+a hand-drawn anime profile: a small nose a pixel out, a soft round chin, and her jaw curving back
+to her ear, with her fringe clear of her eye and the rest of her hair behind (both in
+`pictures.ts`), so nothing overlaps wrongly. Side on her eye is a round iris with a glint, as from
+the front, a pixel higher, level with the bridge of her nose. Her clothes are
+patterned, the same from every side: a gold buckle, moon and stars and silver stitching on her
+hat; gold diamonds above the robe's hem, silver stars, gold buttons, a gold sash buckle and gold
+lines above the cuffs; cuffs, laces and buckled straps on her boots. Her long hair hangs down to
+the small of her back, its ends in clumps of different lengths: side on, it falls from the back of
+her head as one mass, a couple of darker strands running up from the gaps between its ends; from
+the front, below her locks it's behind her, and no hair covers her face or the front of her robe or
+peeks out beside her sleeves. Animations are key poses with eased in-between frames, one about
+every 40 ms (25 a second), so movement is smooth.
+The style follows research into anime pixel art and anime-style game sprites: big eyes with a
+thick upper lid and a glint in the same corner of both; hair as clumps with a shine; colour ramps
+of three or four shades per material, cooler in shadow and warmer in the light; selective
+outlining; taller proportions, a three-quarter view, and hair and robe that trail and settle.
+Other artwork can replace the rig, keyed by the same poses. (Earlier versions, a blank SVG stick
+figure animated in CSS, a hand-typed 36-pixel sprite and a girl in a hoodie, were replaced before
+this was merged.)
+
+- **Poses** (decided by the main process, played frame by frame by the bubble's page):
+  - **Idle**, from the front: 32 frames of breathing (a pixel lower on the out-breath), her hair
+    stirring, a blink every couple of seconds.
+  - **Walk left / walk right**, side on: twelve frames, two steps; each leg swings forward with its
+    knee bent and pushes back, the arms swing against the legs, her body rises as her legs pass and
+    her hair trails behind, while the window moves along the taskbar (80 DIP a second).
+  - **Twenty habits** (fidgets), only once she's been left alone for 30 s, chosen at random, never
+    the same twice in a row: **hop** (crouch, spring, float with her legs tucked, land with a
+    bounce; 1.2 s), **wave** (diagonal, forearm upright swinging to and fro, smiling; 2 s),
+    **stretch** (arms up, a yawn, a lean each way; 2.4 s), **sip** (diagonal, her teacup up to
+    her mouth and a contented smile; 3.2 s), **vision** (from the front, a soft light shines down
+    from the top of the screen and the company's logo comes down it to hover, glowing, over her
+    head; she looks up in wonder, smiles and opens her arms as it arrives, and watches it rise away
+    as the light fades; it hovers for about five seconds, 8.6 s in all; rare, about a fifth as
+    likely as any other habit; the light and the logo are drawn in a click-through window of their
+    own above her, in time with her from a shared timetable), **curtsy** (from the front, her robe
+    held out at the sides, a dip with her head tilted, smiling; 2.2 s), **orb** (from the front,
+    she gazes down into a crystal ball held in both hands as a wisp of light turns inside and
+    sparkles circle it, then smiles at what she sees; 4.4 s), **read** (diagonal, her spellbook open, head down,
+    turning pages, a smile at something; 4 s), **spell** (diagonal, her hand raised, sparkles
+    circling it; 2.4 s), **levitate** (eyes shut, she floats up over a glowing magic circle,
+    hovers, bobbing and smiling, as its runes turn and sparks rise, then settles; 3.6 s), **sit**
+    (down on the taskbar, her robe spread round her, swaying, looking
+    about, then up; 6 s), **twirl** (three spins on the spot through every view and its mirror,
+    arms out, her robe flaring wider, then she lands smiling as it settles; 2.2 s), **butterfly**
+    (from the front, she holds up a finger and a little magic butterfly flutters down to it, rests
+    there opening and shutting its wings while she smiles at it, and flies off; 4.8 s), **doze**
+    (from the front, she nods off where she stands with z's floating up from above her hat, wakes
+    with a start, hair flying, looks one way and the other, and blinks; 5.6 s), **look** (her
+    eyes, then her head, turning one way, then the other; 2.4 s), **juggle** (from the front,
+    three little glowing orbs, teal, gold and pink, thrown up in a high arc from one hand to the
+    other and passed quickly back underneath, each hand dipping as it throws, then caught, and a
+    smile; 4.4 s), **bubbles** (diagonal, she blows magic bubbles through a little wand ring held
+    up in front of her mouth, puffing before each; they drift up, wobble and pop in a twinkle;
+    4.4 s), **wisp** (from the front, a will-o'-wisp appears beside her, goes round her twice,
+    behind her and in front, her eyes following it, then flies off and she waves it goodbye;
+    4.8 s), **sneeze** ("ah... ah... choo!", her head going back, then forward with her hair
+    flying, and the sneeze bursts into a fan of sparkles that twinkle and fade; a sheepish smile;
+    3 s) and **dance** (a little jig: a step to one side with that arm up and the other hand on her
+    hip, then a hop kicking the other foot out, seven beats from side to side; 3.2 s). Desktop
+    mascots and games' idle animations were the model: breathing as the base, varied fidgets at
+    random intervals. Each habit's frames add up to exactly the time the main process waits.
+  - **Dragged**, from the front: held up by her collar, off the ground, mouth open, arms up, legs
+    kicking, swaying, hair lifted, with no shadow under her (she's in the air). Also while she falls
+    after a drop.
+  - **Her spells' poses**, only when a spell is cast (or the app starts or closes): **chant**
+    (arms raised, eyes shut, lips moving, a magic circle turning under her, sparkles round her hand,
+    her hair and robe lifting; round and round for the explosion's 15 s), **vanish** (a smile, then
+    her eyes close and she dissolves into white motes, the top of her first: each pixel turns white,
+    goes, and some leave a mote that rises, sways and fades to silver; 0.9 s) and **appear** (the
+    same backwards: the motes come down and she forms out of them; 0.9 s).
+- **Which way she faces**: the middle of the screen (left from the right-hand corner); walking,
+  the way she walks. Facing left is the mirror image of facing right.
+- **Where it lives**: no longer stuck in a corner, but near one of the bottom corners. It stands on
+  the taskbar (its window's bottom edge on the work area's) and strolls within 240 DIP of its
+  corner (at her usual size; further, and faster, when she's bigger): every 8 to 20 s (5 to 12 s after settling) it walks somewhere else in that stretch, or,
+  once it's been alone 30 s, more often than not does one of her habits instead.
+- **Dragging**: dropped, it falls onto the taskbar of that display with gravity, and from then on
+  lives near that display's nearer bottom corner (the half of the screen it's in). Dropped further
+  than 240 DIP from that corner, it walks back. The corner is remembered as before; a top corner
+  saved by 1.0.0 means the bottom corner below it.
+- **Anything the user does stops it where it is**: clicking it opens the panel from where it
+  stands (the panel still opens toward the middle of the screen); dragging interrupts a walk or a
+  fidget. Nothing happens on its own while the panel is open.
+- **Size**, in Settings (first a menu of its own, behind a size icon): Smaller and Bigger, in steps
+  from half her usual size to six times it (½, ¾, 1, 1.5, 2, 3, 4, 5, 6). She grows or shrinks where
+  she stands, her feet on the taskbar, with the panel's chat card and icons moving out to suit. The
+  size is remembered (`characterScale` in `preferences.json`), but she's never bigger than lets her
+  panel, with all its icons, fit her screen, so Settings can always be reached; on a smaller screen
+  she shrinks to fit, and grows back once there's room. The bigger she is, the further she strolls
+  and the faster she walks. **Light mode** is in Settings too, above Size, in place of its own icon.
+- **Spells** (a wand icon, in place of Bounce, which has been removed): a menu of four spells; the
+  panel closes and she casts the one picked (`castSpell` in `src/main/index.ts`).
+  - **Clones**: ten of her, at her size, walk about the taskbar of her display for thirty seconds,
+    each on its own timetable, stopping now and then and sometimes waving when it does (one stop in
+    five), then fade away, while she does her little spell. They're in one window along the bottom
+    of the screen that never takes the mouse or the focus, so clicks go straight through them;
+    casting it again starts a new lot.
+  - **Starfall**: shooting stars streak down her screen for ten seconds, under twinkling stars.
+  - **Teleport**: she vanishes into white motes, her window moves somewhere else along the taskbar
+    near her corner, and she forms out of them there.
+  - **Explosion**: she chants for fifteen seconds while a pillar of seven magic circles in her
+    colour rises above her, one after another, with a column of light and sparks streaming up it;
+    then it goes off in the middle of the screen: a white flash, a fireball with churning edges that
+    cools from white through yellow, orange and red to smoke as it rises, a shock wave and sparks.
+    Clicking her or picking her up during the chant calls it off.
+  - Starfall and the explosion are pixel art too (their pixels twice the size of hers), drawn on a
+    canvas in a click-through window over her display (`SpellEffects`, `SpellView`); with Windows'
+    reduced-motion setting they show still.
+- **Coming and going**: as the app starts she forms out of white motes, and when it's closed (the
+  Close icon, or Quit in the tray) she dissolves into them, and only then does the app quit.
+- With Windows' reduced-motion setting it still walks, but holds still otherwise (the first frame
+  of each pose).
+- Her shadow on the taskbar turns the accent colour while the panel is open, and she glows softly
+  when the pointer is over her.
+- **The chat card is her speech bubble**: a tail on its side nearest her points at her mouth, at
+  any size, its base kept clear of the card's rounded corners (on a short card at a big size it
+  slants up to her).
+
+Tested with unit tests (where it stands and which corner it belongs to; choosing walks and
+fidgets, walking, falling; the controller with fake timers: standing, strolling both ways,
+fidgeting only after a quiet spell, stopping when clicked with the panel where it stands, nothing
+while open, dangling while dragged, falling where dropped, walking back from far away, another
+display, display changes, habits never repeated back to back; her size: saved and snapped, growing
+where she stands, kept to what fits the screen, walking faster when bigger; the clones' window and
+how they wander and wave; the vision's window and timetable; casting spells and the teleport;
+closing, ignoring clicks while she vanishes; the spells' window, and the explosion called off only
+during its chant; where the shooting stars, magic circles and blast are; the size steps in
+Settings; the animations: every pose's frames, feet on the ground except at the top of the
+hop and while carried (with no shadow while carried), the dozer's z's the right way round facing
+left, each habit's and spell pose's length matching the main process, vanishing to nothing and
+appearing whole, mirroring, the rig's three
+views and face, looking up for the vision, the newer habits' crystal ball, butterfly, z's and
+flared robe, the newest habits' orbs, bubbles, wisp (hidden behind her) and sneeze sparkles only
+when asked, her long hair side on as one mass ending in clumps, the rasteriser's shading, form
+shadows and outlines,
+the shadows things cast) and
+the real app: she stood on the taskbar, walked, sat down and later glanced
+about on her own, with no errors; contact sheets of every frame drawn with the real CSS.
+
+### Spells, and Light mode and Size in Settings
+
+Later on the `character` branch: the Clones icon became the **Spells** menu (a wand), with Clones
+joined by Starfall, Teleport and Explosion (above). To keep the stack short, the light or dark
+mode icon and the Size icon went into **Settings**, as its first two rows (a Light mode switch,
+and Size with − and +), leaving Morse Micro seven icons: Ask Claude, Jira, IT service desk,
+Screenshot, Settings, Spells and Close. And she now **forms out of white motes** as the app
+starts and **dissolves into them** when it's closed (Close, or Quit in the tray), the same
+`appear` and `vanish` her teleport uses.
+
+### The new name: Desktop Wizard
+
+Also on the `character` branch, for version 2.0.0, the app is renamed from Desktop Assist to
+Desktop Wizard: the installer's product name, and so the `.exe`, the uninstaller, the shortcuts, the
+installer file (`Desktop Wizard-Setup-2.0.0.exe`), the data folder (`%APPDATA%\Desktop Wizard`),
+the log (`desktop-wizard.log`), the screenshots folder (`Pictures\Desktop Wizard`, from the
+tenant's `appName`) and every mention in the app and the docs.
+
+- **Updating from 1.0.0 keeps everything** (`src/main/formerName.ts`): the first start renames
+  `%APPDATA%\Desktop Assist` to the new name (or, if it can't, keeps using the old folder), so the
+  preferences, the text box and the sign-ins carry on; and if Windows still starts
+  `Desktop Assist.exe` at sign-in, "Start with Windows" moves to the new `.exe`. Screenshots taken
+  before stay in `Pictures\Desktop Assist`.
+- **Kept as they were**, because copies of 1.0.0 depend on them: the app ID
+  (`com.morsemicro.desktopassist`), so the new version installs over the old one and the installer
+  renames its shortcuts; the install folder (`desktop-assist`); and the text an update's signature
+  signs (`desktop-assist-update …`), which 1.0.0 checks updates against. The release key's place
+  (`~/.desktop-assist`) and the `DESKTOP_ASSIST_*` environment variables, the package names
+  (`@desktop-assist/…`) and the GitHub repository (`Camby10101/Desktop-Assist`) keep the old name
+  too, since nobody using the app sees them.
+
+Tested with unit tests: the data folder moved the first time and left alone after, the new name on
+a PC that never had the old one, the old folder kept in use when it can't be moved, and "Start with
+Windows" moved only when Windows still starts the old `.exe`.
+
 ## 8. Milestones
 
 - **0** ✅ **Foundation**: Everything in §7 works in `npm run dev` and in the unsigned installer. Unit tests and lint pass.
@@ -574,7 +782,8 @@ Integrity Violation".
 - **5** ✅ **Jira and the service desk**: The app-opening spinner, and Atlassian ideas 1 to 9. See §7h.
 - **5.1** ✅ **The bubble on top after starting**: always-on-top that survives a full-screen app. See §7h.
 - **5.2** ✅ **The bubble kept in front, and Check for updates**: the startup front check; updating from GitHub releases, signed with a release key; the `.exe` locked down; version 1.0.0, the first release. See §7h.
-- 6 (next): To be chosen. Candidates:
+- **6** 🧪 **The character** (on trial, branch `character`): the bubble as an animated character on the taskbar near a bottom corner, in a choice of sizes, with a Spells menu (Clones, Starfall, Teleport, Explosion) in place of Bounce; light or dark mode and her size in Settings; forming out of white motes at start-up and dissolving into them on Close. See §7i.
+- 7 (next): To be chosen. Candidates:
   - Shipping: code signing (no "unrecognised app" warning), silent deployment through JumpCloud (with Claude Desktop), CI on GitHub Actions (tests and the installer on every pull request, and building the release), a "What's new" note after an update
   - Bubble and screenshots: a keyboard shortcut to open the panel and to take a screenshot, snipping a region or a window, pasting an image into the text box, hiding during full-screen apps and presentations, a first-run tour
   - Apps and JumpCloud: recently opened apps near the top, arrow keys in the grid, company quick links that aren't JumpCloud apps, a password-expiry reminder
@@ -598,8 +807,8 @@ Step-by-step instructions are in [CLAUDE_DESKTOP_SETUP.md](CLAUDE_DESKTOP_SETUP.
 - **JumpCloud admin (built-in chat only):** a Custom OIDC app. Client authentication
   **Public (None PKCE)**; grant types Authorization Code + Refresh Token; redirect URI
   `http://127.0.0.1:47621/callback`; scopes `openid email profile offline_access`; assigned to the
-  user groups who should have Desktop Assist. It gives the **client ID**.
-- **Claude Console admin (built-in chat only):** a workspace for Desktop Assist, a
+  user groups who should have Desktop Wizard. It gives the **client ID**.
+- **Claude Console admin (built-in chat only):** a workspace for Desktop Wizard, a
   service account with access to it, the JumpCloud issuer, and a federation rule for it. They
   give the **organization, federation rule and service account IDs**.
 - **Code-signing certificate (M4)** (e.g. Azure Trusted Signing). Unsigned installers trigger
@@ -610,10 +819,11 @@ Step-by-step instructions are in [CLAUDE_DESKTOP_SETUP.md](CLAUDE_DESKTOP_SETUP.
 **Made**
 
 - Attach latest → thumbnail chip
-- Screenshots → `Pictures\Desktop Assist`, kept forever
+- Screenshots → `Pictures\Desktop Wizard`, kept forever
 - Capture → the screen the bubble is on
 - Settings (M0) → Start with Windows, Open screenshots folder, Clear text box
-- Bounce → glides back to the corner when stopped
+- Bounce → glides back to the corner when stopped (removed on the `character` branch, replaced by
+  Clones, now one of her spells)
 - Close → quits immediately
 - M1 credentials → the user's own API key (replaced in M3)
 - M3 credentials → JumpCloud sign-in, with Claude reached through Workload Identity Federation
@@ -624,19 +834,21 @@ Step-by-step instructions are in [CLAUDE_DESKTOP_SETUP.md](CLAUDE_DESKTOP_SETUP.
 - 3.1 usage limits → questions open in Claude Desktop, using each person's own claude.ai account
   and limit (§7e). The built-in chat stays as a tenant option (`chatApp`)
 - 3.1 screenshots → copied to the clipboard; several stacked into one image
-- 3.1 sending → Desktop Assist sends the question (and pastes screenshots) in Claude for the user,
+- 3.1 sending → Desktop Wizard sends the question (and pastes screenshots) in Claude for the user,
   on by default, guarded by checking Claude's focused text box holds exactly the question (3.2)
 - 3.2 apps → the user's JumpCloud User Portal apps, from JumpCloud's MCP Server for Users, each
   user connecting once in the browser; no secret in the app
 - 3.2 uninstall → from Settings, through the installer's own uninstaller; user data kept
 - M5 Atlassian → each person connects once through Atlassian's Remote MCP server (no secret in the
   app), sharing the Apps list's connection code; Rovo search left out (it costs Rovo credits)
-- M5 notifications → worked out in Desktop Assist from Jira (assignee changes by someone else,
+- M5 notifications → worked out in Desktop Wizard from Jira (assignee changes by someone else,
   mentions of the user), checked every five minutes; Windows notifications only for IT requests
 - M5 new requests → filled in on the panel, finished and sent on the portal (the request type's
   own form), not created through Jira
 - 5.2 updates → releases of the public GitHub repository, each installer signed with a release key
   whose private half stays off GitHub, so the GitHub account alone can't push an update
+- 2.0.0 name → Desktop Wizard (Desktop Assist up to 1.0.0); the app ID, the install folder and the
+  update signature text keep the old name, so the update installs over 1.0.0 and keeps its data
 
 **Open**
 

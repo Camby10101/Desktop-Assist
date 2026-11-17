@@ -1,4 +1,4 @@
-# Desktop Assist: Code Guide
+# Desktop Wizard: Code Guide
 
 A walk through the whole project: what every file is for, and the actual code of every function
 and method with an explanation of what it does and why. Covers Milestones 0 (Foundation), 1
@@ -6,7 +6,19 @@ and method with an explanation of what it does and why. Covers Milestones 0 (Fou
 to Claude Desktop) and 3.2 (the Apps list, Uninstall in Settings, and fixes), and Milestone 4
 (app logos fixed, favourite apps, the IT service desk icon, light or dark mode, and a fix for
 clicks on the bubble), and Milestone 5 so far (a spinner while an app opens, Jira and the IT
-service desk in the panel, and Check for updates, from version 1.0.0, the first release).
+service desk in the panel, and Check for updates, from version 1.0.0, the first release), and, on
+trial on the `character` branch, the bubble as an animated character standing on the taskbar, who
+comes in several sizes, casts four spells from a Spells menu (ten clones of herself, a starfall, a
+teleport and an explosion), and forms out of white motes as the app starts and dissolves into them
+when it's closed.
+
+Desktop Wizard was called Desktop Assist up to version 1.0.0. A copy updated from then keeps its
+settings and sign-ins: `src/main/formerName.ts` moves its data across on its first start. A few
+names that copies of 1.0.0 depend on keep the old name: the app ID
+(`com.morsemicro.desktopassist`), the install folder (`desktop-assist`), the text update signatures
+sign (`desktop-assist-update …`), the release key's place and the `DESKTOP_ASSIST_*` environment
+variables, the npm package names (`@desktop-assist/…`) and the GitHub repository
+(`Camby10101/Desktop-Assist`).
 
 This page is the overview. The code itself is in the [code walkthrough](#6-code-walkthrough),
 one page per area of the app.
@@ -45,8 +57,12 @@ streaming Claude reply. Every channel is listed in `src/shared/ipc.ts`.
 
 **Why two windows?** The bubble and the panel are separate, transparent, always-on-top windows.
 Both load the same web page; the URL's `?view=bubble` or `?view=panel` decides which UI it
-shows. Keeping the bubble in its own tiny window means it never resizes (no flicker when the
-panel opens), and only a 72×72 window moves around during Bounce.
+shows. Keeping the bubble in its own tiny window means it never resizes when the panel opens (no
+flicker), and only a small window (96×104 at the character's usual size) moves around during a drag
+or a walk. (The bubble is now a small animated character standing on the taskbar, but the code
+still calls it the bubble.) Three more kinds of window come and go: `?view=clones`, for thirty
+seconds when her Clones spell is cast, `?view=vision`, for the few seconds of one of the
+character's habits, and `?view=spell`, for her Starfall and Explosion spells.
 
 **Click-through.** The panel window is a large rectangle, but most of it is transparent. So
 that you can still click whatever is underneath those empty areas, the panel window starts out
@@ -61,7 +77,7 @@ to the window behind it.
 **Claude Desktop** (Morse Micro, since 3.1), the panel is just a text box: asking opens a new chat
 in the Claude Desktop app with the question typed in, in the person's own Claude account, so it
 counts against their own usage limit, and (unless the user turns it off) presses Enter there to send
-it. Desktop Assist then has no sign-in and doesn't call Claude itself. With the **built-in chat**,
+it. Desktop Wizard then has no sign-in and doesn't call Claude itself. With the **built-in chat**,
 the conversation happens in the panel, as described next.
 
 **The built-in chat: where Claude is called, and how you're signed in.** Only the main process
@@ -93,7 +109,9 @@ is in `src/main/mcp/`).
 
 1. Validate `tenant.json`, create the bubble and panel windows (both hidden), load the saved
    draft from disk, and load preferences.
-2. Create the `BubbleController` (the bubble's state machine) and the `ScreenshotService`. Then,
+2. Create the `BubbleController` (the bubble's state machine, with the character at the size
+   saved last time), `Vision`, `SpellEffects` and `Clones` (the windows for her vision and her
+   spells), the `castSpell` function behind the Spells menu, and the `ScreenshotService`. Then,
    depending on the tenant's `chatApp`, either a `ClaudeDesktop` (which hands questions to
    Claude Desktop) or the built-in chat (`startBuiltInChat()`: the Claude backend, the
    `ChatSession` and the `AuthManager`). With a `portal`, also `PortalApps` (the Apps list), which
@@ -104,7 +122,7 @@ is in `src/main/mcp/`).
 3. With the built-in chat, **renew the saved sign-in** (`auth.init()`): if there isn't one, or
    JumpCloud refuses it, the chat box shows **Sign in with JumpCloud** instead of the chat. If
    JumpCloud can't be reached, the sign-in is kept and a banner offers Retry.
-4. Once both pages have painted, `controller.start()` shows the bubble in its saved corner (bottom-right of the main display the first time).
+4. Once both pages have painted, `controller.start()` stands the character on the taskbar in its saved corner (bottom-right of the main display the first time), shows it, and starts the wait for the first thing it does on its own. The bubble's page shows her forming out of white motes as it starts (her `appear` pose, `BubbleView`).
 
 **Asking in Claude Desktop** (when the tenant's `chatApp` is `claude-desktop`)
 
@@ -181,9 +199,9 @@ them.
 
 **Uninstall**
 
-Settings → **Uninstall Desktop Assist** (click twice) → IPC `assist:app-uninstall` →
+Settings → **Uninstall Desktop Wizard** (click twice) → IPC `assist:app-uninstall` →
 `uninstall()` in `src/main/uninstall.ts` turns off Start with Windows, starts the installer's
-"Uninstall Desktop Assist.exe" and quits. The data folder and screenshots are kept.
+"Uninstall Desktop Wizard.exe" and quits. The data folder and screenshots are kept.
 
 **Check for updates** (when the tenant has `updates`)
 
@@ -193,7 +211,7 @@ Settings → **Uninstall Desktop Assist** (click twice) → IPC `assist:app-unin
 2. `Updater` asks GitHub's API for the tenant's repository's latest release. With no release, or
    none newer than this copy (`app.getVersion()`), the row says it's up to date.
 3. Otherwise it downloads the installer attached to the release (from the repository's own
-   releases only) into `%TEMP%\Desktop Assist update`, showing the percentage, and checks its size
+   releases only) into `%TEMP%\Desktop Wizard update`, showing the percentage, and checks its size
    and SHA-256 against GitHub's, and its signature (the release's `.sig`) against the release
    key's public half in `tenant.json`; a file that doesn't match, or isn't signed, is deleted and
    never run.
@@ -201,6 +219,10 @@ Settings → **Uninstall Desktop Assist** (click twice) → IPC `assist:app-unin
    start the app again after), shows a Windows notification ("Updating to …") and quits. The
    installer waits for the app to close, replaces it and starts the new version; the user's data
    is kept. A development run stops after downloading.
+5. Updated from Desktop Assist (1.0.0, before the app was renamed), the new version's first start
+   renames `%APPDATA%\Desktop Assist` to `%APPDATA%\Desktop Wizard` (`adoptFormerData()` in
+   `src/main/formerName.ts`), and `SettingsService.init()` moves "Start with Windows" from the old
+   `.exe` to the new one (`adoptFormerLoginItem()`).
 
 The rest of this section, up to **Typing in the text box**, is the built-in chat.
 
@@ -270,35 +292,96 @@ the page shows a "Screenshot saved" toast. **Attach screenshot** then adds it to
 draft as a chip, and it's sent with your next message (with Claude Desktop, put on the
 clipboard and pasted into Claude).
 
-**Bounce**
+**Size**
 
-Bounce icon → `BubbleController.startBounce()` hides the panel and runs a 60 fps timer that
-calls `bounce.step()` and moves the bubble window across all the monitors. Clicking the bubble calls `glideHome()`,
-which animates it back to its corner of its own display with `bounce.glidePosition()`.
+1. Settings (the gear) → **Size**, near the top of the settings menu (`SizeControl`), with Smaller
+   and Bigger buttons. Each goes one step through `CHARACTER_SIZES` in `src/shared/geometry.ts`
+   (from half her usual size to six times it), and no bigger than fits her screen (`nextSize()` in
+   `lib/sizes.ts`).
+2. A button → `window.assist.character.setSize()` → IPC `assist:character-set-size` →
+   `BubbleController.setScale()`, then `SettingsService.setCharacterScale()` saves it
+   (`characterScale` in `preferences.json`).
+3. The controller keeps her to the biggest size at which her panel, with all its icons, still fits
+   her display (`largestSize()`). She grows or shrinks where she stands, her feet on the taskbar,
+   and both windows are resized to match (`bubbleMetrics()` and `panelLayout()` give everything's
+   size and place at a size).
+4. The new size is broadcast (`assist:size-changed`): the bubble's page draws her at it, and the
+   panel moves the chat card and the icons out to suit. A smaller screen (or dropping her on one)
+   shrinks her the same way, and she grows back to the size chosen once there's room again.
+
+**Spells**
+
+1. The wand icon → `Panel.runAction('spells')` opens the spells menu (`SpellsMenu`) beside it, with
+   her four spells (`SPELLS` in `src/shared/spells.ts`). Picking one closes the menu →
+   `window.assist.character.castSpell()` → IPC `assist:character-cast-spell` → `castSpell` in
+   `src/main/index.ts`, which closes the panel, so the spell can be seen, and casts it:
+   - **Clones**: `Clones.start()` with where she stands (`BubbleController.standing`), while she
+     does her little `spell` fidget (`BubbleController.act()`). `Clones`
+     (`src/main/bubble/clones.ts`) opens one see-through window along the bottom of her display
+     (`cloneStrip()`), which never takes the mouse or the focus, with where she stands, her size,
+     the accent colour and when they end in its address (`?view=clones&…`). That window's page,
+     `ClonesView`, draws ten of her at her size and moves them itself, each wandering up and down
+     the taskbar and stopping now and then, sometimes to wave (`lib/clones.ts`). They fade in, and
+     out just before `Clones` closes the window thirty seconds later. Casting it again before then
+     starts a new lot.
+   - **Starfall**: `SpellEffects.start('starfall')` (`src/main/bubble/spellEffects.ts`) opens a
+     see-through window over her display's work area (`?view=spell&…`), and she does her `spell`
+     fidget. Its page, `SpellView`, draws shooting stars streaking down the screen for ten seconds,
+     as pixel art on a canvas (`lib/spellArt.ts`, from `lib/spellMotion.ts`).
+   - **Teleport**: `BubbleController.teleport()`: she dissolves into white motes (`vanish`), her
+     window moves somewhere else along the taskbar near her corner (`wander.walkTarget()`), and she
+     forms out of the motes there (`appear`).
+   - **Explosion**: `BubbleController.act('chant')`: she chants for fifteen seconds. When her pose
+     becomes `chant`, `index.ts` opens the spell's window (`SpellEffects.start('explosion')`), where
+     a pillar of magic circles rises above her, one after another, with a column of light and
+     sparks; then the explosion goes off in the middle of the screen (a flash, a fireball, a shock
+     wave and sparks). If someone clicks her or picks her up before the chant is done, it stops and
+     so does the explosion (`SpellEffects.chanting`).
+2. Anything the user does (a click, a drag) stops a spell's pose as it stops a fidget, and each
+   effects window closes itself when its spell is over (`SPELL_EFFECT_MS`).
+
+**Closing**
+
+The Close icon → `Panel.runAction('close')` → IPC `assist:invoke-action` → the `close` handler in
+`src/main/actions.ts`, or the tray's **Quit** → `BubbleController.farewell()`: the panel closes,
+and she dissolves into white motes where she stands (her `vanish` pose: each pixel turns white,
+goes, and a share of them rise as motes and fade to silver; `FADE` in `character/rig.ts`). Clicks
+and drags are ignored meanwhile. When she's gone, 0.9 seconds later, the app quits, through the
+`before-quit` handler, which saves the draft.
 
 **Light or dark mode**
 
-Sun or moon icon → `Panel.runAction('theme')` → `window.assist.settings.setTheme()` → IPC
+Settings (the gear) → **Light mode**, at the top of the settings menu →
+`Panel.toggleTheme()` → `window.assist.settings.setTheme()` → IPC
 `assist:settings-set-theme` → `SettingsService.setTheme()` sets Electron's
 `nativeTheme.themeSource`, which every page sees as `prefers-color-scheme`, so both windows switch
-at once, and saves the choice. Desktop Assist is dark until the user switches, whatever Windows
+at once, and saves the choice. Desktop Wizard is dark until the user switches, whatever Windows
 uses; `SettingsService.init()` applies the saved mode before any window shows.
 
 **Clicking the bubble**
 
 `BubbleView` notes when the mouse button goes down, and on the click calls
 `window.assist.bubbleClick(pressedAt)` → IPC `assist:bubble-click` →
-`BubbleController.clickBubble(pressedAt)`. Collapsed, it opens the panel; open, it closes it.
+`BubbleController.clickBubble(pressedAt)`. Collapsed, it opens the panel; open, it closes it. A
+character that's walking stops where it is, and the panel opens beside it there.
 Both windows can take the keyboard focus (a bubble that couldn't sometimes lost its mouse presses
 on Windows), so pressing the bubble while the panel is open closes the panel as the button goes
 down; the press time tells the controller that this click's job is done, and it doesn't reopen.
 
+**The character on its own** (see [The bubble](5-bubble.md))
+
+1. While the panel is closed, `BubbleController.scheduleActivity()` waits 8 to 20 seconds (5 to 12 the first time), then `doActivity()` asks `wander.nextActivity()` what to do.
+2. Usually it's a walk: `walkTo()` moves the bubble window along the taskbar a frame at a time, to somewhere else within 240 DIPs of its corner (`wander.walkTarget()`; further, and faster, when she's bigger), with the pose `walk-left` or `walk-right`. Once nobody has done anything with the character for 30 seconds, it's more often than not a fidget instead (a hop, a wave, a stretch, a sip of tea, a vision (rarely), a curtsy, gazing into a crystal ball, reading her spellbook, a little spell, levitating over a magic circle, a sit on the taskbar, a twirl, a butterfly landing on her finger, a doze, a glance about, juggling three glowing orbs, blowing magic bubbles, a will-o'-wisp going round her, a sneeze that bursts into sparkles or a little dance, never the same one twice in a row), which lasts as long as `FIDGET_MS` in `src/shared/character.ts` says.
+3. Each change of pose is broadcast (`assist:pose-changed`), and `Character` in the bubble's page plays the matching frames of pixel art, facing the middle of the screen (drawn by the rig in `character/rig.ts`, animated by `character/sprite.ts`).
+4. For the vision, `index.ts` also opens a window above her, from the top of the screen down to her feet (`Vision` in `src/main/bubble/vision.ts`, `?view=vision`), where `VisionView` draws a light falling on her and the company's logo coming down it to hover over her head and rising away, while she looks up at it. Both follow the timetable in `VISION` (`src/shared/character.ts`). Any other pose closes that window, and it closes itself when the habit's time is up.
+5. Any change of mode (a click, a drag, a screenshot, the panel closing) stops whatever the character was doing on its own, where it is, and starts the 30 seconds again.
+
 **Dragging the bubble**
 
-1. `BubbleView` sees the mouse pressed on the bubble and moved more than 5 pixels → `window.assist.bubbleDragStart()` → `BubbleController.startDrag()`.
-2. The controller notes where the bubble was grabbed and, 60 times a second, moves the bubble window to follow the mouse pointer (it reads the real pointer from the main process, which keeps it smooth across monitors with different scaling).
-3. On release → `bubbleDragEnd()` → `endDrag()`: the display under the bubble is found, then the nearest of its four corners (`nearestCorner()`), and the bubble glides there.
-4. The new anchor (display + corner) is saved to `preferences.json` and broadcast to the panel, which re-lays itself out to open toward the middle of the screen: in a left corner the chat opens to the right, in a top corner the icons drop below the bubble and the chat grows downward.
+1. `BubbleView` sees the mouse pressed on the character and moved more than 5 pixels → `window.assist.bubbleDragStart()` → `BubbleController.startDrag()`. The change of mode stops anything the character was doing on its own, and its pose becomes `dragged`, so it dangles.
+2. The controller notes where the character was grabbed and, 60 times a second, moves the bubble window to follow the mouse pointer (it reads the real pointer from the main process, which keeps it smooth across monitors with different scaling).
+3. On release → `bubbleDragEnd()` → `endDrag()`: the display under the character is found, then the bottom corner on the side of it the character is on (`nearestCorner()`), and how far along the taskbar from that corner it was let go (`insetAt()`). If that display is too small for her size, she shrinks to fit (`fitScale()`). It falls straight down onto the taskbar, speeding up as it goes (`fall()`, with `wander.fallPosition()`). If it lands further from the corner than its zone (240 DIPs at her usual size), it then walks back.
+4. The new anchor (display + corner) is saved to `preferences.json` and broadcast to the panel, which re-lays itself out to open toward the middle of the screen: near the bottom-left corner the chat opens to the right of the character instead of the left. The panel opens from wherever the character stands. The character, told too, turns to face the middle of the screen.
 
 ---
 
@@ -331,8 +414,8 @@ A _tenant_ is one business's branding. The build includes exactly one, chosen by
 environment variable (default `morse-micro`). This is what makes the app easy to re-brand later.
 
 - `tenants/README.md`: How tenants work, and how to change the logo.
-- `tenants/morse-micro/tenant.json`: `id` (must match the folder name), `companyName`, `appName` (also the name of the screenshots folder), `accentColor` (the highlight colour), `actions` (which icons appear above the bubble, from the bubble upward: for Morse Micro Ask Claude, Jira, the IT service desk, screenshot, light or dark mode, settings, bounce and close), `chatApp` (where questions go: `claude-desktop`, as for Morse Micro, or `built-in`, the default), `startPage` (what the panel opens on: `ask`, the text box, by default, or `apps`, the Apps list, as for Morse Micro, whose `actions` then include `ask` to reach the text box), `portal` for the Apps list (the portal's name, its address, JumpCloud's apps server and the sign-in port), `serviceDesk` for the IT service desk icon (its `https` address, and optionally `requests`: the IT portal's number, its Jira project's key and the request types, to raise requests from the panel), `atlassian` for Jira (the site, the sign-in port, the Confluence spaces with IT's how-to articles, and optionally the MCP server, which defaults to Atlassian's), `updates` for Check for updates in Settings (the GitHub repository releases come from, `Camby10101/Desktop-Assist` for Morse Micro, and optionally GitHub's addresses), and for the built-in chat only: optionally `systemPrompt` (extra instructions for Claude), `signIn` (JumpCloud's address, the app's JumpCloud client ID and the sign-in port) and `claudeAccess` (the Claude Console organization, federation rule, service account and optional workspace IDs). The built-in chat needs `signIn` and `claudeAccess`; Claude Desktop needs neither; the Apps list needs `portal`; the service desk icon (`servicedesk` in `actions`) needs `serviceDesk`; the Jira icon (`jira`) needs `atlassian`. None of these are secret. See `docs/CLAUDE_DESKTOP_SETUP.md`, `docs/APPS_SETUP.md`, `docs/ATLASSIAN_SETUP.md` and `docs/JUMPCLOUD_SETUP.md`.
-- `tenants/morse-micro/logo.png`: The logo: the Morse Micro "Mμ" mark cut to a circle (512×512, transparent corners). It's the bubble, the tray icon and the `.exe` icon. A tenant can use `logo.svg` for the bubble instead (if both exist, the PNG wins), but then the tray falls back to a plain circle in the accent colour and the `.exe` gets Electron's default icon.
+- `tenants/morse-micro/tenant.json`: `id` (must match the folder name), `companyName`, `appName` (also the name of the screenshots folder), `accentColor` (the highlight colour), `actions` (which icons appear above the bubble, from the bubble upward: for Morse Micro Ask Claude, Jira, the IT service desk, screenshot, settings (with light or dark mode and her size), spells and close), `chatApp` (where questions go: `claude-desktop`, as for Morse Micro, or `built-in`, the default), `startPage` (what the panel opens on: `ask`, the text box, by default, or `apps`, the Apps list, as for Morse Micro, whose `actions` then include `ask` to reach the text box), `portal` for the Apps list (the portal's name, its address, JumpCloud's apps server and the sign-in port), `serviceDesk` for the IT service desk icon (its `https` address, and optionally `requests`: the IT portal's number, its Jira project's key and the request types, to raise requests from the panel), `atlassian` for Jira (the site, the sign-in port, the Confluence spaces with IT's how-to articles, and optionally the MCP server, which defaults to Atlassian's), `updates` for Check for updates in Settings (the GitHub repository releases come from, `Camby10101/Desktop-Assist` for Morse Micro, and optionally GitHub's addresses), and for the built-in chat only: optionally `systemPrompt` (extra instructions for Claude), `signIn` (JumpCloud's address, the app's JumpCloud client ID and the sign-in port) and `claudeAccess` (the Claude Console organization, federation rule, service account and optional workspace IDs). The built-in chat needs `signIn` and `claudeAccess`; Claude Desktop needs neither; the Apps list needs `portal`; the service desk icon (`servicedesk` in `actions`) needs `serviceDesk`; the Jira icon (`jira`) needs `atlassian`. None of these are secret. See `docs/CLAUDE_DESKTOP_SETUP.md`, `docs/APPS_SETUP.md`, `docs/ATLASSIAN_SETUP.md` and `docs/JUMPCLOUD_SETUP.md`.
+- `tenants/morse-micro/logo.png`: The logo: the Morse Micro "Mμ" mark cut to a circle (512×512, transparent corners). It's the tray icon (and would be the `.exe` icon without `icon.png`); the bubble on screen is now the animated character, not the logo, though the logo comes down to her in her vision habit (`VisionView`, which uses `logo.svg` when there's no `logo.png`). A tenant with only a `logo.svg` gets a plain circle in the accent colour in the tray and Electron's default icon for the `.exe`.
 
 ---
 
@@ -340,9 +423,10 @@ environment variable (default `morse-micro`). This is what makes the app easy to
 
 All in `apps/desktop/`.
 
-- `package.json`: The desktop app's own package. `productName` ("Desktop Assist") becomes the app's name and its `%APPDATA%` folder. `main` points Electron at the built main process. Scripts: `dev`, `build`, `typecheck`, `lint`, `test`, `dist` (build the installer and sign it with the release key). Every library is a `devDependency` because the build bundles them; the installer ships no `node_modules`. `electron` is pinned to an exact version because the installer builder requires it.
+- `package.json`: The desktop app's own package. `productName` ("Desktop Wizard") becomes the app's name and its `%APPDATA%` folder (a copy updated from Desktop Assist has its old folder renamed to it; see `src/main/formerName.ts`). Its `name`, `@desktop-assist/desktop`, keeps the old name, as nothing outside the build sees it. `main` points Electron at the built main process. Scripts: `dev`, `build`, `typecheck`, `lint`, `test`, `dist` (build the installer and sign it with the release key). Every library is a `devDependency` because the build bundles them; the installer ships no `node_modules`. `electron` is pinned to an exact version because the installer builder requires it.
 - `electron.vite.config.ts`: Build config for electron-vite, which compiles the three parts (main, preload, renderer). Defines the import shortcuts `@shared` → `src/shared` and `@tenant` → `tenants/<TENANT>`, turns on React and Tailwind for the renderer, and minifies the renderer.
-- `electron-builder.cjs`: Installer config: app ID, product name, include only the built `out/` folder, use the tenant's `logo.png` as the `.exe` icon, and build a per-user one-click NSIS installer (`Desktop Assist-Setup-<version>.exe`) into `dist/`. It's JavaScript rather than YAML so the icon can follow `TENANT`. `extraMetadata.name` makes the install folder `desktop-assist` (otherwise it would be named after the npm workspace). `electronFuses` sets Electron's built-in switches in the `.exe`: it can't be run as plain Node or with `NODE_OPTIONS` or Node's debugger, it loads only `app.asar` and checks it against a checksum in the `.exe`, and cookies are encrypted on disk.
+- `tenants/morse-micro/icon.png`: The app's icon: the logo wearing the character's hat, a little tilted, drawn from her own pixel art (512×512, transparent around it). electron-builder makes it the `.exe` icon, which Windows also shows for the Start menu shortcut, the installer and the uninstaller.
+- `electron-builder.cjs`: Installer config: app ID, product name, include only the built `out/` folder, use the tenant's `icon.png` (or, without one, its `logo.png`) as the `.exe` icon, and build a per-user one-click NSIS installer (`Desktop Wizard-Setup-<version>.exe`) into `dist/`. It's JavaScript rather than YAML so the icon can follow `TENANT`. The app ID, `com.morsemicro.desktopassist`, is still the one from when the app was called Desktop Assist: Windows knows an install by it, so each new version installs over the old one, and it must not change. `extraMetadata.name` makes the install folder `desktop-assist` (otherwise it would be named after the npm workspace), which also stays as it was. `electronFuses` sets Electron's built-in switches in the `.exe`: it can't be run as plain Node or with `NODE_OPTIONS` or Node's debugger, it loads only `app.asar` and checks it against a checksum in the `.exe`, and cookies are encrypted on disk.
 - `tsconfig.json`: Points TypeScript at the two configs below.
 - `tsconfig.node.json`: TypeScript settings for code that runs in Node: main, preload, shared, tests and config files. Strict mode on.
 - `tsconfig.web.json`: TypeScript settings for the renderer (browser code with React/JSX).
@@ -359,22 +443,25 @@ with notes on the lines that need them. Read them in order the first time; after
 the area you're working on.
 
 1. [Shared code and the preload bridge](1-shared-and-preload.md):
-   `src/shared` (sizes and layout constants, the action list, data types, the IPC contract, chip labels and "how long ago", the Claude Desktop download link, the Apps list's order, Jira issue keys) and `src/preload` (the `window.assist` bridge between the pages and the main process).
+   `src/shared` (sizes and layout constants, the character's sizes and where things sit at each, the character's poses, the timetable of her vision and the numbers for her clones, her spells and their timings, the action list, data types, the IPC contract, chip labels and "how long ago", the Claude Desktop download link, the Apps list's order, Jira issue keys) and `src/preload` (the `window.assist` bridge between the pages and the main process).
 2. [Main process: startup, IPC and app plumbing](2-main-startup.md):
-   `index.ts` (startup and shutdown, and choosing the built-in chat or Claude Desktop), `ipc.ts` (handling requests from the pages), `actions.ts`, `uninstall.ts`, `updates.ts` (Check for updates: the latest GitHub release, downloaded, checked against its signature and installed) with `scripts/release-signing.mjs` (signing releases), `debugging.ts` (no debugging in an installed copy), `tenant.ts`, `settings.ts`, the tray icon.
+   `index.ts` (startup and shutdown, choosing the built-in chat or Claude Desktop, and casting her spells), `formerName.ts` (carrying the data folder and "Start with Windows" over from the app's old name, Desktop Assist), `ipc.ts` (handling requests from the pages), `actions.ts`, `uninstall.ts`, `updates.ts` (Check for updates: the latest GitHub release, downloaded, checked against its signature and installed) with `scripts/release-signing.mjs` (signing releases), `debugging.ts` (no debugging in an installed copy), `tenant.ts`, `settings.ts`, the tray icon.
 3. [JumpCloud sign-in](3-sign-in.md):
    `auth/` (`AuthManager`, OpenID Connect with JumpCloud, the loopback listener) and `storage/SecretStore.ts`.
 4. [Talking to Claude](4-claude.md):
    `claude/` (the model settings, `AnthropicBackend`, error handling, `ChatSession`).
 5. [The bubble](5-bubble.md):
-   `bubble/` (`BubbleController`, the layout maths, bounce physics, creating the windows, and the
-   check that keeps the bubble in front after starting).
+   `bubble/` (`BubbleController`, with the character's size, her spells' poses, the teleport and
+   saying goodbye as the app closes, the layout maths, `wander.ts` with what the character does on
+   its own and how it falls, `clones.ts` with her clones' window, `vision.ts` with the window of her
+   vision's light and logo, `spellEffects.ts` with the window of her spells' effects, creating the
+   windows, and the check that keeps the bubble in front after starting).
 6. [The draft, screenshots and safe files](6-drafts-and-screenshots.md):
    `notes/NotesStore.ts`, `screenshots/` (including stacking several screenshots into one image for the clipboard), `storage/jsonFile.ts`.
 7. [The pages: entry points, styles, hooks and views](7-renderer-pages.md):
-   `src/renderer`: `index.html`, `main.tsx`, `styles.css`, `lib/`, `hooks/`, `BubbleView`, `PanelView`.
+   `src/renderer`: `index.html`, `main.tsx`, `styles.css`, `lib/` (including how her clones wander), `hooks/`, `BubbleView` (the character's page, where she forms out of white motes as the app starts), `ClonesView` (her clones' page), `VisionView` (the light and the logo of her vision), `SpellView` (her spells' effects, drawn on a canvas), `PanelView`.
 8. [The UI components](8-renderer-components.md):
-   `src/renderer/src/components`: the chat box (with its Open buttons for issue keys and Report to IT), messages, Markdown, sign-in panel, settings menu, action icons, screenshot chips.
+   `src/renderer/src/components`: the chat box (a speech bubble with its tail pointing at her mouth, with its Open buttons for issue keys and Report to IT), messages, Markdown, sign-in panel, settings menu (with Light mode, and her size: `SizeControl.tsx` and `lib/sizes.ts`), spells menu, action icons, screenshot chips, and the character, an original elf mage in pixel art drawn by code: `character/raster.ts` (a tiny rasteriser: shapes drawn straight onto the pixel grid, cel-shaded, with a broad shadow across the side away from the light, and outlined), `character/rig.ts` (her skeleton and the shapes on it, drawing one pose as a frame, with the shadows things cast on what is below them, and dissolving her into white motes), `character/pictures.ts` (the parts drawn by hand: her whole self seen diagonally, and her face side on), `character/sprite.ts` (her animations: key poses and the in-betweens eased between them, about 25 frames a second), `Character.tsx` (playing a pose's frames at a given size, facing a given way, for the bubble and the clones) and `character.css` (the colours); then her spells' effects in pixel art: `lib/spellMotion.ts` (where the shooting stars, the magic circles and the blast are, moment by moment) and `lib/spellArt.ts` (drawing them a pixel at a time).
 9. [Claude Desktop: handing questions over](9-claude-desktop.md):
    `claudeDesktop.ts` (feature 3.1: opening a question in the Claude Desktop app with a link, the screenshots on the clipboard, the notifications, checking it's installed), `sendInClaude.ts` (sending the question there: a hidden PowerShell helper that uses Windows UI Automation to find Claude's text box, then presses Ctrl+V and Enter) and what's tested.
 10. [Your apps: the JumpCloud apps list](10-apps.md):
@@ -397,15 +484,21 @@ changes. Then `npm run docs:pdf` rebuilds `docs/CODE_GUIDE.pdf`, the whole guide
 
 Run with `npm test`. Each file tests code that doesn't need a real window or a real API.
 
-- `layout.test.ts`: Home positions in all four corners (including displays not at the origin), nearest-corner snapping, window sizes, and that the panel window opens into the screen and fits on it in every corner.
-- `bounce.test.ts`: Launch direction (away from each corner) and speed, bouncing off every edge, crossing onto the next monitor where two meet (over a taskbar between stacked monitors) and bouncing off an edge with no monitor beyond it, roaming both monitors without leaving them, getting back on screen when a monitor goes, and the glide.
+- `layout.test.ts`: Where the character stands: on the taskbar (its window's bottom edge on the work area's) in either bottom corner, a top corner meaning the bottom one below it, further along toward the middle by its inset but never off the work area, and on displays not at the origin; turning a position back into an inset (`insetAt`, `maxInset`); the bottom corner for each half of the screen, measured from the character's centre; window sizes (with room above for her hat, at her usual size and at twice it, and rounding the fractional positions of a fall or a walk); that the panel window shares the bubble window's corner (a top corner being the top of her padding, below that room) and fits on screen wherever the character stands in its half of the screen; her sizes (from half her usual size to six times it, each a whole number of DIPs, any number snapped to the nearest, her window and box growing up from her feet while keeping 16 DIPs from the side, the chat card and the actions moving out beside and above her, and the biggest size that lets her panel fit the screen, never less than the smallest); and the clones' strip along the bottom of the work area, as tall as her window. The expected positions are worked out from `UI.bubbleSize`, so the tests follow a change of size.
+- `wander.test.ts`: What the character does on its own: the waits (shorter after settling, longer after that), only strolling until it's been left alone 30 seconds and then, more often than not, one of its fidgets (picked by a second roll: the first, the hop, for a roll of 0, the last, the dance, for a roll near 1, and the vision about a fifth as often as any other), never the same one twice in a row, where it walks to (somewhere else in its zone at least 40 DIPs away, toward its corner or away from it, back into the zone from beyond it, and the far end of a zone too small to choose from), walking at walking speed without passing the target, and the fall (as long as gravity takes, a short hop when dropped over the taskbar, speeding up and landing exactly where it stands).
 - `frontCheck.test.ts`: Reading the front check's answer, only digits taken as a window handle, what counts as needing help and how it's described, and the checks' timing: at 5 s, 20 s, 1, 3 and 10 minutes, silent while the bubble is in front, bringing it back (hidden and shown again only when it was behind something) and logging it, saying when it's still not in front, waiting while the bubble is open, logging a check that failed, and stopping.
-- `bubbleController.test.ts`: The bubble state machine with fake windows, a fake clock and two fake displays: open/close, blur (including staying open when another app takes the focus back just as it opens), clicking the bubble (staying closed when the press on the bubble is what closed the panel, even for a slow click, and reopening straight away after clicking somewhere else, however quick), logging a click ignored while capturing, the saved corner, dragging (follows the mouse, snaps to the nearest corner, onto another display, panel re-placed), bouncing across both displays and gliding back to its own display's corner, screenshots, and display changes (including unplugging the bubble's display).
+- `bubbleController.test.ts`: The bubble state machine with fake windows, a fake clock and two fake displays: starting on the taskbar, the saved corner and display (a top corner saved by an older version taken as the bottom one); on its own (standing, then strolling along the taskbar and standing again, walking both ways, fidgeting only after 30 seconds alone, never the same fidget twice in a row (with `random()` fixed at 0.5: a sit at 39 seconds, over by 46, then a levitate, within the first 64), and for as long as the fidget lasts, stopping where it is when clicked with the panel opening from there, nothing while the panel is open, and dangling instead of fidgeting when dragged); open/close, blur (including staying open when another app takes the focus back just as it opens), clicking the bubble (staying closed when the press on the bubble is what closed the panel, even for a slow click, and reopening straight away after clicking somewhere else, however quick), logging a click ignored while capturing; dragging (dangling from the mouse, falling straight down onto the taskbar, walking back toward the nearer corner when dropped far away, living near a corner of the other display, the panel re-placed, opening while it walks back, dropping it near its own corner keeping the corner); screenshots; display changes (including unplugging the character's display, stopping a walk to stand it back on a moved taskbar, and shrinking her to fit a smaller screen and growing her back once there's room); and her size (starting at her usual size, or at the size saved last time snapped to one of her sizes, growing where she stands with her feet on the taskbar, her corner side kept, both windows resized and the panel left open, no smaller than half, saying nothing when it doesn't change, kept to the biggest that fits a small screen, walking faster the bigger she is, and where she stands, for her clones); casting spells (a spell's pose for its time, then standing idle and wandering again, stopped by a click with what was to follow never coming, only while the panel is closed, and the teleport: vanishing, moving along the taskbar at least 40 DIPs while staying on it, with the panel moved to open from there, appearing, then standing); and closing (vanishing, then quitting, with clicks and drags ignored meanwhile and nothing more done on her own).
+- `clones.test.ts`: Her clones. `Clones` in the main process, with a fake window and fake timers: one window along the taskbar (the whole width of the work area, as tall as her window), told where she stands, her size, the accent colour and when they end; closing it once their time is up; starting a new lot when asked again, closing the old one and giving the new one a full thirty seconds; and ten of her for thirty seconds. How they wander, in the page: all starting where she stands and setting off one after another, kept inside the window, walking somewhere at least a little way off and then stopping a while (and waiting that out), now and then waving when it stops, for as long as her wave takes, and stopping waving when it walks on, walking at about her speed for her size, each clone a little differently, and picking places either side far enough away (or staying put in a window too narrow to walk in).
+- `spellEffects.test.ts`: Her spells' effects. `SpellEffects`, with a fake window and fake timers: one window over her display's work area, told the spell, her size, where she stands and how far down her feet are, when it was cast and the accent colour; closing once the spell is over; one spell at a time (a new one closes the old one); and knowing when the explosion is still at its chant, so stopping then calls it off, and when it's past it, so the bang goes ahead.
+- `spellMotion.test.ts`: Her spells' pixel art, without a page: the seeded random numbers the same every time, and the noise between 0 and 1; shooting stars falling down to the left all through starfall, each within its life, and none after it; the pillar's magic circles above her hat and on the screen, each above the last and coming after it, all before 70% of the chant, and moved in from the edge when she's in a corner so most of each is on the screen; and the explosion bursting out fast, then growing slowly as it cools, with its shock wave racing out beyond it.
+- `sizes.test.ts`: Her size in Settings: saying it as people do ("½×", "¾×", "1.5×", "6×"), and stepping a size at a time, no bigger than fits the screen, stopping at either end.
+- `vision.test.ts`: Her vision's window. `visionBounds()`: a column from the top of the screen down to her feet, centred on her, kept on the work area when she stands in a corner, and growing with her. `Vision`, with a fake window and fake timers: one window over her, told her size, where her middle is and when the vision started; closing when stopped (the habit ends, or someone clicks her); and closing itself once the habit is over. And `VISION`'s timetable: inside the habit's time, with the logo coming down before it rises.
+- `sprite.test.ts`: The character's pixel art. The animations: every pose (her spells' three included) has frames, each a full 96 × 96 grid of palette colours, with the 8 rows of headroom above it, shown for some time; she stands on the bottom rows (her feet leave them only at the top of the hop, with her shadow still on the ground, while she's carried (with no shadow under her then), and while she levitates, with the magic circle's teal ring on the ground under her and gone once she lands); every fidget lasts exactly its `FIDGET_MS` and plays once, while idle, walking and dangling go round; vanishing and appearing last exactly their `SPELL_POSE_MS` and play once, while the chant goes round; vanishing dissolves her into white motes, from all of her to nothing, and appearing forms her out of them, ending exactly as she stands; facing left is the mirror image of facing right (but the dozer's z's still read the right way round), and a walk faces the way it goes; idle has at least three different frames (breathing and a blink) and the walk twelve; in a hop and while she levitates, her hat rises into the headroom but never out of the top of the frame; easing between poses comes in many small steps (a frame about every 40 ms, so every fidget but the glance has at least one frame per 160 ms of its length, and idle has 32 frames); and frames are drawn once, then kept. The rig: three different views (front, diagonal, side); a teacup, a spellbook and sparkles drawn only when asked for, and the newer habits' things too (a crystal ball between her hands, a butterfly on her raised hand part way through its visit but not before it arrives, z's above her head, a robe flared wider at the hem), and the newest habits' things only when asked (three orbs between her hands while she juggles, but none before or after; bubbles and the wand ring blown from in front of her mouth, seen diagonally; the will-o'-wisp, which beside her shows only on empty pixels, in front of her chest is drawn over her, and right behind her is hidden; and a sneeze's sparkles only while they fly); her hat as the highest thing in the picture and her long ears reaching out well past her face; her clothes patterned from every side (gold and a gem on the hat, gold embroidery on the robe, light cuffs and laces and gold buckles on the boots); from the front, her hair behind her, clear of her face and the middle of her robe, her fringe and locks reaching as far out on one side as the other, and none of it beside her sleeves below her locks; side on, her long hair down her back as one mass with a single outline, a full head of hair thick behind her shoulders and reaching the small of her back, as from the front, its ends in clumps of different lengths; her shading from every side (a broad band of shade across the side of her skirt away from the light, no lit hair under her hat and no lit skin under her hair); her face side on, with her cheek clear of hair, a tuft of hair under her ear, over the back of her jaw, and her eye wide open, its iris four pixels tall and at the front of her eye (so she looks the way she faces), with her chin no lower than five rows below the tip of her nose; her hat's crown at least two pixels wide below its tip and widening steadily down from it, with no notch, from the front and side on; a trail of sparkles on the ground behind her as she walks (in most of the walk's frames, none standing still), only ever on empty ground or her shadow; her hair rippling side on, the ends of her hair swaying back and forth through a ripple while her hat and the top of her head stay still, and a different shape in most of the walk's frames; looking up from every side, her irises right under her lids, as she does for most of the vision (but not in its first or last frame); her face (eyes, glint, blush and mouth); and sitting with her hips down near the taskbar. The rasteriser: filling a shape, shading the side away from the light (and a broad band across that side, for materials with a form shadow), lighting the edge toward it and outlining it; lines, polygons and stamps (mirrored too) in the right place; and limbs swinging forward with positive angles. And `framePaths` drawing exactly the frame, one path per colour.
 - `notesStore.test.ts`: Saving the draft, reloading, overtaken writes, damaged files, attachments.
 - `screenshotFiles.test.ts`: Screenshot names, never overwriting, finding the newest, the inside-the-folder check.
 - `screenshotStack.test.ts`: Stacking screenshots into one image for the clipboard: the width they're scaled to (the narrowest, capped), the order and the grey band between them (checked pixel by pixel), a single image left as it is, and refusing different widths, padded rows or an empty list.
 - `format.test.ts`: Chip labels, and "how long ago" (`timeAgo`).
-- `tenants.test.ts`: Every tenant folder has a valid `tenant.json` and a logo; `chatApp` defaults to the built-in chat, which needs `signIn` and `claudeAccess`, while Claude Desktop needs neither (and an unknown `chatApp` is refused); the Apps icon needs `portal`, whose address must be `https`; starting on the Apps list needs `portal` and the `ask` action; the service desk icon needs an `https` `serviceDesk` address; request types (at least one, with numeric IDs) reach the panel; the Jira icon needs `atlassian`, which gets Atlassian's MCP server by default; a dev override can change one Atlassian setting without resetting the others; updates come from a GitHub repository, from GitHub itself by default, need the release key's public half, and offer Check for updates in Settings; the list of missing sign-in settings.
+- `tenants.test.ts`: Every tenant folder has a valid `tenant.json` and a logo, and an `icon.png`, if it has one, Windows can use (a square PNG at least 256 pixels across); `chatApp` defaults to the built-in chat, which needs `signIn` and `claudeAccess`, while Claude Desktop needs neither (and an unknown `chatApp` is refused); the Apps icon needs `portal`, whose address must be `https`; starting on the Apps list needs `portal` and the `ask` action; the service desk icon needs an `https` `serviceDesk` address; request types (at least one, with numeric IDs) reach the panel; the Jira icon needs `atlassian`, which gets Atlassian's MCP server by default; a dev override can change one Atlassian setting without resetting the others; updates come from a GitHub repository, from GitHub itself by default, need the release key's public half, and offer Check for updates in Settings; the list of missing sign-in settings.
 - `trayIcon.test.ts`: The tray circle.
 - `chatSession.test.ts`: The conversation with a scripted fake backend: streaming, images before text, replaying replies unchanged (thinking included), busy/empty/signed-out, Stop with and without text, Retry, an expired sign-in, refusals and length limits, the tool loop, and New conversation ignoring a late reply.
 - `authManager.test.ts`: The sign-in with a fake JumpCloud (whose refresh tokens work once, like the real one): not set up, nothing saved, renewing at startup and saving the replacement token, offline and Retry, a refused sign-in, browser sign-in, Cancel, no refresh token, a port in use, handing out a different ID token each time, never refreshing twice at once, skipping an almost-expired ID token, Log out (revoking), and logging out during a renewal.
@@ -416,6 +509,7 @@ Run with `npm test`. Each file tests code that doesn't need a real window or a r
 - `updates.test.ts`: Check for updates, with a fake GitHub: reading versions (with or without a `v`) and comparing them part by part; finding the installer, GitHub's SHA-256 and the signature in a release, ignoring drafts, pre-releases, odd tags and files not downloaded from the repository, and taking a release without a digest; checking a signature (not another file, version or key) and agreeing with `scripts/release-signing.mjs`; saving the installer in an emptied folder by its own name only, only an `.exe`, and deleting what was saved if the download fails part way; and the `Updater`: up to date when the latest release is this version or there are none, downloading a newer one with progress, checking it, running the installer silently as an update and quitting, stopping at downloading in a development run, never running a download that isn't the release's file (wrong SHA-256 or too short) or isn't signed with the release key (no signature, another key, an older installer passed off as newer, a garbled signature), saying why it couldn't check (GitHub busy, offline), and doing one check at a time.
 - `debugging.test.ts`: The switches an installed copy refuses to start with (Chromium's remote debugging, Node's inspector), and letting everything else through.
 - `uninstall.test.ts`: Finding the uninstaller next to the app, turning off Start with Windows before starting it and then quitting, doing nothing in a dev run or without an uninstaller, and staying open when it couldn't start.
+- `formerName.test.ts`: Carrying things over from the app's old name, Desktop Assist, with a fake disk and a fake startup list. The data folder: renamed from the old name to the new one the first time, both left alone once the new one is there, the new name on a PC that never had the old one, and the old folder kept in use when it can't be moved. "Start with Windows": moved from the old `.exe` to the new one, and nothing changed when Windows already starts the new one, or neither.
 - `sendInClaude.test.ts`: The PowerShell helper's script, without running it: the question key (whitespace evened out, 60 characters), evening out Unicode spaces and fingerprinting the whole question (any extra text changes the hash), a question full of PowerShell code carried only as base64, no key pressed before Claude's box has been found to hold exactly the question, Ctrl+V only with a screenshot, the process name (another for tests, but nothing that could break out of its quotes), and reading the outcome from the last line printed.
 - `loopback.test.ts`: The browser-return listener: catches `/callback` and stops, 404 for anything else, shows JumpCloud's error safely escaped, Cancel, timeout, and a port in use.
 - `secretStore.test.ts`: Encrypted save and load, unreadable files, refusing to save without encryption, clear.

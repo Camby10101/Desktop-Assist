@@ -1,19 +1,19 @@
 # Setting up JumpCloud sign-in (for IT)
 
-> **Only for the built-in chat.** Since feature 3.1, Morse Micro's Desktop Assist hands questions
+> **Only for the built-in chat.** Since feature 3.1, Morse Micro's Desktop Wizard hands questions
 > to the Claude Desktop app instead (`"chatApp": "claude-desktop"` in `tenant.json`), which uses
 > each person's own Claude account and needs none of this. See
 > [CLAUDE_DESKTOP_SETUP.md](CLAUDE_DESKTOP_SETUP.md). This guide applies when a tenant uses
 > `"chatApp": "built-in"`.
 
-Desktop Assist signs people in with JumpCloud and then reaches Claude **without any API key**:
+Desktop Wizard signs people in with JumpCloud and then reaches Claude **without any API key**:
 Anthropic's Workload Identity Federation swaps the user's JumpCloud ID token for a short-lived
 Claude token. To turn that on you need to do three things, about 20 minutes in total:
 
-1. **JumpCloud**: create an OIDC app for Desktop Assist. Gives a **client ID**.
+1. **JumpCloud**: create an OIDC app for Desktop Wizard. Gives a **client ID**.
 2. **Claude Console**: trust JumpCloud and say who may use Claude. Gives an **organization ID**,
    a **federation rule ID** and a **service account ID**.
-3. **Desktop Assist**: put those four values in `tenants/morse-micro/tenant.json`, with
+3. **Desktop Wizard**: put those four values in `tenants/morse-micro/tenant.json`, with
    `"chatApp": "built-in"`, and rebuild.
 
 None of these values are secret. The app has no client secret and no API key.
@@ -21,7 +21,7 @@ None of these values are secret. The app has no client secret and no API key.
 ## How it fits together
 
 ```
- Desktop Assist ── 1. sign in (system browser, PKCE) ───▶ JumpCloud
+ Desktop Wizard ── 1. sign in (system browser, PKCE) ───▶ JumpCloud
                 ◀─ ID token + refresh token
                 ── 2. swap the ID token ───────────────▶ Anthropic (checks it against
                 ◀─ Claude token, short-lived               your federation rule)
@@ -34,7 +34,7 @@ None of these values are secret. The app has no client secret and no API key.
 - Every swap uses a new ID token, which Anthropic checks against your federation rule. Removing a
   user from the JumpCloud app (or their group) stops their access the next time their sign-in is
   renewed, normally within the hour.
-- At Anthropic, all Desktop Assist usage is counted against one **service account** in one
+- At Anthropic, all Desktop Wizard usage is counted against one **service account** in one
   workspace. Per-user usage isn't visible there.
 
 ## 1. JumpCloud: create the OIDC app
@@ -43,7 +43,7 @@ In the JumpCloud Admin Portal:
 
 1. Go to **SSO Applications** and select **+ Add New Application**, then **Custom Application**.
 2. Choose **Manage Single Sign-On (SSO)** → **Configure SSO with OIDC**, and name it
-   `Desktop Assist`. Upload the logo if you like (`tenants/morse-micro/logo.png`).
+   `Desktop Wizard`. Upload the logo if you like (`tenants/morse-micro/logo.png`).
 3. On the **SSO** tab:
    - **Redirect URIs:** `http://127.0.0.1:47621/callback`
    - **Client Authentication Type:** **Public (None PKCE)**
@@ -57,7 +57,7 @@ In the JumpCloud Admin Portal:
    saying so. The refresh token lifetime is the longest anyone could go without signing in
    again; the app renews the sign-in at every start and while it's in use.
 
-4. On the **User Groups** tab, assign the groups who should have Desktop Assist (for everyone,
+4. On the **User Groups** tab, assign the groups who should have Desktop Wizard (for everyone,
    the all-users group).
 5. **Activate** the app and copy the **Client ID**.
 
@@ -83,7 +83,7 @@ go to platform.claude.com in the same browser. Anthropic's own guide is
 
 Everything below is under **Settings** in the Console.
 
-1. **Workspace** (Settings → Workspaces). Create one for Desktop Assist, for example
+1. **Workspace** (Settings → Workspaces). Create one for Desktop Wizard, for example
    `desktop-assist`, so its usage, rate limits and spend limits are separate. An existing
    workspace also works.
 2. **Service account** (Settings → Service accounts). Create `desktop-assist` and add it as a
@@ -111,7 +111,7 @@ Everything below is under **Settings** in the Console.
      refused (`jwt_audience_mismatch` in Authentication events).
    - **Scope:** `workspace:developer` (`workspace:inference`, chat only, isn't offered in the
      Console; never choose `org:admin`)
-   - **Workspace:** just the Desktop Assist workspace (leave **All workspaces** off)
+   - **Workspace:** just the Desktop Wizard workspace (leave **All workspaces** off)
    - **Service account:** `desktop-assist`
    - **Token lifetime:** leave the default
 5. Copy:
@@ -123,10 +123,10 @@ Everything below is under **Settings** in the Console.
    - the **workspace ID** (`wrkspc_...`), only if the rule covers more than one workspace.
 
 The expected audience doesn't change who can use the app (the email condition and JumpCloud's
-group assignments decide that); it means only sign-ins made for the Desktop Assist JumpCloud app
+group assignments decide that); it means only sign-ins made for the Desktop Wizard JumpCloud app
 are accepted, not ones made for other JumpCloud apps.
 
-## 3. Desktop Assist: fill in tenant.json
+## 3. Desktop Wizard: fill in tenant.json
 
 Edit `tenants/morse-micro/tenant.json`:
 
@@ -166,14 +166,14 @@ way to sign in silently, so the one browser step stays.
 
 ## Checking it works
 
-1. Open Desktop Assist and click **Sign in with JumpCloud**. Your browser opens JumpCloud, then
+1. Open Desktop Wizard and click **Sign in with JumpCloud**. Your browser opens JumpCloud, then
    says you can close the tab, and the chat box reopens.
 2. Send a message. In the Claude Console, **Settings → Workload identity → Authentication events**
    should show a successful exchange.
 3. Quit and reopen the app: it should go straight to the chat without asking you to sign in.
 
 When something fails, the app shows Anthropic's request reference with the error, and writes the
-full details to `%APPDATA%\Desktop Assist\logs\desktop-assist.log`. That includes, for a refused
+full details to `%APPDATA%\Desktop Wizard\logs\desktop-wizard.log`. That includes, for a refused
 swap, a summary of the sign-in token that was sent (issuer, audience, email, lifetime, signing key),
 to compare with the federation rule. It never contains a token. In `npm run dev` the same lines
 also appear in the terminal.

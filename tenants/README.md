@@ -10,10 +10,16 @@ $env:TENANT = 'morse-micro'; npm run dev
 A tenant folder contains:
 
 - `tenant.json`: Company and app names, accent colour, the action icons shown above the bubble (listed from the bubble upward), where chats happen, the company's portal, service desk and Atlassian site, and the sign-in settings. Validated at startup and by `npm test`.
-- `logo.png` or `logo.svg`: The logo. `logo.png` is also the tray icon and the `.exe` icon. If both exist, `logo.png` is used.
+- `icon.png` (optional): The app's icon: the `.exe`, the installer and uninstaller, and the Start
+  menu shortcut. A square PNG, at least 256×256. Without it, `logo.png` is used.
+- `logo.png` or `logo.svg`: The logo. `logo.png` is also the tray icon, and the `.exe` icon when there's no `icon.png`. If both exist, `logo.png` is used. The character's vision habit shows the logo too, coming down a light to hover over her head.
 
-Available actions: `ask`, `apps`, `jira`, `servicedesk`, `screenshot`, `theme` (light or dark
-mode), `settings`, `bounce`, `close`.
+Available actions: `ask`, `apps`, `jira`, `servicedesk`, `screenshot`, `settings` (the settings
+menu, which also has light or dark mode and the character's size), `spells` (a menu of her
+spells: ten clones of her walking about the taskbar for thirty seconds, a starfall across the
+screen, a teleport along the taskbar, and an explosion after a long chant), `close` (she dissolves
+into white motes, then the app quits). Morse Micro's, from the bubble upward: `ask`, `jira`,
+`servicedesk`, `screenshot`, `settings`, `spells`, `close`.
 
 `servicedesk` needs `serviceDesk`: `{ "url": "https://…" }`, the company's IT service desk (Morse
 Micro's Jira Service Management help centre), opened in the browser. With `serviceDesk.requests`
@@ -51,9 +57,9 @@ needs `portal`:
 
 `chatApp`, where questions are answered:
 
-- `"claude-desktop"` (Morse Micro, since feature 3.1): Desktop Assist opens each question in the
+- `"claude-desktop"` (Morse Micro, since feature 3.1): Desktop Wizard opens each question in the
   Claude Desktop app, in the person's own Claude account, so it counts against their own usage
-  limit. No sign-in in Desktop Assist, and `signIn` and `claudeAccess` aren't needed. See
+  limit. No sign-in in Desktop Wizard, and `signIn` and `claudeAccess` aren't needed. See
   [docs/CLAUDE_DESKTOP_SETUP.md](../docs/CLAUDE_DESKTOP_SETUP.md).
 - `"built-in"` (the default): the chat runs in the panel through the Claude API, after a JumpCloud
   sign-in, billed to the company's Claude Console account. Needs `signIn` and `claudeAccess`.
@@ -73,12 +79,16 @@ Sign-in settings for the built-in chat (none of them secret):
 Until these are filled in, the app says sign-in isn't set up yet. How to get the values:
 [docs/JUMPCLOUD_SETUP.md](../docs/JUMPCLOUD_SETUP.md).
 
+The character on screen wears a robe and hat in shades of the tenant's `accentColor`, so she
+matches the rest of the panel.
+
 ## Changing the logo
 
 `morse-micro/logo.png` is the Morse Micro "Mμ" mark, cut to a circle (512×512, transparent
 corners). To change it, replace that file and restart `npm run dev`. No code changes are needed.
 
-The bubble is a 56px circle with no background of its own, and the image is scaled to fit
-inside it without cropping. A square image of the logo mark (not the full wordmark), already cut
-to a circle with its own background colour and transparent corners, at least 256×256 pixels,
-looks best.
+The logo is the tray icon; the installed app's icon is `morse-micro/icon.png`, the logo wearing
+the character's hat (without an `icon.png`, the logo is used for that too). The bubble on screen is
+now an animated character, not the logo. A square image of the logo mark (not the full wordmark), already cut to a
+circle with its own background colour and transparent corners, at least 256×256 pixels, looks
+best.

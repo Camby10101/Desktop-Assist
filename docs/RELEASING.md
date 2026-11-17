@@ -1,17 +1,41 @@
 # Releasing a new version
 
-Desktop Assist updates itself from this repository's GitHub releases: **Settings → Check for
+Desktop Wizard updates itself from this repository's GitHub releases: **Settings → Check for
 updates** asks GitHub for the latest release and, if it's newer than the copy that's running,
 downloads the installer attached to it, checks it's exactly the file on GitHub and that it's
-signed with the release key, and runs it. The installer replaces Desktop Assist silently and
+signed with the release key, and runs it. The installer replaces Desktop Wizard silently and
 starts it again; the user's data (preferences, the text box, sign-ins) is kept.
 
 So a release is: a higher version number, the installer built from it and signed with the release
 key, and a GitHub release with both files attached.
 
+## The old name: Desktop Assist
+
+Up to 1.0.0 the app was called Desktop Assist; from 2.0.0 it's Desktop Wizard. Releasing works the
+same, but:
+
+- **The installer is named `Desktop Wizard-Setup-<version>.exe`** (and its signature
+  `Desktop Wizard-Setup-<version>.exe.sig`), after `productName` in `apps/desktop/package.json`; up
+  to 1.0.0 it was `Desktop Assist-Setup-<version>.exe`. Copies of 1.0.0 still find it, since they
+  look for any `.exe` with "Setup" in its name.
+- **Updating keeps everything.** The new version installs over 1.0.0. On its first start it moves
+  the settings, the text box and the sign-ins from `%APPDATA%\Desktop Assist` to
+  `%APPDATA%\Desktop Wizard`, and keeps "Start with Windows" on if it was
+  (`apps/desktop/src/main/formerName.ts`). Screenshots taken before stay in
+  `Pictures\Desktop Assist`.
+- **Never change the signature text or the app ID.** What a release's signature signs still starts
+  `desktop-assist-update` (`signedText()` in `apps/desktop/src/main/updates.ts` and in
+  `scripts/release-signing.mjs`): copies of 1.0.0 check updates against exactly that text, and
+  would refuse every update signed over any other. The app ID, `com.morsemicro.desktopassist`
+  (`appId` in `apps/desktop/electron-builder.cjs`), is how Windows knows the install: with another
+  ID, a new version would install beside the old one instead of replacing it. The install folder
+  (`extraMetadata.name`, `desktop-assist`) stays as it is too.
+- The release key stays at `%USERPROFILE%\.desktop-assist\release-key.pem` (or the file named in
+  `DESKTOP_ASSIST_RELEASE_KEY`), and the repository is still `Camby10101/Desktop-Assist`.
+
 ## The release key
 
-Copies of Desktop Assist only install an update signed with the **release key**. The key has two
+Copies of Desktop Wizard only install an update signed with the **release key**. The key has two
 halves:
 
 - The **public half** is in `tenant.json` (`updates.publicKey`), so it's inside every copy. It can
@@ -36,11 +60,11 @@ copy refuses to install it, because they don't have the private half.
 
 ## 1. Set the version
 
-In `apps/desktop/package.json`, raise `version`, for example from `1.0.0` to `1.0.1` (fixes),
-`1.1.0` (new features) or `2.0.0` (big changes). Or from the repository's folder:
+In `apps/desktop/package.json`, raise `version`, for example from `2.0.0` to `2.0.1` (fixes),
+`2.1.0` (new features) or `3.0.0` (big changes). Or from the repository's folder:
 
 ```powershell
-npm version 1.0.1 --no-git-tag-version -w apps/desktop
+npm version 2.0.1 --no-git-tag-version -w apps/desktop
 ```
 
 The version is what Settings shows at the bottom, what the installer is named after, and what
@@ -56,8 +80,8 @@ From `main`, with the version you set, on the PC with the release key:
 npm run dist
 ```
 
-This builds `apps/desktop/dist/Desktop Assist-Setup-1.0.1.exe` and signs it: next to it is
-`Desktop Assist-Setup-1.0.1.exe.sig`, the signature. The signing step first checks the key is the
+This builds `apps/desktop/dist/Desktop Wizard-Setup-2.0.1.exe` and signs it: next to it is
+`Desktop Wizard-Setup-2.0.1.exe.sig`, the signature. The signing step first checks the key is the
 one whose public half is in `tenant.json`.
 
 If the key isn't on the PC, the build stops at signing and says so. The installer is still built,
@@ -69,13 +93,13 @@ Install it once yourself to check it.
 ## 3. Publish the release on GitHub
 
 1. On GitHub, open the repository's **Releases** and choose **Draft a new release**.
-2. **Choose a tag**: type `v` and the version, e.g. `v1.0.1`, and choose **Create new tag on
+2. **Choose a tag**: type `v` and the version, e.g. `v2.0.1`, and choose **Create new tag on
    publish**, targeting `main`. The tag must be the version (with or without the `v`); a tag that
    isn't a version (`latest`, `beta`) is ignored by the app.
-3. **Title**: e.g. `Desktop Assist 1.0.1`, and a few lines on what's new.
-4. **Attach both files**: drag `Desktop Assist-Setup-1.0.1.exe` and
-   `Desktop Assist-Setup-1.0.1.exe.sig` into the box. GitHub renames them
-   `Desktop.Assist-Setup-1.0.1.exe` and `Desktop.Assist-Setup-1.0.1.exe.sig`; that's fine (the app
+3. **Title**: e.g. `Desktop Wizard 2.0.1`, and a few lines on what's new.
+4. **Attach both files**: drag `Desktop Wizard-Setup-2.0.1.exe` and
+   `Desktop Wizard-Setup-2.0.1.exe.sig` into the box. GitHub renames them
+   `Desktop.Wizard-Setup-2.0.1.exe` and `Desktop.Wizard-Setup-2.0.1.exe.sig`; that's fine (the app
    looks for an `.exe` with "Setup" in its name, and the file of the same name plus `.sig`).
 5. Leave **Set as a pre-release** and **Save as draft** unticked (the app ignores both), and
    **Publish release**.
@@ -94,9 +118,9 @@ From then on, **Check for updates** on any older copy finds it.
 - It checks the `.sig` is the release key's signature of this version and the installer's
   SHA-256. Signing the version too means an old, genuine installer can't be passed off as a newer
   release. A release without a valid signature is never installed: the download is deleted and
-  Settings says "Didn't install 1.0.1. It isn't signed with the release key…".
+  Settings says "Didn't install 2.0.1. It isn't signed with the release key…".
 - The installer runs as electron-builder's own updater runs it: `--updated /S --force-run`
-  (an update, silently, starting the app again afterwards). It waits for Desktop Assist to close,
+  (an update, silently, starting the app again afterwards). It waits for Desktop Wizard to close,
   which it does as soon as the installer has started.
 - In a development run (`npm run dev`) it downloads and checks the installer but never runs it;
   the log says what an installed copy would have run.
@@ -129,14 +153,14 @@ sets Electron's _fuses_, switches built into the `.exe`:
 
 And an installed copy refuses to start with Chromium's remote debugging switched on
 (`--remote-debugging-port`, `--remote-debugging-pipe`); `src/main/debugging.ts` has the list. Both
-together mean another program on the PC can't use Desktop Assist to run its own code or to drive
+together mean another program on the PC can't use Desktop Wizard to run its own code or to drive
 the app's pages. Because of this, Playwright and debuggers can't attach to an installed copy: test
 with `npm run dev` or the built `out/` folder, as the automated tests do.
 
 ## Troubleshooting
 
 - **"Up to date" but there's a newer release**: check the release isn't a draft or pre-release, its
-  tag is a version (`v1.0.1`), and the `.exe` is attached. The copy compares versions, so check the
+  tag is a version (`v2.0.1`), and the `.exe` is attached. The copy compares versions, so check the
   release's version is higher than the one at the bottom of Settings.
 - **"Didn't install … It isn't signed with the release key"**: the `.sig` isn't attached ("the
   release has no signature"), or it was made for another file, version or key ("its signature
@@ -146,5 +170,5 @@ with `npm run dev` or the built `out/` folder, as the automated tests do.
   (some proxies do); try again. If it keeps happening, re-upload the installer to the release.
 - **"Couldn't reach GitHub"**: the PC is offline, or a firewall blocks `api.github.com`,
   `github.com` or `objects.githubusercontent.com` (where GitHub serves release files from).
-- The log (`%APPDATA%\Desktop Assist\logs\desktop-assist.log`) has the details of anything that
+- The log (`%APPDATA%\Desktop Wizard\logs\desktop-wizard.log`) has the details of anything that
   failed.

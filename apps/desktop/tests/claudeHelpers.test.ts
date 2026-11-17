@@ -49,11 +49,11 @@ describe('classifyError', () => {
 describe('buildSystemPrompt', () => {
   it('names the app and company, and appends tenant instructions', () => {
     const prompt = buildSystemPrompt({
-      appName: 'Desktop Assist',
+      appName: 'Desktop Wizard',
       companyName: 'Morse Micro',
       systemPrompt: 'Use Australian English.',
     })
-    expect(prompt).toContain('You are Desktop Assist')
+    expect(prompt).toContain('You are Desktop Wizard')
     expect(prompt).toContain('Morse Micro')
     expect(prompt.endsWith('Use Australian English.')).toBe(true)
   })

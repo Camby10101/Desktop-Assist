@@ -1,23 +1,14 @@
-import { useRef, type PointerEvent } from 'react'
-import { UI } from '@shared/geometry'
+import { useEffect, useRef, useState, type PointerEvent } from 'react'
+import { SPELL_POSE_MS } from '@shared/character'
+import { bubbleMetrics, DEFAULT_SIZE, isLeftCorner } from '@shared/geometry'
 import type { Mode } from '@shared/types'
+import { Character } from '../components/Character'
 import { useAccentColor, useAssistState } from '../hooks/useAssistState'
-import { cn } from '../lib/cn'
-
-// The tenant's logo: logo.png, or logo.svg (if a tenant has both, the PNG wins).
-const logos = import.meta.glob<string>('@tenant/logo.{png,svg}', {
-  eager: true,
-  query: '?url',
-  import: 'default',
-})
-const logoUrl =
-  Object.entries(logos).find(([path]) => path.endsWith('.png'))?.[1] ?? Object.values(logos)[0]
 
 const ACTION_LABEL: Record<Mode, string> = {
   collapsed: 'Open',
   expanded: 'Close',
   dragging: 'Moving',
-  bouncing: 'Stop bouncing',
   returning: 'Returning',
   capturing: 'Taking screenshot',
 }
@@ -25,17 +16,43 @@ const ACTION_LABEL: Record<Mode, string> = {
 /** Moving the pointer further than this while pressed turns a click into a drag. */
 const DRAG_THRESHOLD = 5
 
+/** How long she waits for word that her window is showing before she's just there (ms). */
+const ARRIVAL_WAIT_MS = 4000
+
 /**
- * The always-on-top logo bubble. A click goes to the main process, which decides what it means.
- * Press and move to drag it: the main process makes it follow the mouse, and on release snaps it
- * to the nearest corner of whichever display it's on.
+ * The always-on-top character (the "bubble"), filling its small window. A click goes to the main
+ * process, which decides what it means. Press and move to drag it: the main process makes it
+ * follow the mouse, and on release it falls onto the taskbar. What it's doing (its pose) comes
+ * from the main process too; Character animates it.
  */
 export function BubbleView() {
   // No useClickThrough here: the bubble window always takes the mouse (see bubble/windows.ts).
   const state = useAssistState()
   useAccentColor(state?.branding.accentColor)
   const mode = state?.mode ?? 'collapsed'
-  const appName = state?.branding.appName ?? 'Desktop Assist'
+  const appName = state?.branding.appName ?? 'Desktop Wizard'
+  // Her window, as big as she is (with room above her hat); she faces the middle of the screen,
+  // away from her corner.
+  const { box, headroom } = bubbleMetrics(state?.size.scale ?? DEFAULT_SIZE)
+  const corner = state?.corner ?? 'bottom-right'
+
+  // As the app starts, she forms out of white motes (her `appear` pose) before doing as she's told.
+  // Her window is shown a little after this page is ready (once the panel's is too), so she waits
+  // for word that it's showing, and until then isn't drawn at all, so she never flashes up whole
+  // first. Without the word (the page reloaded, say), she's just there after a few seconds.
+  const [arrival, setArrival] = useState<'waiting' | 'arriving' | 'here'>('waiting')
+  useEffect(() => {
+    let timer = setTimeout(() => setArrival('here'), ARRIVAL_WAIT_MS)
+    const stop = window.assist.onArrive(() => {
+      clearTimeout(timer)
+      setArrival('arriving')
+      timer = setTimeout(() => setArrival('here'), SPELL_POSE_MS.appear)
+    })
+    return () => {
+      stop()
+      clearTimeout(timer)
+    }
+  }, [])
 
   const press = useRef<{ x: number; y: number; dragging: boolean } | null>(null)
   // When the button last went down: the main process uses it to tell whether this press is what
@@ -72,38 +89,33 @@ export function BubbleView() {
   }
 
   return (
-    <div className="flex h-full w-full items-center justify-center">
-      <button
-        data-hit
-        type="button"
-        aria-label={`${ACTION_LABEL[mode]} ${appName}`}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={endPress}
-        onLostPointerCapture={endPress}
-        onClick={() => {
-          if (swallowClick.current) swallowClick.current = false
-          // A click from the keyboard has no press: it's "now".
-          else window.assist.bubbleClick(pressedAt.current ?? Date.now())
-          pressedAt.current = undefined
-        }}
-        style={{ width: UI.bubbleSize, height: UI.bubbleSize }}
-        className={cn(
-          'overflow-hidden rounded-full shadow-[0_2px_6px_rgba(0,0,0,0.35)] outline-none',
-          'transition-[transform,box-shadow] duration-150 ease-out motion-reduce:transition-none',
-          mode === 'dragging' ? 'scale-105' : 'hover:scale-105 active:scale-95',
-          // Always a 2px white border; while the panel is open, a purple one outside it.
-          'ring-2',
-          mode === 'expanded' ? 'ring-accent ring-offset-2 ring-offset-white' : 'ring-white',
-        )}
-      >
-        <img
-          src={logoUrl}
-          alt=""
-          draggable={false}
-          className="pointer-events-none size-full object-contain"
+    <button
+      data-hit
+      type="button"
+      aria-label={`${ACTION_LABEL[mode]} ${appName}`}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={endPress}
+      onLostPointerCapture={endPress}
+      onClick={() => {
+        if (swallowClick.current) swallowClick.current = false
+        // A click from the keyboard has no press: it's "now".
+        else window.assist.bubbleClick(pressedAt.current ?? Date.now())
+        pressedAt.current = undefined
+      }}
+      style={{ width: box, height: box + headroom }}
+      // No focus outline: clicking her focuses the button, and Chromium can count that as
+      // keyboard focus and draw the accent-coloured ring round her window.
+      className="block cursor-grab outline-none focus-visible:outline-none active:cursor-grabbing"
+    >
+      {arrival !== 'waiting' && (
+        <Character
+          pose={arrival === 'arriving' ? 'appear' : (state?.pose ?? 'idle')}
+          facing={isLeftCorner(corner) ? 'right' : 'left'}
+          box={box}
+          expanded={mode === 'expanded'}
         />
-      </button>
-    </div>
+      )}
+    </button>
   )
 }

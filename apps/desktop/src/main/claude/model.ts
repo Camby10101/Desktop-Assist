@@ -1,4 +1,4 @@
-// How Desktop Assist calls Claude. Kept in one place so the model and request shape are easy to change.
+// How Desktop Wizard calls Claude. Kept in one place so the model and request shape are easy to change.
 
 export const CLAUDE_MODEL = 'claude-opus-5-5'
 export const CLAUDE_MODEL_NAME = 'Claude Opus 5.5'

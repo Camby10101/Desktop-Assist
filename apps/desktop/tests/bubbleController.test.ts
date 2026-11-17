@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Corner, Point, Rect } from '@shared/geometry'
+import { FIDGET_MS, SPELL_POSE_MS, type Pose } from '@shared/character'
+import { UI, type CharacterSize, type Corner, type Point, type Rect } from '@shared/geometry'
 import type { Mode } from '@shared/types'
 import {
   BLUR_CLICK_GRACE_MS,
@@ -10,7 +11,14 @@ import {
   type BubbleAnchor,
   type DisplayArea,
 } from '../src/main/bubble/BubbleController'
-import { bubbleWindowBounds, homePosition, panelWindowBounds } from '../src/main/bubble/layout'
+import { bubbleWindowBounds, panelWindowBounds, restPosition } from '../src/main/bubble/layout'
+import { WANDER } from '../src/main/bubble/wander'
+
+/** Her box's position, from her window's bounds: in by its padding, below its headroom. */
+const boxOf = (window: Rect): Point => ({
+  x: window.x + UI.bubblePad,
+  y: window.y + UI.bubblePad + UI.bubbleHeadroom,
+})
 
 class FakeSurface {
   visible = false
@@ -48,16 +56,17 @@ let cursor: Point
 let bubble: FakeSurface
 let panel: FakeSurface
 let modes: Mode[]
+let poses: Pose[]
 let anchors: BubbleAnchor[]
+let sizes: CharacterSize[]
 let controller: BubbleController
 
-function makeController(initialAnchor: BubbleAnchor | null = null) {
+function makeController(initialAnchor: BubbleAnchor | null = null, initialScale?: number) {
   return new BubbleController({
     bubble,
     panel,
     displays: {
       primary: () => screens[0]!,
-      all: () => screens,
       byId: (id) => screens.find((s) => s.id === id),
       nearest: (p) =>
         screens.find(
@@ -68,9 +77,14 @@ function makeController(initialAnchor: BubbleAnchor | null = null) {
     },
     actionCount: 4,
     initialAnchor,
+    initialScale,
     onModeChange: (mode) => modes.push(mode),
     onAnchorChange: (anchor) => anchors.push(anchor),
+    onPoseChange: (pose) => poses.push(pose),
+    onSizeChange: (size) => sizes.push(size),
     now: () => Date.now(),
+    // With 0.5 every time: the first thing it does comes 8.5 s after settling, then one every
+    // 14 s; a walk goes to the middle of the stretches far enough away.
     random: () => 0.5,
   })
 }
@@ -85,7 +99,9 @@ beforeEach(() => {
   bubble = new FakeSurface()
   panel = new FakeSurface()
   modes = []
+  poses = []
   anchors = []
+  sizes = []
   controller = makeController()
   controller.start()
 })
@@ -96,8 +112,17 @@ afterEach(() => {
 })
 
 const workArea = () => screens[0]!.workArea
-const home = (area: Rect = workArea(), corner: Corner = 'bottom-right') =>
-  bubbleWindowBounds(homePosition(area, corner))
+/** The character's window standing `inset` from `corner` of `area`. */
+const home = (area: Rect = workArea(), corner: Corner = 'bottom-right', inset = 0) =>
+  bubbleWindowBounds(restPosition(area, corner, inset))
+const FIRST_ACTIVITY_MS = WANDER.firstDelay[0] + 0.5 * (WANDER.firstDelay[1] - WANDER.firstDelay[0])
+/** Moves time on a frame at a time until `done()` (at most a minute). */
+function advanceUntil(done: () => boolean) {
+  for (let i = 0; i < 60_000 / 16 && !done(); i++) vi.advanceTimersByTime(16)
+  expect(done()).toBe(true)
+}
+/** How long walking `distance` takes, plus a frame. */
+const walkMs = (distance: number) => (distance / WANDER.walkSpeed) * 1000 + 32
 
 /** Presses on the bubble's centre, moves the mouse to `to`, and lets go. */
 function drag(to: Point) {
@@ -110,33 +135,193 @@ function drag(to: Point) {
 }
 
 describe('start', () => {
-  it('shows the bubble bottom-right of the main display, with the panel hidden', () => {
+  it('stands the character on the taskbar bottom-right of the main display, panel hidden', () => {
     expect(bubble.visible).toBe(true)
     expect(bubble.bounds).toEqual(home())
+    expect(bubble.bounds!.y + bubble.bounds!.height).toBe(1040) // on the taskbar
     expect(panel.visible).toBe(false)
     expect(controller.currentMode).toBe('collapsed')
+    expect(controller.currentPose).toBe('idle')
     expect(controller.corner).toBe('bottom-right')
   })
 
   it('returns to the saved corner and display', () => {
     controller.dispose()
-    controller = makeController({ displayId: 2, corner: 'top-left' })
+    controller = makeController({ displayId: 2, corner: 'bottom-left' })
     controller.start()
-    expect(bubble.bounds).toEqual(home(SECOND.workArea, 'top-left'))
-    expect(controller.corner).toBe('top-left')
+    expect(bubble.bounds).toEqual(home(SECOND.workArea, 'bottom-left'))
+    expect(controller.corner).toBe('bottom-left')
   })
 
-  it('knows the saved corner before start(), for pages that load first', () => {
+  it('takes a top corner saved by an older version as the bottom corner below it', () => {
     controller.dispose()
     controller = makeController({ displayId: 2, corner: 'top-left' })
-    expect(controller.corner).toBe('top-left')
+    expect(controller.corner).toBe('bottom-left') // known before start(), for pages that load first
+    controller.start()
+    expect(bubble.bounds).toEqual(home(SECOND.workArea, 'bottom-left'))
   })
 
   it("uses the same corner of the main display if the saved display isn't connected", () => {
     controller.dispose()
-    controller = makeController({ displayId: 99, corner: 'top-right' })
+    controller = makeController({ displayId: 99, corner: 'bottom-left' })
     controller.start()
-    expect(bubble.bounds).toEqual(home(PRIMARY.workArea, 'top-right'))
+    expect(bubble.bounds).toEqual(home(PRIMARY.workArea, 'bottom-left'))
+  })
+})
+
+describe('on its own', () => {
+  it('stands idle, then strolls along the taskbar near its corner, then stands again', () => {
+    vi.advanceTimersByTime(FIRST_ACTIVITY_MS - 100)
+    expect(poses).toEqual([])
+    vi.advanceTimersByTime(200)
+    // From the right-hand corner toward the middle: walking left, along the taskbar only.
+    expect(controller.currentPose).toBe('walk-left')
+    expect(controller.currentMode).toBe('collapsed')
+    vi.advanceTimersByTime(500)
+    expect(bubble.bounds!.x).toBeLessThan(home().x)
+    expect(bubble.bounds!.y).toBe(home().y)
+    // To 140 from the corner (the middle of 40–240, the stretch far enough away).
+    vi.advanceTimersByTime(walkMs(140))
+    expect(controller.currentPose).toBe('idle')
+    expect(bubble.bounds).toEqual(home(PRIMARY.workArea, 'bottom-right', 140))
+    // The panel would open from where it now stands.
+    const position = restPosition(PRIMARY.workArea, 'bottom-right', 140)
+    expect(panel.bounds).toEqual(panelWindowBounds(position, 4, 'bottom-right'))
+    expect(modes).toEqual([]) // walking on its own isn't a change of mode
+  })
+
+  it('walks both ways, and fidgets only once it has been left alone a while', () => {
+    vi.advanceTimersByTime(46_000)
+    expect(poses).toEqual([
+      'walk-left', // at 8.5 s, to 140 from the corner
+      'idle',
+      'walk-right', // at 24 s, back to 80
+      'idle',
+      'sit', // at 39 s: alone for 30 s now (for six seconds)
+      'idle',
+    ])
+  })
+
+  it("doesn't do the same fidget twice in a row", () => {
+    vi.advanceTimersByTime(64_000)
+    expect(poses).toEqual([
+      'walk-left',
+      'idle',
+      'walk-right',
+      'idle',
+      'sit',
+      'idle',
+      'levitate',
+      'idle',
+    ])
+  })
+
+  it('plays a fidget for as long as its animation lasts, standing still', () => {
+    advanceUntil(() => controller.currentPose === 'sit')
+    const where = bubble.bounds
+    vi.advanceTimersByTime(FIDGET_MS.sit - 100)
+    expect(controller.currentPose).toBe('sit')
+    expect(bubble.bounds).toEqual(where)
+    vi.advanceTimersByTime(200)
+    expect(controller.currentPose).toBe('idle')
+  })
+
+  it('stops where it is when clicked, and the panel opens from there', () => {
+    vi.advanceTimersByTime(FIRST_ACTIVITY_MS + 600)
+    expect(controller.currentPose).toBe('walk-left')
+    controller.clickBubble()
+    expect(controller.currentMode).toBe('expanded')
+    expect(controller.currentPose).toBe('idle')
+    const where = bubble.bounds!
+    expect(where.x).toBeLessThan(home().x)
+    expect(panel.bounds).toEqual(panelWindowBounds(boxOf(where), 4, 'bottom-right'))
+    vi.advanceTimersByTime(5000)
+    expect(bubble.bounds).toEqual(where) // the walk doesn't carry on
+  })
+
+  it('does nothing on its own while the panel is open, and starts again once it closes', () => {
+    controller.clickBubble()
+    vi.advanceTimersByTime(60_000)
+    expect(poses).toEqual([])
+    expect(bubble.bounds).toEqual(home())
+    controller.clickBubble()
+    vi.advanceTimersByTime(WANDER.delay[0] + 0.5 * (WANDER.delay[1] - WANDER.delay[0]) + 100)
+    expect(controller.currentPose).toMatch(/^walk-/)
+  })
+
+  it('stops a fidget when dragged, and dangles instead', () => {
+    advanceUntil(() => controller.currentPose === 'sit')
+    controller.startDrag()
+    expect(controller.currentPose).toBe('dragged')
+    vi.advanceTimersByTime(FIDGET_MS.sit + 100)
+    expect(controller.currentPose).toBe('dragged') // the fidget's end doesn't interrupt
+    controller.endDrag()
+  })
+})
+
+describe('casting spells', () => {
+  it('plays a spell’s pose for its time, then stands idle and gets on with her day', () => {
+    controller.act('chant')
+    expect(controller.currentPose).toBe('chant')
+    vi.advanceTimersByTime(SPELL_POSE_MS.chant - 100)
+    expect(controller.currentPose).toBe('chant')
+    vi.advanceTimersByTime(200)
+    expect(controller.currentPose).toBe('idle')
+    // ...and wanders again later.
+    advanceUntil(() => controller.currentPose !== 'idle')
+  })
+
+  it('stops a spell when she’s clicked, and never finishes it', () => {
+    const then = vi.fn()
+    controller.act('vanish', then)
+    controller.clickBubble()
+    expect(controller.currentMode).toBe('expanded')
+    expect(controller.currentPose).toBe('idle')
+    vi.advanceTimersByTime(SPELL_POSE_MS.vanish + 100)
+    expect(then).not.toHaveBeenCalled()
+  })
+
+  it('only acts collapsed: casting closes the panel first', () => {
+    controller.expand()
+    controller.act('chant')
+    expect(controller.currentPose).toBe('idle')
+  })
+
+  it('teleports: vanishes, moves along the taskbar near her corner, appears, then stands', () => {
+    const before = bubble.bounds!
+    controller.teleport()
+    expect(controller.currentPose).toBe('vanish')
+    expect(bubble.bounds).toEqual(before) // not yet
+    vi.advanceTimersByTime(SPELL_POSE_MS.vanish + 10)
+    expect(controller.currentPose).toBe('appear')
+    const after = bubble.bounds!
+    expect(after.y).toBe(before.y) // still on the taskbar
+    expect(Math.abs(after.x - before.x)).toBeGreaterThanOrEqual(WANDER.minWalk)
+    // The panel would open from where she is now.
+    expect(panel.bounds).toEqual(panelWindowBounds(boxOf(after), 4, 'bottom-right'))
+    vi.advanceTimersByTime(SPELL_POSE_MS.appear + 10)
+    expect(controller.currentPose).toBe('idle')
+  })
+})
+
+describe('closing', () => {
+  it('vanishes, then quits, ignoring clicks and drags meanwhile', () => {
+    controller.expand()
+    const done = vi.fn()
+    controller.farewell(done)
+    expect(controller.currentMode).toBe('collapsed')
+    expect(controller.currentPose).toBe('vanish')
+    controller.clickBubble()
+    controller.startDrag()
+    expect(controller.currentMode).toBe('collapsed')
+    expect(controller.currentPose).toBe('vanish')
+    vi.advanceTimersByTime(SPELL_POSE_MS.vanish - 10)
+    expect(done).not.toHaveBeenCalled()
+    vi.advanceTimersByTime(20)
+    expect(done).toHaveBeenCalledOnce()
+    // She does nothing more on her own.
+    vi.advanceTimersByTime(60_000)
+    expect(controller.currentPose).toBe('vanish')
   })
 })
 
@@ -233,7 +418,6 @@ describe('clicking away (panel blur)', () => {
       panel,
       displays: {
         primary: () => screens[0]!,
-        all: () => screens,
         byId: (id) => screens.find((s) => s.id === id),
         nearest: () => screens[0]!,
         cursor: () => cursor,
@@ -254,47 +438,85 @@ describe('clicking away (panel blur)', () => {
 })
 
 describe('dragging', () => {
-  it('the bubble follows the mouse, keeping the point where it was grabbed', () => {
+  it('the character dangles from the mouse, keeping the point where it was grabbed', () => {
     const start = bubble.bounds!
     cursor = { x: start.x + 20, y: start.y + 30 }
     controller.startDrag()
     expect(controller.currentMode).toBe('dragging')
+    expect(controller.currentPose).toBe('dragged')
     cursor = { x: 900, y: 500 }
     vi.advanceTimersByTime(16)
     expect(bubble.bounds).toMatchObject({ x: 880, y: 470 })
     controller.endDrag()
   })
 
-  it('snaps to the nearest corner when released, gliding there', () => {
-    drag({ x: 300, y: 200 }) // top-left quarter of the main display
+  it('falls straight down onto the taskbar where it was dropped', () => {
+    drag({ x: 1700, y: 300 }) // the right half, near enough to its corner
     expect(controller.currentMode).toBe('returning')
+    expect(controller.currentPose).toBe('dragged')
+    const dropped = bubble.bounds!
+    vi.advanceTimersByTime(200)
+    expect(bubble.bounds!.y).toBeGreaterThan(dropped.y) // on its way down
+    expect(bubble.bounds!.x).toBe(dropped.x)
     vi.advanceTimersByTime(1000)
     expect(controller.currentMode).toBe('collapsed')
-    expect(bubble.bounds).toEqual(home(PRIMARY.workArea, 'top-left'))
-    expect(anchors).toEqual([{ displayId: 1, corner: 'top-left' }])
+    expect(controller.currentPose).toBe('idle')
+    expect(bubble.bounds).toEqual({ ...dropped, y: home().y })
+    expect(anchors).toEqual([]) // still the right-hand corner
   })
 
-  it('snaps to a corner of the other display when dropped there', () => {
-    drag({ x: 3000, y: 900 }) // bottom-right quarter of the second display
+  it('dropped far from a corner, it walks back toward the nearer one', () => {
+    drag({ x: 900, y: 300 }) // the left half of the main display, far from its corner
     vi.advanceTimersByTime(1000)
-    expect(bubble.bounds).toEqual(home(SECOND.workArea, 'bottom-right'))
+    expect(anchors).toEqual([{ displayId: 1, corner: 'bottom-left' }])
+    expect(controller.currentMode).toBe('collapsed')
+    expect(controller.currentPose).toBe('walk-left')
+    const landed = bubble.bounds!.x
+    vi.advanceTimersByTime(walkMs(landed + 8 - 16 - WANDER.zone))
+    expect(controller.currentPose).toBe('idle')
+    expect(bubble.bounds).toEqual(home(PRIMARY.workArea, 'bottom-left', WANDER.zone))
+  })
+
+  it('lives near a corner of the other display when dropped there', () => {
+    drag({ x: 2650, y: 300 }) // the right half of the second display, far from its corner
+    const inset = 3200 - 16 - UI.bubbleSize - (2650 - 28)
+    vi.advanceTimersByTime(1000)
     expect(anchors).toEqual([{ displayId: 2, corner: 'bottom-right' }])
+    expect(bubble.bounds!.y).toBe(home(SECOND.workArea).y) // on that display's taskbar
+    expect(controller.currentPose).toBe('walk-right')
+    vi.advanceTimersByTime(walkMs(inset - WANDER.zone))
+    expect(bubble.bounds).toEqual(home(SECOND.workArea, 'bottom-right', WANDER.zone))
   })
 
   it('moves the panel to open toward the middle of the screen from the new corner', () => {
-    drag({ x: 300, y: 200 })
+    drag({ x: 200, y: 200 }) // the left half, 156 from its corner
     vi.advanceTimersByTime(1000)
-    const position = homePosition(PRIMARY.workArea, 'top-left')
-    expect(panel.bounds).toEqual(panelWindowBounds(position, 4, 'top-left'))
+    const position = restPosition(PRIMARY.workArea, 'bottom-left', 200 - 28 - 16)
+    expect(bubble.bounds).toEqual(bubbleWindowBounds(position))
+    expect(panel.bounds).toEqual(panelWindowBounds(position, 4, 'bottom-left'))
     controller.clickBubble()
     expect(controller.currentMode).toBe('expanded')
   })
 
-  it('dropping back in the same corner changes nothing', () => {
+  it('opening while it walks back stops it, with the panel where it stands', () => {
+    drag({ x: 900, y: 300 })
+    vi.advanceTimersByTime(2000)
+    expect(controller.currentPose).toBe('walk-left')
+    controller.clickBubble()
+    const where = bubble.bounds!
+    expect(controller.currentMode).toBe('expanded')
+    expect(panel.bounds).toEqual(panelWindowBounds(boxOf(where), 4, 'bottom-left'))
+    vi.advanceTimersByTime(5000)
+    expect(bubble.bounds).toEqual(where)
+  })
+
+  it('dropping it back near its corner keeps the corner', () => {
     drag({ x: 1800, y: 950 })
     vi.advanceTimersByTime(1000)
     expect(anchors).toEqual([])
-    expect(bubble.bounds).toEqual(home())
+    expect(bubble.bounds).toEqual(
+      home(PRIMARY.workArea, 'bottom-right', 1920 - 16 - UI.bubbleSize - (1800 - 28)),
+    )
   })
 
   it('closes the open panel when a drag starts', () => {
@@ -306,123 +528,6 @@ describe('dragging', () => {
     controller.expand() // ignored while dragging
     expect(controller.currentMode).toBe('dragging')
     controller.endDrag()
-  })
-
-  it("can't start while bouncing", () => {
-    controller.startBounce()
-    controller.startDrag()
-    expect(controller.currentMode).toBe('bouncing')
-  })
-})
-
-describe('bounce', () => {
-  /** Whether the visible bubble (inside the window's padding) is wholly on the displays. */
-  const onScreens = ({ x, y, width, height }: Rect) =>
-    [
-      [x + 8, y + 8],
-      [x + width - 8, y + 8],
-      [x + 8, y + height - 8],
-      [x + width - 8, y + height - 8],
-    ].every(([px, py]) =>
-      screens.some(
-        ({ workArea: a }) =>
-          px! >= a.x && px! <= a.x + a.width && py! >= a.y && py! <= a.y + a.height,
-      ),
-    )
-
-  it('hides the panel and moves the bubble around, staying on screen', () => {
-    controller.clickBubble()
-    controller.startBounce()
-    expect(controller.currentMode).toBe('bouncing')
-    expect(panel.visible).toBe(false)
-
-    const seen = new Set<string>()
-    for (let i = 0; i < 600; i++) {
-      vi.advanceTimersByTime(16)
-      seen.add(`${bubble.bounds!.x},${bubble.bounds!.y}`)
-      expect(onScreens(bubble.bounds!)).toBe(true)
-    }
-    expect(seen.size).toBeGreaterThan(100)
-  })
-
-  it('roams onto the other display, and a click brings it back to its corner on its own', () => {
-    controller.startBounce()
-    let visitedSecond = false
-    for (let i = 0; i < 20_000 && !visitedSecond; i++) {
-      vi.advanceTimersByTime(16)
-      expect(onScreens(bubble.bounds!)).toBe(true)
-      if (bubble.bounds!.x + 8 >= SECOND.workArea.x) visitedSecond = true
-    }
-    expect(visitedSecond).toBe(true)
-    vi.advanceTimersByTime(500) // well onto the second display
-    controller.clickBubble()
-    vi.advanceTimersByTime(1000)
-    expect(bubble.bounds).toEqual(home(PRIMARY.workArea, 'bottom-right'))
-    expect(anchors).toEqual([]) // its home never moved
-  })
-
-  it('crosses the taskbar between a monitor and the one stacked above it', () => {
-    // Like the user's desk: a laptop with a wide monitor above it, whose taskbar runs along the
-    // edge they share.
-    screens = [
-      {
-        id: 1,
-        bounds: { x: 0, y: 0, width: 1536, height: 864 },
-        workArea: { x: 0, y: 0, width: 1536, height: 816 },
-      },
-      {
-        id: 2,
-        bounds: { x: -750, y: -1440, width: 3440, height: 1440 },
-        workArea: { x: -750, y: -1440, width: 3440, height: 1392 },
-      },
-    ]
-    controller.displayChanged()
-    controller.startBounce()
-    let visitedAbove = false
-    for (let i = 0; i < 20_000 && !visitedAbove; i++) {
-      vi.advanceTimersByTime(16)
-      if (bubble.bounds!.y + 64 <= -48) visitedAbove = true // wholly on the monitor above
-    }
-    expect(visitedAbove).toBe(true)
-    controller.clickBubble()
-    vi.advanceTimersByTime(1000)
-    expect(bubble.bounds).toEqual(home(screens[0]!.workArea, 'bottom-right'))
-  })
-
-  it('returns to its corner of the second display when that is where it lives', () => {
-    drag({ x: 2100, y: 100 }) // second display, top-left
-    vi.advanceTimersByTime(1000)
-    controller.startBounce()
-    vi.advanceTimersByTime(8000)
-    controller.clickBubble()
-    vi.advanceTimersByTime(1000)
-    expect(bubble.bounds).toEqual(home(SECOND.workArea, 'top-left'))
-  })
-
-  it('stops on click and glides back to the corner', () => {
-    controller.startBounce()
-    vi.advanceTimersByTime(2000)
-    expect(bubble.bounds).not.toEqual(home())
-
-    controller.clickBubble()
-    expect(controller.currentMode).toBe('returning')
-    controller.clickBubble() // ignored mid-glide
-    expect(controller.currentMode).toBe('returning')
-
-    vi.advanceTimersByTime(1000)
-    expect(controller.currentMode).toBe('collapsed')
-    expect(bubble.bounds).toEqual(home())
-    expect(modes).toEqual(['bouncing', 'returning', 'collapsed'])
-  })
-
-  it('opening from the tray while bouncing glides home, then opens', () => {
-    controller.startBounce()
-    vi.advanceTimersByTime(1000)
-    controller.expand()
-    vi.advanceTimersByTime(1000)
-    expect(controller.currentMode).toBe('expanded')
-    expect(bubble.bounds).toEqual(home())
-    expect(panel.visible).toBe(true)
   })
 })
 
@@ -466,7 +571,7 @@ describe('whileHidden (screenshots)', () => {
 })
 
 describe('display changes', () => {
-  it('moves the bubble to its corner of the resized display', () => {
+  it('moves the character onto the taskbar of the resized display', () => {
     screens[0]!.bounds = { x: 0, y: 0, width: 2560, height: 1440 }
     screens[0]!.workArea = { x: 0, y: 0, width: 2560, height: 1400 }
     controller.displayChanged()
@@ -474,28 +579,111 @@ describe('display changes', () => {
   })
 
   it('moves to the same corner of the main display when its display is unplugged', () => {
-    drag({ x: 2100, y: 100 }) // second display, top-left
+    drag({ x: 2100, y: 100 }) // second display, 136 from its bottom-left corner
     vi.advanceTimersByTime(1000)
     screens = [screens[0]!]
     controller.displayChanged()
-    expect(bubble.bounds).toEqual(home(PRIMARY.workArea, 'top-left'))
-    expect(anchors.at(-1)).toEqual({ displayId: 1, corner: 'top-left' })
+    expect(bubble.bounds).toEqual(home(PRIMARY.workArea, 'bottom-left', 136))
+    expect(anchors.at(-1)).toEqual({ displayId: 1, corner: 'bottom-left' })
   })
 
-  it('lets a bounce carry on, on the displays as they are now', () => {
-    controller.startBounce()
-    // A lower resolution on the main display.
+  it('stops a fidget too, standing idle again', () => {
+    advanceUntil(() => controller.currentPose === 'sit')
+    controller.displayChanged()
+    expect(controller.currentPose).toBe('idle')
+  })
+
+  it('stops a walk and stands it back on the taskbar, as far along as still fits', () => {
+    vi.advanceTimersByTime(FIRST_ACTIVITY_MS + 600)
+    expect(controller.currentPose).toBe('walk-left')
+    screens[0]!.workArea = { x: 0, y: 0, width: 1920, height: 1000 } // a taller taskbar
+    controller.displayChanged()
+    expect(controller.currentPose).toBe('idle')
+    expect(bubble.bounds!.y + bubble.bounds!.height).toBe(1000)
+  })
+
+  it('shrinks her to fit a smaller screen, and grows her back once there is room', () => {
+    controller.setScale(6)
     screens[0]!.bounds = { x: 0, y: 0, width: 1280, height: 720 }
     screens[0]!.workArea = { x: 0, y: 0, width: 1280, height: 680 }
     controller.displayChanged()
-    expect(controller.currentMode).toBe('bouncing')
-    for (let i = 0; i < 200; i++) {
-      vi.advanceTimersByTime(16)
-      const { x, y } = bubble.bounds!
-      // Wholly on one display or the other (the shrunken main one no longer reaches the second).
-      const on = ({ workArea: a }: DisplayArea) =>
-        x + 8 >= a.x && x + 64 <= a.x + a.width && y + 8 >= a.y && y + 64 <= a.y + a.height
-      expect(screens.some(on)).toBe(true)
-    }
+    // At 6× the panel (its actions above her) would be taller than the screen.
+    expect(controller.size).toEqual({ scale: 5, max: 5 })
+    expect(bubble.bounds).toEqual(
+      bubbleWindowBounds(restPosition(workArea(), 'bottom-right', 0, 5), 5),
+    )
+    screens[0]!.bounds = { ...PRIMARY.bounds }
+    screens[0]!.workArea = { ...PRIMARY.workArea }
+    controller.displayChanged()
+    expect(controller.size).toEqual({ scale: 6, max: 6 })
+  })
+})
+
+describe('her size', () => {
+  it('starts at her usual size', () => {
+    expect(controller.size).toEqual({ scale: 1, max: 6 })
+    expect(bubble.bounds).toEqual(home())
+  })
+
+  it('starts at the size saved last time, snapped to one of her sizes', () => {
+    controller.dispose()
+    controller = makeController(null, 2.2)
+    controller.start()
+    expect(controller.size.scale).toBe(2)
+    expect(bubble.bounds).toEqual(
+      bubbleWindowBounds(restPosition(workArea(), 'bottom-right', 0, 2), 2),
+    )
+  })
+
+  it('grows where she stands: feet on the taskbar, her corner side kept, both windows resized', () => {
+    controller.clickBubble()
+    const before = bubble.bounds!
+    expect(controller.setScale(3)).toEqual({ scale: 3, max: 6 })
+    const after = bubble.bounds!
+    expect(after.width).toBe(before.width * 3)
+    expect(after.y + after.height).toBe(1040) // still on the taskbar
+    expect(after.x + after.width - 24).toBe(before.x + before.width - 8) // 16 from the side
+    const position = restPosition(workArea(), 'bottom-right', 0, 3)
+    expect(panel.bounds).toEqual(panelWindowBounds(position, 4, 'bottom-right', 3))
+    expect(sizes).toEqual([{ scale: 3, max: 6 }])
+    expect(controller.currentMode).toBe('expanded') // the panel stays open
+  })
+
+  it('shrinks to half her size, and no smaller', () => {
+    controller.setScale(0.5)
+    expect(bubble.bounds!.width).toBe(48)
+    controller.setScale(0.1)
+    expect(controller.size.scale).toBe(0.5)
+  })
+
+  it("doesn't say anything when her size doesn't change", () => {
+    controller.setScale(1)
+    expect(sizes).toEqual([])
+  })
+
+  it('keeps her to the biggest size that fits a small screen', () => {
+    screens[0]!.workArea = { x: 0, y: 0, width: 1280, height: 680 }
+    controller.displayChanged()
+    expect(controller.setScale(6)).toEqual({ scale: 5, max: 5 })
+  })
+
+  it('walks faster the bigger she is, her steps as long as she is big', () => {
+    controller.setScale(2)
+    vi.advanceTimersByTime(FIRST_ACTIVITY_MS + 100)
+    expect(controller.currentPose).toBe('walk-left')
+    const from = bubble.bounds!.x
+    vi.advanceTimersByTime(1000)
+    // Twice the usual speed, give or take a frame.
+    expect(from - bubble.bounds!.x).toBeGreaterThan(WANDER.walkSpeed * 2 - 5)
+    expect(from - bubble.bounds!.x).toBeLessThan(WANDER.walkSpeed * 2 + 5)
+  })
+
+  it('says where she stands, for her clones', () => {
+    controller.setScale(2)
+    expect(controller.standing).toEqual({
+      workArea: PRIMARY.workArea,
+      bounds: bubbleWindowBounds(restPosition(workArea(), 'bottom-right', 0, 2), 2),
+      scale: 2,
+    })
   })
 })

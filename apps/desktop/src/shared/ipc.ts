@@ -1,5 +1,7 @@
 import type { CommandActionId } from './actions'
-import type { Corner, Point } from './geometry'
+import type { Pose } from './character'
+import type { CharacterSize, Corner, Point } from './geometry'
+import type { Spell } from './spells'
 import type {
   ActionResult,
   AppsState,
@@ -51,6 +53,8 @@ export const IPC = {
   settingsSetAutoSend: 'assist:settings-set-auto-send',
   settingsSetFavoriteApp: 'assist:settings-set-favorite-app',
   settingsSetTheme: 'assist:settings-set-theme',
+  characterSetSize: 'assist:character-set-size',
+  characterCastSpell: 'assist:character-cast-spell',
   authSignIn: 'assist:auth-sign-in',
   authCancel: 'assist:auth-cancel',
   authSignOut: 'assist:auth-sign-out',
@@ -90,7 +94,10 @@ export const IPC = {
   updatesCheck: 'assist:updates-check',
   // main → renderer
   modeChanged: 'assist:mode-changed',
+  poseChanged: 'assist:pose-changed',
+  bubbleArrive: 'assist:bubble-arrive',
   cornerChanged: 'assist:corner-changed',
+  sizeChanged: 'assist:size-changed',
   clickThroughReset: 'assist:click-through-reset',
   authStatus: 'assist:auth-status',
   chatMessage: 'assist:chat-message',
@@ -108,7 +115,7 @@ export interface AssistApi {
   bubbleClick(pressedAt?: number): void
   /** The bubble was pressed and moved: the main process makes it follow the mouse. */
   bubbleDragStart(): void
-  /** Released: the bubble snaps to the nearest corner of the display it's on. */
+  /** Released: the character falls onto the taskbar of the display it's on. */
   bubbleDragEnd(): void
   collapse(): void
   /** Tell the main process whether the pointer is over real UI (true) or a see-through area. */
@@ -138,8 +145,14 @@ export interface AssistApi {
     setAutoSend(autoSend: boolean): Promise<Settings>
     /** Stars an app in the Apps list (it moves to the top), or takes its star away. */
     setFavoriteApp(id: string, favorite: boolean): Promise<Settings>
-    /** Light or dark mode for all of Desktop Assist; saved. */
+    /** Light or dark mode for all of Desktop Wizard; saved. */
     setTheme(theme: Theme): Promise<Settings>
+  }
+  character: {
+    /** Makes her `scale` times her usual size (one of CHARACTER_SIZES); saved. */
+    setSize(scale: number): Promise<CharacterSize>
+    /** Casts one of her spells: the panel closes so it can be seen. */
+    castSpell(spell: Spell): Promise<void>
   }
   auth: {
     /** Opens JumpCloud in the browser; progress arrives through `onAuthStatus`. */
@@ -171,7 +184,7 @@ export interface AssistApi {
   apps: {
     /** The list as it stands; loads it first if needed, or again with `refresh`. */
     get(refresh?: boolean): Promise<AppsState>
-    /** Connects Desktop Assist to the portal, in the browser; progress via onAppsState. */
+    /** Connects Desktop Wizard to the portal, in the browser; progress via onAppsState. */
     signIn(): Promise<void>
     cancelSignIn(): Promise<void>
     /** Opens the app in the default browser (signed in through the portal). */
@@ -229,10 +242,16 @@ export interface AssistApi {
      */
     check(): Promise<UpdateState>
   }
-  /** Starts Desktop Assist's uninstaller and quits (installed copies only). */
+  /** Starts Desktop Wizard's uninstaller and quits (installed copies only). */
   uninstall(): Promise<UninstallResult>
   onModeChanged(callback: (mode: Mode) => void): () => void
+  /** The character's pose changed (walking, fidgeting, dangling...). */
+  onPoseChanged(callback: (pose: Pose) => void): () => void
+  /** Her window has just been shown as the app starts: time for her to appear (the bubble's page). */
+  onArrive(callback: () => void): () => void
   onCornerChanged(callback: (corner: Corner) => void): () => void
+  /** Her size changed, or the biggest she can be on her screen did. */
+  onSizeChanged(callback: (size: CharacterSize) => void): () => void
   /** The panel was just shown with click-through reset; `pointer` is where the mouse is now. */
   onClickThroughReset(callback: (pointer: Point) => void): () => void
   onAuthStatus(callback: (status: AuthStatus) => void): () => void

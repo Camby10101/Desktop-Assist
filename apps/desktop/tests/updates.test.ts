@@ -225,7 +225,7 @@ function updater(
       const parts: Uint8Array[] = []
       for await (const chunk of chunks) parts.push(chunk)
       world.saved = Buffer.concat(parts)
-      return `C:\\Temp\\Desktop Assist update\\${name}`
+      return `C:\\Temp\\Desktop Wizard update\\${name}`
     },
     install: options.dev ? null : (path) => void world.installed.push(path),
     notify: ({ title }) => void world.notified.push(title),
@@ -249,7 +249,7 @@ describe('Updater', () => {
     expect(await u.checkAndInstall()).toEqual({ status: 'installing', version: '1.0.1' })
     expect(world.saved?.equals(INSTALLER)).toBe(true)
     expect(world.installed).toEqual([
-      'C:\\Temp\\Desktop Assist update\\Desktop.Assist-Setup-1.0.1.exe',
+      'C:\\Temp\\Desktop Wizard update\\Desktop.Assist-Setup-1.0.1.exe',
     ])
     expect(world.notified).toEqual(['Updating to 1.0.1'])
     expect(world.quit).toBe(1)
@@ -269,7 +269,7 @@ describe('Updater', () => {
     expect(await u.checkAndInstall()).toEqual({
       status: 'downloaded',
       version: '1.0.1',
-      path: 'C:\\Temp\\Desktop Assist update\\Desktop.Assist-Setup-1.0.1.exe',
+      path: 'C:\\Temp\\Desktop Wizard update\\Desktop.Assist-Setup-1.0.1.exe',
     })
     expect(world.quit).toBe(0)
   })

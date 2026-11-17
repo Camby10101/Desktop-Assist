@@ -1,13 +1,14 @@
 import type { ActionId } from './actions'
-import type { Corner } from './geometry'
+import type { Pose } from './character'
+import type { CharacterSize, Corner } from './geometry'
 
 /**
- * What the bubble is doing. The main process owns this; renderers only display it.
+ * What the bubble (the character) is doing. The main process owns this; renderers only display it.
  * - `dragging`: following the mouse while the user drags it.
- * - `returning`: gliding into its corner after a bounce or a drag.
+ * - `returning`: falling onto the taskbar after a drag.
  * - `capturing`: windows are hidden while a screenshot is taken.
  */
-export type Mode = 'collapsed' | 'expanded' | 'dragging' | 'bouncing' | 'returning' | 'capturing'
+export type Mode = 'collapsed' | 'expanded' | 'dragging' | 'returning' | 'capturing'
 
 export interface Attachment {
   id: string
@@ -41,7 +42,7 @@ export interface Settings {
   canUninstall: boolean
   /** IDs of the apps the user starred in the Apps list. */
   favoriteApps: string[]
-  /** Light or dark mode for Desktop Assist (dark until the user switches). */
+  /** Light or dark mode for Desktop Wizard (dark until the user switches). */
   theme: Theme
 }
 
@@ -132,8 +133,12 @@ export type AskResult =
 
 export interface AppState {
   mode: Mode
-  /** The screen corner the bubble rests in; the panel lays itself out to open away from it. */
+  /** The bottom corner the character lives near; the panel lays itself out to open away from it. */
   corner: Corner
+  /** What the character is doing, for the bubble's page to animate. */
+  pose: Pose
+  /** How big she is, and the biggest she can be on her screen. */
+  size: CharacterSize
   notes: Notes
   settings: Settings
   branding: Branding
@@ -153,7 +158,7 @@ export interface PortalApp {
 
 /**
  * The Apps list.
- * - `sign-in`: the user hasn't connected Desktop Assist to their portal yet (or the connection
+ * - `sign-in`: the user hasn't connected Desktop Wizard to their portal yet (or the connection
  *   ended); a button starts it, in the browser.
  * - `signing-in`: waiting for the user to finish in their browser.
  */

@@ -35,12 +35,9 @@ export function createActionHandlers(deps: {
         return { ok: false, message: "Couldn't take a screenshot" }
       }
     },
-    async bounce() {
-      deps.controller.startBounce()
-      return { ok: true }
-    },
     async close() {
-      deps.quit()
+      // She vanishes into white motes first, then the app quits.
+      deps.controller.farewell(deps.quit)
       return { ok: true }
     },
   }

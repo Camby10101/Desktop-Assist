@@ -9,11 +9,13 @@ import {
   Trash2,
   type LucideIcon,
 } from 'lucide-react'
-import { useEffect, useState, type ReactNode } from 'react'
-import { PANEL_LAYOUT, UI, type Corner } from '@shared/geometry'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { UI, type CharacterSize, type Corner, type PanelLayout } from '@shared/geometry'
 import type { Branding, Effort, Settings, SignedInUser, UpdateState } from '@shared/types'
+import { useFitInWindow } from '../hooks/useFitInWindow'
 import { anchored } from '../lib/anchor'
 import { cn } from '../lib/cn'
+import { SizeControl } from './SizeControl'
 
 const CONFIRM_MS = 3000
 
@@ -26,9 +28,13 @@ const EFFORTS: { value: Effort; label: string; hint: string }[] = [
 /** The menu that opens beside the gear icon, on the side facing the middle of the screen. */
 export function SettingsMenu(props: {
   corner: Corner
+  /** Where things sit for her size: the menu goes beside the stack. */
+  layout: PanelLayout
   /** Distance from the bubble's edge of the window to the gear, so the menu lines up with it. */
   offset: number
   settings: Settings
+  /** Her size, and the biggest she can be. */
+  size: CharacterSize
   branding: Branding
   version: string
   /** Who's signed in, or null when nobody is. */
@@ -39,6 +45,8 @@ export function SettingsMenu(props: {
   /** Check for updates, as it stands. */
   update: UpdateState
   onCheckForUpdates: () => void
+  onToggleTheme: () => void
+  onSetSize: (scale: number) => void
   onToggleAutoStart: () => void
   onSetEffort: (effort: Effort) => void
   onToggleAutoSend: () => void
@@ -64,11 +72,15 @@ export function SettingsMenu(props: {
   }, [confirmingUninstall])
 
   const { settings, branding } = props
+  // Beside the gear, but never past the top of the window: it's a long menu.
+  const menu = useRef<HTMLDivElement>(null)
+  const fit = useFitInWindow(menu, props.offset)
   // With Claude Desktop, the chat and its settings live there; only the text box is here.
   const builtInChat = branding.chatApp === 'built-in'
 
   return (
     <div
+      ref={menu}
       data-hit
       data-settings-menu
       role="menu"
@@ -78,10 +90,32 @@ export function SettingsMenu(props: {
         'border-black/10 bg-white text-zinc-800 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100',
       )}
       style={{
-        ...anchored(props.corner, PANEL_LAYOUT.settingsX, props.offset),
+        ...anchored(props.corner, props.layout.settingsX, fit.offset),
         width: UI.settingsMenuWidth,
+        maxHeight: fit.maxHeight,
+        overflowY: 'auto',
       }}
     >
+      <button
+        type="button"
+        role="menuitemcheckbox"
+        aria-checked={settings.theme === 'light'}
+        onClick={props.onToggleTheme}
+        className="flex w-full items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800"
+      >
+        <span>
+          Light mode
+          <span className="block text-[11px] text-zinc-500">
+            {settings.theme === 'light' ? 'Light windows' : 'Dark windows'}
+          </span>
+        </span>
+        <Switch on={settings.theme === 'light'} />
+      </button>
+
+      <SizeControl size={props.size} onSetSize={props.onSetSize} />
+
+      <div className="my-1 border-t border-black/10 dark:border-white/10" />
+
       <button
         type="button"
         role="menuitemcheckbox"
@@ -243,7 +277,7 @@ function UpdateItem(props: { state: UpdateState; version: string; onCheck: () =>
       : state.status === 'downloading'
         ? [`Downloading ${state.version}… ${state.percent}%`, 'It installs itself when done']
         : state.status === 'installing'
-          ? [`Installing ${state.version}…`, 'Desktop Assist will close and start again']
+          ? [`Installing ${state.version}…`, 'Desktop Wizard will close and start again']
           : state.status === 'downloaded'
             ? [`Downloaded ${state.version}`, 'Not installed: this is a development run']
             : state.status === 'up-to-date'

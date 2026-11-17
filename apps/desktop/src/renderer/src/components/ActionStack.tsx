@@ -4,16 +4,13 @@ import {
   Headset,
   LayoutGrid,
   MessageCircle,
-  Moon,
   Power,
   Settings,
-  Sun,
-  Volleyball,
+  WandSparkles,
   type LucideIcon,
 } from 'lucide-react'
 import { ACTIONS, type ActionId } from '@shared/actions'
-import { PANEL_LAYOUT, UI, isTopCorner, type Corner } from '@shared/geometry'
-import type { Theme } from '@shared/types'
+import { UI, isTopCorner, type Corner, type PanelLayout } from '@shared/geometry'
 import { anchored } from '../lib/anchor'
 import { cn } from '../lib/cn'
 
@@ -23,9 +20,8 @@ const ICONS: Record<ActionId, LucideIcon> = {
   jira: Bell,
   servicedesk: Headset,
   screenshot: Camera,
-  theme: Sun,
   settings: Settings,
-  bounce: Volleyball,
+  spells: WandSparkles,
   close: Power,
 }
 
@@ -35,11 +31,11 @@ const ICONS: Record<ActionId, LucideIcon> = {
  */
 export function ActionStack(props: {
   corner: Corner
+  /** Where things sit for her size: the stack goes above her. */
+  layout: PanelLayout
   actions: ActionId[]
   open: boolean
   activeId: ActionId | null
-  /** The current mode: the theme icon shows the one it switches to. */
-  theme: Theme
   /** Icons with a small dot, e.g. Ask Claude while an unsent question is waiting behind it. */
   dotted?: ActionId[]
   /** Command icons that open a page in the panel instead (the service desk, with a form). */
@@ -51,18 +47,13 @@ export function ActionStack(props: {
     <div
       className={cn('absolute flex', top ? 'flex-col' : 'flex-col-reverse')}
       style={{
-        ...anchored(props.corner, PANEL_LAYOUT.actionsX, PANEL_LAYOUT.actionsY),
+        ...anchored(props.corner, props.layout.actionsX, props.layout.actionsY),
         gap: UI.actionGap,
       }}
     >
       {props.actions.map((id, index) => {
-        const Icon = id === 'theme' && props.theme === 'light' ? Moon : ICONS[id]
-        const label =
-          id === 'theme'
-            ? props.theme === 'dark'
-              ? 'Switch to light mode'
-              : 'Switch to dark mode'
-            : ACTIONS[id].label
+        const Icon = ICONS[id]
+        const label = ACTIONS[id].label
         const active = id === props.activeId
         return (
           <button

@@ -564,7 +564,7 @@ Compares two file paths the way Windows does, for `addAttachment()`.
 Everything the app does with screenshot images goes through this class: taking one, finding the
 newest, making small previews, preparing one for Claude, combining several into one image for the
 clipboard, and opening one in another app. `index.ts` creates a single instance with the
-screenshots folder (`Pictures\<appName>`, for example `Pictures\Desktop Assist`) and a function
+screenshots folder (`Pictures\<appName>`, for example `Pictures\Desktop Wizard`) and a function
 that returns the display the bubble is on. `actions.ts` calls `capture()` for the camera button,
 `index.ts` uses `forClipboard()` when a question goes to Claude Desktop or an IT request to the
 service desk portal, and `ipc.ts` exposes the rest to the pages.
@@ -844,7 +844,7 @@ forClipboard(paths: string[]): NativeImage | null {
 
 Prepares the attached screenshots for Claude Desktop. A question goes to Claude Desktop as a link,
 and a link can carry text but not images, so the screenshots go on the Windows clipboard to be
-pasted into Claude with Ctrl+V, by Desktop Assist or by the user (see
+pasted into Claude with Ctrl+V, by Desktop Wizard or by the user (see
 [Claude Desktop](9-claude-desktop.md)). An IT request raised from the panel goes to the service
 desk portal as a link too, so its screenshots go the same way, to be pasted into the portal's form
 (see [Jira and the service desk](11-atlassian.md)). The clipboard holds only one image at a time,
@@ -1084,8 +1084,8 @@ The heart of the inside-the-folder check: is `file` really inside `dir` (or one 
 and not `dir` itself?
 
 A simple test such as "does the file's path start with the folder's path?" isn't safe.
-`C:\Users\me\Pictures\Desktop Assist\..\..\Documents\taxes.pdf` starts with the folder's path but
-points outside it, and `C:\Users\me\Pictures\Desktop Assist Copy\x.png` starts with the same text
+`C:\Users\me\Pictures\Desktop Wizard\..\..\Documents\taxes.pdf` starts with the folder's path but
+points outside it, and `C:\Users\me\Pictures\Desktop Wizard Copy\x.png` starts with the same text
 but is a different folder. This function compares the real path structure instead. It works on the
 path text alone and doesn't look at the disk.
 

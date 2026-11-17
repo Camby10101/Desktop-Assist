@@ -17,8 +17,9 @@ import { existsSync } from 'node:fs'
 import { readFile, rm } from 'node:fs/promises'
 import { hostname, release, version as osVersion } from 'node:os'
 import { join } from 'node:path'
-import { BUBBLE_BOX, panelWindowSize } from '@shared/geometry'
+import { bubbleMetrics, panelWindowSize, type Rect } from '@shared/geometry'
 import { IPC } from '@shared/ipc'
+import type { Spell } from '@shared/spells'
 import type { AppsState, AtlassianState, AuthStatus } from '@shared/types'
 import tenantConfig from '@tenant/tenant.json'
 import { createActionHandlers } from './actions'
@@ -30,6 +31,9 @@ import { summarizeIdToken, type IdTokenSummary } from './auth/idToken'
 import { listenForRedirect } from './auth/loopback'
 import { createOidc } from './auth/oidc'
 import { BubbleController, type DisplayArea, type Displays } from './bubble/BubbleController'
+import { Clones } from './bubble/clones'
+import { SpellEffects } from './bubble/spellEffects'
+import { Vision } from './bubble/vision'
 import { runFrontCheck, watchBubbleFront } from './bubble/frontCheck'
 import {
   bringToFront,
@@ -53,6 +57,7 @@ import { INSTALLER_ARGS, saveDownload, Updater } from './updates'
 import { NotesStore } from './notes/NotesStore'
 import { ScreenshotService } from './screenshots/ScreenshotService'
 import { myRequestsUrl, ServiceDesk, windowsVersion } from './serviceDesk'
+import { adoptFormerData, FORMER_NAME, PRODUCT_NAME } from './formerName'
 import { SettingsService } from './settings'
 import { readJsonFile, writeJsonFile } from './storage/jsonFile'
 import { SecretStore, type Encryptor } from './storage/SecretStore'
@@ -68,17 +73,19 @@ import {
 import { createTray } from './tray'
 
 const SHUTDOWN_TIMEOUT_MS = 2000
-/** The installer's product name (electron-builder.cjs): its uninstaller is named after it. */
-const PRODUCT_NAME = 'Desktop Assist'
 
-// Keep dev runs (`npm run dev`) from sharing notes, the sign-in and the single-instance lock with
-// an installed copy. Must happen before anything reads the userData path. Automated tests give
-// their dev runs a folder of their own with DESKTOP_ASSIST_DEV_USER_DATA.
-if (!app.isPackaged) {
+// Its data folder, which must be settled before anything reads the userData path. An installed
+// copy's is %APPDATA%\Desktop Wizard: the first time after an update from Desktop Assist (its old
+// name), the old folder is moved across (see formerName.ts). Dev runs (`npm run dev`) have one of
+// their own, so they don't share notes, the sign-in and the single-instance lock with an installed
+// copy; automated tests give theirs a folder of its own with DESKTOP_ASSIST_DEV_USER_DATA.
+if (app.isPackaged) {
+  app.setPath('userData', adoptFormerData(app.getPath('appData'), PRODUCT_NAME, FORMER_NAME))
+} else {
   app.setPath(
     'userData',
     process.env['DESKTOP_ASSIST_DEV_USER_DATA'] ||
-      join(app.getPath('appData'), `${app.getName()} (Dev)`),
+      adoptFormerData(app.getPath('appData'), `${app.getName()} (Dev)`, `${FORMER_NAME} (Dev)`),
   )
 }
 
@@ -91,7 +98,7 @@ const refusedSwitches = app.isPackaged
   : []
 
 if (refusedSwitches.length) {
-  createLog(join(app.getPath('userData'), 'logs', 'desktop-assist.log'))(
+  createLog(join(app.getPath('userData'), 'logs', 'desktop-wizard.log'))(
     `Refused to start with ${refusedSwitches.map((name) => `--${name}`).join(' ')}`,
   )
   app.exit(1)
@@ -112,8 +119,8 @@ async function start(): Promise<void> {
   const userData = app.getPath('userData')
   const screenshotsDir = join(app.getPath('pictures'), tenant.appName)
   const actionCount = tenant.actions.length
-  // Problems go to %APPDATA%\Desktop Assist\logs, so an installed copy can be diagnosed too.
-  const log = createLog(join(userData, 'logs', 'desktop-assist.log'))
+  // Problems go to %APPDATA%\Desktop Wizard\logs, so an installed copy can be diagnosed too.
+  const log = createLog(join(userData, 'logs', 'desktop-wizard.log'))
 
   const notes = new NotesStore(join(userData, 'notes.json'), {
     onError: (error) => log('Saving the text box failed:', error),
@@ -125,7 +132,8 @@ async function start(): Promise<void> {
 
   // The windows are created after the last `await`: from here to registerIpc() below nothing
   // waits, so the pages can't ask for the app state before there's anything to answer them.
-  const bubbleWindow = createOverlayWindow('bubble', { width: BUBBLE_BOX, height: BUBBLE_BOX })
+  const { box, headroom } = bubbleMetrics()
+  const bubbleWindow = createOverlayWindow('bubble', { width: box, height: box + headroom })
   const panelWindow = createOverlayWindow('panel', panelWindowSize(actionCount))
   const windows = [bubbleWindow, panelWindow]
   const stopKeepingOnTop = windows.map(keepOnTop)
@@ -135,14 +143,45 @@ async function start(): Promise<void> {
     for (const win of windows) if (!win.isDestroyed()) win.webContents.send(channel, payload)
   }
 
+  /**
+   * A window that only shows something over the screen (her clones, her vision's light and logo,
+   * or a spell's effects): it shows once its page is drawn, behind her own window, which is put
+   * back in front.
+   */
+  const openOverlay =
+    (view: 'clones' | 'vision' | 'spell') => (bounds: Rect, query: Record<string, string>) => {
+      const win = createOverlayWindow(view, { width: bounds.width, height: bounds.height }, query)
+      win.setBounds(bounds)
+      win.once('ready-to-show', () => {
+        win.showInactive()
+        bringToFront(bubbleWindow, false)
+      })
+      return { close: () => !win.isDestroyed() && win.destroy() }
+    }
+  // Her vision's light and logo, over her for as long as she's having it.
+  const vision = new Vision({ open: openOverlay('vision') })
+  // Her spells' effects (starfall; the explosion's pillar of magic circles, and the bang).
+  const effects = new SpellEffects({ accentColor: tenant.accentColor, open: openOverlay('spell') })
+
   const bubble = new BubbleController({
     bubble: bubbleSurface(bubbleWindow),
     panel: panelSurface(panelWindow),
     displays: electronDisplays,
     actionCount,
     initialAnchor: settings.bubbleAnchor,
+    initialScale: settings.characterScale,
     onDiagnostic: (message) => log(message),
     onModeChange: (mode) => broadcast(IPC.modeChanged, mode),
+    onPoseChange: (pose) => {
+      broadcast(IPC.poseChanged, pose)
+      if (pose === 'vision') vision.start(bubble.standing)
+      else vision.stop()
+      // The explosion is her chant: it starts with it, and it's called off if she stops chanting
+      // before it's done (someone clicked her, or picked her up).
+      if (pose === 'chant') effects.start('explosion', bubble.standing)
+      else if (effects.chanting) effects.stop()
+    },
+    onSizeChange: (size) => broadcast(IPC.sizeChanged, size),
     onAnchorChange: (anchor) => {
       broadcast(IPC.cornerChanged, anchor.corner)
       void settings.setBubbleAnchor(anchor) // remembered for next time
@@ -150,6 +189,31 @@ async function start(): Promise<void> {
   })
   controller = bubble
   panelWindow.on('blur', () => bubble.panelBlurred())
+
+  // Her clones: a window along the taskbar.
+  const clones = new Clones({ accentColor: tenant.accentColor, open: openOverlay('clones') })
+
+  /** The Spells menu: the panel closes, so the spell can be seen, and she casts it. */
+  const castSpell = (spell: Spell) => {
+    bubble.collapse()
+    switch (spell) {
+      case 'clones':
+        clones.start(bubble.standing)
+        bubble.act('spell')
+        return
+      case 'starfall':
+        effects.start('starfall', bubble.standing)
+        bubble.act('spell')
+        return
+      case 'teleport':
+        bubble.teleport()
+        return
+      case 'explosion':
+        // Her chant brings the effects (onPoseChange, above).
+        bubble.act('chant')
+        return
+    }
+  }
 
   const screenshots = new ScreenshotService(screenshotsDir, () =>
     screen.getDisplayMatching(bubbleWindow.getBounds()),
@@ -353,6 +417,7 @@ async function start(): Promise<void> {
       openServiceDesk: serviceDesk ? () => shell.openExternal(serviceDesk.url) : null,
       quit: () => app.quit(),
     }),
+    castSpell,
     uninstall: () =>
       uninstall({
         isPackaged: app.isPackaged,
@@ -367,6 +432,8 @@ async function start(): Promise<void> {
     getState: () => ({
       mode: bubble.currentMode,
       corner: bubble.corner,
+      pose: bubble.currentPose,
+      size: bubble.size,
       notes: notes.get(),
       settings: settings.get(),
       branding: brandingOf(tenant),
@@ -380,7 +447,8 @@ async function start(): Promise<void> {
     appName: tenant.appName,
     accentColor: tenant.accentColor,
     onOpen: () => bubble.expand(),
-    onQuit: () => app.quit(),
+    // As the Close icon does: she vanishes, then the app quits.
+    onQuit: () => bubble.farewell(() => app.quit()),
   })
 
   const onDisplayChange = () => bubble.displayChanged()
@@ -395,6 +463,9 @@ async function start(): Promise<void> {
     shuttingDown = true
     event.preventDefault()
     bubble.dispose()
+    clones.stop()
+    vision.stop()
+    effects.stop()
     for (const stop of stopKeepingOnTop) stop()
     builtIn?.chat.stop()
     void portalApps?.dispose()
@@ -408,6 +479,8 @@ async function start(): Promise<void> {
 
   await windowsReady
   bubble.start()
+  // Her window is showing now: she forms out of white motes (BubbleView).
+  bubbleWindow.webContents.send(IPC.bubbleArrive)
   // For its first ten minutes, make sure the bubble isn't stuck behind other apps' windows.
   const stopWatchingFront = watchBubbleFront({
     isResting: () => bubble.currentMode === 'collapsed',
@@ -538,7 +611,6 @@ const toArea = (display: Electron.Display): DisplayArea => ({
 })
 const electronDisplays: Displays = {
   primary: () => toArea(screen.getPrimaryDisplay()),
-  all: () => screen.getAllDisplays().map(toArea),
   byId: (id) => {
     const display = screen.getAllDisplays().find((d) => d.id === id)
     return display && toArea(display)
@@ -550,6 +622,6 @@ const electronDisplays: Displays = {
 
 function fail(error: unknown): void {
   console.error(error)
-  dialog.showErrorBox('Desktop Assist could not start', String(error))
+  dialog.showErrorBox('Desktop Wizard could not start', String(error))
   app.exit(1)
 }

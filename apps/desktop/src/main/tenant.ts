@@ -123,9 +123,9 @@ export type ClaudeAccessConfig = z.infer<typeof ClaudeAccessSchema>
 
 /**
  * Where conversations with Claude happen.
- * - `claude-desktop`: Desktop Assist hands the question to the Claude Desktop app, so it uses the
+ * - `claude-desktop`: Desktop Wizard hands the question to the Claude Desktop app, so it uses the
  *   person's own Claude (Team/Enterprise) account and counts against their own usage limit. No
- *   sign-in in Desktop Assist.
+ *   sign-in in Desktop Wizard.
  * - `built-in`: the chat runs in the panel, through the Claude API, after a JumpCloud sign-in
  *   (`signIn` and `claudeAccess`). Usage is billed to the company's Claude Console account.
  */

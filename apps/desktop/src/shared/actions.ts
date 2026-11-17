@@ -2,8 +2,8 @@
 // `actions` list chooses which of these show and in what order (from the bubble upward).
 //
 // - `command` actions run in the main process (see src/main/actions.ts).
-// - `popover` actions open UI inside the panel and never reach the main process.
-// - `switch` actions flip a setting from the panel (light or dark mode).
+// - `popover` actions open UI inside the panel (a page or a menu); whatever that does next is up
+//   to it.
 
 export const ACTION_IDS = [
   'ask',
@@ -11,9 +11,8 @@ export const ACTION_IDS = [
   'jira',
   'servicedesk',
   'screenshot',
-  'theme',
   'settings',
-  'bounce',
+  'spells',
   'close',
 ] as const
 
@@ -26,11 +25,12 @@ export const ACTIONS = {
   // A page in the panel when the tenant lists request types (see PanelView); otherwise a link.
   servicedesk: { label: 'IT service desk', kind: 'command' },
   screenshot: { label: 'Take screenshot', kind: 'command' },
-  theme: { label: 'Light or dark mode', kind: 'switch' },
+  // Light or dark mode and her size are in here too.
   settings: { label: 'Settings', kind: 'popover' },
-  bounce: { label: 'Bounce', kind: 'command' },
-  close: { label: 'Close Desktop Assist', kind: 'command' },
-} as const satisfies Record<ActionId, { label: string; kind: 'command' | 'popover' | 'switch' }>
+  // A menu of her spells (src/shared/spells.ts); casting one goes to the main process.
+  spells: { label: 'Spells', kind: 'popover' },
+  close: { label: 'Close Desktop Wizard', kind: 'command' },
+} as const satisfies Record<ActionId, { label: string; kind: 'command' | 'popover' }>
 
 export type CommandActionId = {
   [K in ActionId]: (typeof ACTIONS)[K]['kind'] extends 'command' ? K : never

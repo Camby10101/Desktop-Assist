@@ -39,6 +39,10 @@ const api: AssistApi = {
     setFavoriteApp: (id, favorite) =>
       ipcRenderer.invoke(IPC.settingsSetFavoriteApp, { id, favorite }),
   },
+  character: {
+    setSize: (scale) => ipcRenderer.invoke(IPC.characterSetSize, scale),
+    castSpell: (spell) => ipcRenderer.invoke(IPC.characterCastSpell, spell),
+  },
   auth: {
     signIn: () => ipcRenderer.invoke(IPC.authSignIn),
     cancel: () => ipcRenderer.invoke(IPC.authCancel),
@@ -92,7 +96,10 @@ const api: AssistApi = {
   },
   uninstall: () => ipcRenderer.invoke(IPC.appUninstall),
   onModeChanged: (callback) => subscribe(IPC.modeChanged, callback),
+  onPoseChanged: (callback) => subscribe(IPC.poseChanged, callback),
+  onArrive: (callback) => subscribe(IPC.bubbleArrive, callback),
   onCornerChanged: (callback) => subscribe(IPC.cornerChanged, callback),
+  onSizeChanged: (callback) => subscribe(IPC.sizeChanged, callback),
   onClickThroughReset: (callback) => subscribe(IPC.clickThroughReset, callback),
   onAuthStatus: (callback) => subscribe(IPC.authStatus, callback),
   onChatMessage: (callback) => subscribe(IPC.chatMessage, callback),

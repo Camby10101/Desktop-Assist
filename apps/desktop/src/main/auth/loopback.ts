@@ -83,8 +83,8 @@ export function listenForRedirect(port: number, timeoutMs = 5 * 60_000): Promise
 function callbackPage(error: string | null): string {
   const message = error
     ? `Sign-in didn't complete: ${escapeHtml(error)}`
-    : 'You’re signed in to Desktop Assist. You can close this tab.'
-  return `<!doctype html><html><head><meta charset="utf-8"><title>Desktop Assist</title>
+    : 'You’re signed in to Desktop Wizard. You can close this tab.'
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Desktop Wizard</title>
 <style>body{font-family:'Segoe UI',system-ui,sans-serif;display:grid;place-items:center;height:100vh;margin:0;color:#18181b}
 p{font-size:16px}</style></head><body><p>${message}</p><script>setTimeout(()=>window.close(),1500)</script></body></html>`
 }

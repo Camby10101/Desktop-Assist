@@ -134,11 +134,11 @@ function html() {
     month: 'long',
     year: 'numeric',
   })
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Desktop Assist Code Guide</title>
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Desktop Wizard Code Guide</title>
 <style>${highlight}${STYLES}</style></head><body>
 <section class="cover">
   <img src="data:image/png;base64,${logo}" alt="">
-  <h1 class="title">Desktop Assist</h1>
+  <h1 class="title">Desktop Wizard</h1>
   <p class="subtitle">Code Guide</p>
   <p class="meta">Morse Micro · ${date}</p>
   <p class="intro">How the app fits together, and the actual code of every function and method with an
@@ -209,7 +209,7 @@ app
       displayHeaderFooter: true,
       headerTemplate: '<span></span>',
       footerTemplate: `<div style="width:100%;font:8px 'Segoe UI',sans-serif;color:#8c959f;text-align:center">
-      Desktop Assist Code Guide · <span class="pageNumber"></span> / <span class="totalPages"></span></div>`,
+      Desktop Wizard Code Guide · <span class="pageNumber"></span> / <span class="totalPages"></span></div>`,
       generateDocumentOutline: true,
       generateTaggedPDF: true,
     })

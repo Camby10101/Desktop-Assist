@@ -4,12 +4,18 @@ const { existsSync } = require('node:fs')
 const { join } = require('node:path')
 
 const tenant = process.env.TENANT ?? 'morse-micro'
-const logo = join(__dirname, '../../tenants', tenant, 'logo.png')
+// The app's icon: the tenant's icon.png if it has one (Morse Micro's is its logo wearing the
+// character's hat), otherwise its logo.png.
+const icon = ['icon.png', 'logo.png']
+  .map((name) => join(__dirname, '../../tenants', tenant, name))
+  .find((path) => existsSync(path))
 
 /** @type {import('electron-builder').Configuration} */
 module.exports = {
+  // Still the ID from when it was called Desktop Assist: Windows knows an install by it, so each
+  // new version installs over the old one (see src/main/formerName.ts for what else carries over).
   appId: 'com.morsemicro.desktopassist',
-  productName: 'Desktop Assist',
+  productName: 'Desktop Wizard',
   directories: { output: 'dist', buildResources: 'build' },
   files: ['out/**', 'package.json'],
   // The install folder is named after the package; without this it would be the npm workspace
@@ -31,10 +37,10 @@ module.exports = {
     enableCookieEncryption: true,
   },
   win: {
-    // The bubble's logo. electron-builder turns it into the .exe's icon, which Windows also shows
-    // for the Start menu shortcut, the installer and the uninstaller. Windows icons can't be made
-    // from SVG, so a tenant with only logo.svg gets Electron's default icon.
-    ...(existsSync(logo) ? { icon: logo } : {}),
+    // The icon (see above). electron-builder turns it into the .exe's icon, which Windows also
+    // shows for the Start menu shortcut, the installer and the uninstaller. Windows icons can't be
+    // made from SVG, so a tenant with neither PNG gets Electron's default icon.
+    ...(icon ? { icon } : {}),
     target: [{ target: 'nsis', arch: ['x64'] }],
     artifactName: '${productName}-Setup-${version}.${ext}',
   },
