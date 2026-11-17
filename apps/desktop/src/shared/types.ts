@@ -42,7 +42,7 @@ export interface Settings {
   canUninstall: boolean
   /** IDs of the apps the user starred in the Apps list. */
   favoriteApps: string[]
-  /** Light or dark mode for Desktop Assist (dark until the user switches). */
+  /** Light or dark mode for Desktop Wizard (dark until the user switches). */
   theme: Theme
 }
 
@@ -158,7 +158,7 @@ export interface PortalApp {
 
 /**
  * The Apps list.
- * - `sign-in`: the user hasn't connected Desktop Assist to their portal yet (or the connection
+ * - `sign-in`: the user hasn't connected Desktop Wizard to their portal yet (or the connection
  *   ended); a button starts it, in the browser.
  * - `signing-in`: waiting for the user to finish in their browser.
  */

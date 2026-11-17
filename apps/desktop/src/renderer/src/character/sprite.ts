@@ -1,9 +1,20 @@
 import { FIDGET_MS, type Pose as Name } from '@shared/character'
-import { draw, GRID, HEADROOM, LEG_LENGTH, type Arm, type Leg, type Pose } from './rig'
+import {
+  BUBBLES,
+  draw,
+  GRID,
+  HEADROOM,
+  JUGGLE,
+  LEG_LENGTH,
+  wispAt,
+  type Arm,
+  type Leg,
+  type Pose,
+} from './rig'
 
 // The character's animations: for each pose, a list of frames drawn by the rig (rig.ts) from key
 // poses and the in-betweens eased between them. She's an original design: an elf mage with long
-// pointed ears, silver-white hair in one long braid, amber eyes, a wide-brimmed crooked hat and a
+// pointed ears, long silver-white hair, amber eyes, a wide-brimmed crooked hat and a
 // long robe in the tenant's accent colour. Frames are drawn the first time a pose is needed, then
 // kept.
 
@@ -114,6 +125,7 @@ function mix(a: Pose, b: Pose, t: number): Pose {
     rune: lerp(a.rune, b.rune, t),
     spin: lerp(a.spin, b.spin, t),
     spread: lerp(a.spread, b.spread, t),
+    burst: lerp(a.burst, b.burst, t),
     arms: [mixArm(an, bn, t), mixArm(af, bf, t)],
     legs: [mixLeg(ln, mn, t), mixLeg(lf, mf, t)],
   }
@@ -733,6 +745,164 @@ function look(): Frame[] {
   ]
 }
 
+/** Between 0 and 1: how far `t` is from `from` to `to`, eased in and out. */
+const between = (t: number, from: number, to: number) =>
+  smooth(Math.min(1, Math.max(0, (t - from) / (to - from))))
+
+/**
+ * Juggling, from the front: her hands come up in front of her and three little orbs fly between
+ * them, up in a high arc from her far hand to her near one and quickly back underneath, each hand
+ * dipping as it throws; then they're gone into her hands and she smiles.
+ */
+function juggle(): Key[] {
+  const steps = Math.round(FIDGET_MS.juggle / FRAME_MS)
+  const [start, end] = [0.1, 0.88]
+  return Array.from({ length: steps }, (_, i) => {
+    const t = i / steps
+    const ready = between(t, 0, 0.08) * (1 - between(t, 0.92, 1))
+    const playing = t >= start && t < end
+    const progress = playing ? (t - start) / (end - start) : 0
+    // A hand dips as an orb leaves it: three throws a round from each, the near hand's a little
+    // after the far one's (when an orb comes to the end of its high arc).
+    const dip = (at: number) =>
+      playing
+        ? Math.max(0, Math.cos((progress * JUGGLE.rounds - at) * 3 * Math.PI * 2)) ** 4 * 0.2
+        : 0
+    const arm = (d: number): Arm => ({ shoulder: 0.1 + 0.4 * ready - d, elbow: -1.45 * ready + d })
+    return {
+      pose: {
+        view: 'front',
+        juggle: progress,
+        arms: [arm(dip(JUGGLE.arc)), arm(dip(0))],
+        face: t >= end + 0.02 ? 'happy' : 'neutral',
+      },
+      ms: FRAME_MS,
+    }
+  })
+}
+
+/**
+ * Bubbles, seen diagonally: she holds a little wand ring up in front of her mouth and blows
+ * through it, puffing before each bubble; they drift up and away, wobbling, and pop. She puts the
+ * wand away and watches the last ones go, smiling.
+ */
+function bubbles(): Key[] {
+  const steps = Math.round(FIDGET_MS.bubbles / FRAME_MS)
+  const blowing: Arm = { shoulder: 0.75, elbow: 2.45 }
+  return Array.from({ length: steps }, (_, i) => {
+    const t = i / steps
+    const up = between(t, 0, 0.08) * (1 - between(t, BUBBLES.wandAway, BUBBLES.wandAway + 0.06))
+    const arm: Arm = {
+      shoulder: lerp(ARM_DOWN.shoulder, blowing.shoulder, up),
+      elbow: lerp(ARM_DOWN.elbow, blowing.elbow, up),
+    }
+    // A puff just before each bubble comes.
+    const puffing = Array.from(
+      { length: BUBBLES.count },
+      (_, k) => BUBBLES.first + k * BUBBLES.gap,
+    ).some((at) => t > at - 0.045 && t <= at + 0.005)
+    const face: Pose['face'] = puffing
+      ? 'sip'
+      : t > 0.9 && t < 0.93
+        ? 'blink'
+        : t > BUBBLES.wandAway - 0.1
+          ? 'happy'
+          : 'neutral'
+    return { pose: { view: 'diagonal', bubbles: t, arms: [arm, ARM_DOWN], face }, ms: FRAME_MS }
+  })
+}
+
+/**
+ * A will-o'-wisp, from the front: a little light appears beside her (she's surprised), goes round
+ * her twice, behind her and in front (see wispAt), her eyes following it and a smile as it passes
+ * in front; then it flies off up and away, and she waves it goodbye.
+ */
+function wisp(): Key[] {
+  const steps = Math.round(FIDGET_MS.wisp / FRAME_MS)
+  return Array.from({ length: steps }, (_, i) => {
+    const t = i / steps
+    const at = wispAt(t)
+    const bye = between(t, 0.8, 0.84) * (1 - between(t, 0.94, 0.98))
+    const arm: Arm = {
+      shoulder: 0.08 + 1.45 * bye,
+      elbow: (0.75 + 0.35 * Math.sin(t * 70)) * bye,
+    }
+    const inFront = at !== null && !at.behind && Math.abs(at.x) < 12
+    return {
+      pose: {
+        view: 'front',
+        wisp: t,
+        look: at === null ? 0 : at.x > 7 ? 1 : at.x < -7 ? -1 : 0,
+        arms: [arm, ARM_DOWN],
+        face: t > 0.06 && t < 0.14 ? 'surprised' : inFront || bye > 0 ? 'happy' : 'neutral',
+      },
+      ms: FRAME_MS,
+    }
+  })
+}
+
+/**
+ * A sneeze, from the front: her nose twitches, "ah..." (her head goes back), a breath, "ah..."
+ * (further back, eyes shut), "choo!" (forward, hair flying, hands up), and the sneeze bursts into
+ * sparkles that fly out and fade; she looks surprised, then smiles sheepishly and blinks.
+ */
+function sneeze(): Key[] {
+  const twitch: Pose = { view: 'front', face: 'surprised' }
+  const ah = (tilt: number, face: Pose['face']): Pose => ({ view: 'front', face, tilt, lift: -0.5 })
+  const hands: [Arm, Arm] = [
+    { shoulder: 0.3, elbow: -0.9 },
+    { shoulder: 0.3, elbow: -0.9 },
+  ]
+  const choo: Pose = { view: 'front', face: 'blink', tilt: 0.1, lift: 1.5, arms: hands, burst: 0.1 }
+  const after: Pose = { view: 'front', face: 'surprised', tilt: 0.03, burst: 0.55 }
+  const sheepish: Pose = { view: 'front', face: 'happy', burst: 1 }
+  return [
+    ...hold(FRONT, 200),
+    ...hold(twitch, 160),
+    ...tween(twitch, ah(-0.06, 'down'), 360),
+    ...tween(ah(-0.06, 'down'), ah(-0.03, 'down'), 160),
+    ...tween(ah(-0.03, 'down'), ah(-0.1, 'blink'), 420),
+    ...tween(ah(-0.1, 'blink'), choo, 80),
+    ...tween(choo, after, 520),
+    ...tween(after, sheepish, 480),
+    ...hold({ view: 'front', face: 'happy' }, 360),
+    ...hold({ view: 'front', face: 'blink' }, 120),
+    ...hold(FRONT, 140),
+  ]
+}
+
+/**
+ * A little jig, from the front: she steps to one side with that arm up and her other hand on her
+ * hip, then hops, kicking her other foot out, her robe swinging and her hair flying the other way;
+ * then the other side, seven beats in all, and back to standing.
+ */
+function dance(): Key[] {
+  const up: Arm = { shoulder: 2.4, elbow: 0.6 }
+  const hip: Arm = { shoulder: 0.55, elbow: -1.6 }
+  const kick: Leg = { hip: 0.35, knee: 0.5 }
+  const step = (side: 1 | -1, hopping: boolean): Pose => ({
+    view: 'front',
+    face: 'happy',
+    x: 2 * side,
+    y: hopping ? -2 : 0,
+    wind: -1.2 * side,
+    spread: 2,
+    arms: side === 1 ? [up, hip] : [hip, up],
+    legs: hopping ? (side === 1 ? [LEG_STAND, kick] : [kick, LEG_STAND]) : [LEG_STAND, LEG_STAND],
+  })
+  const beats: Key[] = []
+  let last: Pose = FRONT
+  for (let beat = 0; beat < 7; beat++) {
+    const side = beat % 2 === 0 ? 1 : -1
+    beats.push(
+      ...tween(last, step(side, false), 190),
+      ...tween(step(side, false), step(side, true), 190),
+    )
+    last = step(side, true)
+  }
+  return [...hold(FRONT, 160), ...beats, ...tween(last, FRONT, 260), ...hold(FRONT, 120)]
+}
+
 /**
  * Carried by her collar: off the ground, arms up, legs kicking, swaying, hair lifted, and no
  * shadow under her (she's in the air, wherever the pointer takes her).
@@ -789,6 +959,11 @@ const MAKERS: Record<Name, () => Frame[]> = {
   doze: () => drawn(doze()),
   sit: () => drawn(sit()),
   look,
+  juggle: () => drawn(juggle()),
+  bubbles: () => drawn(bubbles()),
+  wisp: () => drawn(wisp()),
+  sneeze: () => drawn(sneeze()),
+  dance: () => drawn(dance()),
   dragged: () => drawn(dragged()),
 }
 
@@ -821,6 +996,11 @@ export const LOOPS: Record<Name, boolean> = {
   doze: false,
   sit: false,
   look: false,
+  juggle: false,
+  bubbles: false,
+  wisp: false,
+  sneeze: false,
+  dance: false,
 }
 
 export type Facing = 'left' | 'right'

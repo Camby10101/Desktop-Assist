@@ -1,6 +1,6 @@
-# Setting up Claude Desktop for Desktop Assist (for IT)
+# Setting up Claude Desktop for Desktop Wizard (for IT)
 
-Since feature 3.1, Desktop Assist doesn't chat with Claude itself. When someone asks a question in
+Since feature 3.1, Desktop Wizard doesn't chat with Claude itself. When someone asks a question in
 the bubble, it opens a new chat in the **Claude Desktop** app with the question typed in, and
 sends it there (with any screenshots pasted in). The chat happens in their own Claude account, so
 it counts against their own usage limit (the one their group gives them in claude.ai), like
@@ -17,7 +17,7 @@ for the built-in chat ([JUMPCLOUD_SETUP.md](JUMPCLOUD_SETUP.md)), which Morse Mi
 ## How it works
 
 ```
- Desktop Assist ── claude://claude.ai/new?q=<question> ──▶ Claude Desktop: a new chat with
+ Desktop Wizard ── claude://claude.ai/new?q=<question> ──▶ Claude Desktop: a new chat with
                 ── screenshots → clipboard (one image)       the question filled in
                 ── once Claude's box shows the question:
                    Ctrl+V (screenshot), then Enter ───────▶ sent; Claude answers
@@ -30,15 +30,15 @@ for the built-in chat ([JUMPCLOUD_SETUP.md](JUMPCLOUD_SETUP.md)), which Morse Mi
   web pages); it's expected, and the question is still the person's own.
 - A link can't carry pictures, so attached screenshots are copied to the clipboard (several are
   stacked into one image) and a Windows notification says to press **Ctrl+V** in Claude.
-- The link only fills the question in, so Desktop Assist then presses the keys itself: Ctrl+V for
+- The link only fills the question in, so Desktop Wizard then presses the keys itself: Ctrl+V for
   a screenshot, then Enter. A hidden Windows PowerShell helper uses Windows UI Automation (the
   accessibility interface) to check that the focused text box belongs to Claude Desktop and
   already shows the question; it presses nothing otherwise, so keys never land in another app.
   If it can't within 20 seconds, a notification says what's left (paste, or press Enter). Each
   person can turn this off in Settings (**Send in Claude automatically**) and send it themselves.
-- Claude Desktop cuts a question in a link off at about 14,000 characters, so Desktop Assist
+- Claude Desktop cuts a question in a link off at about 14,000 characters, so Desktop Wizard
   refuses anything over 12,000 and says so.
-- Desktop Assist stores no Claude sign-in and sends nothing to Anthropic itself.
+- Desktop Wizard stores no Claude sign-in and sends nothing to Anthropic itself.
 
 ## 1. Install Claude Desktop
 
@@ -48,7 +48,7 @@ for the built-in chat ([JUMPCLOUD_SETUP.md](JUMPCLOUD_SETUP.md)), which Morse Mi
   device management (JumpCloud can run PowerShell commands on managed devices). Anthropic's guide:
   [Deploy Claude Desktop for Windows](https://support.claude.com/en/articles/12622703-deploy-claude-desktop-for-windows).
 
-When it isn't installed, Desktop Assist says so as soon as its panel opens ("Claude Desktop isn't
+When it isn't installed, Desktop Wizard says so as soon as its panel opens ("Claude Desktop isn't
 installed on this PC…"), with a **Download** button, and won't try to open it.
 
 ## 2. Make sure people use the company account
@@ -65,7 +65,7 @@ installed on this PC…"), with a **Download** button, and won't try to open it.
 
 ## 3. Usage limits
 
-Nothing to set in Desktop Assist. Its questions are ordinary Claude chats, so the limits you
+Nothing to set in Desktop Wizard. Its questions are ordinary Claude chats, so the limits you
 already give people in claude.ai apply: the organization, group and individual spend limits
 (an individual limit overrides their group's). Their usage shows under their name in claude.ai's
 usage analytics, as Chat.
@@ -101,9 +101,9 @@ Organization skills and plugins also reach Claude Desktop chats.
   check PowerShell isn't blocked for users (Constrained Language Mode or AppLocker rules stop
   the helper); everything else still works, people just press Enter themselves.
 - **Nothing happens, or "Couldn't open Claude Desktop":** the reason is in
-  `%APPDATA%\Desktop Assist\logs\desktop-assist.log` ("Opening Claude Desktop failed").
+  `%APPDATA%\Desktop Wizard\logs\desktop-wizard.log` ("Opening Claude Desktop failed").
 - **Ctrl+V adds nothing, or something else:** something was copied after the question was sent.
-  Attach the screenshot again and ask again, or drag the file from `Pictures\Desktop Assist` into
+  Attach the screenshot again and ask again, or drag the file from `Pictures\Desktop Wizard` into
   Claude.
 - **The chat went to a personal account:** set `forceLoginOrgUUID` (step 2).
 
@@ -115,7 +115,7 @@ answered in the panel through the Claude API, usage is billed to the Claude Cons
 
 ## What the built-in chat used
 
-Desktop Assist 3.1 deletes the JumpCloud sign-in the built-in chat saved on each PC. The Claude
-Console pieces (workspace, service account, federation rule) and the JumpCloud OIDC app are no
-longer used. Keep them if you might switch back; otherwise archive the federation rule in the
+Since feature 3.1, Desktop Wizard deletes the JumpCloud sign-in the built-in chat saved on each PC.
+The Claude Console pieces (workspace, service account, federation rule) and the JumpCloud OIDC app
+are no longer used. Keep them if you might switch back; otherwise archive the federation rule in the
 Console (Settings → Workload identity), so the Console credit can no longer be spent through it.

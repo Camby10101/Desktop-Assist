@@ -142,7 +142,7 @@ export interface AssistApi {
     setAutoSend(autoSend: boolean): Promise<Settings>
     /** Stars an app in the Apps list (it moves to the top), or takes its star away. */
     setFavoriteApp(id: string, favorite: boolean): Promise<Settings>
-    /** Light or dark mode for all of Desktop Assist; saved. */
+    /** Light or dark mode for all of Desktop Wizard; saved. */
     setTheme(theme: Theme): Promise<Settings>
   }
   character: {
@@ -179,7 +179,7 @@ export interface AssistApi {
   apps: {
     /** The list as it stands; loads it first if needed, or again with `refresh`. */
     get(refresh?: boolean): Promise<AppsState>
-    /** Connects Desktop Assist to the portal, in the browser; progress via onAppsState. */
+    /** Connects Desktop Wizard to the portal, in the browser; progress via onAppsState. */
     signIn(): Promise<void>
     cancelSignIn(): Promise<void>
     /** Opens the app in the default browser (signed in through the portal). */
@@ -237,7 +237,7 @@ export interface AssistApi {
      */
     check(): Promise<UpdateState>
   }
-  /** Starts Desktop Assist's uninstaller and quits (installed copies only). */
+  /** Starts Desktop Wizard's uninstaller and quits (installed copies only). */
   uninstall(): Promise<UninstallResult>
   onModeChanged(callback: (mode: Mode) => void): () => void
   /** The character's pose changed (walking, fidgeting, dangling...). */

@@ -14,19 +14,19 @@ the text box, and an **Apps** icon (a grid of squares) in `actions` swaps it for
 The list comes from **JumpCloud's "MCP Server for Users"** (`https://usermcp.jumpcloud.com/v1`),
 which an admin turns on in the JumpCloud Admin Portal. _MCP_, the Model Context Protocol, is an
 open standard for giving AI assistants access to tools and data: a server offers named _tools_,
-and a client calls them with JSON arguments. Desktop Assist is simply a client here, with no AI
+and a client calls them with JSON arguments. Desktop Wizard is simply a client here, with no AI
 involved: it calls two of the server's tools itself, `list_applications` and
 `launch_application`. It talks to the server through the official MCP SDK
 (`@modelcontextprotocol/sdk`).
 
 **Connecting, once per person.** The server only answers a signed-in user, so each person
-connects Desktop Assist to their portal once, in the browser. This is OAuth, the same family of
+connects Desktop Wizard to their portal once, in the browser. This is OAuth, the same family of
 standards as the built-in chat's JumpCloud sign-in ([JumpCloud sign-in](3-sign-in.md)), and the
 MCP SDK carries out its steps:
 
 - **Discovery**: the SDK asks the MCP server where its sign-in (authorization) server is, and
   reads that server's addresses.
-- **Dynamic client registration**: the first time, Desktop Assist registers itself with that
+- **Dynamic client registration**: the first time, Desktop Wizard registers itself with that
   server and gets a client ID back. Nothing has to be set up for the app in JumpCloud
   beforehand.
 - **A public client with PKCE**: an app installed on people's PCs can't keep a secret, so it has
@@ -912,7 +912,7 @@ export interface McpConnector {
   /** Connects with the saved sign-in (renewing it if needed); throws NeedsSignInError if none. */
   connect(provider: OAuthClientProvider): Promise<McpSession>
   /**
-   * The OAuth steps. Without a code: registers Desktop Assist with the server if it isn't yet,
+   * The OAuth steps. Without a code: registers Desktop Wizard with the server if it isn't yet,
    * and asks the provider to send the user to the sign-in page ('REDIRECT'). With the code from
    * the browser: swaps it for tokens ('AUTHORIZED').
    */
@@ -975,7 +975,7 @@ interface Saved {
 
 ```ts
 /**
- * The OAuth client the MCP SDK drives: Desktop Assist as a public client (PKCE, no secret) with a
+ * The OAuth client the MCP SDK drives: Desktop Wizard as a public client (PKCE, no secret) with a
  * loopback redirect. It remembers the registration and the tokens; the sign-in page is only opened
  * by McpAccount.signIn(), never by just using the connection.
  */

@@ -2,7 +2,7 @@
 
 [← Code Guide](CODE_GUIDE.md)
 
-This part covers how Desktop Assist knows who you are, and how that turns into access to Claude
+This part covers how Desktop Wizard knows who you are, and how that turns into access to Claude
 without an API key. You sign in once with JumpCloud in your normal browser. The app keeps a
 long-lived _refresh token_, encrypted on disk, and uses it to get short-lived _ID tokens_, which
 Anthropic swaps for Claude tokens. All of it runs in the main process: the pages only ever learn the
@@ -1424,8 +1424,8 @@ the port is open before it opens the browser.
 function callbackPage(error: string | null): string {
   const message = error
     ? `Sign-in didn't complete: ${escapeHtml(error)}`
-    : 'You’re signed in to Desktop Assist. You can close this tab.'
-  return `<!doctype html><html><head><meta charset="utf-8"><title>Desktop Assist</title>
+    : 'You’re signed in to Desktop Wizard. You can close this tab.'
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Desktop Wizard</title>
 <style>body{font-family:'Segoe UI',system-ui,sans-serif;display:grid;place-items:center;height:100vh;margin:0;color:#18181b}
 p{font-size:16px}</style></head><body><p>${message}</p><script>setTimeout(()=>window.close(),1500)</script></body></html>`
 }
@@ -1462,7 +1462,7 @@ It's used only by `startBuiltInChat()` in `index.ts`. The `identityToken` functi
 `AnthropicBackend` summarizes every ID token before handing it over, and keeps the latest summary in
 `lastIdToken`. When a chat request fails and `classifyError()` (in `src/main/claude/errors.ts`) says
 `not-allowed`, meaning Anthropic's token exchange refused the swap (a status such as 400, 401 or
-403), `ChatSession`'s `onError` writes that summary to the app's log (`logs\desktop-assist.log` in
+403), `ChatSession`'s `onError` writes that summary to the app's log (`logs\desktop-wizard.log` in
 the app's data folder).
 
 The case it was written for, and what to look for:
@@ -1623,7 +1623,7 @@ function text(value: unknown): string | undefined {
 Keeps one secret in one file, encrypted so only the same Windows user on the same PC can read it.
 The app has three such secrets, each in a store of its own: the built-in chat's JumpCloud sign-in
 (`AuthManager` saves the refresh token and user as JSON in
-`%APPDATA%\Desktop Assist\jumpcloud-session.bin`), the Apps list's connection to JumpCloud
+`%APPDATA%\Desktop Wizard\jumpcloud-session.bin`), the Apps list's connection to JumpCloud
 (`jumpcloud-apps.bin`, see [Your apps](10-apps.md)), and the connection to Atlassian
 (`atlassian.bin`, see [Jira and the service desk](11-atlassian.md)). The encryption itself is passed
 in as an `Encryptor`: `index.ts` gives it Electron's `safeStorage`, which on Windows uses **DPAPI**

@@ -54,9 +54,9 @@ needs `portal`:
 
 `chatApp`, where questions are answered:
 
-- `"claude-desktop"` (Morse Micro, since feature 3.1): Desktop Assist opens each question in the
+- `"claude-desktop"` (Morse Micro, since feature 3.1): Desktop Wizard opens each question in the
   Claude Desktop app, in the person's own Claude account, so it counts against their own usage
-  limit. No sign-in in Desktop Assist, and `signIn` and `claudeAccess` aren't needed. See
+  limit. No sign-in in Desktop Wizard, and `signIn` and `claudeAccess` aren't needed. See
   [docs/CLAUDE_DESKTOP_SETUP.md](../docs/CLAUDE_DESKTOP_SETUP.md).
 - `"built-in"` (the default): the chat runs in the panel through the Claude API, after a JumpCloud
   sign-in, billed to the company's Claude Console account. Needs `signIn` and `claudeAccess`.

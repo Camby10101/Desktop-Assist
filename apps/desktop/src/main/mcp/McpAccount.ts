@@ -30,7 +30,7 @@ export interface McpConnector {
   /** Connects with the saved sign-in (renewing it if needed); throws NeedsSignInError if none. */
   connect(provider: OAuthClientProvider): Promise<McpSession>
   /**
-   * The OAuth steps. Without a code: registers Desktop Assist with the server if it isn't yet,
+   * The OAuth steps. Without a code: registers Desktop Wizard with the server if it isn't yet,
    * and asks the provider to send the user to the sign-in page ('REDIRECT'). With the code from
    * the browser: swaps it for tokens ('AUTHORIZED').
    */
@@ -50,7 +50,7 @@ interface Saved {
 }
 
 /**
- * The OAuth client the MCP SDK drives: Desktop Assist as a public client (PKCE, no secret) with a
+ * The OAuth client the MCP SDK drives: Desktop Wizard as a public client (PKCE, no secret) with a
  * loopback redirect. It remembers the registration and the tokens; the sign-in page is only opened
  * by McpAccount.signIn(), never by just using the connection.
  */

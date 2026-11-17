@@ -1,5 +1,5 @@
 /**
- * Command-line switches that would let another program on the PC look inside Desktop Assist or
+ * Command-line switches that would let another program on the PC look inside Desktop Wizard or
  * drive it: Chromium's remote debugging (the pages, whose bridge reaches Jira with the user's
  * sign-in) and Node's inspector (the main process). An installed copy refuses to start with any
  * of them. Node's are also switched off in the .exe itself (the fuses in electron-builder.cjs).

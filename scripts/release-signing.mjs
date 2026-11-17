@@ -1,4 +1,4 @@
-// Signs a release's installer with the release key, so copies of Desktop Assist will run it as an
+// Signs a release's installer with the release key, so copies of Desktop Wizard will run it as an
 // update (see docs/RELEASING.md). The key's private half stays on the PC that builds releases,
 // never on GitHub, so someone who gets into the GitHub account can't publish an update; the
 // tenant's tenant.json has the public half (`updates.publicKey`).
@@ -52,7 +52,7 @@ function makeKey() {
   })
   console.log(`Made the release key: ${KEY}`)
   console.log('Keep a copy somewhere safe, such as a password manager. Without it, copies of')
-  console.log("Desktop Assist can't be updated from Settings; with it, anyone can sign an update.")
+  console.log("Desktop Wizard can't be updated from Settings; with it, anyone can sign an update.")
   console.log(`\nIts public half, for "updates": { "publicKey": ... } in tenant.json:`)
   console.log(publicKeyOf(privateKey))
 }

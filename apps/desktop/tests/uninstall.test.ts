@@ -3,15 +3,15 @@ import { describe, expect, it } from 'vitest'
 import { uninstall, uninstallerPath, type UninstallDeps } from '../src/main/uninstall'
 
 const FOLDER = join('C:', 'Users', 'me', 'AppData', 'Local', 'Programs', 'desktop-assist')
-const EXE = join(FOLDER, 'Desktop Assist.exe')
-const UNINSTALLER = join(FOLDER, 'Uninstall Desktop Assist.exe')
+const EXE = join(FOLDER, 'Desktop Wizard.exe')
+const UNINSTALLER = join(FOLDER, 'Uninstall Desktop Wizard.exe')
 
 function deps(overrides: Partial<UninstallDeps> = {}) {
   const events: string[] = []
   const all: UninstallDeps = {
     isPackaged: true,
     exePath: EXE,
-    productName: 'Desktop Assist',
+    productName: 'Desktop Wizard',
     exists: (path) => path === UNINSTALLER,
     stopStartingWithWindows: () => void events.push('no autostart'),
     runDetached: (path) => void events.push(`run ${path}`),
@@ -24,7 +24,7 @@ function deps(overrides: Partial<UninstallDeps> = {}) {
 
 describe('uninstall', () => {
   it("finds the installer's uninstaller next to the app", () => {
-    expect(uninstallerPath(EXE, 'Desktop Assist')).toBe(UNINSTALLER)
+    expect(uninstallerPath(EXE, 'Desktop Wizard')).toBe(UNINSTALLER)
   })
 
   it('turns off Start with Windows, starts the uninstaller, then quits', () => {

@@ -3,8 +3,8 @@ import { Canvas, Layer, add, limb, rotate, type Point, type Ramp } from './raste
 import { DIAGONAL, DIAGONAL_EYES, DIAGONAL_MOUTH, SIDE_FACE } from './pictures'
 
 // The character's rig: her skeleton and the shapes that hang on it, drawn as pixel art for one
-// pose. She's an original design: an elf mage with long pointed ears, silver-white hair in one
-// long braid, amber eyes, a wide-brimmed crooked hat (a gold buckle on its band, a gold moon and
+// pose. She's an original design: an elf mage with long pointed ears, long silver-white hair
+// down her back, amber eyes, a wide-brimmed crooked hat (a gold buckle on its band, a gold moon and
 // stars on its crown, silver stitching round its brim), and a long robe in the tenant's accent
 // colour with bell sleeves, silver trim, gold embroidery (a border of diamonds above the hem, a
 // line above each cuff), silver stars, gold buttons, a sash with a gold buckle and a gem brooch,
@@ -110,6 +110,14 @@ export interface Pose {
   zzz?: number
   /** Letters (the z's) drawn back to front, for a frame that will be mirrored to face left. */
   flipText?: boolean
+  /** Three little orbs juggled between her hands (from the front), this far through (0 to 1). */
+  juggle?: number
+  /** Magic bubbles blown through a little wand ring at her near hand (seen diagonally), 0 to 1. */
+  bubbles?: number
+  /** A will-o'-wisp going round her (from the front), 0 to 1: see wispAt. */
+  wisp?: number
+  /** A sneeze's burst of sparkles flying out from her nose, 0 to 1 (none at 0). */
+  burst?: number
 }
 
 const DOWN: Arm = { shoulder: 0.08, elbow: 0 }
@@ -198,6 +206,52 @@ const BUTTERFLY_SHUT = ['.GkG.', '..k..']
 /** A dozer's z's: a big one and a small one, each with a darker shadow to the lower right. */
 const Z_BIG = ['ffff.', '..fFF', '.fF..', 'ffffF', '.FFFF']
 const Z_SMALL = ['fff.', '.fF.', 'fffF', '.FFF']
+/** Juggling orbs: a teal one, a gold one and a pink one, each with a glint. */
+const ORBS = [
+  ['.G.', 'GwG', '.G.'],
+  ['.Y.', 'YwY', '.Y.'],
+  ['.c.', 'cwc', '.c.'],
+]
+/** A soap bubble, small and grown: a teal ring (see-through inside) with a white glint. */
+const BUBBLE_SMALL = ['.G.', 'G.G', '.G.']
+const BUBBLE_BIG = ['.GG.', 'Gw.G', 'G..G', '.GG.']
+/** The little silver wand ring she blows bubbles through. */
+const WAND_RING = ['.f.', 'f.f', '.f.']
+/** A will-o'-wisp: a round teal light with a white heart. */
+const WISP = ['.GG.', 'GwwG', 'GwwG', '.GG.']
+
+/**
+ * Juggling (Pose.juggle): how many times each orb goes round, hand to hand and back, while she
+ * juggles; how far up its high arc goes above her hands, and its low pass back (pixels); and the
+ * share of the way round spent on the high arc.
+ */
+export const JUGGLE = { rounds: 4, high: 28, low: 5, arc: 0.62 }
+
+/**
+ * Bubbles (Pose.bubbles): how many she blows, when the first comes and how far apart they come
+ * (shares of the habit), how long each floats before it pops, and when she puts the wand away.
+ */
+export const BUBBLES = { count: 5, first: 0.1, gap: 0.12, life: 0.36, wandAway: 0.86 }
+
+/**
+ * Where the will-o'-wisp is (Pose.wisp, 0 to 1), from the middle of her chest: it appears at her
+ * side, goes round her twice (a flat ellipse, bobbing; on the far half it's behind her), then
+ * flies off up and away. Null before it comes and once it's gone.
+ */
+export function wispAt(t: number): { x: number; y: number; behind: boolean } | null {
+  const [come, round, gone] = [0.06, 0.8, 0.96]
+  if (t < come || t >= gone) return null
+  if (t < round) {
+    const angle = ((t - come) / (round - come)) * Math.PI * 4
+    return {
+      x: Math.cos(angle) * 20,
+      y: Math.sin(angle) * 5 + Math.sin(angle * 3) * 1.5 - 4,
+      behind: Math.sin(angle) < 0,
+    }
+  }
+  const away = (t - round) / (gone - round)
+  return { x: 20 + away * 14, y: -4 - away * away * 46, behind: false }
+}
 
 /** Which eyes a face uses. */
 function eyesFor(face: Face): 'open' | 'blink' | 'happy' | 'down' | 'up' {
@@ -446,11 +500,11 @@ export function draw(pose: Pose): string[] {
       }
     }
 
-    // Her long hair behind her. From the front it hangs down past her shoulders, no wider than
-    // them below her locks, so none of it peeks out beside her sleeves (her braid hangs down her
-    // back, out of sight). Side on it's one clump from the back of her head that narrows down her
-    // back into her braid: its back edge straight from under her hat to the ribbon, a short tail
-    // below that.
+    // Her long hair behind her, down to the small of her back, its ends in clumps of different
+    // lengths. From the front it hangs down past her shoulders, no wider than them below her locks,
+    // so none of it peeks out beside her sleeves. Side on it falls from the back of her head as one
+    // mass, as long as it is from the front: its back edge straight from under her hat to its ends,
+    // a little wider as it goes down.
     const back = new Layer(GRID, HEADROOM)
     const backHair =
       view === 'side'
@@ -463,19 +517,18 @@ export function draw(pose: Pose): string[] {
             [7.5, -5],
             [6, -2],
             [-1, 2],
-            // Down her back, behind her neck and robe, narrowing to the ribbon...
+            // Down her back, behind her neck and robe...
             [-3, 9],
-            [-5.5, 17],
-            [-7.4, 24],
-            [-9.2, 26.6],
-            // ...the tail below it, flaring a little...
-            [-9.4, 28],
-            [-9, 30.2],
-            [-10.8, 29.4],
-            [-12.2, 30.4],
-            [-12.5, 28],
-            // ...and back up, straight from the ribbon to the back of her head.
-            [-12.4, 26.6],
+            [-5, 17],
+            [-6.5, 24],
+            // ...its ends, three clumps (as from the front)...
+            [-6.8, 27.4],
+            [-8.3, 25.4],
+            [-9.9, 28.6],
+            [-11.3, 25.8],
+            [-12.9, 28],
+            [-13.4, 25],
+            // ...and back up, straight to the back of her head.
             [-8, -3],
           ]
         : [
@@ -503,18 +556,23 @@ export function draw(pose: Pose): string[] {
     )
     ink(back)
     if (view === 'side') {
-      // The braid's plaits, a darker stroke every few pixels down it, and its ribbon.
-      const braid = (y: number) => onHead(blown({ x: -7.6 - (y - 10) * 0.16, y }))
-      for (let y = 10.5; y <= 24; y += 3) {
-        const p = braid(y)
-        set({ x: p.x - 1, y: p.y }, 'D', 'hl')
-        set({ x: p.x, y: p.y }, 'D', 'hl')
-        set({ x: p.x + 1, y: p.y + 1 }, 'D', 'hl')
+      // Strands: a darker line down between its clumps, from the gaps between their ends up into
+      // the hair, so it reads as long hair rather than a flat shape.
+      for (const [top, end] of [
+        [
+          [-8.6, 9],
+          [-8.3, 25],
+        ],
+        [
+          [-10, 6],
+          [-11.3, 25.6],
+        ],
+      ] as const) {
+        for (let t = 0; t <= 1; t += 0.05) {
+          const p = { x: top[0] + (end[0] - top[0]) * t, y: top[1] + (end[1] - top[1]) * t }
+          set(onHead(blown(p)), 'D', 'hl')
+        }
       }
-      const tie = braid(26.6)
-      set(tie, 'v')
-      set({ x: tie.x + 1, y: tie.y }, 'v')
-      set({ x: tie.x - 1, y: tie.y }, 'a')
     }
 
     if (!frontView) drawArm(farArm, -1)
@@ -771,8 +829,8 @@ export function draw(pose: Pose): string[] {
         [-3, -11],
         [-6.5, -8],
         [-8.1, -3],
-        [-8.9, 2.5],
-        [-9.6, 7],
+        [-9.1, 2.5],
+        [-10, 7],
         [-5.5, 7.4],
         [-3, 2],
         [-1.5, -2.5],
@@ -795,7 +853,7 @@ export function draw(pose: Pose): string[] {
         0.6,
         'hair',
       )
-    // Side on there's no lock: her hair behind her ear is the back hair and the braid.
+    // Side on there's no lock: her hair behind her ear is the back hair.
     if (view !== 'side') {
       lock(8.2 + shiftHair, 13)
       lock(-8.2 + shiftHair * 0.5, 13)
@@ -910,8 +968,10 @@ export function draw(pose: Pose): string[] {
 
   // The near arm last, in front of her (from the front, both arms), and anything she's holding.
   let hand: Point
+  // The far hand too, from the front (where she can use both, to juggle).
+  let farHand: Point | null = null
   if (frontView) {
-    drawArm(farArm, -1)
+    farHand = drawArm(farArm, -1)
     hand = drawArm(nearArm, 1)
   } else {
     hand = drawArm(nearArm, 1)
@@ -1017,6 +1077,85 @@ export function draw(pose: Pose): string[] {
       if (life <= 0 || life >= 1) continue
       const at = onHead({ x: 7 + life * 6 + k * 1.5, y: -13 - life * 12 })
       canvas.stamp(life > 0.45 ? Z_BIG : Z_SMALL, at.x, at.y, pose.flipText)
+    }
+  }
+
+  // Juggling: three orbs, a third of the way round apart, each thrown up in a high arc from her far
+  // hand to her near one and passed quickly back underneath (a "shower"), just above her hands.
+  const juggle = pose.juggle ?? 0
+  if (juggle > 0 && juggle < 1 && farHand) {
+    const left = farHand
+    ORBS.forEach((orb, k) => {
+      const round = (juggle * JUGGLE.rounds + k / ORBS.length) % 1
+      const high = round < JUGGLE.arc
+      const t = high ? round / JUGGLE.arc : (round - JUGGLE.arc) / (1 - JUGGLE.arc)
+      const [from, to] = high ? [left, hand] : [hand, left]
+      const up = (high ? JUGGLE.high : JUGGLE.low) * 4 * t * (1 - t)
+      const at = { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t - 3 - up }
+      canvas.stamp(orb, at.x - 1, at.y - 1)
+    })
+  }
+
+  // Bubbles: the wand ring held up at her near hand, and bubbles drifting up and forward from in
+  // front of her mouth, wobbling and growing, each popping in a twinkle.
+  const bubbles = pose.bubbles ?? 0
+  if (bubbles > 0) {
+    if (bubbles < BUBBLES.wandAway) {
+      set(add(hand, { x: 0.5, y: -1.5 }), 'F')
+      canvas.stamp(WAND_RING, hand.x, hand.y - 4)
+    }
+    const dy = Math.round(pose.y ?? 0)
+    const from = { x: DIAGONAL_MOUTH.x + 6, y: DIAGONAL_MOUTH.y - 2 + dy }
+    for (let k = 0; k < BUBBLES.count; k++) {
+      const life = (bubbles - BUBBLES.first - k * BUBBLES.gap) / BUBBLES.life
+      if (life <= 0 || life > 1.12) continue
+      const at = {
+        x: from.x + life * 15 + Math.sin(life * 9 + k * 2) * 1.5,
+        y: from.y - life * 21,
+      }
+      if (life > 1) canvas.stamp(TWINKLE, at.x - 1, at.y - 1)
+      else if (life < 0.3) canvas.stamp(BUBBLE_SMALL, at.x - 1, at.y - 1)
+      else canvas.stamp(BUBBLE_BIG, at.x - 1.5, at.y - 1.5)
+    }
+  }
+
+  // A will-o'-wisp going round her, with a fading tail: on the far side of her it's behind her,
+  // drawn only where nothing of her is.
+  const wisp = pose.wisp ?? 0
+  if (wisp > 0) {
+    const chest = onBody({ x: 0, y: 2 })
+    const trail = [wispAt(wisp - 0.012), wispAt(wisp - 0.006)]
+    trail.forEach((p, k) => {
+      if (p)
+        set({ x: chest.x + p.x, y: chest.y + p.y }, k === 0 ? 'f' : 'G', p.behind ? '.' : undefined)
+    })
+    const at = wispAt(wisp)
+    if (at) {
+      WISP.forEach((row, dy) =>
+        [...row].forEach((letter, dx) => {
+          if (letter === '.') return
+          const p = { x: chest.x + at.x - 1.5 + dx, y: chest.y + at.y - 1.5 + dy }
+          set(p, letter, at.behind ? '.' : undefined)
+        }),
+      )
+    }
+  }
+
+  // A sneeze's sparkles: flying out from her nose in a wide fan above it, out past her face and
+  // hair, big at first, then twinkles, then single glints, and gone.
+  const burst = pose.burst ?? 0
+  if (burst > 0 && burst < 1) {
+    const nose = onHead({ x: 0.5, y: 5 })
+    for (let k = 0; k < 7; k++) {
+      const angle = -Math.PI * (-0.1 + k * 0.2)
+      const reach = 6 + burst * 22
+      const at = {
+        x: nose.x + Math.cos(angle) * reach,
+        y: nose.y + Math.sin(angle) * reach * 0.5 - burst * 4,
+      }
+      if (burst < 0.5 && k % 2 === 0) canvas.stamp(SPARKLE, at.x - 2, at.y - 2)
+      else if (burst < 0.8) canvas.stamp(TWINKLE, at.x - 1, at.y - 1)
+      else set(at, 'w')
     }
   }
 

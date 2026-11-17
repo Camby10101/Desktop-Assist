@@ -47,7 +47,7 @@ import {
   type RequestInfo,
 } from './jiraData'
 
-/** The tools of Atlassian's Remote MCP server that Desktop Assist uses. */
+/** The tools of Atlassian's Remote MCP server that Desktop Wizard uses. */
 export const TOOLS = {
   user: 'atlassianUserInfo',
   sites: 'getAccessibleAtlassianResources',

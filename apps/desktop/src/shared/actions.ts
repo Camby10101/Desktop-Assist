@@ -31,7 +31,7 @@ export const ACTIONS = {
   settings: { label: 'Settings', kind: 'popover' },
   size: { label: 'Size', kind: 'popover' },
   clones: { label: 'Clones', kind: 'command' },
-  close: { label: 'Close Desktop Assist', kind: 'command' },
+  close: { label: 'Close Desktop Wizard', kind: 'command' },
 } as const satisfies Record<ActionId, { label: string; kind: 'command' | 'popover' | 'switch' }>
 
 export type CommandActionId = {

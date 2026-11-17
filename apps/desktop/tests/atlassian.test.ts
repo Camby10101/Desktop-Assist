@@ -455,7 +455,7 @@ function fakeAtlassian() {
     }
   }
   const atlassian = new Atlassian({
-    appName: 'Desktop Assist',
+    appName: 'Desktop Wizard',
     site: SITE,
     redirectPort: 47623,
     knowledgeSpaces: ['INFRA'],

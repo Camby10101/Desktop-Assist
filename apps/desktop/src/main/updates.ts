@@ -83,7 +83,8 @@ export function releaseOf(payload: unknown, downloads: string): Release | null {
 /**
  * What a release's signature signs: the version and the installer's SHA-256. Signing the version
  * too means a genuine older installer can't be passed off as a newer release.
- * scripts/release-signing.mjs signs the same text.
+ * scripts/release-signing.mjs signs the same text. It still says "desktop-assist", from the app's
+ * old name: copies from then check updates against exactly this text.
  */
 export function signedText(version: string, sha256: string): string {
   return `desktop-assist-update ${version} sha256:${sha256}`
@@ -191,7 +192,7 @@ export class Updater {
     }
     this.deps.notify({
       title: `Updating to ${version}`,
-      body: 'Desktop Assist will close and start again in a moment.',
+      body: 'Desktop Wizard will close and start again in a moment.',
     })
     this.deps.quit()
     return this.state

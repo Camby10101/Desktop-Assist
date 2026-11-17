@@ -10,10 +10,10 @@ export interface Picture {
 
 /**
  * Her seen diagonally, turned to face right, standing: one flat drawing (no layers), so her hat,
- * ears, hair, face, braid, robe and boots each sit exactly in front of or behind the others. Her
+ * ears, hair, face, robe and boots each sit exactly in front of or behind the others. Her
  * right side is toward us: her ear and the back of her head on the left, her near eye larger,
- * her far cheek (with a small upturned nose) the right-hand edge of her face, her braid over her
- * near shoulder, her near leg in front. Her clothes carry the same patterns as the rig draws from
+ * her far cheek (with a small upturned nose) the right-hand edge of her face, her long hair down
+ * her back, her near leg in front. Her clothes carry the same patterns as the rig draws from
  * the front and side on (the hat's buckle, moon, stars and stitching; the robe's gold border,
  * stars, buttons and sash buckle; the boots' cuffs, laces and buckled straps), placed by hand to
  * suit the turn. Her near arm isn't in it: the rig draws it on top, since
@@ -58,27 +58,27 @@ export const DIAGONAL: Picture = {
     '...OlDDDODDDKssSSSSKKO.........',
     '...OlDDDODDqKzsSSKKDDO.........',
     '...OlhDDODqvKzSSSKvqqO.........',
-    '...OOhhDOqvvKSSSSKffAq.........',
-    '...OODhDDOvaAKSSKafaAAq........',
-    '...OOlDDDOaaAAKKaffaAAAq.......',
-    '...OOlhDDOaaaaafafaAAAAq.......',
-    '...OOlDDDOaaaaaafGaAAAAq.......',
-    '...OOlhDDOaaaaaaGGGAAAAq.......',
-    '...OlOhDDOaaaaaaaGaAAAAq.......',
-    '...OlODDDOaaaaaaaaaAAAAq.......',
-    '...OlOlDDOaaaaaaaaaAAAAq.......',
-    '...OlOlDDOaaaaaaaYaAAAAq.......',
-    '...OlODDDOaaaaaaaaaAAAAq.......',
-    '...OlOlDDOaaaaaaaaaAAAAq.......',
-    '....OOavAOaaaaaaaYaAAAAq.......',
-    '....OODDDOaaaaaaaaaAAAAq.......',
-    '....OOlDDOaaaaaaaaaAAAAq.......',
-    '.....ODDDOaaaaaaaYaAAAAqq......',
-    '.....ODDDOaaaaaaaaaAAAAqq......',
-    '.....ODDDOaaaaaaaaaAAAAqq......',
-    '......ODOAAAAAAAYYYAAAAqq......',
-    '......qOqqqqqqqqYkYqqqAAq......',
-    '......qvaaaaaaaaafAAAAAAqq.....',
+    '...OlhhDOqvvKSSSSKffAq.........',
+    '...OlDhDDOvaAKSSKafaAAq........',
+    '...OllDDDOaaAAKKaffaAAAq.......',
+    '...OllhDDOaaaaafafaAAAAq.......',
+    '...OllDDDOaaaaaafGaAAAAq.......',
+    '...OllhDDOaaaaaaGGGAAAAq.......',
+    '...OlhhDDOaaaaaaaGaAAAAq.......',
+    '...OlhDDDOaaaaaaaaaAAAAq.......',
+    '...OlhlDDOaaaaaaaaaAAAAq.......',
+    '...OlDhDDOaaaaaaaYaAAAAq.......',
+    '...OlDhDDOaaaaaaaaaAAAAq.......',
+    '...OlhDhDOaaaaaaaaaAAAAq.......',
+    '...OlhDhDOaaaaaaaYaAAAAq.......',
+    '...OlDhDDOaaaaaaaaaAAAAq.......',
+    '...OlDhDDOaaaaaaaaaAAAAq.......',
+    '...OlhDhDOaaaaaaaYaAAAAqq......',
+    '...OlhDhDOaaaaaaaaaAAAAqq......',
+    '...ODDDDDOaaaaaaaaaAAAAqq......',
+    '...ODDODOAAAAAAAYYYAAAAqq......',
+    '...ODO.OqqqqqqqqYkYqqqAAq......',
+    '....O.qvaaaaaaaaafAAAAAAqq.....',
     '......qvaaaaaaaaafAAAAAAqq.....',
     '.....qvvaaaaaaaaafAAAAAAqq.....',
     '.....qvaaafvAaaaafAAAfAAqq.....',

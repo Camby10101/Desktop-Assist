@@ -1,6 +1,6 @@
 # Setting up Jira and the service desk (for IT)
 
-Since Milestone 5, Desktop Assist works with the company's Atlassian site
+Since Milestone 5, Desktop Wizard works with the company's Atlassian site
 (`morsemicro.atlassian.net` for Morse Micro):
 
 - **Jira** (the bell icon): **Notifications** shows when someone else assigned you an issue or
@@ -26,14 +26,14 @@ connect once.
 
 1. Click the bell icon, then **Connect to Atlassian**.
 2. Their browser opens Atlassian. Staff sign in to Atlassian through JumpCloud, so if they're
-   already signed in it's usually just **Accept** on Atlassian's consent page ("Desktop Assist
+   already signed in it's usually just **Accept** on Atlassian's consent page ("Desktop Wizard
    wants to access your Atlassian account"). The browser then says they can close the tab, and
    the panel comes back.
 3. From then on it works straight away. The connection is saved encrypted for their Windows
-   account only (`%APPDATA%\Desktop Assist\atlassian.bin`, Windows DPAPI) and renewed by itself.
+   account only (`%APPDATA%\Desktop Wizard\atlassian.bin`, Windows DPAPI) and renewed by itself.
    **Settings → Disconnect Atlassian** forgets it.
 
-Desktop Assist connects through **Atlassian's Remote MCP server** (`https://mcp.atlassian.com`),
+Desktop Wizard connects through **Atlassian's Remote MCP server** (`https://mcp.atlassian.com`),
 the documented way for apps to reach Jira and Confluence as the signed-in person. There's no API
 key or secret in the app: it registers itself with the server, signs the person in with OAuth
 (PKCE) through their browser, and only ever sees what that person can see in Jira and Confluence.
@@ -97,7 +97,7 @@ Atlassian's guide: [Available Atlassian Rovo MCP server domains](https://support
 ## How it works
 
 ```
- Desktop Assist ── connect (browser, PKCE, once) ────────▶ Atlassian Remote MCP server
+ Desktop Wizard ── connect (browser, PKCE, once) ────────▶ Atlassian Remote MCP server
                 ◀─ access + refresh token (saved, DPAPI)        (mcp.atlassian.com)
                 ── every 5 minutes, as the person: ──────▶ Jira:
                      issues assigned to them lately             searchJiraIssuesUsingJql
@@ -109,11 +109,11 @@ Atlassian's guide: [Available Atlassian Rovo MCP server domains](https://support
  New request ───── opens the portal form, filled in ─────▶ …/portal/1/create/<type>?summary=…
 ```
 
-- **Notifications** are worked out in Desktop Assist, from Jira: the latest change of assignee to
+- **Notifications** are worked out in Desktop Wizard, from Jira: the latest change of assignee to
   the person in each issue's history (or the issue's creator, for an issue created already
   assigned), skipped when they made it themselves; and comments (or descriptions) that mention
   their account, by someone else. What they've seen is remembered in
-  `%APPDATA%\Desktop Assist\atlassian.json` (a time, and each request's last status and reply;
+  `%APPDATA%\Desktop Wizard\atlassian.json` (a time, and each request's last status and reply;
   no issue content).
 - **My requests news**: a reply by a person other than the requester (automatic replies such as
   "Thanks for raising your request" don't count), or a change of status. The first check after
@@ -124,7 +124,7 @@ Atlassian's guide: [Available Atlassian Rovo MCP server domains](https://support
 - **New request** never creates anything itself: the person sends the request from the portal,
   signed in as themselves, where the request type's own form (and any extra fields IT added) is
   shown. The summary and description are filled in from the link; the PC details are the PC's
-  name, Windows version and Desktop Assist version.
+  name, Windows version and Desktop Wizard version.
 
 ## Troubleshooting
 
@@ -139,15 +139,17 @@ Atlassian's guide: [Available Atlassian Rovo MCP server domains](https://support
   with single sign-on and multi-line descriptions (JSDCLOUD-19333, fixed by Atlassian and waiting
   for release). Going back and clicking **Continue on the portal** again, now signed in, fills it
   in. Request types whose portal form is built with Atlassian's "forms" don't take filled-in
-  fields at all; what the person wrote is still in Desktop Assist's text box to copy.
+  fields at all; what the person wrote is still in Desktop Wizard's text box to copy.
 - **A request type is missing or wrong**: edit `serviceDesk.requests.requestTypes` and rebuild.
 - **No articles are suggested**: articles only come from `knowledgeSpaces`, and only once the
   summary and details have a few words.
-- **Problems**: the log (`%APPDATA%\Desktop Assist\logs\desktop-assist.log`) says what failed.
+- **Problems**: the log (`%APPDATA%\Desktop Wizard\logs\desktop-wizard.log`) says what failed.
 
 ## Removing access
 
-- **One person:** Settings → **Disconnect Atlassian**, or revoke Desktop Assist in their
-  Atlassian account (**Profile → Account settings → Connected apps**).
+- **One person:** Settings → **Disconnect Atlassian**, or revoke Desktop Wizard in their
+  Atlassian account (**Profile → Account settings → Connected apps**). Someone who connected
+  before the app was renamed (up to 1.0.0) may see it there under its old name, Desktop Assist,
+  since the connection keeps the name it was made with.
 - **Everyone:** take `jira` out of `actions` and `atlassian` out of `tenant.json` (and rebuild),
   or turn off the Rovo MCP server in Atlassian administration.

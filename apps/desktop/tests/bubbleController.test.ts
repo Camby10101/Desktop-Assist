@@ -191,36 +191,36 @@ describe('on its own', () => {
   })
 
   it('walks both ways, and fidgets only once it has been left alone a while', () => {
-    vi.advanceTimersByTime(45_000)
+    vi.advanceTimersByTime(46_000)
     expect(poses).toEqual([
       'walk-left', // at 8.5 s, to 140 from the corner
       'idle',
       'walk-right', // at 24 s, back to 80
       'idle',
-      'read', // at 39 s: alone for 30 s now
+      'sit', // at 39 s: alone for 30 s now (for six seconds)
       'idle',
     ])
   })
 
   it("doesn't do the same fidget twice in a row", () => {
-    vi.advanceTimersByTime(60_000)
+    vi.advanceTimersByTime(64_000)
     expect(poses).toEqual([
       'walk-left',
       'idle',
       'walk-right',
       'idle',
-      'read',
+      'sit',
       'idle',
-      'spell',
+      'levitate',
       'idle',
     ])
   })
 
   it('plays a fidget for as long as its animation lasts, standing still', () => {
-    advanceUntil(() => controller.currentPose === 'read')
+    advanceUntil(() => controller.currentPose === 'sit')
     const where = bubble.bounds
-    vi.advanceTimersByTime(FIDGET_MS.read - 100)
-    expect(controller.currentPose).toBe('read')
+    vi.advanceTimersByTime(FIDGET_MS.sit - 100)
+    expect(controller.currentPose).toBe('sit')
     expect(bubble.bounds).toEqual(where)
     vi.advanceTimersByTime(200)
     expect(controller.currentPose).toBe('idle')
@@ -250,10 +250,10 @@ describe('on its own', () => {
   })
 
   it('stops a fidget when dragged, and dangles instead', () => {
-    advanceUntil(() => controller.currentPose === 'read')
+    advanceUntil(() => controller.currentPose === 'sit')
     controller.startDrag()
     expect(controller.currentPose).toBe('dragged')
-    vi.advanceTimersByTime(FIDGET_MS.read + 100)
+    vi.advanceTimersByTime(FIDGET_MS.sit + 100)
     expect(controller.currentPose).toBe('dragged') // the fidget's end doesn't interrupt
     controller.endDrag()
   })
@@ -522,7 +522,7 @@ describe('display changes', () => {
   })
 
   it('stops a fidget too, standing idle again', () => {
-    advanceUntil(() => controller.currentPose === 'read')
+    advanceUntil(() => controller.currentPose === 'sit')
     controller.displayChanged()
     expect(controller.currentPose).toBe('idle')
   })

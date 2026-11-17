@@ -204,23 +204,23 @@ describe('the rig', () => {
       const right = row.length - 1 - [...row].reverse().join('').search(hair)
       expect(left + right).toBe(95)
     }
-    // Below her locks nothing of her hair beside her sleeves (her braid hangs down her back).
+    // Below her locks nothing of her hair beside her sleeves (it hangs down her back).
     for (const row of rows.slice(39, 70)) {
       expect(row.slice(30, 40)).not.toMatch(hair)
       expect(row.slice(56, 66)).not.toMatch(hair)
     }
   })
 
-  it('hangs her hair down her back side on as one clump, narrowing into her braid', () => {
+  it('hangs her long hair down her back side on, as one mass with its ends in clumps', () => {
     const rows = drawn({ view: 'side' })
-    // Behind her shoulders: one outline, at its back edge, and no more than 7 pixels to her robe.
-    for (const row of rows.slice(37, 48)) {
-      const clump = row.match(/[ODhlL]+/)![0]
-      expect(clump.match(/O/g)).toHaveLength(1)
-      expect(clump.length).toBeLessThanOrEqual(7)
+    // Behind her shoulders: one outline, at its back edge, and a full head of hair thick.
+    for (const row of rows.slice(37, 49)) {
+      const mass = row.match(/[ODhlL]+/)![0]
+      expect(mass.match(/O/g)).toHaveLength(1)
+      expect(mass.length).toBeGreaterThanOrEqual(6)
     }
-    // Its ribbon, near the end, behind her robe.
-    expect(rows.slice(50, 57).some((row) => /v/.test(row.slice(30, 41)))).toBe(true)
+    // Down to the small of her back, as from the front, its ends clumps of different lengths.
+    expect(rows[54]!.slice(30, 42).match(/O+/g)!.length).toBeGreaterThan(1)
   })
 
   it('shades her: a broad shadow on the side away from the light, and the shadows things cast', () => {
@@ -255,7 +255,7 @@ describe('the rig', () => {
 
   it('ripples her hair as she walks: a wave running down it, her head and hat still', () => {
     const at = (flow: number) => drawn({ view: 'side', flow })
-    // Through a ripple, the end of her braid sways back and forth...
+    // Through a ripple, the ends of her hair sway back and forth...
     const tail = [0, 1, 2, 3, 4, 5].map((i) => at((i * Math.PI) / 3)[52]!.search(/[ODhlL]/))
     expect(new Set(tail).size).toBeGreaterThan(2)
     // ...while her hat and the top of her head stay as they are.
@@ -312,6 +312,36 @@ describe('the rig', () => {
     // A flared robe is wider at the hem.
     const width = (rows: string[]) => rows[HEADROOM + 80]!.replace(/\./g, '').length
     expect(width(draw({ view: 'front', spread: 6 }))).toBeGreaterThan(width(plain) + 8)
+  })
+
+  it('draws the newest habits’ things only when asked: juggled orbs, bubbles, a wisp, a sneeze', () => {
+    const same = (a: Pose, b: Pose) => draw(a).join('') === draw(b).join('')
+    // Three orbs between her hands while she juggles, none before or after.
+    const hands: Pose['arms'] = [
+      { shoulder: 0.5, elbow: -1.45 },
+      { shoulder: 0.5, elbow: -1.45 },
+    ]
+    const front: Pose = { view: 'front', arms: hands }
+    expect(same({ ...front, juggle: 0.3 }, front)).toBe(false)
+    expect(same({ ...front, juggle: 0 }, front)).toBe(true)
+    expect(same({ ...front, juggle: 1 }, front)).toBe(true)
+    // Bubbles (and the wand ring) blown from in front of her mouth, seen diagonally.
+    expect(same({ view: 'diagonal', bubbles: 0.3 }, { view: 'diagonal' })).toBe(false)
+    // The wisp: beside her, it shows; in front of her chest, over her; right behind her, hidden.
+    const plain = draw({ view: 'front' })
+    const wisp = (t: number) => draw({ view: 'front', wisp: t })
+    const changed = (rows: string[]) =>
+      rows.flatMap((row, y) =>
+        [...row].flatMap((p, x) => (p === plain[y]![x] ? [] : [plain[y]![x]])),
+      )
+    const beside = changed(wisp(0.06 + 0.74 / 4))
+    expect(beside.length).toBeGreaterThan(0)
+    expect(beside.every((p) => p === '.')).toBe(true)
+    expect(changed(wisp(0.06 + 0.74 / 8)).some((p) => p !== '.')).toBe(true)
+    expect(changed(wisp(0.06 + (0.74 * 3) / 8))).toEqual([])
+    // A sneeze's sparkles, only while they fly.
+    expect(same({ view: 'front', burst: 0.3 }, { view: 'front' })).toBe(false)
+    expect(same({ view: 'front', burst: 1 }, { view: 'front' })).toBe(true)
   })
 
   it('puts her face on: eyes, blush and mouth', () => {

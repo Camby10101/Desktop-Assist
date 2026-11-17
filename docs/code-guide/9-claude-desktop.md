@@ -6,11 +6,11 @@ Since feature 3.1, a tenant can send questions to the **Claude Desktop** app ins
 built into the panel (`"chatApp": "claude-desktop"` in `tenant.json`; Morse Micro does). The
 point is whose Claude it is. Each person asks in their own Claude account, on the company's
 Claude plan, so every question counts against their own usage limit, which the company already
-manages in claude.ai, and the conversation carries on in Claude Desktop. Desktop Assist then has
+manages in claude.ai, and the conversation carries on in Claude Desktop. Desktop Wizard then has
 no sign-in of its own and sends nothing to Anthropic itself: there's no JumpCloud app, no Claude
 Console service account, and no usage billed to the company's Console account.
 
-What Desktop Assist does is small. It opens a new chat in Claude Desktop with the question already
+What Desktop Wizard does is small. It opens a new chat in Claude Desktop with the question already
 typed in, and then, unless the user has turned **Send in Claude automatically** off, presses the
 keys that send it. That's in two main-process files, covered below: `src/main/claudeDesktop.ts`
 (the hand-over) and `src/main/sendInClaude.ts` (the key presses). The other pieces are on other
@@ -46,7 +46,7 @@ pages: `start()` in `index.ts` creates the `ClaudeDesktop` and wires in the Elec
    question there.
 
 ```text
- Desktop Assist ── claude://claude.ai/new?q=<question> ──▶ Claude Desktop: new chat with the
+ Desktop Wizard ── claude://claude.ai/new?q=<question> ──▶ Claude Desktop: new chat with the
                 ── screenshots → clipboard (one image)      question typed in
                 ── once Claude's box shows the question:
                    Ctrl+V (screenshot), then Enter ───────▶ sent; Claude answers
@@ -250,7 +250,7 @@ draft is `ipc.ts`'s job, once it knows Claude Desktop has opened.
  * Hands questions over to the Claude Desktop app, so they're answered with the person's own Claude
  * account and count against their own usage limit. A link can carry text but not images, so the
  * screenshots go on the clipboard. A link only fills the question in; with "Send in Claude" on,
- * Desktop Assist then presses Ctrl+V and Enter in Claude for the user.
+ * Desktop Wizard then presses Ctrl+V and Enter in Claude for the user.
  */
 export class ClaudeDesktop {
   // …

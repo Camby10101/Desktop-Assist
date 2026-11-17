@@ -12,8 +12,10 @@ const icon = ['icon.png', 'logo.png']
 
 /** @type {import('electron-builder').Configuration} */
 module.exports = {
+  // Still the ID from when it was called Desktop Assist: Windows knows an install by it, so each
+  // new version installs over the old one (see src/main/formerName.ts for what else carries over).
   appId: 'com.morsemicro.desktopassist',
-  productName: 'Desktop Assist',
+  productName: 'Desktop Wizard',
   directories: { output: 'dist', buildResources: 'build' },
   files: ['out/**', 'package.json'],
   // The install folder is named after the package; without this it would be the npm workspace

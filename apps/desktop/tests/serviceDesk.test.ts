@@ -14,7 +14,7 @@ const HELP_CENTRE = 'https://example.atlassian.net/servicedesk/customer/portals'
 const PC = {
   computerName: 'MM-LT-042',
   windows: 'Windows 11 Pro (10.0.26200)',
-  appName: 'Desktop Assist',
+  appName: 'Desktop Wizard',
   appVersion: '0.1.0',
 }
 
@@ -48,7 +48,7 @@ describe('service desk links', () => {
 
   it('adds the PC details under the description, and keeps the link a sensible length', () => {
     expect(requestDescription('It broke', pcDetails(PC))).toBe(
-      'It broke\n\n---\nPC: MM-LT-042\nWindows: Windows 11 Pro (10.0.26200)\nDesktop Assist: 0.1.0',
+      'It broke\n\n---\nPC: MM-LT-042\nWindows: Windows 11 Pro (10.0.26200)\nDesktop Wizard: 0.1.0',
     )
     expect(requestDescription('  ', null)).toBe('')
     const long = requestDescription('x'.repeat(5000), null)

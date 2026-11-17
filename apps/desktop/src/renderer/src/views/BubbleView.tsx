@@ -26,7 +26,7 @@ export function BubbleView() {
   const state = useAssistState()
   useAccentColor(state?.branding.accentColor)
   const mode = state?.mode ?? 'collapsed'
-  const appName = state?.branding.appName ?? 'Desktop Assist'
+  const appName = state?.branding.appName ?? 'Desktop Wizard'
   // Her window, as big as she is (with room above her hat); she faces the middle of the screen,
   // away from her corner.
   const { box, headroom } = bubbleMetrics(state?.size.scale ?? DEFAULT_SIZE)

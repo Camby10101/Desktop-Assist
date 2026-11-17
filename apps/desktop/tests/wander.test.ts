@@ -35,7 +35,7 @@ describe('nextActivity', () => {
   it('after that, more often than not does one of her fidgets instead', () => {
     const alone = WANDER.fidgetAfter
     expect(nextActivity(alone, 0, 240, rolls(0.1, 0))).toEqual({ kind: 'fidget', pose: 'hop' })
-    expect(nextActivity(alone, 0, 240, rolls(0.1, 0.99))).toEqual({ kind: 'fidget', pose: 'look' })
+    expect(nextActivity(alone, 0, 240, rolls(0.1, 0.99))).toEqual({ kind: 'fidget', pose: 'dance' })
     expect(nextActivity(alone, 0, 240, rolls(0.8, 0.5)).kind).toBe('walk')
   })
 

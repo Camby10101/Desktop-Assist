@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process'
 import { join } from 'node:path'
 
-// Making sure the bubble can be seen after Desktop Assist starts. Started by Windows at sign-in,
+// Making sure the bubble can be seen after Desktop Wizard starts. Started by Windows at sign-in,
 // after other apps, the bubble could sit behind them although its window was always on top, until
 // the user minimised everything and restored it. So for its first ten minutes the app asks Windows
 // what's at the bubble's centre, and if it isn't the bubble, brings the bubble back to the front

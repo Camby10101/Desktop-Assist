@@ -49,7 +49,7 @@ describe('saveScreenshot', () => {
   })
 
   it('creates the folder if needed', async () => {
-    const nested = join(dir, 'Pictures', 'Desktop Assist')
+    const nested = join(dir, 'Pictures', 'Desktop Wizard')
     const path = await saveScreenshot(nested, Buffer.from('x'), date)
     expect(path.startsWith(nested)).toBe(true)
   })
@@ -89,7 +89,7 @@ describe('findLatestScreenshot', () => {
 })
 
 describe('isInsideDir', () => {
-  const base = join('C:', 'Users', 'me', 'Pictures', 'Desktop Assist')
+  const base = join('C:', 'Users', 'me', 'Pictures', 'Desktop Wizard')
 
   it('accepts files in the folder or below it', () => {
     expect(isInsideDir(base, join(base, 'shot.png'))).toBe(true)

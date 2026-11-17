@@ -79,10 +79,11 @@ page in it moves them (`ClonesView`, see [The pages](7-renderer-pages.md)).
 **Left alone.** While `collapsed`, the character has a life of its own. Every 8 to 20 seconds it
 walks somewhere else in its zone (the pose `walk-left` or `walk-right`, while the controller moves
 its window along the taskbar a frame at a time). Once nobody has done anything with it for 30
-seconds, more often than not it does one of its fifteen fidgets instead (a hop, a wave, a stretch,
+seconds, more often than not it does one of its twenty fidgets instead (a hop, a wave, a stretch,
 a sip of tea, a vision, a curtsy, gazing into a crystal ball, reading its spellbook, a little
 spell, levitating over a magic circle, a sit on the taskbar, a twirl, a butterfly landing on its
-finger, a doze, or a glance about), never the same one twice in a row. In the vision, a light
+finger, a doze, a glance about, juggling, blowing bubbles, a will-o'-wisp going round it, a
+sneeze, or a little dance), never the same one twice in a row. In the vision, a light
 shines down from the top of the screen and the company's logo comes down it to hover over her head
 while she looks up at it; the light and the logo are drawn in a window of their own above her
 (`vision.ts`, below). None of this changes the mode, and every change of mode counts as the user doing something: it stops whatever the
@@ -2123,14 +2124,14 @@ they wait for a quiet spell rather than starting up while someone has just been 
 - `last?: Fidget`: the fidget it did last (`BubbleController.lastFidget`), or `undefined` if it
   hasn't done one yet. The `?` makes the parameter optional.
 - `FIDGETS.filter((fidget) => fidget !== last)`: every fidget but that one, so it never does the
-  same one twice in a row. With no `last`, all fifteen are choices.
+  same one twice in a row. With no `last`, all twenty are choices.
 - `weights`: how likely each choice is, from `FIDGET_WEIGHT` (above): 1 for every fidget but the
   vision, which is 0.2, so it's rare. `?? 1` gives 1 to any fidget the list leaves out.
 - `let roll = random() * ...`: a second roll, as a point along all the weights laid end to end
-  (`reduce()` adds them up): 14.2 long with all fifteen fidgets as choices.
+  (`reduce()` adds them up): 19.2 long with all twenty fidgets as choices.
 - The loop walks along the choices, taking each one's weight off the roll; the first that takes it
   below 0 is the one the point fell in. So each fidget is picked in proportion to its weight: the
-  vision about one time in 71 (0.2 of 14.2), each of the others about one in 14. `choices.entries()`
+  vision about one time in 96 (0.2 of 19.2), each of the others about one in 19. `choices.entries()`
   gives each choice with its index, for its weight.
 - `choices.at(-1)!`: the last choice, if rounding ever leaves the roll at exactly the end (it
   can't with `Math.random()`, but this keeps TypeScript and odd `random`s happy). The `!` tells
@@ -2641,7 +2642,7 @@ As its comment says, the light and the logo over where she stands.
   measured from the window's left edge, where the light falls and the logo hovers.
 - `starts: String((this.deps.now ?? Date.now)())`: when the vision started, on the wall clock. The
   page measures its place in `VISION`'s timetable from this, so the logo arrives as she looks up.
-- `setTimeout(() => this.stop(), FIDGET_MS.vision)`: closes the window after the habit's 5.2
+- `setTimeout(() => this.stop(), FIDGET_MS.vision)`: closes the window after the habit's 8.6
   seconds, in case the pose change that should close it never comes.
 
 ### `Vision.stop()`
@@ -2755,7 +2756,7 @@ up to `'status'` it tucks the window in just behind the taskbar.
 That caused a bug. With `alwaysOnTop: true` in the window's options, Electron uses its default
 level, `'floating'`, one of those. While a full-screen app is in front, Windows takes the taskbar
 out of the always-on-top group (so the app can cover it), and Windows' rule is that a window placed
-behind one that isn't always on top stops being always on top itself. So if Desktop Assist started
+behind one that isn't always on top stops being always on top itself. So if Desktop Wizard started
 while, say, a full-screen browser was open (as it can at sign-in, when Windows starts it a little
 after other apps), both its windows lost always-on-top and the bubble sat behind the user's
 windows until something reshuffled them. `'pop-up-menu'` is the lowest level Electron simply keeps
@@ -3152,7 +3153,7 @@ without this you couldn't cut, paste or fix spelling with the mouse.
 Started by Windows at sign-in, after other apps were already open, the bubble could sit behind
 them, although its window was always on top, until the user minimised everything and restored it.
 It couldn't be reproduced by starting the app behind other windows by hand (the bubble was in
-front every time), so instead of guessing at the cause, Desktop Assist now checks: a few times in
+front every time), so instead of guessing at the cause, Desktop Wizard now checks: a few times in
 its first ten minutes it asks Windows which window is at the bubble's centre, and if it isn't the
 bubble, brings the bubble back to the front and writes what it found in the log. That fixes it
 whatever the cause, and the log says what happened.
@@ -3168,7 +3169,7 @@ only reads; moving the window is done in Electron (`bringToFront()` in `windows.
 [`src/main/bubble/frontCheck.ts`, lines 4–11](../../apps/desktop/src/main/bubble/frontCheck.ts#L4-L11)
 
 ```ts
-// Making sure the bubble can be seen after Desktop Assist starts. Started by Windows at sign-in,
+// Making sure the bubble can be seen after Desktop Wizard starts. Started by Windows at sign-in,
 // after other apps, the bubble could sit behind them although its window was always on top, until
 // the user minimised everything and restored it. So for its first ten minutes the app asks Windows
 // what's at the bubble's centre, and if it isn't the bubble, brings the bubble back to the front

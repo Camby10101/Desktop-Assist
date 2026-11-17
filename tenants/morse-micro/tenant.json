@@ -1,7 +1,7 @@
 {
   "id": "morse-micro",
   "companyName": "Morse Micro",
-  "appName": "Desktop Assist",
+  "appName": "Desktop Wizard",
   "accentColor": "#9333EA",
   "actions": [
     "ask",

@@ -55,6 +55,7 @@ import { INSTALLER_ARGS, saveDownload, Updater } from './updates'
 import { NotesStore } from './notes/NotesStore'
 import { ScreenshotService } from './screenshots/ScreenshotService'
 import { myRequestsUrl, ServiceDesk, windowsVersion } from './serviceDesk'
+import { adoptFormerData, FORMER_NAME, PRODUCT_NAME } from './formerName'
 import { SettingsService } from './settings'
 import { readJsonFile, writeJsonFile } from './storage/jsonFile'
 import { SecretStore, type Encryptor } from './storage/SecretStore'
@@ -70,17 +71,19 @@ import {
 import { createTray } from './tray'
 
 const SHUTDOWN_TIMEOUT_MS = 2000
-/** The installer's product name (electron-builder.cjs): its uninstaller is named after it. */
-const PRODUCT_NAME = 'Desktop Assist'
 
-// Keep dev runs (`npm run dev`) from sharing notes, the sign-in and the single-instance lock with
-// an installed copy. Must happen before anything reads the userData path. Automated tests give
-// their dev runs a folder of their own with DESKTOP_ASSIST_DEV_USER_DATA.
-if (!app.isPackaged) {
+// Its data folder, which must be settled before anything reads the userData path. An installed
+// copy's is %APPDATA%\Desktop Wizard: the first time after an update from Desktop Assist (its old
+// name), the old folder is moved across (see formerName.ts). Dev runs (`npm run dev`) have one of
+// their own, so they don't share notes, the sign-in and the single-instance lock with an installed
+// copy; automated tests give theirs a folder of its own with DESKTOP_ASSIST_DEV_USER_DATA.
+if (app.isPackaged) {
+  app.setPath('userData', adoptFormerData(app.getPath('appData'), PRODUCT_NAME, FORMER_NAME))
+} else {
   app.setPath(
     'userData',
     process.env['DESKTOP_ASSIST_DEV_USER_DATA'] ||
-      join(app.getPath('appData'), `${app.getName()} (Dev)`),
+      adoptFormerData(app.getPath('appData'), `${app.getName()} (Dev)`, `${FORMER_NAME} (Dev)`),
   )
 }
 
@@ -93,7 +96,7 @@ const refusedSwitches = app.isPackaged
   : []
 
 if (refusedSwitches.length) {
-  createLog(join(app.getPath('userData'), 'logs', 'desktop-assist.log'))(
+  createLog(join(app.getPath('userData'), 'logs', 'desktop-wizard.log'))(
     `Refused to start with ${refusedSwitches.map((name) => `--${name}`).join(' ')}`,
   )
   app.exit(1)
@@ -114,8 +117,8 @@ async function start(): Promise<void> {
   const userData = app.getPath('userData')
   const screenshotsDir = join(app.getPath('pictures'), tenant.appName)
   const actionCount = tenant.actions.length
-  // Problems go to %APPDATA%\Desktop Assist\logs, so an installed copy can be diagnosed too.
-  const log = createLog(join(userData, 'logs', 'desktop-assist.log'))
+  // Problems go to %APPDATA%\Desktop Wizard\logs, so an installed copy can be diagnosed too.
+  const log = createLog(join(userData, 'logs', 'desktop-wizard.log'))
 
   const notes = new NotesStore(join(userData, 'notes.json'), {
     onError: (error) => log('Saving the text box failed:', error),
@@ -584,6 +587,6 @@ const electronDisplays: Displays = {
 
 function fail(error: unknown): void {
   console.error(error)
-  dialog.showErrorBox('Desktop Assist could not start', String(error))
+  dialog.showErrorBox('Desktop Wizard could not start', String(error))
   app.exit(1)
 }

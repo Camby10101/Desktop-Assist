@@ -63,7 +63,7 @@ export interface ClaudeDesktopDeps {
  * Hands questions over to the Claude Desktop app, so they're answered with the person's own Claude
  * account and count against their own usage limit. A link can carry text but not images, so the
  * screenshots go on the clipboard. A link only fills the question in; with "Send in Claude" on,
- * Desktop Assist then presses Ctrl+V and Enter in Claude for the user.
+ * Desktop Wizard then presses Ctrl+V and Enter in Claude for the user.
  */
 export class ClaudeDesktop {
   private finishing: Promise<void> = Promise.resolve()

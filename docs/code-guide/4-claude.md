@@ -9,7 +9,7 @@ the conversation and runs each reply. There is no API key: the SDK swaps the use
 sign-in for a short-lived Claude token (see `AnthropicBackend.getClient()`).
 
 This is the built-in chat, created by `startBuiltInChat()` in `index.ts`. When a tenant sends
-questions to Claude Desktop instead (see [Claude Desktop](9-claude-desktop.md)), Desktop Assist
+questions to Claude Desktop instead (see [Claude Desktop](9-claude-desktop.md)), Desktop Wizard
 doesn't call the Claude API at all, and none of this page's code runs.
 
 **What happens when you send a message**
@@ -50,7 +50,7 @@ and `errors.ts` puts `CLAUDE_MODEL_NAME` in one of its messages.
 [`src/main/claude/model.ts`, lines 1–4](../../apps/desktop/src/main/claude/model.ts#L1-L4)
 
 ```ts
-// How Desktop Assist calls Claude. Kept in one place so the model and request shape are easy to change.
+// How Desktop Wizard calls Claude. Kept in one place so the model and request shape are easy to change.
 
 export const CLAUDE_MODEL = 'claude-opus-5-5'
 

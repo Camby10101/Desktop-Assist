@@ -31,7 +31,7 @@ the security policy.
       http-equiv="Content-Security-Policy"
       content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
     />
-    <title>Desktop Assist</title>
+    <title>Desktop Wizard</title>
   </head>
   <body>
     <div id="root"></div>
@@ -161,7 +161,7 @@ export {}
 `rounded-full`, `px-3` (horizontal padding), `bg-white`, `text-xs`. Components style themselves by
 listing these in `className` instead of writing a separate stylesheet. A prefix applies a class only
 in some situation: `hover:` while the pointer is over it, `dark:` when the page is in dark mode
-(Desktop Assist's own setting, dark by default), `motion-reduce:` when Windows animations are turned
+(Desktop Wizard's own setting, dark by default), `motion-reduce:` when Windows animations are turned
 off, and `group-data-open:` when a parent marked `group` has a `data-open` attribute (used by the
 panel). At build time Tailwind scans the source for the class names actually used and generates CSS
 for just those. This file sets Tailwind up and holds the styles that classes can't express.
@@ -447,7 +447,7 @@ for just those. This file sets Tailwind up and holds the styles that classes can
 - `.markdown table`: `display: block` with `overflow-x: auto` lets a wide table scroll inside the
   card.
 - `@media (prefers-color-scheme: dark)`: the dark-mode colours for the same elements. This media
-  query follows Desktop Assist's own light/dark setting: the main process sets Electron's
+  query follows Desktop Wizard's own light/dark setting: the main process sets Electron's
   `nativeTheme.themeSource`, which decides what the pages see (see `SettingsService.setTheme()` in
   [Main process: startup, IPC and app plumbing](2-main-startup.md)).
 - `.hljs-comment`: the start of the code-highlighting colours. `rehype-highlight` (used by
@@ -1316,7 +1316,7 @@ const DRAG_THRESHOLD = 5
 
 - `Record<Mode, string>`: a label for every `Mode` (src/shared/types.ts). TypeScript reports an
   error if a mode is ever added without one. The label becomes the button's accessible name for
-  screen readers, such as "Open Desktop Assist".
+  screen readers, such as "Open Desktop Wizard".
 - `DRAG_THRESHOLD = 5`: a press that moves no more than 5 pixels is still a click, so a slightly
   shaky click doesn't start a drag.
 
@@ -1338,7 +1338,7 @@ export function BubbleView() {
   const state = useAssistState()
   useAccentColor(state?.branding.accentColor)
   const mode = state?.mode ?? 'collapsed'
-  const appName = state?.branding.appName ?? 'Desktop Assist'
+  const appName = state?.branding.appName ?? 'Desktop Wizard'
   // Her window, as big as she is (with room above her hat); she faces the middle of the screen,
   // away from her corner.
   const { box, headroom } = bubbleMetrics(state?.size.scale ?? DEFAULT_SIZE)
@@ -1418,7 +1418,7 @@ the function's argument (see `Panel` below).
 - `const state = useAssistState()`: the bubble needs only the mode (for its label and the
   character's shadow), the pose, the corner (which way the character faces), her size and the
   branding. Until the state arrives, it falls back to `'collapsed'`, `'idle'`, `'bottom-right'`,
-  her usual size and `'Desktop Assist'`.
+  her usual size and `'Desktop Wizard'`.
 - `useAccentColor(state?.branding.accentColor)`: `?.` because `state` is `null` at first.
 - `const { box, headroom } = bubbleMetrics(state?.size.scale ?? DEFAULT_SIZE)`: as the comment
   says, her window, as big as she is, with room above her hat. `bubbleMetrics()`
@@ -1469,7 +1469,7 @@ the function's argument (see `Panel` below).
   still names it for screen readers.
 - `data-hit`: the marker `useClickThrough` looks for. The bubble window doesn't use click-through,
   so here it has no effect.
-- `ACTION_LABEL[mode]`: the `aria-label` reads, for example, "Close Desktop Assist" while the panel
+- `ACTION_LABEL[mode]`: the `aria-label` reads, for example, "Close Desktop Wizard" while the panel
   is open.
 - `style={{ width: box, height: box + headroom }}`: the whole window, `box` wide and
   `box + headroom` tall (see above). The character is drawn across the whole window, headroom and
@@ -2655,7 +2655,7 @@ Effects:
 - `if (!open || !inClaudeDesktop) return`: with Claude Desktop, each time the panel opens it asks
   whether Claude Desktop is installed (`window.assist.claudeDesktop.isInstalled()`), so a missing
   app is pointed out before anything is typed. Asking every time, rather than once, picks up
-  Claude Desktop being installed while Desktop Assist is running.
+  Claude Desktop being installed while Desktop Wizard is running.
 - `let alive = true`, `if (alive) setClaudeMissing(!installed)`: the same guard as in
   `useAssistState`. If the panel closes before the answer arrives, the cleanup sets `alive` to
   `false` and the late answer is ignored.
@@ -3325,7 +3325,7 @@ one saying Claude Desktop isn't installed. With the built-in chat, it depends on
   browser (see `src/shared/claudeDesktop.ts` in
   [Shared code and the preload bridge](1-shared-and-preload.md)). `shrink-0` stops the long
   message squeezing the button.
-- `{branding.appName}`: the tenant's app name, so the message reads "…and Desktop Assist opens
+- `{branding.appName}`: the tenant's app name, so the message reads "…and Desktop Wizard opens
   your questions in it."
 - `<Banner spinner>`: shown while a saved sign-in is being renewed, at startup or after Retry. The
   chat is visible, but `signedIn` is false, so nothing can be sent yet.

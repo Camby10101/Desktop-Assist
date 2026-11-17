@@ -2,6 +2,7 @@ import { app, nativeTheme } from 'electron'
 import { z } from 'zod'
 import type { Effort, Settings, Theme } from '@shared/types'
 import type { BubbleAnchor } from './bubble/BubbleController'
+import { adoptFormerLoginItem } from './formerName'
 import { readJsonFile, writeJsonFile } from './storage/jsonFile'
 
 /** Fast answers by default; Balanced and Thorough think longer. */
@@ -37,7 +38,10 @@ export class SettingsService {
     private readonly screenshotsDir: string,
   ) {}
 
-  /** Loads preferences. The first time an installed build runs, turns on "Start with Windows". */
+  /**
+   * Loads preferences. The first time an installed build runs, turns on "Start with Windows"; after
+   * an update from Desktop Assist (its old name), keeps it on for the renamed .exe.
+   */
   async init(): Promise<void> {
     const result = await readJsonFile(this.preferencesPath, PreferencesSchema)
     this.prefs = result.status === 'ok' ? result.value : {}
@@ -46,6 +50,12 @@ export class SettingsService {
     if (app.isPackaged && !this.prefs.autoStartInitialized) {
       this.setAutoStart(true)
       await this.save({ autoStartInitialized: true })
+    } else if (app.isPackaged) {
+      // Updated from Desktop Assist, Windows may still start the old .exe at sign-in.
+      adoptFormerLoginItem(app.getPath('exe'), {
+        startsAtLogin: (path) => app.getLoginItemSettings(path ? { path } : undefined).openAtLogin,
+        startAtLogin: () => app.setLoginItemSettings({ openAtLogin: true }),
+      })
     }
   }
 
@@ -80,7 +90,7 @@ export class SettingsService {
   }
 
   /**
-   * Light or dark mode for every Desktop Assist window, whatever Windows uses: Electron's
+   * Light or dark mode for every Desktop Wizard window, whatever Windows uses: Electron's
    * `themeSource` sets what the pages see as prefers-color-scheme, which the styles follow.
    */
   async setTheme(theme: Theme): Promise<Settings> {

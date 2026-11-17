@@ -20,6 +20,12 @@
  *   off.
  * - `doze`: nods off where she stands (floating z's), wakes with a start and looks about.
  * - `look`: glances one way and the other.
+ * - `juggle`: juggles three little glowing orbs, then catches them and smiles.
+ * - `bubbles`: blows magic bubbles through a little wand ring; they drift up, wobble and pop.
+ * - `wisp`: a will-o'-wisp goes round her twice, behind her and in front, her eyes following it,
+ *   then flies off; she waves it goodbye.
+ * - `sneeze`: "ah... ah... choo!", and the sneeze bursts into sparkles; a sheepish smile.
+ * - `dance`: a little jig, stepping side to side, an arm up and a hand on her hip, then the other.
  */
 export const FIDGETS = [
   'hop',
@@ -37,6 +43,11 @@ export const FIDGETS = [
   'butterfly',
   'doze',
   'look',
+  'juggle',
+  'bubbles',
+  'wisp',
+  'sneeze',
+  'dance',
 ] as const
 export type Fidget = (typeof FIDGETS)[number]
 
@@ -65,6 +76,11 @@ export const FIDGET_MS: Record<Fidget, number> = {
   butterfly: 4800,
   doze: 5600,
   look: 2400,
+  juggle: 4400,
+  bubbles: 4400,
+  wisp: 4800,
+  sneeze: 3000,
+  dance: 3200,
 }
 
 export const isFidget = (pose: Pose): pose is Fidget =>

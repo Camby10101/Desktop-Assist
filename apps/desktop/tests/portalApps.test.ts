@@ -224,7 +224,7 @@ function fakePortal(options: { forgeState?: boolean; slowLaunch?: boolean } = {}
     }
   }
   const portal = new PortalApps({
-    appName: 'Desktop Assist',
+    appName: 'Desktop Wizard',
     redirectPort: 47622,
     connector,
     store: {
@@ -362,7 +362,7 @@ describe('SavedAuth', () => {
       save: async (s: string) => void (saved = s),
       clear: async () => void (saved = null),
     }
-    const auth = new SavedAuth('Desktop Assist', 47622, store)
+    const auth = new SavedAuth('Desktop Wizard', 47622, store)
     await auth.load()
     expect(auth.clientMetadata).toMatchObject({
       redirect_uris: ['http://127.0.0.1:47622/callback'],
@@ -371,7 +371,7 @@ describe('SavedAuth', () => {
     })
     expect(auth.tokens()).toBeUndefined()
     await auth.saveTokens({ access_token: 't', token_type: 'bearer' })
-    const again = new SavedAuth('Desktop Assist', 47622, store)
+    const again = new SavedAuth('Desktop Wizard', 47622, store)
     await again.load()
     expect(again.tokens()?.access_token).toBe('t')
     await again.invalidateCredentials('all')

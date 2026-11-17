@@ -252,7 +252,7 @@ function UpdateItem(props: { state: UpdateState; version: string; onCheck: () =>
       : state.status === 'downloading'
         ? [`Downloading ${state.version}… ${state.percent}%`, 'It installs itself when done']
         : state.status === 'installing'
-          ? [`Installing ${state.version}…`, 'Desktop Assist will close and start again']
+          ? [`Installing ${state.version}…`, 'Desktop Wizard will close and start again']
           : state.status === 'downloaded'
             ? [`Downloaded ${state.version}`, 'Not installed: this is a development run']
             : state.status === 'up-to-date'

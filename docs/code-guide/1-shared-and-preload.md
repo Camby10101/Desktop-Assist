@@ -535,7 +535,7 @@ both sides need too.
 
 <!-- code: apps/desktop/src/shared/character.ts#FIDGETS,Fidget,Pose,FIDGET_MS,isFidget -->
 
-[`src/shared/character.ts`, lines 1–71](../../apps/desktop/src/shared/character.ts#L1-L71)
+[`src/shared/character.ts`, lines 1–87](../../apps/desktop/src/shared/character.ts#L1-L87)
 
 ```ts
 // The character that stands in for the bubble: what she's doing (her pose), shared by the main
@@ -560,6 +560,12 @@ both sides need too.
  *   off.
  * - `doze`: nods off where she stands (floating z's), wakes with a start and looks about.
  * - `look`: glances one way and the other.
+ * - `juggle`: juggles three little glowing orbs, then catches them and smiles.
+ * - `bubbles`: blows magic bubbles through a little wand ring; they drift up, wobble and pop.
+ * - `wisp`: a will-o'-wisp goes round her twice, behind her and in front, her eyes following it,
+ *   then flies off; she waves it goodbye.
+ * - `sneeze`: "ah... ah... choo!", and the sneeze bursts into sparkles; a sheepish smile.
+ * - `dance`: a little jig, stepping side to side, an arm up and a hand on her hip, then the other.
  */
 export const FIDGETS = [
   'hop',
@@ -577,6 +583,11 @@ export const FIDGETS = [
   'butterfly',
   'doze',
   'look',
+  'juggle',
+  'bubbles',
+  'wisp',
+  'sneeze',
+  'dance',
 ] as const
 
 export type Fidget = (typeof FIDGETS)[number]
@@ -606,6 +617,11 @@ export const FIDGET_MS: Record<Fidget, number> = {
   butterfly: 4800,
   doze: 5600,
   look: 2400,
+  juggle: 4400,
+  bubbles: 4400,
+  wisp: 4800,
+  sneeze: 3000,
+  dance: 3200,
 }
 
 export const isFidget = (pose: Pose): pose is Fidget =>
@@ -614,16 +630,19 @@ export const isFidget = (pose: Pose): pose is Fidget =>
 
 <!-- /code -->
 
-- `FIDGETS`: the fifteen things she does now and then once she's been left alone a while, each
-  described in the comment above it. One, `vision`, needs more than her own window: the light and
-  the company's logo are drawn in a window of their own above her (see `VISION` below). The
-  others, the butterfly and the dozer's z's included, are drawn in her own window. `as const`
-  makes it a fixed list of those exact strings, rather than any list of strings, which is what lets the next line make a type from it. It's a
-  real list, not only a type, because code goes through it: `nextActivity()` in
-  `src/main/bubble/wander.ts` picks one at random, and `Character` draws each one's frames ahead of
-  time.
+- `FIDGETS`: the twenty things she does now and then once she's been left alone a while, each
+  described in the comment above it. The last five are the newest: `juggle` (three glowing orbs),
+  `bubbles` (blown through a little wand ring), `wisp` (a will-o'-wisp that goes round her, behind
+  her and in front), `sneeze` (a sneeze that bursts into sparkles) and `dance` (a little jig). One,
+  `vision`, needs more than her own window: the light and the company's logo are drawn in a window
+  of their own above her (see `VISION` below). The others, the butterfly, the dozer's z's, the
+  orbs, the bubbles, the wisp and the sneeze's sparkles included, are drawn in her own window, so
+  they stay close to her. `as const` makes it a fixed list of those exact strings, rather than any
+  list of strings, which is what lets the next line make a type from it. It's a real list, not only
+  a type, because code goes through it: `nextActivity()` in `src/main/bubble/wander.ts` picks one
+  at random, and `Character` draws each one's frames ahead of time.
 - `Fidget`: `(typeof FIDGETS)[number]` means "the type of any item of `FIDGETS`", so it's
-  `'hop' | 'wave' | ... | 'look'`, and adding a fidget to the list adds it to the type too. It's
+  `'hop' | 'wave' | ... | 'dance'`, and adding a fidget to the list adds it to the type too. It's
   the narrower type for code that only deals with fidgets (`FIDGET_MS` here, and `Activity` and
   `nextActivity()` in `wander.ts`).
 - `Pose`: the four poses that aren't fidgets, with what each looks like in the comment above it,
@@ -632,11 +651,12 @@ export const isFidget = (pose: Pose): pose is Fidget =>
   `walk-right` while the main process moves her window along the taskbar; `dragged` whenever she's
   being moved about (dragged, or falling after a drop).
 - `FIDGET_MS`: as the comment says, how long each fidget plays, from 1.2 seconds for the hop to
-  8.6 for the vision. Both sides use it. The main process waits this long before setting the pose
-  back to `idle`, and the frames of each fidget's animation (`character/sprite.ts` in the
-  renderer) add up to exactly the same time, which a test checks, so the pose changes back just as
-  the last frame ends. `Record<Fidget, number>` makes TypeScript insist on a length for each
-  fidget.
+  8.6 for the vision; the newest five take 4.4 seconds (the juggling and the bubbles), 4.8 (the
+  wisp), 3 (the sneeze) and 3.2 (the dance). Both sides use it. The main process waits this long
+  before setting the pose back to `idle`, and the frames of each fidget's animation
+  (`character/sprite.ts` in the renderer) add up to exactly the same time, which a test checks, so
+  the pose changes back just as the last frame ends. `Record<Fidget, number>` makes TypeScript
+  insist on a length for each fidget.
 - `isFidget`: whether a pose is one of the fidgets, that is, whether `FIDGETS` includes it.
   `FIDGETS as readonly string[]` lets `includes()` take any pose (on the list's own type it would
   only take a `Fidget`, which is the very thing being checked). The return type, `pose is Fidget`,
@@ -647,7 +667,7 @@ export const isFidget = (pose: Pose): pose is Fidget =>
 
 <!-- code: apps/desktop/src/shared/character.ts#VISION -->
 
-[`src/shared/character.ts`, lines 73–84](../../apps/desktop/src/shared/character.ts#L73-L84)
+[`src/shared/character.ts`, lines 89–100](../../apps/desktop/src/shared/character.ts#L89-L100)
 
 ```ts
 /**
@@ -686,7 +706,7 @@ pages. Each entry is a `[from, to]` pair:
 
 <!-- code: apps/desktop/src/shared/character.ts#CLONES -->
 
-[`src/shared/character.ts`, lines 86–90](../../apps/desktop/src/shared/character.ts#L86-L90)
+[`src/shared/character.ts`, lines 102–106](../../apps/desktop/src/shared/character.ts#L102-L106)
 
 ```ts
 /**
@@ -798,7 +818,7 @@ export const ACTIONS = {
   settings: { label: 'Settings', kind: 'popover' },
   size: { label: 'Size', kind: 'popover' },
   clones: { label: 'Clones', kind: 'command' },
-  close: { label: 'Close Desktop Assist', kind: 'command' },
+  close: { label: 'Close Desktop Wizard', kind: 'command' },
 } as const satisfies Record<ActionId, { label: string; kind: 'command' | 'popover' | 'switch' }>
 ```
 
@@ -985,7 +1005,7 @@ export interface Settings {
   canUninstall: boolean
   /** IDs of the apps the user starred in the Apps list. */
   favoriteApps: string[]
-  /** Light or dark mode for Desktop Assist (dark until the user switches). */
+  /** Light or dark mode for Desktop Wizard (dark until the user switches). */
   theme: Theme
 }
 
@@ -1006,14 +1026,14 @@ Thorough. `Settings` is what the settings menu shows; `SettingsService.get()` in
 - `screenshotsDir: string`: the folder screenshots are saved in, opened by "Open screenshots
   folder".
 - `effort: Effort`: the response style, used by the built-in chat only.
-- `autoSend: boolean`: used with Claude Desktop only: whether Desktop Assist also sends the
+- `autoSend: boolean`: used with Claude Desktop only: whether Desktop Wizard also sends the
   question there (presses Ctrl+V and Enter in Claude), or only fills it in. On unless the user
   turns "Send in Claude automatically" off in the settings menu.
 - `canUninstall: boolean`: like `autoStartAvailable`, true only in the installed app, which is the
   only copy with an uninstaller. Under `npm run dev` the menu's Uninstall item is greyed out.
 - `favoriteApps: string[]`: the IDs of the apps the user starred in the Apps list, which it shows
   first. They're kept with the other preferences, so they survive a restart.
-- `theme: Theme`: light or dark mode for every Desktop Assist window, whatever Windows itself
+- `theme: Theme`: light or dark mode for every Desktop Wizard window, whatever Windows itself
   uses. Dark until the user switches, with the theme icon beside the bubble.
 
 ### `ChatApp`
@@ -1039,7 +1059,7 @@ Where questions are answered, set per tenant (`chatApp` in `tenant.json`, checke
   process calls the Claude API, billed to the company's Claude Console account.
 - `claude-desktop`: the panel is only a text box. Asking opens the question in the Claude Desktop
   app (and, unless the user turns it off, sends it there), where the person is signed in with
-  their own Claude account, so it counts against their own usage limit. Desktop Assist has no
+  their own Claude account, so it counts against their own usage limit. Desktop Wizard has no
   sign-in of its own then (see [Claude Desktop](9-claude-desktop.md)).
 
 ### `Branding`, `RequestType` and `StartPage`
@@ -1221,7 +1241,7 @@ Claude Desktop has opened with the question filled in. The failures come from
 `ClaudeDesktop.ask()` in `src/main/claudeDesktop.ts` (see [Claude Desktop](9-claude-desktop.md)).
 
 - `screenshots: number`: how many attached screenshots were put on the clipboard, combined into
-  one image, to be pasted into Claude (by Desktop Assist with "Send in Claude automatically" on,
+  one image, to be pasted into Claude (by Desktop Wizard with "Send in Claude automatically" on,
   otherwise by the user with Ctrl+V).
 - The result doesn't say whether the question was sent in Claude: that happens afterwards, in
   the background, and if it doesn't work a Windows notification tells the user what's left.
@@ -1299,7 +1319,7 @@ export interface PortalApp {
 
 /**
  * The Apps list.
- * - `sign-in`: the user hasn't connected Desktop Assist to their portal yet (or the connection
+ * - `sign-in`: the user hasn't connected Desktop Wizard to their portal yet (or the connection
  *   ended); a button starts it, in the browser.
  * - `signing-in`: waiting for the user to finish in their browser.
  */
@@ -1322,7 +1342,7 @@ sets the state and broadcasts every change on `assist:apps-state`.
 - `logo: string | null`: as the comment says, a `data:` URL. The page's Content-Security-Policy
   only allows images from the app and `data:` URLs, so the main process fetches each logo and
   hands it over already encoded.
-- `{ status: 'sign-in'; message?: string }`: the user hasn't connected Desktop Assist to their
+- `{ status: 'sign-in'; message?: string }`: the user hasn't connected Desktop Wizard to their
   portal yet, or the connection ended. `message` says why when there's a reason to (a sign-in that
   failed, say).
 - `{ status: 'ready'; apps: PortalApp[] }`: the list, sorted by name.
@@ -1859,7 +1879,7 @@ export interface AssistApi {
     setAutoSend(autoSend: boolean): Promise<Settings>
     /** Stars an app in the Apps list (it moves to the top), or takes its star away. */
     setFavoriteApp(id: string, favorite: boolean): Promise<Settings>
-    /** Light or dark mode for all of Desktop Assist; saved. */
+    /** Light or dark mode for all of Desktop Wizard; saved. */
     setTheme(theme: Theme): Promise<Settings>
   }
   character: {
@@ -1896,7 +1916,7 @@ export interface AssistApi {
   apps: {
     /** The list as it stands; loads it first if needed, or again with `refresh`. */
     get(refresh?: boolean): Promise<AppsState>
-    /** Connects Desktop Assist to the portal, in the browser; progress via onAppsState. */
+    /** Connects Desktop Wizard to the portal, in the browser; progress via onAppsState. */
     signIn(): Promise<void>
     cancelSignIn(): Promise<void>
     /** Opens the app in the default browser (signed in through the portal). */
@@ -1954,7 +1974,7 @@ export interface AssistApi {
      */
     check(): Promise<UpdateState>
   }
-  /** Starts Desktop Assist's uninstaller and quits (installed copies only). */
+  /** Starts Desktop Wizard's uninstaller and quits (installed copies only). */
   uninstall(): Promise<UninstallResult>
   onModeChanged(callback: (mode: Mode) => void): () => void
   /** The character's pose changed (walking, fidgeting, dangling...). */
