@@ -82,7 +82,9 @@ export function BubbleView() {
         pressedAt.current = undefined
       }}
       style={{ width: box, height: box + headroom }}
-      className="block cursor-grab outline-offset-[-2px] active:cursor-grabbing"
+      // No focus outline: clicking her focuses the button, and Chromium can count that as
+      // keyboard focus and draw the accent-coloured ring round her window.
+      className="block cursor-grab outline-none focus-visible:outline-none active:cursor-grabbing"
     >
       <Character
         pose={state?.pose ?? 'idle'}

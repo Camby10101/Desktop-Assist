@@ -1324,7 +1324,7 @@ const DRAG_THRESHOLD = 5
 
 <!-- code: apps/desktop/src/renderer/src/views/BubbleView.tsx#BubbleView -->
 
-[`src/renderer/src/views/BubbleView.tsx`, lines 18–95](../../apps/desktop/src/renderer/src/views/BubbleView.tsx#L18-L95)
+[`src/renderer/src/views/BubbleView.tsx`, lines 18–97](../../apps/desktop/src/renderer/src/views/BubbleView.tsx#L18-L97)
 
 ```tsx
 /**
@@ -1394,7 +1394,9 @@ export function BubbleView() {
         pressedAt.current = undefined
       }}
       style={{ width: box, height: box + headroom }}
-      className="block cursor-grab outline-offset-[-2px] active:cursor-grabbing"
+      // No focus outline: clicking her focuses the button, and Chromium can count that as
+      // keyboard focus and draw the accent-coloured ring round her window.
+      className="block cursor-grab outline-none focus-visible:outline-none active:cursor-grabbing"
     >
       <Character
         pose={state?.pose ?? 'idle'}
@@ -1478,9 +1480,12 @@ the function's argument (see `Panel` below).
   nothing adds space around it in the small window.
 - `cursor-grab`, `active:cursor-grabbing`: an open hand over the character, and a closed one while
   the button is held, a hint that it can be picked up.
-- `outline-offset-[-2px]`: the keyboard focus outline (`:focus-visible` in `styles.css`) is drawn
-  2 pixels inside the button instead of outside it, where the window's edge would cut it off.
-  Square brackets give a Tailwind class a custom value.
+- `outline-none focus-visible:outline-none`: no focus outline round her. As the comment above
+  the class says, clicking her focuses the button, and Chromium can count that as keyboard focus
+  (`:focus-visible`), so the accent-coloured outline `styles.css` gives keyboard focus appeared
+  round her window every time she was clicked. `focus-visible:outline-none` is a utility, in
+  Tailwind's `utilities` layer, so it wins over that rule, which is in the `base` layer. The
+  bubble is a single control in a window of its own, so it needs no ring to show where focus is.
 - `<Character`: the figure, in the `pose` the main process chose (standing until the state
   arrives).
   - `facing={isLeftCorner(corner) ? 'right' : 'left'}`: as the comment above says, she faces the

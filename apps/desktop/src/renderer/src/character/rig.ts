@@ -118,6 +118,8 @@ export interface Pose {
   wisp?: number
   /** A sneeze's burst of sparkles flying out from her nose, 0 to 1 (none at 0). */
   burst?: number
+  /** Her sparkle trail as she walks: how far through her stride she is (0 to 1; none if left out). */
+  trail?: number
 }
 
 const DOWN: Arm = { shoulder: 0.08, elbow: 0 }
@@ -228,6 +230,15 @@ const WISP = ['.GG.', 'GwwG', 'GwwG', '.GG.']
  * share of the way round spent on the high arc.
  */
 export const JUGGLE = { rounds: 4, high: 28, low: 5, arc: 0.62 }
+
+/**
+ * Her sparkle trail (Pose.trail): how many sparkles she leaves a stride; how far each drifts back
+ * from her heel over a whole stride (pixels: she walks WANDER.walkSpeed, 80 DIPs a second, and a
+ * stride takes 0.66 s, about 53 DIPs, which is 53 sprite pixels at any size, so a sparkle stays
+ * where she left it on the taskbar while her window moves on); and how long one lasts (shares of
+ * a stride).
+ */
+export const TRAIL = { perStride: 4, drift: 53, life: 0.45 }
 
 /**
  * Bubbles (Pose.bubbles): how many she blows, when the first comes and how far apart they come
@@ -933,23 +944,23 @@ export function draw(pose: Pose): string[] {
     const tipLean = view === 'side' ? -1 : 1
     const hatCentre = view === 'side' ? 0.5 : 0
     hat.ellipse(onHead({ x: hatCentre, y: -9 }), view === 'side' ? 12.5 : 14, 2.7, 'hat')
+    // The crown, rising to a tip that flops over to her right from the front; side on the whole
+    // crown is mirrored (`tipLean`), so the tip flops back over its back edge, and its front edge
+    // runs straight up to the bend.
     hat.polygon(
       shape(
         [
           [-6.5, -9.5],
           [-4.8, -14],
           [-2.5, -18],
-          [0.5 * tipLean, -20.5],
-          [4.5 * tipLean, -22],
-          [3.2 * tipLean, -19.5],
-          // Side on, where the tip bends back over the crown, a pixel fuller, so the crown doesn't
-          // narrow to a single pixel.
-          ...(view === 'side' ? [[0.2, -18.4]] : []),
+          [0.5, -20.5],
+          [4.5, -22],
+          [3.2, -19.5],
           [3.4, -16],
           [5, -12.5],
           [6.5, -9.5],
         ],
-        (p) => onHead({ x: p.x + hatCentre, y: p.y - lift * 0.15 }),
+        (p) => onHead({ x: p.x * tipLean + hatCentre, y: p.y - lift * 0.15 }),
       ),
       'hat',
     )
@@ -1162,6 +1173,20 @@ export function draw(pose: Pose): string[] {
       if (burst < 0.5 && k % 2 === 0) canvas.stamp(SPARKLE, at.x - 2, at.y - 2)
       else if (burst < 0.8) canvas.stamp(TWINKLE, at.x - 1, at.y - 1)
       else set(at, 'w')
+    }
+  }
+
+  // Her sparkle trail: little sparkles on the ground behind her heel, left behind as she walks
+  // and fading as they drift back: a twinkle, then a glint, then a fainter one, and gone; every
+  // other one gold. Only on empty ground or her shadow, never over her.
+  if (pose.trail !== undefined) {
+    for (let k = 0; k < TRAIL.perStride; k++) {
+      const age = (((pose.trail - k / TRAIL.perStride) % 1) + 1) % 1
+      if (age >= TRAIL.life) continue
+      const at = { x: hips.x - 5 - age * TRAIL.drift - (k % 2) * 2, y: 93 - (k % 2) - age * 4 }
+      const gold = k % 2 === 1
+      if (age < 0.1) motif(at, gold ? ['.Y.', 'YwY', '.Y.'] : TWINKLE, '.x')
+      else set(at, age < 0.25 ? (gold ? 'Y' : 'w') : gold ? 'k' : 'f', '.x')
     }
   }
 

@@ -261,13 +261,41 @@ describe('the rig', () => {
     expect(chin(rows)).toBe(35)
   })
 
-  it('gives her hat a crown at least two pixels wide below its tip, side on too', () => {
+  it('gives her hat a crown that widens steadily from its tip down, side on too', () => {
     for (const view of ['front', 'side'] as const) {
       const rows = drawn({ view })
       const top = rows.findIndex((row) => /[^.x]/.test(row))
+      // At least two pixels of hat inside its outline, below the tip...
       for (const row of rows.slice(top + 3, top + 11)) {
         expect(row.match(/[nNgYkG]/g)?.length ?? 0).toBeGreaterThanOrEqual(2)
       }
+      // ...and no row narrower than the one above it, so no notch in its edges.
+      const widths = rows.slice(top + 2, top + 11).map((row) => row.replace(/\./g, '').length)
+      widths.slice(1).forEach((width, i) => expect(width).toBeGreaterThanOrEqual(widths[i]!))
+    }
+  })
+
+  it('leaves a trail of sparkles on the ground behind her as she walks, never over her', () => {
+    // Walking (facing right), sparkles on the ground behind her heel, in most of the frames.
+    const behind = (rows: string[]) =>
+      rows
+        .slice(HEADROOM + 86, HEADROOM + 96)
+        .map((row) => row.slice(0, 42))
+        .join('')
+    const walking = framesOf('walk-right', 'right').filter(({ rows }) =>
+      /[wYfk]/.test(behind(rows)),
+    )
+    expect(walking.length).toBeGreaterThan(6)
+    // None standing still.
+    for (const { rows } of framesOf('idle', 'right')) expect(behind(rows)).not.toMatch(/[wYfk]/)
+    // Only on empty ground or her shadow.
+    const plain = draw({ view: 'side' })
+    for (const trail of [0, 0.1, 0.3]) {
+      draw({ view: 'side', trail }).forEach((row, y) =>
+        [...row].forEach((p, x) => {
+          if (p !== plain[y]![x]) expect('.x').toContain(plain[y]![x])
+        }),
+      )
     }
   })
 
