@@ -2511,7 +2511,7 @@ uninstalling from Windows Settings.
 
 Settings → **Check for updates** keeps the app up to date without a trip to an installer. New
 versions are published as _releases_ of the tenant's GitHub repository (`updates.repo`): each one is
-tagged with its version, such as `v1.1.1`, and has the installer (`Desktop Wizard-Setup-1.1.1.exe`)
+tagged with its version, such as `v2.0.1`, and has the installer (`Desktop Wizard-Setup-2.0.1.exe`)
 attached. One click does the whole job: ask GitHub's API for the latest release; if it's newer than
 this copy (`app.getVersion()`), download its installer, check it's exactly the file GitHub has (its
 size and SHA-256) and that it's signed with the _release key_, and run it as an update. The

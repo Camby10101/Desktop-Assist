@@ -4,10 +4,10 @@ Status: **Milestones 0 (Foundation), 1 (Chat with Claude), 2.1 (bubble fixes), 3
 sign-in), 4 (logos, favourites, service desk, light/dark, the bubble-click fix) and 5 (the
 app-opening spinner; Jira and the service desk), its fixes 5.1 and 5.2 (the bubble kept in front;
 Check for updates), and features 3.1 (questions open in Claude Desktop) and 3.2 (Apps list,
-Uninstall, fixes) complete**. Version 1.0.0 is the first release (§7h). On trial (branch
-`character`): the bubble as an animated character, in a choice of sizes, with a Spells menu
-(Clones, Starfall, Teleport, Explosion) in place of Bounce, and the app's new name, Desktop Wizard: it was Desktop Assist up to 1.0.0 (§7i). Last
-updated 2026-11-17.
+Uninstall, fixes) complete**. Version 1.0.0 is the first release (§7h). Version 2.0.0 (the
+`character` branch, merged into `main`): the bubble as an animated character, in a choice of sizes,
+with a Spells menu (Clones, Starfall, Teleport, Explosion) in place of Bounce, and the app's new
+name, Desktop Wizard: it was Desktop Assist up to 1.0.0 (§7i). Last updated 2026-11-17.
 
 A Windows desktop assistant that runs in the background, shows a small circular company logo
 in the bottom-right corner of the screen, and opens a panel when clicked. It's built for Morse
@@ -747,9 +747,9 @@ starts and **dissolves into them** when it's closed (Close, or Quit in the tray)
 
 ### The new name: Desktop Wizard
 
-Also on the `character` branch, for version 1.1.0, the app is renamed from Desktop Assist to
+Also on the `character` branch, for version 2.0.0, the app is renamed from Desktop Assist to
 Desktop Wizard: the installer's product name, and so the `.exe`, the uninstaller, the shortcuts, the
-installer file (`Desktop Wizard-Setup-1.1.0.exe`), the data folder (`%APPDATA%\Desktop Wizard`),
+installer file (`Desktop Wizard-Setup-2.0.0.exe`), the data folder (`%APPDATA%\Desktop Wizard`),
 the log (`desktop-wizard.log`), the screenshots folder (`Pictures\Desktop Wizard`, from the
 tenant's `appName`) and every mention in the app and the docs.
 
@@ -847,7 +847,7 @@ Step-by-step instructions are in [CLAUDE_DESKTOP_SETUP.md](CLAUDE_DESKTOP_SETUP.
   own form), not created through Jira
 - 5.2 updates → releases of the public GitHub repository, each installer signed with a release key
   whose private half stays off GitHub, so the GitHub account alone can't push an update
-- 1.1.0 name → Desktop Wizard (Desktop Assist up to 1.0.0); the app ID, the install folder and the
+- 2.0.0 name → Desktop Wizard (Desktop Assist up to 1.0.0); the app ID, the install folder and the
   update signature text keep the old name, so the update installs over 1.0.0 and keeps its data
 
 **Open**

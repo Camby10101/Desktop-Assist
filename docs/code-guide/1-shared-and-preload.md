@@ -792,9 +792,9 @@ top of the file says, both sides need them: the main process casts the spells (m
 opening the windows their effects are drawn in), and the pages draw the menu, her animations and
 the effects. `character.ts` (above) takes the lengths of her spells' poses from here too.
 
-### `SPELLS`, `Spell` and `SPELL_INFO`
+### `SPELLS`, `Spell` and `SPELL_LABELS`
 
-<!-- code: apps/desktop/src/shared/spells.ts#SPELLS,Spell,SPELL_INFO -->
+<!-- code: apps/desktop/src/shared/spells.ts#SPELLS,Spell,SPELL_LABELS -->
 
 [`src/shared/spells.ts`, lines 1–14](../../apps/desktop/src/shared/spells.ts#L1-L14)
 
@@ -807,12 +807,12 @@ export const SPELLS = ['clones', 'starfall', 'teleport', 'explosion'] as const
 
 export type Spell = (typeof SPELLS)[number]
 
-/** What the Spells menu says about each. */
-export const SPELL_INFO: Record<Spell, { label: string; hint: string }> = {
-  clones: { label: 'Clones', hint: 'Ten of her, wandering the taskbar' },
-  starfall: { label: 'Starfall', hint: 'Shooting stars across the screen' },
-  teleport: { label: 'Teleport', hint: 'Vanishes, and pops up elsewhere' },
-  explosion: { label: 'Explosion', hint: 'A long chant, then a big bang' },
+/** What the Spells menu calls each. */
+export const SPELL_LABELS: Record<Spell, string> = {
+  clones: 'Clones',
+  starfall: 'Starfall',
+  teleport: 'Teleport',
+  explosion: 'Explosion',
 }
 ```
 
@@ -825,9 +825,8 @@ export const SPELL_INFO: Record<Spell, { label: string; hint: string }> = {
   As with `ACTION_IDS` below, it's a real list made `as const`, and `Spell` is the type of any item
   of it. It exists at runtime because code goes through it: the menu draws a row for each, and
   `registerIpc()` in `src/main/ipc.ts` checks the spell a page asks for with `z.enum(SPELLS)`.
-- `SPELL_INFO`: as the comment says, what the menu says about each: its name, and a short line
-  under it (its _hint_), such as "Vanishes, and pops up elsewhere". `Record<Spell, ...>` makes
-  TypeScript insist on both for every spell.
+- `SPELL_LABELS`: as the comment says, what the menu calls each: just its name. `Record<Spell,
+string>` makes TypeScript insist on one for every spell.
 
 ### `STARFALL`, `EXPLOSION` and `TELEPORT`
 

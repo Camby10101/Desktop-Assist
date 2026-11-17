@@ -5,12 +5,12 @@
 export const SPELLS = ['clones', 'starfall', 'teleport', 'explosion'] as const
 export type Spell = (typeof SPELLS)[number]
 
-/** What the Spells menu says about each. */
-export const SPELL_INFO: Record<Spell, { label: string; hint: string }> = {
-  clones: { label: 'Clones', hint: 'Ten of her, wandering the taskbar' },
-  starfall: { label: 'Starfall', hint: 'Shooting stars across the screen' },
-  teleport: { label: 'Teleport', hint: 'Vanishes, and pops up elsewhere' },
-  explosion: { label: 'Explosion', hint: 'A long chant, then a big bang' },
+/** What the Spells menu calls each. */
+export const SPELL_LABELS: Record<Spell, string> = {
+  clones: 'Clones',
+  starfall: 'Starfall',
+  teleport: 'Teleport',
+  explosion: 'Explosion',
 }
 
 /** Starfall: shooting stars across her screen for this long (ms), this many starting a second. */

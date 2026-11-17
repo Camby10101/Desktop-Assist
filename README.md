@@ -129,7 +129,7 @@ GitHub repository (`Camby10101/Desktop-Assist`) keep it too, since nobody using 
 
 **Install it like a normal app:**
 
-1. Run `npm run dist`. This builds `apps/desktop/dist/Desktop Wizard-Setup-1.1.0.exe` (named
+1. Run `npm run dist`. This builds `apps/desktop/dist/Desktop Wizard-Setup-2.0.0.exe` (named
    after the version in `apps/desktop/package.json`; up to 1.0.0 it was
    `Desktop Assist-Setup-<version>.exe`). Its last step signs the installer for Check for updates;
    on a PC without the release key it stops there with a message, and the installer is still built

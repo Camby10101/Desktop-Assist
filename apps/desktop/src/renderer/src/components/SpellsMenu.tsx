@@ -1,12 +1,12 @@
 import { Flame, Orbit, Sparkles, UsersRound, type LucideIcon } from 'lucide-react'
 import { useRef } from 'react'
 import { type Corner, type PanelLayout } from '@shared/geometry'
-import { SPELL_INFO, SPELLS, type Spell } from '@shared/spells'
+import { SPELL_LABELS, SPELLS, type Spell } from '@shared/spells'
 import { useFitInWindow } from '../hooks/useFitInWindow'
 import { anchored } from '../lib/anchor'
 import { cn } from '../lib/cn'
 
-const MENU_WIDTH = 236
+const MENU_WIDTH = 176
 
 const ICONS: Record<Spell, LucideIcon> = {
   clones: UsersRound,
@@ -16,8 +16,8 @@ const ICONS: Record<Spell, LucideIcon> = {
 }
 
 /**
- * The menu that opens beside the wand icon: her spells (src/shared/spells.ts), each with a line
- * saying what it does. Picking one casts it; the main process closes the panel so it can be seen.
+ * The menu that opens beside the wand icon: her spells (src/shared/spells.ts), by name. Picking
+ * one casts it; the main process closes the panel so it can be seen.
  */
 export function SpellsMenu(props: {
   corner: Corner
@@ -52,7 +52,6 @@ export function SpellsMenu(props: {
       </p>
       {SPELLS.map((spell) => {
         const Icon = ICONS[spell]
-        const { label, hint } = SPELL_INFO[spell]
         return (
           <button
             key={spell}
@@ -62,10 +61,7 @@ export function SpellsMenu(props: {
             className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800"
           >
             <Icon size={16} className="shrink-0 text-accent" aria-hidden />
-            <span className="min-w-0">
-              {label}
-              <span className="block text-[11px] text-zinc-500">{hint}</span>
-            </span>
+            {SPELL_LABELS[spell]}
           </button>
         )
       })}

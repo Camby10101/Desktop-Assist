@@ -2063,8 +2063,7 @@ One of the two round buttons, private to this file.
 
 ## `src/renderer/src/components/SpellsMenu.tsx`: the spells menu
 
-The small menu that opens beside the wand icon (Spells), listing her four spells, each with a line
-saying what it does. `Panel` renders it only while the panel is open, the wand has toggled it on,
+The small menu that opens beside the wand icon (Spells), listing her four spells by name. `Panel` renders it only while the panel is open, the wand has toggled it on,
 and the tenant's list of actions includes `spells`. Its props are the `corner`, `layout` and
 `offset` for positioning, as for `SettingsMenu`, and `onCast`, through which `Panel` closes the
 menu and asks the main process to cast the spell (`window.assist.character.castSpell()`). The
@@ -2082,7 +2081,7 @@ closes.
 [`src/renderer/src/components/SpellsMenu.tsx`, lines 9–16](../../apps/desktop/src/renderer/src/components/SpellsMenu.tsx#L9-L16)
 
 ```tsx
-const MENU_WIDTH = 236
+const MENU_WIDTH = 176
 
 const ICONS: Record<Spell, LucideIcon> = {
   clones: UsersRound,
@@ -2094,8 +2093,7 @@ const ICONS: Record<Spell, LucideIcon> = {
 
 <!-- /code -->
 
-- `MENU_WIDTH = 236`: the menu's width in pixels, with room for each spell's name and the line
-  under it.
+- `MENU_WIDTH = 176`: the menu's width in pixels, room for an icon and the longest name.
 - `ICONS: Record<Spell, LucideIcon>`: the lucide icon beside each spell's name: two people
   (`UsersRound`) for Clones, sparkles for Starfall, a ring round a dot (`Orbit`) for Teleport and a
   flame for Explosion. `Record<Spell, ...>` makes TypeScript insist on one for every spell in
@@ -2105,12 +2103,12 @@ const ICONS: Record<Spell, LucideIcon> = {
 
 <!-- code: apps/desktop/src/renderer/src/components/SpellsMenu.tsx#SpellsMenu -->
 
-[`src/renderer/src/components/SpellsMenu.tsx`, lines 18–74](../../apps/desktop/src/renderer/src/components/SpellsMenu.tsx#L18-L74)
+[`src/renderer/src/components/SpellsMenu.tsx`, lines 18–70](../../apps/desktop/src/renderer/src/components/SpellsMenu.tsx#L18-L70)
 
 ```tsx
 /**
- * The menu that opens beside the wand icon: her spells (src/shared/spells.ts), each with a line
- * saying what it does. Picking one casts it; the main process closes the panel so it can be seen.
+ * The menu that opens beside the wand icon: her spells (src/shared/spells.ts), by name. Picking
+ * one casts it; the main process closes the panel so it can be seen.
  */
 export function SpellsMenu(props: {
   corner: Corner
@@ -2145,7 +2143,6 @@ export function SpellsMenu(props: {
       </p>
       {SPELLS.map((spell) => {
         const Icon = ICONS[spell]
-        const { label, hint } = SPELL_INFO[spell]
         return (
           <button
             key={spell}
@@ -2155,10 +2152,7 @@ export function SpellsMenu(props: {
             className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800"
           >
             <Icon size={16} className="shrink-0 text-accent" aria-hidden />
-            <span className="min-w-0">
-              {label}
-              <span className="block text-[11px] text-zinc-500">{hint}</span>
-            </span>
+            {SPELL_LABELS[spell]}
           </button>
         )
       })}
@@ -2192,14 +2186,11 @@ like the settings menu: the same look, placed the same way and kept inside the w
 - `<p className="... uppercase">Spells</p>`: a small grey heading at the top, in capitals.
 - `{SPELLS.map((spell) => {`: one row per spell, in `SPELLS`' order: Clones, Starfall, Teleport and
   Explosion. `key={spell}` lets React tell the rows apart.
-- `const { label, hint } = SPELL_INFO[spell]`: its name, and the line under it, such as "Starfall"
-  with "Shooting stars across the screen".
 - `onClick={() => props.onCast(spell)}`: casts it. The menu does nothing else itself: `Panel`
   closes it and asks the main process to cast the spell, which closes the panel first.
 - `<Icon size={16} className="shrink-0 text-accent" aria-hidden />`: the spell's icon, in the
   accent colour; `aria-hidden`, because the name beside it says the same.
-- `<span className="min-w-0">`: lets the name and its line wrap inside the row rather than pushing
-  the row wider.
+- `{SPELL_LABELS[spell]}`: its name, beside the icon.
 
 ## `src/renderer/src/components/ActionStack.tsx`: the action icons
 
