@@ -9,6 +9,7 @@ import {
   INSTALLER_ARGS,
   isNewer,
   isSigned,
+  newestRelease,
   ownDownloads,
   parseVersion,
   releaseOf,
@@ -154,6 +155,43 @@ describe('releaseOf', () => {
   })
 })
 
+describe('newestRelease', () => {
+  it('takes the highest version, whatever order the releases came in or which GitHub calls latest', () => {
+    const list = [release('v1.0.1'), release('v1.2.0'), release('v1.10.0'), release('v1.9.9')]
+    expect(newestRelease(list, DOWNLOADS)).toMatchObject({
+      release: { version: '1.10.0' },
+      unfinished: null,
+    })
+  })
+
+  it('skips drafts, pre-releases and tags that are not versions', () => {
+    const list = [
+      { ...release('v3.0.0'), draft: true },
+      { ...release('v2.0.0'), prerelease: true },
+      { ...release('v1.5.0'), tag_name: 'nightly' },
+      release('v1.1.0'),
+    ]
+    expect(newestRelease(list, DOWNLOADS).release?.version).toBe('1.1.0')
+  })
+
+  it('notes a newer version whose installer is not attached yet, but not an older one', () => {
+    const bare = (tag: string) => ({ tag_name: tag, draft: false, prerelease: false, assets: [] })
+    expect(newestRelease([bare('2.2.0'), release('v2.1.0')], DOWNLOADS)).toMatchObject({
+      release: { version: '2.1.0' },
+      unfinished: '2.2.0',
+    })
+    expect(newestRelease([bare('2.0.0'), release('v2.1.0')], DOWNLOADS).unfinished).toBeNull()
+    expect(newestRelease([bare('2.2.0')], DOWNLOADS)).toEqual({
+      release: null,
+      unfinished: '2.2.0',
+    })
+    expect(newestRelease({ message: 'Not Found' }, DOWNLOADS)).toEqual({
+      release: null,
+      unfinished: null,
+    })
+  })
+})
+
 describe('signatures', () => {
   it("checks the release key signed this version's installer", () => {
     const signed = Buffer.from(signature('1.0.1'), 'base64')
@@ -237,13 +275,13 @@ function updater(
   const file = options.file ?? INSTALLER
   const instance = new Updater({
     currentVersion: options.current ?? '1.0.0',
-    latestUrl: `https://api.github.com/repos/${REPO}/releases/latest`,
+    releasesUrl: `https://api.github.com/repos/${REPO}/releases?per_page=30`,
     downloads: DOWNLOADS,
     publicKey: KEY.publicKey,
     fetch: async (url) => {
       world.requests.push(url)
-      if (url.endsWith('/releases/latest')) {
-        return options.latest ? options.latest() : Response.json(release('v1.0.1'))
+      if (url.includes('/releases?')) {
+        return options.latest ? options.latest() : Response.json([release('v1.0.1')])
       }
       if (url.endsWith('.sig')) return new Response(options.sig ?? signature('1.0.1', file))
       // The installer, in a few chunks.
@@ -271,11 +309,33 @@ function updater(
 
 describe('Updater', () => {
   it('says up to date when the latest release is this version, or there are none', async () => {
-    const same = updater({ latest: () => Response.json(release('v1.0.0')) })
+    const same = updater({ latest: () => Response.json([release('v1.0.0')]) })
     expect(await same.updater.checkAndInstall()).toEqual({ status: 'up-to-date', version: '1.0.0' })
+    const empty = updater({ latest: () => Response.json([]) })
+    expect(await empty.updater.checkAndInstall()).toEqual({
+      status: 'up-to-date',
+      version: '1.0.0',
+    })
     const none = updater({ latest: () => new Response('', { status: 404 }) })
     expect(await none.updater.checkAndInstall()).toEqual({ status: 'up-to-date', version: '1.0.0' })
-    expect(none.world.requests).toEqual([`https://api.github.com/repos/${REPO}/releases/latest`])
+    expect(none.world.requests).toEqual([
+      `https://api.github.com/repos/${REPO}/releases?per_page=30`,
+    ])
+  })
+
+  it('says when a newer version is out but its installer is not attached to the release yet', async () => {
+    const bare = { tag_name: '1.0.2', draft: false, prerelease: false, assets: [] }
+    const waiting = updater({ latest: () => Response.json([bare, release('v1.0.0')]) })
+    expect(await waiting.updater.checkAndInstall()).toEqual({
+      status: 'error',
+      message: "Version 1.0.2 is out, but its installer isn't attached yet",
+    })
+    // An older release with its installer still installs, if it's newer than this copy.
+    const older = updater({ latest: () => Response.json([bare, release('v1.0.1')]) })
+    expect(await older.updater.checkAndInstall()).toEqual({
+      status: 'installing',
+      version: '1.0.1',
+    })
   })
 
   it('downloads a newer release, checks it, runs the installer and quits', async () => {
@@ -334,7 +394,7 @@ describe('Updater', () => {
     // No .sig on the release: nothing is downloaded.
     const payload = release('v1.0.1')
     const unsigned = updater({
-      latest: () => Response.json({ ...payload, assets: payload.assets.slice(0, 2) }),
+      latest: () => Response.json([{ ...payload, assets: payload.assets.slice(0, 2) }]),
     })
     expect(await unsigned.updater.checkAndInstall()).toEqual(
       refused('the release has no signature'),
@@ -377,7 +437,7 @@ describe('Updater', () => {
     const slow = updater({ latest: () => new Promise<Response>((resolve) => (answer = resolve)) })
     const first = slow.updater.checkAndInstall()
     expect(await slow.updater.checkAndInstall()).toEqual({ status: 'checking' })
-    answer(Response.json(release('v1.0.0')))
+    answer(Response.json([release('v1.0.0')]))
     await first
     expect(slow.world.requests).toHaveLength(1)
   })

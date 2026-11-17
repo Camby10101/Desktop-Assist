@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { FIDGET_MS, SPELL_POSE_MS, type Pose } from '@shared/character'
+import { DRAG_CHECK, FIDGET_MS, LANDING, SPELL_POSE_MS, type Pose } from '@shared/character'
 import { UI, type CharacterSize, type Corner, type Point, type Rect } from '@shared/geometry'
 import type { Habits, Mode } from '@shared/types'
 import {
@@ -12,7 +12,7 @@ import {
   type DisplayArea,
 } from '../src/main/bubble/BubbleController'
 import { bubbleWindowBounds, panelWindowBounds, restPosition } from '../src/main/bubble/layout'
-import { WANDER } from '../src/main/bubble/wander'
+import { FLING, WANDER } from '../src/main/bubble/wander'
 
 /** Her box's position, from her window's bounds: in by its padding, below its headroom. */
 const boxOf = (window: Rect): Point => ({
@@ -126,16 +126,47 @@ function advanceUntil(done: () => boolean) {
   for (let i = 0; i < 60_000 / 16 && !done(); i++) vi.advanceTimersByTime(16)
   expect(done()).toBe(true)
 }
+/** Moves time on `ms`, her page saying every so often that the mouse button is still down. */
+function holdFor(ms: number) {
+  for (let left = ms; left > 0; left -= DRAG_CHECK.everyMs) {
+    vi.advanceTimersByTime(Math.min(left, DRAG_CHECK.everyMs))
+    controller.dragHeld()
+  }
+}
 /** How long walking `distance` takes, plus a frame. */
 const walkMs = (distance: number) => (distance / WANDER.walkSpeed) * 1000 + 32
 
-/** Presses on the bubble's centre, moves the mouse to `to`, and lets go. */
+/**
+ * Presses on the bubble's centre, moves the mouse to `to`, holds it still there a moment (so it's
+ * a drop, not a throw), and lets go.
+ */
 function drag(to: Point) {
   const start = bubble.bounds!
   cursor = { x: start.x + 36, y: start.y + 36 }
   controller.startDrag()
   cursor = to
-  vi.advanceTimersByTime(32)
+  holdFor(32 + FLING.sampleMs)
+  controller.endDrag()
+}
+
+/**
+ * Picks her up (and carries her to `from`, if given) and throws her: the mouse moving `step` each
+ * frame for a few frames, then let go while it's still moving.
+ */
+function fling(step: Point, from?: Point) {
+  const start = bubble.bounds!
+  cursor = { x: start.x + 36, y: start.y + 36 }
+  controller.startDrag()
+  // Carried up to `from` first, if it says.
+  if (from) {
+    cursor = from
+    holdFor(32 + FLING.sampleMs)
+  }
+  for (let i = 0; i < 8; i++) {
+    cursor = { x: cursor.x + step.x, y: cursor.y + step.y }
+    vi.advanceTimersByTime(16)
+    controller.dragHeld()
+  }
   controller.endDrag()
 }
 
@@ -258,7 +289,7 @@ describe('on its own', () => {
     advanceUntil(() => controller.currentPose === 'sit')
     controller.startDrag()
     expect(controller.currentPose).toBe('dragged')
-    vi.advanceTimersByTime(FIDGET_MS.sit + 100)
+    holdFor(FIDGET_MS.sit + 100)
     expect(controller.currentPose).toBe('dragged') // the fidget's end doesn't interrupt
     controller.endDrag()
   })
@@ -310,7 +341,7 @@ describe('as Settings say', () => {
 
   it('stays where she was dropped, however far from her corner, when she’s to stand still', () => {
     startWith({ standStill: true, noIdles: false })
-    drag({ x: 900, y: 300 })
+    drag({ x: 900, y: 850 })
     vi.advanceTimersByTime(1000)
     expect(controller.currentMode).toBe('collapsed')
     expect(controller.currentPose).toBe('idle')
@@ -562,7 +593,7 @@ describe('dragging', () => {
   })
 
   it('falls straight down onto the taskbar where it was dropped', () => {
-    drag({ x: 1700, y: 300 }) // the right half, near enough to its corner
+    drag({ x: 1700, y: 850 }) // the right half, near enough to its corner
     expect(controller.currentMode).toBe('returning')
     expect(controller.currentPose).toBe('dragged')
     const dropped = bubble.bounds!
@@ -577,7 +608,7 @@ describe('dragging', () => {
   })
 
   it('dropped far from a corner, it walks back toward the nearer one', () => {
-    drag({ x: 900, y: 300 }) // the left half of the main display, far from its corner
+    drag({ x: 900, y: 850 }) // the left half of the main display, far from its corner
     vi.advanceTimersByTime(1000)
     expect(anchors).toEqual([{ displayId: 1, corner: 'bottom-left' }])
     expect(controller.currentMode).toBe('collapsed')
@@ -589,7 +620,7 @@ describe('dragging', () => {
   })
 
   it('lives near a corner of the other display when dropped there', () => {
-    drag({ x: 2650, y: 300 }) // the right half of the second display, far from its corner
+    drag({ x: 2650, y: 850 }) // the right half of the second display, far from its corner
     const inset = 3200 - 16 - UI.bubbleSize - (2650 - 28)
     vi.advanceTimersByTime(1000)
     expect(anchors).toEqual([{ displayId: 2, corner: 'bottom-right' }])
@@ -600,7 +631,7 @@ describe('dragging', () => {
   })
 
   it('moves the panel to open toward the middle of the screen from the new corner', () => {
-    drag({ x: 200, y: 200 }) // the left half, 156 from its corner
+    drag({ x: 200, y: 850 }) // the left half, 156 from its corner
     vi.advanceTimersByTime(1000)
     const position = restPosition(PRIMARY.workArea, 'bottom-left', 200 - 28 - 16)
     expect(bubble.bounds).toEqual(bubbleWindowBounds(position))
@@ -610,7 +641,7 @@ describe('dragging', () => {
   })
 
   it('opening while it walks back stops it, with the panel where it stands', () => {
-    drag({ x: 900, y: 300 })
+    drag({ x: 900, y: 850 })
     vi.advanceTimersByTime(2000)
     expect(controller.currentPose).toBe('walk-left')
     controller.clickBubble()
@@ -635,10 +666,126 @@ describe('dragging', () => {
     controller.startDrag()
     expect(panel.visible).toBe(false)
     expect(controller.currentMode).toBe('dragging')
-    controller.clickBubble() // ignored while dragging
     controller.expand() // ignored while dragging
     expect(controller.currentMode).toBe('dragging')
     controller.endDrag()
+  })
+})
+
+describe('throwing her, and hard landings', () => {
+  it('lands hard when dropped from high up: splat, then up again, idle and on with her day', () => {
+    drag({ x: 1700, y: 300 })
+    advanceUntil(() => controller.currentMode === 'collapsed')
+    expect(controller.currentPose).toBe('splat')
+    expect(bubble.bounds!.y).toBe(home().y)
+    vi.advanceTimersByTime(LANDING.splatMs - 100)
+    expect(controller.currentPose).toBe('splat')
+    vi.advanceTimersByTime(200)
+    expect(controller.currentPose).toBe('idle')
+  })
+
+  it('lands softly when dropped from near the taskbar', () => {
+    drag({ x: 1700, y: 850 })
+    advanceUntil(() => controller.currentMode === 'collapsed')
+    expect(controller.currentPose).toBe('idle')
+  })
+
+  it('flies on when let go while moving, tumbling, and lands on the taskbar further along', () => {
+    fling({ x: -30, y: -10 }) // about 1900 DIP a second to the left, and up
+    expect(controller.currentMode).toBe('returning')
+    expect(controller.currentPose).toBe('flung')
+    const released = bubble.bounds!
+    vi.advanceTimersByTime(100)
+    expect(bubble.bounds!.x).toBeLessThan(released.x - 50) // still going left
+    expect(bubble.bounds!.y).toBeLessThan(released.y) // and up, for now
+    advanceUntil(() => controller.currentMode === 'collapsed')
+    expect(bubble.bounds!.y).toBe(home().y)
+    expect(bubble.bounds!.x).toBeLessThan(released.x - 200)
+  })
+
+  it('bounces off the side of the screen, never leaving it, and lives near the corner it lands by', () => {
+    // About 2200 DIP a second to the left, from high on the right: into the left side and back.
+    fling({ x: -35, y: -10 }, { x: 1700, y: 400 })
+    const edge = home(PRIMARY.workArea, 'bottom-left', 0).x
+    let leftmost = Infinity
+    advanceUntil(() => {
+      leftmost = Math.min(leftmost, bubble.bounds!.x)
+      return controller.currentMode === 'collapsed'
+    })
+    expect(leftmost).toBe(edge) // it got to the side, and no further
+    expect(bubble.bounds!.x).toBeGreaterThan(edge) // and bounced back off it
+    expect(anchors.at(-1)).toEqual({ displayId: 1, corner: 'bottom-left' })
+  })
+
+  it('lands hard when thrown down at the taskbar from high up', () => {
+    fling({ x: 0, y: 40 }, { x: 1700, y: 200 })
+    advanceUntil(() => controller.currentMode === 'collapsed')
+    expect(controller.currentPose).toBe('splat')
+  })
+
+  it('can be caught in the air', () => {
+    fling({ x: -30, y: -20 })
+    vi.advanceTimersByTime(80)
+    expect(controller.currentMode).toBe('returning')
+    controller.startDrag()
+    expect(controller.currentMode).toBe('dragging')
+    expect(controller.currentPose).toBe('dragged')
+    controller.endDrag()
+  })
+
+  it('stops a hard landing when she’s clicked, opening the panel', () => {
+    drag({ x: 1700, y: 300 })
+    advanceUntil(() => controller.currentPose === 'splat')
+    controller.clickBubble()
+    expect(controller.currentMode).toBe('expanded')
+    expect(controller.currentPose).toBe('idle')
+  })
+})
+
+describe('a drag whose release goes missing', () => {
+  it('stays carried as long as her page says the button is still down', () => {
+    controller.startDrag()
+    holdFor(10_000)
+    expect(controller.currentMode).toBe('dragging')
+    controller.endDrag()
+  })
+
+  it('lets her go once her page stops saying so, and logs it', () => {
+    const logged: string[] = []
+    controller.dispose()
+    controller = new BubbleController({
+      bubble,
+      panel,
+      displays: {
+        primary: () => screens[0]!,
+        byId: (id) => screens.find((s) => s.id === id),
+        nearest: () => screens[0]!,
+        cursor: () => cursor,
+      },
+      actionCount: 4,
+      onModeChange: (mode) => modes.push(mode),
+      onAnchorChange: () => {},
+      onDiagnostic: (message) => logged.push(message),
+      now: () => Date.now(),
+      random: () => 0.5,
+    })
+    controller.start()
+    controller.startDrag()
+    holdFor(1_000)
+    vi.advanceTimersByTime(DRAG_CHECK.staleMs - 100)
+    expect(controller.currentMode).toBe('dragging')
+    vi.advanceTimersByTime(200)
+    expect(controller.currentMode).toBe('returning') // falling to the taskbar
+    expect(logged.at(-1)).toMatch(/no word that the mouse button is still down/)
+    vi.advanceTimersByTime(1000)
+    expect(controller.currentMode).toBe('collapsed')
+  })
+
+  it('lets her go when she’s clicked while carried', () => {
+    controller.startDrag()
+    holdFor(500)
+    controller.clickBubble()
+    expect(controller.currentMode).toBe('returning')
   })
 })
 
@@ -690,7 +837,7 @@ describe('display changes', () => {
   })
 
   it('moves to the same corner of the main display when its display is unplugged', () => {
-    drag({ x: 2100, y: 100 }) // second display, 136 from its bottom-left corner
+    drag({ x: 2100, y: 850 }) // second display, 136 from its bottom-left corner
     vi.advanceTimersByTime(1000)
     screens = [screens[0]!]
     controller.displayChanged()

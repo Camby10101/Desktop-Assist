@@ -1351,7 +1351,7 @@ Esc, on a click anywhere else in the panel, and when the panel closes.
 
 <!-- code: apps/desktop/src/renderer/src/components/SettingsMenu.tsx#CONFIRM_MS,EFFORTS -->
 
-[`src/renderer/src/components/SettingsMenu.tsx`, lines 20–26](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L20-L26)
+[`src/renderer/src/components/SettingsMenu.tsx`, lines 21–27](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L21-L27)
 
 ```tsx
 const CONFIRM_MS = 3000
@@ -1376,7 +1376,7 @@ const EFFORTS: { value: Effort; label: string; hint: string }[] = [
 
 <!-- code: apps/desktop/src/renderer/src/components/SettingsMenu.tsx#SettingsMenu -->
 
-[`src/renderer/src/components/SettingsMenu.tsx`, lines 28–264](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L28-L264)
+[`src/renderer/src/components/SettingsMenu.tsx`, lines 29–272](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L29-L272)
 
 ```tsx
 /** The menu that opens beside the gear icon, on the side facing the middle of the screen. */
@@ -1402,6 +1402,7 @@ export function SettingsMenu(props: {
   onToggleTheme: () => void
   onSetSize: (scale: number) => void
   onSetHabits: (habits: Partial<Habits>) => void
+  onSetRobeColor: (color: string | null) => void
   onToggleAutoStart: () => void
   onSetEffort: (effort: Effort) => void
   onToggleAutoSend: () => void
@@ -1459,6 +1460,12 @@ export function SettingsMenu(props: {
       />
 
       <SizeControl size={props.size} onSetSize={props.onSetSize} />
+
+      <RobeColorControl
+        color={settings.robeColor}
+        companyColor={branding.accentColor}
+        onSetColor={props.onSetRobeColor}
+      />
 
       <ToggleRow
         label="Stand still"
@@ -1740,7 +1747,7 @@ switches the "New conversation" (or "Clear text box") row into its "Click again"
 
 <!-- code: apps/desktop/src/renderer/src/components/SettingsMenu.tsx#UpdateItem -->
 
-[`src/renderer/src/components/SettingsMenu.tsx`, lines 266–304](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L266-L304)
+[`src/renderer/src/components/SettingsMenu.tsx`, lines 274–312](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L274-L312)
 
 ```tsx
 /** Check for updates, showing how it's going: checking, downloading, installing, or the answer. */
@@ -1809,7 +1816,7 @@ whole job happens in the main process (`Updater` in `src/main/updates.ts`; see
 
 <!-- code: apps/desktop/src/renderer/src/components/SettingsMenu.tsx#MenuItem -->
 
-[`src/renderer/src/components/SettingsMenu.tsx`, lines 306–335](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L306-L335)
+[`src/renderer/src/components/SettingsMenu.tsx`, lines 314–343](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L314-L343)
 
 ```tsx
 function MenuItem(props: {
@@ -1864,7 +1871,7 @@ One row of the menu: an icon and a label, as a button.
 
 <!-- code: apps/desktop/src/renderer/src/components/SettingsMenu.tsx#ToggleRow -->
 
-[`src/renderer/src/components/SettingsMenu.tsx`, lines 337–354](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L337-L354)
+[`src/renderer/src/components/SettingsMenu.tsx`, lines 345–362](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L345-L362)
 
 ```tsx
 /** A setting that's on or off: its name, a line saying what it does now, and its switch. */
@@ -1907,7 +1914,7 @@ switches there would have been four copies of the same lines, which would only d
 
 <!-- code: apps/desktop/src/renderer/src/components/SettingsMenu.tsx#Switch -->
 
-[`src/renderer/src/components/SettingsMenu.tsx`, lines 356–373](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L356-L373)
+[`src/renderer/src/components/SettingsMenu.tsx`, lines 364–381](../../apps/desktop/src/renderer/src/components/SettingsMenu.tsx#L364-L381)
 
 ```tsx
 function Switch({ on }: { on: boolean }) {
@@ -3195,7 +3202,7 @@ const LIGHT: Point = { x: -1, y: -1 }
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#View,Face,Arm,Leg,Pose,DOWN,STAND,LEG_LENGTH -->
 
-[`src/renderer/src/character/rig.ts`, lines 53–140](../../apps/desktop/src/renderer/src/character/rig.ts#L53-L140)
+[`src/renderer/src/character/rig.ts`, lines 53–167](../../apps/desktop/src/renderer/src/character/rig.ts#L53-L167)
 
 ```ts
 export type View = 'front' | 'diagonal' | 'side'
@@ -3281,6 +3288,33 @@ export interface Pose {
    * on her front shows: no face, collar, brooch, buttons or buckles, nor the hat's buckle and moon.
    */
   back?: boolean
+  /** A flame in her near palm (seen diagonally), 0 to 1: kindled, flickering, blown out in smoke. */
+  flame?: number
+  /** A snowflake forming over her cupped hands (from the front), 0 to 1, then bursting into glitter. */
+  frost?: number
+  /** A flower growing up in front of her (seen diagonally), 0 to 1: blooming, then scattering. */
+  bloom?: number
+  /** A star traced in light in the air beside her (from the front), 0 to 1: flaring, then fading. */
+  sigil?: number
+  /** A rainbow over her (from the front), 0 to 1: painted from the top outward, then fading. */
+  rainbow?: number
+  /** Her hat lifted off her head (pixels up), and turned about its middle (radians; 0 faces us). */
+  hatLift?: number
+  hatTurn?: number
+  /** Sparkles showering down from under her lifted hat, 0 to 1 (none at 0). */
+  shower?: number
+  /** A falling star (from the front), 0 to 1: falling into her hands, glowing, tossed back up. */
+  star?: number
+  /** A little rain cloud over her (from the front), 0 to 1: gathering, raining, bursting. */
+  rain?: number
+  /** A potion in her near hand (seen diagonally), 0 to 1: bubbling, uncorked in a puff of smoke. */
+  potion?: number
+  /** Her spellbook floating open in front of her (from the front), 0 to 1: see TOME. */
+  tome?: number
+  /** Stars going round above her head after a hard landing, this far round (whole turns). */
+  dizzy?: number
+  /** Dust puffing out along the ground either side of her after a hard landing, 0 to 1. */
+  dust?: number
 }
 
 const DOWN: Arm = { shoulder: 0.08, elbow: 0 }
@@ -3371,7 +3405,7 @@ What a pose is made of.
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#EYES,MOUTHS,SPARKLE,TWINKLE,BUTTERFLY_OPEN,BUTTERFLY_SHUT,Z_BIG,Z_SMALL,ORBS,BUBBLE_SMALL,BUBBLE_BIG,WAND_RING,WISP -->
 
-[`src/renderer/src/character/rig.ts`, lines 142–237](../../apps/desktop/src/renderer/src/character/rig.ts#L142-L237)
+[`src/renderer/src/character/rig.ts`, lines 169–264](../../apps/desktop/src/renderer/src/character/rig.ts#L169-L264)
 
 ```ts
 // Face pictures, facing right; `.` is see-through. Eyes have a thick upper lid, a dark-to-light
@@ -3544,7 +3578,7 @@ As the comment says, they face right; frames facing left are mirrored with every
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#TRAIL,JUGGLE,BUBBLES,wispAt -->
 
-[`src/renderer/src/character/rig.ts`, lines 239–297](../../apps/desktop/src/renderer/src/character/rig.ts#L239-L297)
+[`src/renderer/src/character/rig.ts`, lines 370–428](../../apps/desktop/src/renderer/src/character/rig.ts#L370-L428)
 
 ```ts
 /**
@@ -3635,7 +3669,7 @@ puff before each bubble, her eyes following the wisp).
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#FADE,hash,dissolveAt -->
 
-[`src/renderer/src/character/rig.ts`, lines 246–262](../../apps/desktop/src/renderer/src/character/rig.ts#L246-L262)
+[`src/renderer/src/character/rig.ts`, lines 377–393](../../apps/desktop/src/renderer/src/character/rig.ts#L377-L393)
 
 ```ts
 /**
@@ -3685,7 +3719,7 @@ vanishes or appears. `draw()` uses them at its very end (below).
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#eyesFor -->
 
-[`src/renderer/src/character/rig.ts`, lines 299–306](../../apps/desktop/src/renderer/src/character/rig.ts#L299-L306)
+[`src/renderer/src/character/rig.ts`, lines 430–437](../../apps/desktop/src/renderer/src/character/rig.ts#L430-L437)
 
 ```ts
 /** Which eyes a face uses. */
@@ -3707,7 +3741,7 @@ and `awe` and `up` both look up (their mouths are what differ).
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#draw -->
 
-[`src/renderer/src/character/rig.ts`, lines 308–1350](../../apps/desktop/src/renderer/src/character/rig.ts#L308-L1350)
+[`src/renderer/src/character/rig.ts`, lines 439–1972](../../apps/desktop/src/renderer/src/character/rig.ts#L439-L1972)
 
 ```ts
 /** Draws one pose as rows of palette letters. */
@@ -3903,7 +3937,10 @@ export function draw(pose: Pose): string[] {
   if (view === 'diagonal') {
     // Hand-drawn: one flat picture of her (pictures.ts), then her expression on its face.
     const dy = Math.round(pose.y ?? 0)
-    canvas.stamp(DIAGONAL.rows, DIAGONAL.x + Math.round(pose.x ?? 0), DIAGONAL.y + dy)
+    // The picture has her shadow in it: left out when she has none (thrown, in the air).
+    const picture =
+      pose.shadow === false ? DIAGONAL.rows.map((row) => row.replace(/x/g, '.')) : DIAGONAL.rows
+    canvas.stamp(picture, DIAGONAL.x + Math.round(pose.x ?? 0), DIAGONAL.y + dy)
     const expression = pose.face ?? 'neutral'
     if (expression !== 'neutral') {
       const eyes = EYES.diagonal[eyesFor(expression)]
@@ -4455,7 +4492,13 @@ export function draw(pose: Pose): string[] {
     // From behind the crown is mirrored too: its tip flops over to the other side of the picture.
     const tipLean = view === 'side' || fromBehind ? -1 : 1
     const hatCentre = view === 'side' ? 0.5 : 0
-    hat.ellipse(onHead({ x: hatCentre, y: -9 }), view === 'side' ? 12.5 : 14, 2.7, 'hat')
+    // Lifted off her head and turning (her hat trick): narrowing to its edge and widening again,
+    // its back to us, then its front (never quite to nothing); a point on it at `x`, `y`.
+    const hatLift = pose.hatLift ?? 0
+    const facing = Math.cos(pose.hatTurn ?? 0)
+    const across = (facing < 0 ? -1 : 1) * Math.max(0.15, Math.abs(facing))
+    const onHat = (x: number, y: number) => onHead({ x: hatCentre + x * across, y: y - hatLift })
+    hat.ellipse(onHat(0, -9), (view === 'side' ? 12.5 : 14) * Math.abs(across), 2.7, 'hat')
     // The crown, rising to a tip that flops over to her right from the front; side on the whole
     // crown is mirrored (`tipLean`), so the tip flops back over its back edge, and its front edge
     // runs straight up to the bend.
@@ -4472,25 +4515,25 @@ export function draw(pose: Pose): string[] {
           [5, -12.5],
           [6.5, -9.5],
         ],
-        (p) => onHead({ x: p.x * tipLean + hatCentre, y: p.y - lift * 0.15 }),
+        (p) => onHat(p.x * tipLean, p.y - lift * 0.15),
       ),
       'hat',
     )
     ink(hat)
     for (let dx = -6; dx <= 6; dx += 0.5) {
-      set(onHead({ x: dx + hatCentre, y: -11 }), 'f', 'ngN')
-      set(onHead({ x: dx + hatCentre, y: -12 }), 'F', 'ngN')
+      set(onHat(dx, -11), 'f', 'ngN')
+      set(onHat(dx, -12), 'F', 'ngN')
     }
     for (let dx = 7.5; dx <= 13; dx += 2) {
-      set(onHead({ x: hatCentre + dx, y: -8.6 }), 'F', 'ngN')
-      set(onHead({ x: hatCentre - dx, y: -8.6 }), 'F', 'ngN')
+      set(onHat(dx, -8.6), 'F', 'ngN')
+      set(onHat(-dx, -8.6), 'F', 'ngN')
     }
-    // Its buckle, and the gold moon and stars on its front (none from behind).
-    if (!fromBehind) {
+    // Its buckle, and the gold moon and stars on its front (none from behind, nor while its back
+    // or its edge is to us as it turns).
+    if (!fromBehind && across > 0.5) {
       const hatSide = view === 'side' ? 1 : 0
-      motif(onHead({ x: hatCentre + hatSide * 3, y: -11.5 }), ['YYY', 'YGY', 'YYY'], 'ngNfFq')
-      const lifted = (x: number, y: number) =>
-        onHead({ x: x * tipLean + hatCentre, y: y - lift * 0.15 })
+      motif(onHat(hatSide * 3, -11.5), ['YYY', 'YGY', 'YYY'], 'ngNfFq')
+      const lifted = (x: number, y: number) => onHat(x * tipLean, y - lift * 0.15)
       motif(lifted(-1.5, -15.5), ['.YY', 'Y..', 'Y..', '.YY'], 'ngN')
       motif(lifted(2, -14.5), ['Y'], 'ngN')
       motif(lifted(1.2, -18), ['k'], 'ngN')
@@ -4720,6 +4763,488 @@ export function draw(pose: Pose): string[] {
       hand.x - 1 + Math.cos(spin + 4.2) * 5,
       hand.y - 1 - 3 + Math.sin(spin + 4.2) * 3,
     )
+  }
+
+  // A flame in her palm: a spark, growing and flickering (its tip leaning one way, then the
+  // other), then blown out, leaning away from her as it shrinks, into a curl of smoke rising with a
+  // few sparks.
+  const flame = pose.flame ?? 0
+  if (flame > 0 && flame < 1) {
+    const palm = add(hand, { x: 0.5, y: -1 })
+    const blown = stage(flame, ...FLAME.blow)
+    if (flame >= FLAME.kindle && blown < 1) {
+      const grown = stage(flame, FLAME.kindle, FLAME.full)
+      const size =
+        blown > 0 ? (blown < 0.5 ? 2 : 1) : grown < 0.25 ? 0 : grown < 0.6 ? 1 : grown < 1 ? 2 : 3
+      const picture = FLAMES[size]!
+      const flicker = blown === 0 && hash(Math.floor(flame * 60), 3) < 0.5
+      const x = palm.x - (picture[0]!.length - 1) / 2 + (blown > 0 ? 1 + blown * 2 : 0)
+      canvas.stamp(picture, x, palm.y - picture.length + 1, flicker)
+    }
+    const smoke = stage(flame, FLAME.blow[1], 0.95)
+    if (smoke > 0 && smoke < 1) {
+      for (let k = 0; k < 5; k++) {
+        const life = smoke * 1.6 - k * 0.15
+        if (life <= 0 || life >= 1) continue
+        const at = { x: palm.x + 1 + Math.sin(life * 6 + k) * 2, y: palm.y - 2 - life * 18 }
+        if (life < 0.4) canvas.stamp(['ff', 'ff'], at.x, at.y)
+        else set(at, life < 0.75 ? 'f' : 'F')
+      }
+      for (let k = 0; k < 3; k++) {
+        const life = smoke * 2 - k * 0.2
+        if (life <= 0 || life >= 1) continue
+        set(
+          { x: palm.x + (k - 1) * (2 + life * 4), y: palm.y - 3 - life * 10 },
+          life < 0.5 ? 'Y' : 'k',
+        )
+      }
+    }
+  }
+
+  // A snowflake over her cupped hands: six arms growing out from its heart, branching, a glint
+  // going round its tips; then it bursts into glitter that flies out and drifts down, twinkling.
+  const frost = pose.frost ?? 0
+  if (frost > 0 && frost < 1 && farHand) {
+    const c = {
+      x: (hand.x + farHand.x) / 2,
+      y: Math.min(hand.y, farHand.y) - 9 + Math.sin(frost * 25) * 0.6,
+    }
+    const burst = stage(frost, ...FROST.burst)
+    const grown = stage(frost, ...FROST.grow)
+    if (burst === 0 && grown > 0) {
+      const reach = 1 + grown * 5
+      for (let k = 0; k < 6; k++) {
+        const a = Math.PI / 2 + (k * Math.PI) / 3
+        const out = { x: Math.cos(a), y: Math.sin(a) }
+        for (let r = 1; r <= reach; r += 0.5) {
+          set({ x: c.x + out.x * r, y: c.y + out.y * r }, r > reach - 1 ? 'G' : 'w')
+        }
+        if (reach < 3.5) continue
+        for (const side of [-1, 1]) {
+          const b = a + (side * Math.PI) / 3
+          const from = { x: c.x + out.x * reach * 0.55, y: c.y + out.y * reach * 0.55 }
+          for (let r = 0.5; r <= reach * 0.35; r += 0.5) {
+            set({ x: from.x + Math.cos(b) * r, y: from.y + Math.sin(b) * r }, 'f')
+          }
+        }
+      }
+      set(c, 'w')
+      if (grown >= 1) {
+        const a = Math.PI / 2 + ((Math.floor(frost * 24) % 6) * Math.PI) / 3
+        canvas.stamp(TWINKLE, c.x - 1 + Math.cos(a) * reach, c.y - 1 + Math.sin(a) * reach)
+      }
+    } else if (burst > 0 && burst < 1) {
+      for (let k = 0; k < 14; k++) {
+        const a = (k / 14) * Math.PI * 2 + 0.2
+        const out = 3 + (1 - (1 - burst) ** 2) * 14
+        const at = {
+          x: c.x + Math.cos(a) * out,
+          y: c.y + Math.sin(a) * out * 0.6 + burst * burst * 12,
+        }
+        if (burst < 0.3 && k % 3 === 0) canvas.stamp(TWINKLE, at.x - 1, at.y - 1)
+        else set(at, (k + Math.floor(burst * 10)) % 3 === 0 ? 'w' : k % 2 ? 'G' : 'f')
+      }
+    }
+  }
+
+  // A flower: sparkles drip from her pointing finger to the ground in front of her, where a sprout
+  // comes up, grows leaves and a bud, and opens into a pink flower that sways and twinkles; at the
+  // end it glows and scatters into sparkles.
+  const bloom = pose.bloom ?? 0
+  if (bloom > 0 && bloom < 1) {
+    const ground = { x: hips.x + BLOOM.ahead, y: 94 }
+    const drip = stage(bloom, ...BLOOM.drip)
+    if (drip > 0 && drip < 1) {
+      const tip = add(hand, { x: 1, y: 1 })
+      for (let k = 0; k < 3; k++) {
+        const fall = (drip * 3 + k / 3) % 1
+        const at = {
+          x: tip.x + (ground.x - tip.x) * fall,
+          y: tip.y + (ground.y - 2 - tip.y) * fall,
+        }
+        set(at, k === 1 ? 'Y' : 'w')
+      }
+    }
+    const grown = stage(bloom, ...BLOOM.grow)
+    const open = stage(bloom, ...BLOOM.open)
+    const scatter = stage(bloom, ...BLOOM.scatter)
+    if (grown > 0 && scatter === 0) {
+      const tall = Math.round(1 + grown * 12)
+      const sway = Math.sin(bloom * 16) * 0.8 * stage(bloom, 0.6, 0.66)
+      for (let k = 0; k < tall; k++) set({ x: ground.x + (sway * k) / tall, y: ground.y - k }, 'E')
+      // Leaves either side as it grows: a pair low down, then one higher up.
+      for (const [height, side] of [
+        [3, -1],
+        [5, 1],
+        [8, -1],
+      ] as const) {
+        if (tall < height + 2) continue
+        set({ x: ground.x + side, y: ground.y - height }, 'E')
+        set({ x: ground.x + side * 2, y: ground.y - height - 1 }, 'E')
+        set({ x: ground.x + side * 3, y: ground.y - height - 1 }, 'P')
+      }
+      const top = { x: ground.x + sway, y: ground.y - tall }
+      if (open > 0) {
+        const flower = open < 0.5 ? FLOWER_HALF : FLOWER
+        canvas.stamp(flower, top.x - (flower[0]!.length - 1) / 2, top.y - (flower.length - 1) / 2)
+        if (open >= 1 && Math.floor(bloom * 30) % 4 === 0) {
+          canvas.stamp(TWINKLE, top.x + 3, top.y - 6)
+        }
+      } else if (grown >= 1) {
+        canvas.stamp(BUD, top.x - 1, top.y - 1)
+      }
+    } else if (scatter > 0 && scatter < 1) {
+      const top = { x: ground.x, y: ground.y - 13 }
+      for (let k = 0; k < 8; k++) {
+        const a = (k / 8) * Math.PI * 2
+        const at = {
+          x: top.x + Math.cos(a) * scatter * 9,
+          y: top.y + Math.sin(a) * scatter * 4 - scatter * 10,
+        }
+        if (scatter < 0.35 && k % 2 === 0) canvas.stamp(TWINKLE, at.x - 1, at.y - 1)
+        else set(at, scatter < 0.6 ? (k % 2 ? 'c' : 'Y') : 'w')
+      }
+    }
+  }
+
+  // A star traced in the air beside her: a point of light draws its outline, five points round,
+  // in gold; it flashes white as it closes, glows with a sparkle at its heart, and fades away a
+  // pixel at a time, motes rising from its points.
+  const sigil = pose.sigil ?? 0
+  if (sigil > 0 && sigil < 1) {
+    const c = { x: hips.x + 20, y: head.y - 7 }
+    const corners = Array.from({ length: 10 }, (_, i) => {
+      const a = -Math.PI / 2 + (i * Math.PI) / 5
+      const r = i % 2 === 0 ? SIGIL.outer : SIGIL.inner
+      return { x: c.x + Math.cos(a) * r, y: c.y + Math.sin(a) * r }
+    })
+    const along = (s: number) => {
+      const i = Math.floor(s) % 10
+      const [from, to] = [corners[i]!, corners[(i + 1) % 10]!]
+      return { x: from.x + (to.x - from.x) * (s % 1), y: from.y + (to.y - from.y) * (s % 1) }
+    }
+    const traced = stage(sigil, ...SIGIL.trace) * 10
+    const flash = sigil >= SIGIL.trace[1] && sigil < SIGIL.trace[1] + 0.06
+    const fading = stage(sigil, ...SIGIL.fade)
+    if (fading < 1) {
+      for (let s = 0; s < Math.min(10, traced); s += 0.08) {
+        const p = along(s)
+        if (fading > 0 && hash(Math.round(p.x), Math.round(p.y), 5) < fading) continue
+        set(p, flash ? 'w' : 'Y')
+      }
+    }
+    if (traced > 0 && traced < 10) {
+      const tip = along(traced)
+      canvas.stamp(TWINKLE, tip.x - 1, tip.y - 1)
+    } else if (traced >= 10 && fading === 0) {
+      const glint = Math.floor(sigil * 20) % 2 === 0 ? SPARKLE : TWINKLE
+      canvas.stamp(glint, c.x - (glint.length - 1) / 2, c.y - (glint.length - 1) / 2)
+    } else if (fading > 0 && fading < 1) {
+      for (let k = 0; k < 5; k++) {
+        const point = corners[k * 2]!
+        set({ x: point.x, y: point.y - 1 - fading * 8 }, fading < 0.5 ? 'w' : 'f')
+      }
+    }
+  }
+
+  // A rainbow over her, behind her: painted from its top outward either side as her hands sweep
+  // apart, five bands of colour; glints run along it; then it fades away a pixel at a time.
+  const rainbow = pose.rainbow ?? 0
+  if (rainbow > 0 && rainbow < 1) {
+    const centre = { x: hips.x, y: hips.y - 4 }
+    const reach = stage(rainbow, ...RAINBOW.paint) * RAINBOW.span
+    const fading = stage(rainbow, ...RAINBOW.fade)
+    RAINBOW_BANDS.forEach((letter, b) => {
+      for (let a = -reach; a <= reach; a += 0.012) {
+        const p = {
+          x: centre.x + Math.sin(a) * (RAINBOW.rx - b),
+          y: centre.y - Math.cos(a) * (RAINBOW.ry - b),
+        }
+        if (fading > 0 && hash(Math.round(p.x), Math.round(p.y), 7) < fading) continue
+        set(p, letter, '.')
+      }
+    })
+    if (reach >= RAINBOW.span && fading === 0) {
+      for (let k = 0; k < 3; k++) {
+        const a = ((((rainbow * 3 + k / 3) % 1) * 2 - 1) * RAINBOW.span) / 1.05
+        const p = {
+          x: centre.x + Math.sin(a) * (RAINBOW.rx - 2),
+          y: centre.y - Math.cos(a) * (RAINBOW.ry - 2),
+        }
+        motif(p, TWINKLE, '.' + RAINBOW_BANDS.join(''))
+      }
+    }
+  }
+
+  // Her hat trick: sparkles showering down from under her lifted hat as it spins, over her.
+  const shower = pose.shower ?? 0
+  if (shower > 0 && shower < 1) {
+    const brim = onHead({ x: 0, y: -9 - (pose.hatLift ?? 0) })
+    for (let k = 0; k < 7; k++) {
+      const round = shower * 3 + k / 7
+      const life = round % 1
+      const at = {
+        x: brim.x + (hash(k, Math.floor(round), 9) - 0.5) * 22,
+        y: brim.y + 2 + life * 26,
+      }
+      if (life < 0.25) canvas.stamp(k % 2 ? GOLD_TWINKLE : TWINKLE, at.x - 1, at.y - 1)
+      else set(at, life < 0.6 ? (k % 2 ? 'Y' : 'w') : 'f')
+    }
+  }
+
+  // A falling star: it streaks down from high to one side into her cupped hands, its tail behind
+  // it; glows there, glinting; then she tosses it back up and away, leaving twinkles in the air.
+  const star = pose.star ?? 0
+  if (star > 0 && star < 1 && farHand) {
+    const cupped = { x: (hand.x + farHand.x) / 2, y: Math.min(hand.y, farHand.y) - 3 }
+    const [fallFrom, fallTo] = STAR_CATCH.fall
+    const [tossFrom, tossTo] = STAR_CATCH.toss
+    if (star >= fallFrom && star < fallTo) {
+      const from = { x: hips.x + 34, y: -6 }
+      const path = (t: number) => ({
+        x: from.x + (cupped.x - from.x) * t,
+        y: from.y + (cupped.y - from.y) * t * t,
+      })
+      const t = stage(star, fallFrom, fallTo)
+      for (let k = 8; k >= 1; k--) {
+        if (t - k * 0.03 < 0) continue
+        set(path(t - k * 0.03), k < 3 ? 'w' : k < 6 ? 'j' : 'Y')
+      }
+      const at = path(t)
+      canvas.stamp(STAR, at.x - 2, at.y - 2)
+    } else if (star >= fallTo && star < tossFrom) {
+      canvas.stamp(STAR, cupped.x - 2, cupped.y - 2)
+      const glint = Math.floor(star * 30) % 3
+      if (glint === 0) set({ x: cupped.x - 4, y: cupped.y - 3 }, 'w')
+      if (glint === 1) set({ x: cupped.x + 4, y: cupped.y - 4 }, 'w')
+      if (glint === 2) set({ x: cupped.x + 1, y: cupped.y - 6 }, 'j')
+    } else if (star >= tossFrom && star < tossTo) {
+      const t = stage(star, tossFrom, tossTo)
+      const at = { x: cupped.x + t * 6, y: cupped.y - t * 62 }
+      for (let k = 1; k <= 6; k++) set({ x: at.x - k * 0.5, y: at.y + k * 2 }, k < 3 ? 'w' : 'j')
+      canvas.stamp(STAR, at.x - 2, at.y - 2)
+    }
+    const after = stage(star, tossFrom + 0.04, 0.98)
+    if (after > 0 && after < 1) {
+      for (let k = 0; k < 4; k++) {
+        const life = after * 1.6 - k * 0.15
+        if (life <= 0 || life >= 1) continue
+        const at = { x: cupped.x + 1 + k * 1.5, y: cupped.y - 14 - k * 11 }
+        if (life < 0.4) canvas.stamp(GOLD_TWINKLE, at.x - 1, at.y - 1)
+        else set(at, life < 0.7 ? 'Y' : 'k')
+      }
+    }
+  }
+
+  // A little rain cloud: it gathers over her hat, light on top and grey beneath, and rains on her
+  // (and round her, splashing on the ground); shooed, it shakes and bursts into sparkles.
+  const rain = pose.rain ?? 0
+  if (rain > 0 && rain < 1) {
+    const gather = stage(rain, ...RAIN.gather)
+    const burst = stage(rain, ...RAIN.burst)
+    const shake = rain > 0.6 && rain < RAIN.burst[0] ? Math.round(Math.sin(rain * 200)) : 0
+    const c = { x: head.x + 1 + shake, y: Math.max(-5, head.y - 28) }
+    if (gather > 0 && burst === 0) {
+      const humps = [
+        { dx: -6, r: 4 },
+        { dx: 0, r: 5.5 },
+        { dx: 6, r: 4.5 },
+      ]
+      const cloud = new Set<string>()
+      for (let y = Math.floor(c.y - 7); y <= c.y + 2; y++) {
+        for (let x = Math.floor(c.x - 13); x <= c.x + 13; x++) {
+          const inside = humps.some(({ dx, r }) => {
+            const rx = r * 1.3 * gather
+            const ry = r * gather
+            return ((x + 0.5 - c.x - dx * gather) / rx) ** 2 + ((y + 0.5 - c.y) / ry) ** 2 <= 1
+          })
+          if (inside) cloud.add(`${x},${y}`)
+        }
+      }
+      for (const key of cloud) {
+        const [x, y] = key.split(',').map(Number) as [number, number]
+        const edge = [
+          [1, 0],
+          [-1, 0],
+          [0, 1],
+          [0, -1],
+        ].some(([dx, dy]) => !cloud.has(`${x + dx!},${y + dy!}`))
+        set({ x, y }, edge ? 'O' : y >= c.y + 1 ? 'F' : y <= c.y - 2 ? 'l' : 'f')
+      }
+    }
+    const pour = stage(rain, ...RAIN.pour)
+    if (pour > 0 && pour < 1) {
+      const top = c.y + 3
+      for (let k = 0; k < 8; k++) {
+        const x = c.x - 9 + k * 2.6
+        const fall = (pour * 9 + hash(k, 1, 11)) % 1
+        const y = top + fall * (93 - top)
+        set({ x, y: y - 1 }, 'w')
+        set({ x, y }, 'G')
+        if (fall > 0.9) {
+          set({ x: x - 1, y: 93 }, 'f', '.x')
+          set({ x: x + 1, y: 93 }, 'f', '.x')
+        }
+      }
+    }
+    if (burst > 0 && burst < 1) {
+      for (let k = 0; k < 10; k++) {
+        const a = (k / 10) * Math.PI * 2
+        const at = { x: c.x + Math.cos(a) * burst * 14, y: c.y + Math.sin(a) * burst * 7 }
+        if (burst < 0.4 && k % 2 === 0)
+          canvas.stamp(k % 4 ? GOLD_TWINKLE : TWINKLE, at.x - 1, at.y - 1)
+        else set(at, burst < 0.7 ? (k % 2 ? 'G' : 'w') : 'f')
+      }
+    }
+  }
+
+  // A potion in a little flask in her hand, bubbling and changing colour; the cork pops off and
+  // flies away, and puffs of coloured smoke curl up out of it, fading.
+  const potion = pose.potion ?? 0
+  if (potion > 0 && potion < 1) {
+    const corner = { x: Math.round(hand.x) - 2, y: Math.round(hand.y) - 7 }
+    const corked = potion < POTION.pop
+    if (potion > 0.04 && potion < 0.92) {
+      const colour = POTION_COLOURS[Math.floor(potion * 12) % POTION_COLOURS.length]!
+      FLASK.forEach((row, dy) =>
+        [...row].forEach((letter, dx) => {
+          if (letter === '.' || (letter === 'o' && !corked)) return
+          const drawn = letter === 'X' ? colour : letter === 'o' ? 'i' : letter
+          canvas.set(corner.x + dx, corner.y + dy, drawn)
+        }),
+      )
+      const bubble = Math.floor(potion * 40) % 3
+      set({ x: corner.x + 1 + (bubble % 2) * 2, y: corner.y + 5 - bubble }, 'w', colour)
+      canvas.stamp(['ss'], hand.x - 1, hand.y)
+    }
+    const flying = stage(potion, POTION.pop, POTION.pop + 0.12)
+    if (flying > 0 && flying < 1) {
+      set({ x: corner.x + 2 + flying * 8, y: corner.y - flying * 14 + flying * flying * 10 }, 'i')
+    }
+    const puff = stage(potion, POTION.pop, POTION.puffed)
+    if (puff > 0 && puff < 1) {
+      for (let k = 0; k < 6; k++) {
+        const life = puff * 1.8 - k * 0.15
+        if (life <= 0 || life >= 1) continue
+        const letter = ['c', 'a', 'G'][k % 3]!
+        const at = {
+          x: corner.x + 2 + Math.sin(life * 7 + k * 2) * (2 + life * 4),
+          y: corner.y - 1 - life * 20,
+        }
+        if (life < 0.45) canvas.stamp([letter + letter, letter + letter], at.x, at.y)
+        else set(at, life < 0.8 ? letter : 'w')
+      }
+    }
+  }
+
+  // Her spellbook, floating open in front of her, bobbing: it rises into place opening, its pages
+  // turn by themselves, right to left, glowing letters rise out of it and fade; then it closes and
+  // vanishes in a twinkle.
+  const tome = pose.tome ?? 0
+  if (tome > 0 && tome < 1) {
+    const appear = stage(tome, ...TOME.appear)
+    const close = stage(tome, ...TOME.close)
+    const vanish = stage(tome, ...TOME.vanish)
+    const c = {
+      x: Math.round(hips.x),
+      y: Math.round(hips.y - 16 + (1 - appear) * 6 + Math.sin(tome * 18)),
+    }
+    if (appear > 0 && vanish === 0) {
+      const half = Math.round(1 + 6 * appear * (1 - close))
+      // Its outline, dark against her robe, then its covers with a gold edge.
+      for (let dx = -half - 2; dx <= half + 2; dx++) {
+        for (let dy = -3; dy <= 5; dy++) set({ x: c.x + dx, y: c.y + dy }, 'u')
+      }
+      for (let dx = -half - 1; dx <= half + 1; dx++) set({ x: c.x + dx, y: c.y + 3 }, 'n')
+      for (let dx = -half; dx <= half; dx++) set({ x: c.x + dx, y: c.y + 4 }, 'Y')
+      for (let dy = -1; dy <= 2; dy++) {
+        set({ x: c.x - half - 1, y: c.y + dy }, 'n')
+        set({ x: c.x + half + 1, y: c.y + dy }, 'n')
+      }
+      for (let dy = -2; dy <= 2; dy++) {
+        for (let dx = -half; dx <= half; dx++) {
+          if (dy === -2 && Math.abs(dx) === half && half > 1) continue
+          const text =
+            (dy === -1 || dy === 1) &&
+            Math.abs(dx) > 1 &&
+            Math.abs(dx) < half &&
+            (dx + dy) % 2 === 0
+          set({ x: c.x + dx, y: c.y + dy }, dx === 0 || text ? 'F' : 'f')
+        }
+      }
+      const turning = stage(tome, ...TOME.turn)
+      if (turning > 0 && turning < 1 && close === 0) {
+        const edge = Math.round(Math.cos(((turning * TOME.pages) % 1) * Math.PI) * half)
+        const [from, to] = edge > 0 ? [1, edge] : [edge, -1]
+        for (let dx = from; dx <= to; dx++) {
+          for (let dy = -3; dy <= 1; dy++)
+            set({ x: c.x + dx, y: c.y + dy }, dx === edge ? 'F' : 'w')
+        }
+      }
+      if (appear < 1) canvas.stamp(TWINKLE, c.x + half + 1, c.y - 4)
+    }
+    const letters = stage(tome, ...TOME.letters)
+    if (letters > 0 && letters < 1) {
+      for (let k = 0; k < 6; k++) {
+        const raw = letters * 3 - k / 6
+        if (raw < 0 || raw >= 2.6) continue
+        const life = raw % 1
+        if (life > 0.9) continue
+        const glyph = GLYPHS[k % GLYPHS.length]!.map((row) =>
+          life < 0.6 ? row : row.replace(/Y/g, 'k'),
+        )
+        // Up and out to one side of her or the other, clear of her face.
+        const side = k % 2 === 0 ? 1 : -1
+        const at = {
+          x: c.x + side * (5 + life * 16) + Math.sin(life * 6 + k) - 1,
+          y: c.y - 3 - life * 20,
+        }
+        canvas.stamp(glyph, at.x, at.y)
+      }
+    }
+    if (vanish > 0 && vanish < 1) {
+      for (let k = 0; k < 6; k++) {
+        const a = (k / 6) * Math.PI * 2
+        const at = { x: c.x + Math.cos(a) * vanish * 9, y: c.y + Math.sin(a) * vanish * 5 }
+        if (vanish < 0.5) canvas.stamp(k % 2 ? GOLD_TWINKLE : TWINKLE, at.x - 1, at.y - 1)
+        else set(at, 'w')
+      }
+    }
+  }
+
+  // Dust from a hard landing: puffs thrown out along the ground either side of her, rising a
+  // little and thinning out, only on empty ground or her shadow.
+  const dust = pose.dust ?? 0
+  if (dust > 0 && dust < 1) {
+    for (const side of [-1, 1]) {
+      for (let k = 0; k < 3; k++) {
+        const life = dust * 1.3 - k * 0.12
+        if (life <= 0 || life >= 1) continue
+        const at = { x: hips.x + side * (22 + life * 14 + k * 3), y: 93 - life * 5 - k }
+        if (life < 0.45) motif(at, ['ff', 'fF'], '.x')
+        else set(at, life < 0.75 ? 'f' : 'F', '.x')
+      }
+    }
+  }
+
+  // Dizzy stars going round above her head (a hard landing): in front of her on the near half of
+  // the circle, behind her on the far half.
+  if (pose.dizzy !== undefined) {
+    // Above her hat's tip, wherever it is (knocked down over her eyes, it's lower).
+    const middle = onHead({ x: 0, y: -25 - (pose.hatLift ?? 0) })
+    for (let k = 0; k < 3; k++) {
+      const a = pose.dizzy * Math.PI * 2 + (k * Math.PI * 2) / 3
+      const at = { x: middle.x + Math.cos(a) * 12, y: middle.y + Math.sin(a) * 3.5 }
+      const behind = Math.sin(a) < 0
+      const star = k === 1 ? GOLD_TWINKLE : STAR
+      const half = (star.length - 1) / 2
+      star.forEach((row, dy) =>
+        [...row].forEach((letter, dx) => {
+          if (letter === '.') return
+          set({ x: at.x - half + dx, y: at.y - half + dy }, letter, behind ? '.' : undefined)
+        }),
+      )
+    }
   }
 
   castShadows(canvas)
@@ -5210,7 +5735,7 @@ Math.PI) % 2`), which turn with `spin`. Six white runes (`w`) go round the outer
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#HAT,HAIR,ROBE,castShadows -->
 
-[`src/renderer/src/character/rig.ts`, lines 1352–1384](../../apps/desktop/src/renderer/src/character/rig.ts#L1352-L1384)
+[`src/renderer/src/character/rig.ts`, lines 1974–2006](../../apps/desktop/src/renderer/src/character/rig.ts#L1974-L2006)
 
 ```ts
 /** Letters by part, for castShadows. */
@@ -5386,7 +5911,7 @@ kept, and `Character` (below) plays them.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#SPRITE_SIZE,SPRITE_HEADROOM,PALETTE -->
 
-[`src/renderer/src/character/sprite.ts`, lines 16–75](../../apps/desktop/src/renderer/src/character/sprite.ts#L16-L75)
+[`src/renderer/src/character/sprite.ts`, lines 26–88](../../apps/desktop/src/renderer/src/character/sprite.ts#L26-L88)
 
 ```ts
 // The character's animations: for each pose, a list of frames drawn by the rig (rig.ts) from key
@@ -5434,6 +5959,9 @@ export const PALETTE: Record<string, string> = {
   f: 'px-trim',
   F: 'px-trim-shade',
   G: 'px-gem',
+  // Leaves and stems (her flower), and their shade.
+  E: 'px-leaf',
+  P: 'px-leaf-shade',
   // Gold embroidery and buckles, and its shade.
   Y: 'px-gold',
   k: 'px-gold-shade',
@@ -5479,7 +6007,7 @@ export const PALETTE: Record<string, string> = {
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#Frame,Key -->
 
-[`src/renderer/src/character/sprite.ts`, lines 77–90](../../apps/desktop/src/renderer/src/character/sprite.ts#L77-L90)
+[`src/renderer/src/character/sprite.ts`, lines 90–103](../../apps/desktop/src/renderer/src/character/sprite.ts#L90-L103)
 
 ```ts
 /**
@@ -5510,7 +6038,7 @@ interface Key {
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#smooth,lerp,mixArm,mixLeg,ARM_DOWN,LEG_STAND,mix -->
 
-[`src/renderer/src/character/sprite.ts`, lines 92–133](../../apps/desktop/src/renderer/src/character/sprite.ts#L92-L133)
+[`src/renderer/src/character/sprite.ts`, lines 105–146](../../apps/desktop/src/renderer/src/character/sprite.ts#L105-L146)
 
 ```ts
 // ------------------------------------------------------------------------------------- tweening
@@ -5590,7 +6118,7 @@ _Tweening_: working out the poses between two key poses.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#FRAME_MS,tween,hold,crouch -->
 
-[`src/renderer/src/character/sprite.ts`, lines 135–161](../../apps/desktop/src/renderer/src/character/sprite.ts#L135-L161)
+[`src/renderer/src/character/sprite.ts`, lines 148–174](../../apps/desktop/src/renderer/src/character/sprite.ts#L148-L174)
 
 ```ts
 /** In-betweens come about this often (ms): 25 frames a second. */
@@ -5652,7 +6180,7 @@ function crouch(depth: number): [Leg, Leg] {
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#FRONT,DIAGONAL,idle -->
 
-[`src/renderer/src/character/sprite.ts`, lines 163–185](../../apps/desktop/src/renderer/src/character/sprite.ts#L163-L185)
+[`src/renderer/src/character/sprite.ts`, lines 176–198](../../apps/desktop/src/renderer/src/character/sprite.ts#L176-L198)
 
 ```ts
 // ----------------------------------------------------------------------------------- the poses
@@ -5699,7 +6227,7 @@ function idle(): Key[] {
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#walk -->
 
-[`src/renderer/src/character/sprite.ts`, lines 187–218](../../apps/desktop/src/renderer/src/character/sprite.ts#L187-L218)
+[`src/renderer/src/character/sprite.ts`, lines 200–231](../../apps/desktop/src/renderer/src/character/sprite.ts#L200-L231)
 
 ```ts
 /**
@@ -5770,7 +6298,7 @@ a cycle ahead: positive while that leg swings forward, negative while it pushes 
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#hop -->
 
-[`src/renderer/src/character/sprite.ts`, lines 220–278](../../apps/desktop/src/renderer/src/character/sprite.ts#L220-L278)
+[`src/renderer/src/character/sprite.ts`, lines 233–291](../../apps/desktop/src/renderer/src/character/sprite.ts#L233-L291)
 
 ```ts
 /** A hop: crouch, spring up with her arms flung up, float, fall, land with a bounce. */
@@ -5859,7 +6387,7 @@ named, and `tween()` eases from each to the next, about 30 frames altogether.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#wave -->
 
-[`src/renderer/src/character/sprite.ts`, lines 280–300](../../apps/desktop/src/renderer/src/character/sprite.ts#L280-L300)
+[`src/renderer/src/character/sprite.ts`, lines 293–313](../../apps/desktop/src/renderer/src/character/sprite.ts#L293-L313)
 
 ```ts
 /** A wave, seen diagonally: her hand up, waving to and fro, head tilted, smiling. */
@@ -5902,7 +6430,7 @@ As the comment says, a wave, seen diagonally, smiling, with her head tilted.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#stretch -->
 
-[`src/renderer/src/character/sprite.ts`, lines 302–325](../../apps/desktop/src/renderer/src/character/sprite.ts#L302-L325)
+[`src/renderer/src/character/sprite.ts`, lines 315–338](../../apps/desktop/src/renderer/src/character/sprite.ts#L315-L338)
 
 ```ts
 /** A stretch: arms up, a yawn, a lean one way and the other, arms down. */
@@ -5944,7 +6472,7 @@ As the comment says, a stretch, from the front.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#sip -->
 
-[`src/renderer/src/character/sprite.ts`, lines 327–359](../../apps/desktop/src/renderer/src/character/sprite.ts#L327-L359)
+[`src/renderer/src/character/sprite.ts`, lines 340–372](../../apps/desktop/src/renderer/src/character/sprite.ts#L340-L372)
 
 ```ts
 /** A sip of tea, seen diagonally: the cup up to her mouth, a sip, down, a contented smile. */
@@ -5999,7 +6527,7 @@ As the comment says, a sip of tea, seen diagonally.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#read -->
 
-[`src/renderer/src/character/sprite.ts`, lines 361–391](../../apps/desktop/src/renderer/src/character/sprite.ts#L361-L391)
+[`src/renderer/src/character/sprite.ts`, lines 374–404](../../apps/desktop/src/renderer/src/character/sprite.ts#L374-L404)
 
 ```ts
 /** Reading her spellbook, seen diagonally: head down, turning a page, a smile at something. */
@@ -6052,7 +6580,7 @@ As the comment says, reading her spellbook, seen diagonally.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#spell -->
 
-[`src/renderer/src/character/sprite.ts`, lines 393–416](../../apps/desktop/src/renderer/src/character/sprite.ts#L393-L416)
+[`src/renderer/src/character/sprite.ts`, lines 406–429](../../apps/desktop/src/renderer/src/character/sprite.ts#L406-L429)
 
 ```ts
 /** A little spell: her hand up, sparkles circling it, then gone with a smile. */
@@ -6097,7 +6625,7 @@ As the comment says, a little spell, seen diagonally.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#vision -->
 
-[`src/renderer/src/character/sprite.ts`, lines 418–452](../../apps/desktop/src/renderer/src/character/sprite.ts#L418-L452)
+[`src/renderer/src/character/sprite.ts`, lines 431–465](../../apps/desktop/src/renderer/src/character/sprite.ts#L431-L465)
 
 ```ts
 /**
@@ -6166,7 +6694,7 @@ blinking once; she watches it rise away, then settles and blinks.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#levitate -->
 
-[`src/renderer/src/character/sprite.ts`, lines 454–504](../../apps/desktop/src/renderer/src/character/sprite.ts#L454-L504)
+[`src/renderer/src/character/sprite.ts`, lines 467–517](../../apps/desktop/src/renderer/src/character/sprite.ts#L467-L517)
 
 ```ts
 /**
@@ -6243,7 +6771,7 @@ As the comment says, she levitates, from the front.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#sit -->
 
-[`src/renderer/src/character/sprite.ts`, lines 506–546](../../apps/desktop/src/renderer/src/character/sprite.ts#L506-L546)
+[`src/renderer/src/character/sprite.ts`, lines 519–559](../../apps/desktop/src/renderer/src/character/sprite.ts#L519-L559)
 
 ```ts
 /** Sitting on the taskbar, her robe spread round her, swaying gently, looking about, then up again. */
@@ -6307,7 +6835,7 @@ As the comment says, sitting on the taskbar with her robe spread round her, the 
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#curtsy -->
 
-[`src/renderer/src/character/sprite.ts`, lines 548–573](../../apps/desktop/src/renderer/src/character/sprite.ts#L548-L573)
+[`src/renderer/src/character/sprite.ts`, lines 561–586](../../apps/desktop/src/renderer/src/character/sprite.ts#L561-L586)
 
 ```ts
 /** A curtsy, from the front: her robe held out at the sides, a dip with her head tilted, smiling. */
@@ -6358,7 +6886,7 @@ tilted, smiling.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#orb -->
 
-[`src/renderer/src/character/sprite.ts`, lines 575–608](../../apps/desktop/src/renderer/src/character/sprite.ts#L575-L608)
+[`src/renderer/src/character/sprite.ts`, lines 588–621](../../apps/desktop/src/renderer/src/character/sprite.ts#L588-L621)
 
 ```ts
 /**
@@ -6418,7 +6946,7 @@ sees and puts it away.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#twirl -->
 
-[`src/renderer/src/character/sprite.ts`, lines 610–646](../../apps/desktop/src/renderer/src/character/sprite.ts#L610-L646)
+[`src/renderer/src/character/sprite.ts`, lines 623–659](../../apps/desktop/src/renderer/src/character/sprite.ts#L623-L659)
 
 ```ts
 /**
@@ -6486,7 +7014,7 @@ frame, and it reuses a few drawings.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#butterfly -->
 
-[`src/renderer/src/character/sprite.ts`, lines 648–672](../../apps/desktop/src/renderer/src/character/sprite.ts#L648-L672)
+[`src/renderer/src/character/sprite.ts`, lines 661–685](../../apps/desktop/src/renderer/src/character/sprite.ts#L661-L685)
 
 ```ts
 /**
@@ -6539,7 +7067,7 @@ every frame is its own pose, rather than key poses with in-betweens.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#doze -->
 
-[`src/renderer/src/character/sprite.ts`, lines 674–725](../../apps/desktop/src/renderer/src/character/sprite.ts#L674-L725)
+[`src/renderer/src/character/sprite.ts`, lines 687–738](../../apps/desktop/src/renderer/src/character/sprite.ts#L687-L738)
 
 ```ts
 /**
@@ -6624,7 +7152,7 @@ one way and the other, and blinks. Like `butterfly()`, every frame is its own po
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#look -->
 
-[`src/renderer/src/character/sprite.ts`, lines 727–749](../../apps/desktop/src/renderer/src/character/sprite.ts#L727-L749)
+[`src/renderer/src/character/sprite.ts`, lines 740–762](../../apps/desktop/src/renderer/src/character/sprite.ts#L740-L762)
 
 ```ts
 /**
@@ -6669,7 +7197,7 @@ used again.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#between,juggle -->
 
-[`src/renderer/src/character/sprite.ts`, lines 751–785](../../apps/desktop/src/renderer/src/character/sprite.ts#L751-L785)
+[`src/renderer/src/character/sprite.ts`, lines 764–798](../../apps/desktop/src/renderer/src/character/sprite.ts#L764-L798)
 
 ```ts
 /** Between 0 and 1: how far `t` is from `from` to `to`, eased in and out. */
@@ -6748,7 +7276,7 @@ Like `butterfly()`, every frame is its own pose, worked out from how far through
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#bubbles -->
 
-[`src/renderer/src/character/sprite.ts`, lines 787–816](../../apps/desktop/src/renderer/src/character/sprite.ts#L787-L816)
+[`src/renderer/src/character/sprite.ts`, lines 800–829](../../apps/desktop/src/renderer/src/character/sprite.ts#L800-L829)
 
 ```ts
 /**
@@ -6807,7 +7335,7 @@ rig's `bubbles`, and the rig places the bubbles and the wand from that.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#wisp -->
 
-[`src/renderer/src/character/sprite.ts`, lines 818–845](../../apps/desktop/src/renderer/src/character/sprite.ts#L818-L845)
+[`src/renderer/src/character/sprite.ts`, lines 831–858](../../apps/desktop/src/renderer/src/character/sprite.ts#L831-L858)
 
 ```ts
 /**
@@ -6864,7 +7392,7 @@ pose: 120 frames of 40 ms, `FIDGET_MS.wisp` (4800 ms). The rig draws the wisp fr
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#sneeze -->
 
-[`src/renderer/src/character/sprite.ts`, lines 847–875](../../apps/desktop/src/renderer/src/character/sprite.ts#L847-L875)
+[`src/renderer/src/character/sprite.ts`, lines 860–888](../../apps/desktop/src/renderer/src/character/sprite.ts#L860-L888)
 
 ```ts
 /**
@@ -6925,7 +7453,7 @@ to 1, and the rig draws them big, then as twinkles, then as glints.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#dance -->
 
-[`src/renderer/src/character/sprite.ts`, lines 877–907](../../apps/desktop/src/renderer/src/character/sprite.ts#L877-L907)
+[`src/renderer/src/character/sprite.ts`, lines 890–920](../../apps/desktop/src/renderer/src/character/sprite.ts#L890-L920)
 
 ```ts
 /**
@@ -6988,7 +7516,7 @@ in-betweens again.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#chant -->
 
-[`src/renderer/src/character/sprite.ts`, lines 909–936](../../apps/desktop/src/renderer/src/character/sprite.ts#L909-L936)
+[`src/renderer/src/character/sprite.ts`, lines 922–949](../../apps/desktop/src/renderer/src/character/sprite.ts#L922-L949)
 
 ```ts
 /**
@@ -7048,7 +7576,7 @@ hair and robe lifting in the updraft. Unlike the fidgets, it isn't key poses wit
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#over,vanish,appear -->
 
-[`src/renderer/src/character/sprite.ts`, lines 938–972](../../apps/desktop/src/renderer/src/character/sprite.ts#L938-L972)
+[`src/renderer/src/character/sprite.ts`, lines 951–985](../../apps/desktop/src/renderer/src/character/sprite.ts#L951-L985)
 
 ```ts
 /**
@@ -7120,7 +7648,7 @@ the rig turns into her dissolving (see `FADE` in `rig.ts`).
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#dragged -->
 
-[`src/renderer/src/character/sprite.ts`, lines 974–1004](../../apps/desktop/src/renderer/src/character/sprite.ts#L974-L1004)
+[`src/renderer/src/character/sprite.ts`, lines 987–1017](../../apps/desktop/src/renderer/src/character/sprite.ts#L987-L1017)
 
 ```ts
 /**
@@ -7173,7 +7701,7 @@ Twelve frames of 55 ms, round and round.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#gaze -->
 
-[`src/renderer/src/character/sprite.ts`, lines 1006–1029](../../apps/desktop/src/renderer/src/character/sprite.ts#L1006-L1029)
+[`src/renderer/src/character/sprite.ts`, lines 1019–1042](../../apps/desktop/src/renderer/src/character/sprite.ts#L1019-L1042)
 
 ```ts
 /**
@@ -7226,7 +7754,7 @@ the screen saver is on), so it has no entry in `MAKERS`; `gazeFrames()`, below, 
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#drawn,MAKERS,LEFT_MAKERS,LOOPS -->
 
-[`src/renderer/src/character/sprite.ts`, lines 1031–1112](../../apps/desktop/src/renderer/src/character/sprite.ts#L1031-L1112)
+[`src/renderer/src/character/sprite.ts`, lines 1427–1533](../../apps/desktop/src/renderer/src/character/sprite.ts#L1427-L1533)
 
 ```ts
 // ------------------------------------------------------------------------------------- frames
@@ -7258,10 +7786,22 @@ const MAKERS: Record<Name, () => Frame[]> = {
   wisp: () => drawn(wisp()),
   sneeze: () => drawn(sneeze()),
   dance: () => drawn(dance()),
+  flame: () => drawn(flame()),
+  frost: () => drawn(frost()),
+  bloom: () => drawn(bloom()),
+  sigil: () => drawn(sigil()),
+  rainbow: () => drawn(rainbow()),
+  hat: () => drawn(hat()),
+  star: () => drawn(star()),
+  rain: () => drawn(rain()),
+  potion: () => drawn(potion()),
+  tome: () => drawn(tome()),
   chant: () => drawn(chant()),
   vanish: () => drawn(vanish()),
   appear: () => drawn(appear()),
   dragged: () => drawn(dragged()),
+  flung,
+  splat: () => drawn(splat()),
 }
 
 /**
@@ -7278,6 +7818,9 @@ export const LOOPS: Record<Name, boolean> = {
   'walk-left': true,
   'walk-right': true,
   dragged: true,
+  // Tumbling through the air goes round until she lands; her hard landing plays once.
+  flung: true,
+  splat: false,
   hop: false,
   wave: false,
   stretch: false,
@@ -7298,6 +7841,16 @@ export const LOOPS: Record<Name, boolean> = {
   wisp: false,
   sneeze: false,
   dance: false,
+  flame: false,
+  frost: false,
+  bloom: false,
+  sigil: false,
+  rainbow: false,
+  hat: false,
+  star: false,
+  rain: false,
+  potion: false,
+  tome: false,
   // Her spells': the chant goes round for as long as it lasts; vanishing and appearing play once.
   chant: true,
   vanish: false,
@@ -7312,14 +7865,18 @@ export const LOOPS: Record<Name, boolean> = {
   not the frames themselves, so nothing is drawn until it's needed. `Record<Name, ...>` makes
   TypeScript insist on every pose. Both walks make the same right-facing frames; `framesOf()`
   mirrors them for `walk-left`. `look` and `twirl` make their frames themselves. Every fidget has
-  its maker here, the five newest (`juggle`, `bubbles`, `wisp`, `sneeze`, `dance`) included; like
-  most, they make key poses, which `drawn()` turns into frames. So do her spells' three poses
+  its maker here, the ten magic ones (`flame`, `frost`, `bloom`, `sigil`, `rainbow`, `hat`,
+  `star`, `rain`, `potion`, `tome`) included; like most, they make key poses, which `drawn()` turns
+  into frames. The magic ones each make a frame every 40 ms with `through()`, from how far through
+  the habit it is, and set one number on the pose (`flame`, `frost` and so on, or `hatLift`,
+  `hatTurn` and `shower` for the hat trick) that the rig turns into the effect, timed by the rig's
+  `FLAME`, `FROST`, `BLOOM`, `SIGIL`, `RAINBOW`, `STAR_CATCH`, `RAIN`, `POTION` and `TOME`. So do her spells' three poses
   (`chant`, `vanish` and `appear`).
 - `LEFT_MAKERS`: as the comment says, poses with letters in them, drawn the other way round for
   facing left, so they read right once the frame is mirrored. Only the dozer's z's so far:
   `doze(true)`. `Partial<Record<...>>` lets it list only the poses that need it.
 - `LOOPS`: as the comment says, which poses go round and round (idle, the walks and dangling) and
-  which play once (all twenty fidgets, the five newest included: their last frame stays until the
+  which play once (all thirty fidgets, the magic ones included: their last frame stays until the
   main process changes the pose, which it does just as `FIDGET_MS` runs out). Of her spells'
   poses, as the comment says, the chant goes round for as long as it lasts, and vanishing and
   appearing play once (`SPELL_POSE_MS` times them; after vanishing, her last frame is empty).
@@ -7330,7 +7887,7 @@ export const LOOPS: Record<Name, boolean> = {
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#gazing,gazeFrames -->
 
-[`src/renderer/src/character/sprite.ts`, lines 1074–1080](../../apps/desktop/src/renderer/src/character/sprite.ts#L1074-L1080)
+[`src/renderer/src/character/sprite.ts`, lines 1482–1488](../../apps/desktop/src/renderer/src/character/sprite.ts#L1482-L1488)
 
 ```ts
 let gazing: Frame[] | null = null
@@ -7357,7 +7914,7 @@ In the source these sit between `LEFT_MAKERS` and `LOOPS`, above.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#Facing,made,framesOf -->
 
-[`src/renderer/src/character/sprite.ts`, lines 1114–1136](../../apps/desktop/src/renderer/src/character/sprite.ts#L1114-L1136)
+[`src/renderer/src/character/sprite.ts`, lines 1535–1557](../../apps/desktop/src/renderer/src/character/sprite.ts#L1535-L1557)
 
 ```ts
 export type Facing = 'left' | 'right'
@@ -7401,7 +7958,7 @@ export function framesOf(pose: Name, facing: Facing): Frame[] {
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#animationLength,mirror -->
 
-[`src/renderer/src/character/sprite.ts`, lines 1138–1145](../../apps/desktop/src/renderer/src/character/sprite.ts#L1138-L1145)
+[`src/renderer/src/character/sprite.ts`, lines 1559–1566](../../apps/desktop/src/renderer/src/character/sprite.ts#L1559-L1566)
 
 ```ts
 /** How long a pose's frames last altogether (a fidget's must match FIDGET_MS). */
@@ -7427,7 +7984,7 @@ export function mirror(rows: string[]): string[] {
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#framePaths -->
 
-[`src/renderer/src/character/sprite.ts`, lines 1147–1171](../../apps/desktop/src/renderer/src/character/sprite.ts#L1147-L1171)
+[`src/renderer/src/character/sprite.ts`, lines 1568–1592](../../apps/desktop/src/renderer/src/character/sprite.ts#L1568-L1592)
 
 ```ts
 /**
@@ -7485,7 +8042,7 @@ the pose and way of facing from `lib/clones.ts`.
 
 <!-- code: apps/desktop/src/renderer/src/components/Character.tsx#paths,pathsOf,ALL_POSES,Character -->
 
-[`src/renderer/src/components/Character.tsx`, lines 14–67](../../apps/desktop/src/renderer/src/components/Character.tsx#L14-L67)
+[`src/renderer/src/components/Character.tsx`, lines 14–76](../../apps/desktop/src/renderer/src/components/Character.tsx#L14-L76)
 
 ```tsx
 /** Each frame's SVG paths, worked out the first time it shows. */
@@ -7501,7 +8058,16 @@ function pathsOf(frame: Frame): ReturnType<typeof framePaths> {
 }
 
 /** Every pose, for drawing ahead of time. */
-const ALL_POSES: Pose[] = ['idle', 'walk-left', 'walk-right', 'dragged', ...FIDGETS, ...SPELL_POSES]
+const ALL_POSES: Pose[] = [
+  'idle',
+  'walk-left',
+  'walk-right',
+  'dragged',
+  'flung',
+  'splat',
+  ...FIDGETS,
+  ...SPELL_POSES,
+]
 
 /**
  * The character: pixel art (character/sprite.ts) drawn `box` DIPs wide and a little taller, for
@@ -7601,7 +8167,7 @@ export function Character(props: { pose: Pose; facing: Facing; box: number; expa
 
 <!-- code: apps/desktop/src/renderer/src/components/Character.tsx#Frames -->
 
-[`src/renderer/src/components/Character.tsx`, lines 69–88](../../apps/desktop/src/renderer/src/components/Character.tsx#L69-L88)
+[`src/renderer/src/components/Character.tsx`, lines 78–97](../../apps/desktop/src/renderer/src/components/Character.tsx#L78-L97)
 
 ```tsx
 /**
@@ -7648,14 +8214,15 @@ Plays a pose's frames, as the comment says.
 
 <!-- code: apps/desktop/src/renderer/src/components/character.css -->
 
-[`src/renderer/src/components/character.css`, lines 1–145](../../apps/desktop/src/renderer/src/components/character.css#L1-L145)
+[`src/renderer/src/components/character.css`, lines 1–153](../../apps/desktop/src/renderer/src/components/character.css#L1-L153)
 
 ```css
 /*
  * The character's colours: one class per letter of character/sprite.ts's PALETTE. Each material
  * is a ramp of shades, cooler (bluer) in shadow and warmer in the light, and each part's outline
- * is a dark shade of its own colour. Her robe and hat are mixed from the tenant's accent colour,
- * so they match the panel.
+ * is a dark shade of its own colour. Her robe and hat are mixed from `--color-robe`, the colour
+ * chosen in Settings (see useRobeColor), or without one the tenant's accent colour, so they match
+ * the panel; the hat is always a darker shade of the robe.
  */
 
 .character {
@@ -7719,16 +8286,16 @@ Plays a pose's frames, as the comment says.
 
 /* The robe, from the accent colour: deep indigo in the shadows, a little cream in the light. */
 .px-robe-line {
-  fill: color-mix(in oklab, var(--color-accent) 45%, #140a24);
+  fill: color-mix(in oklab, var(--color-robe, var(--color-accent)) 45%, #140a24);
 }
 .px-robe-shade {
-  fill: color-mix(in oklab, var(--color-accent) 72%, #1e1b4b);
+  fill: color-mix(in oklab, var(--color-robe, var(--color-accent)) 72%, #1e1b4b);
 }
 .px-robe {
-  fill: var(--color-accent);
+  fill: var(--color-robe, var(--color-accent));
 }
 .px-robe-light {
-  fill: color-mix(in oklab, var(--color-accent) 70%, #fff4d6);
+  fill: color-mix(in oklab, var(--color-robe, var(--color-accent)) 70%, #fff4d6);
 }
 
 /* Silver trim, and a teal gem. */
@@ -7741,6 +8308,13 @@ Plays a pose's frames, as the comment says.
 .px-gem {
   fill: #3fd0c0;
 }
+/* Leaves and stems (the flower she grows): fresh green, deeper in the shade. */
+.px-leaf {
+  fill: #6cc26a;
+}
+.px-leaf-shade {
+  fill: #2f7d4f;
+}
 
 /* Gold embroidery on her robe and hat, and the buckles on her boots. */
 .px-gold {
@@ -7752,13 +8326,13 @@ Plays a pose's frames, as the comment says.
 
 /* Her hat and her spellbook's cover: a deep shade of the accent colour. */
 .px-hat {
-  fill: color-mix(in oklab, var(--color-accent) 55%, #1a1433);
+  fill: color-mix(in oklab, var(--color-robe, var(--color-accent)) 55%, #1a1433);
 }
 .px-hat-shade {
-  fill: color-mix(in oklab, var(--color-accent) 38%, #120d26);
+  fill: color-mix(in oklab, var(--color-robe, var(--color-accent)) 38%, #120d26);
 }
 .px-hat-light {
-  fill: color-mix(in oklab, var(--color-accent) 80%, #1a1433);
+  fill: color-mix(in oklab, var(--color-robe, var(--color-accent)) 80%, #1a1433);
 }
 
 /* Stockings and boots. */

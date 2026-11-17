@@ -13,6 +13,13 @@ import { EXPLOSION, TELEPORT } from './spells'
  *   up at it in wonder for a moment, then it rises away again (see VISION).
  * - `curtsy`: holds her robe out at the sides and dips in a little curtsy, smiling.
  * - `orb`: gazes into a crystal ball, which swirls and sparkles, then smiles at what she sees.
+ * - `flame`: a flame kindles in her palm, flickers and grows; she blows it out in a curl of smoke.
+ * - `frost`: a snowflake grows over her cupped hands, glinting, then bursts into glitter.
+ * - `bloom`: she points at the ground; sparkles drip down and a flower sprouts, blooms and
+ *   scatters into sparkles.
+ * - `sigil`: she traces a star in the air in gold light; it flares, glows and fades away.
+ * - `rainbow`: her hands sweep apart overhead, painting a rainbow over her, which shimmers and
+ *   fades.
  * - `read`: reads her spellbook (and smiles at something in it).
  * - `spell`: a little spell, sparkles circling her hand.
  * - `levitate`: floats up over a glowing magic circle, hovers with her eyes shut, and settles.
@@ -27,6 +34,14 @@ import { EXPLOSION, TELEPORT } from './spells'
  * - `wisp`: a will-o'-wisp goes round her twice, behind her and in front, her eyes following it,
  *   then flies off; she waves it goodbye.
  * - `sneeze`: "ah... ah... choo!", and the sneeze bursts into sparkles; a sheepish smile.
+ * - `hat`: her hat floats up off her head and spins, showering sparkles, then settles back.
+ * - `star`: a falling star drops into her cupped hands, glows there, and she tosses it back up.
+ * - `rain`: a little cloud gathers over her and rains on her; she shoos it and it bursts into
+ *   sparkles.
+ * - `potion`: a flask in her hand bubbles and changes colour; the cork pops and coloured smoke
+ *   puffs out.
+ * - `tome`: her spellbook floats open in front of her, its pages turning by themselves and glowing
+ *   letters rising out of it, then closes and vanishes.
  * - `dance`: a little jig, stepping side to side, an arm up and a hand on her hip, then the other.
  */
 export const FIDGETS = [
@@ -37,6 +52,11 @@ export const FIDGETS = [
   'vision',
   'curtsy',
   'orb',
+  'flame',
+  'frost',
+  'bloom',
+  'sigil',
+  'rainbow',
   'read',
   'spell',
   'levitate',
@@ -49,6 +69,11 @@ export const FIDGETS = [
   'bubbles',
   'wisp',
   'sneeze',
+  'hat',
+  'star',
+  'rain',
+  'potion',
+  'tome',
   'dance',
 ] as const
 export type Fidget = (typeof FIDGETS)[number]
@@ -79,9 +104,17 @@ export const isSpellPose = (pose: Pose): pose is SpellPose =>
  * - `idle`: standing, breathing, blinking now and then.
  * - `walk-left`, `walk-right`: walking along the taskbar (the window moves with her).
  * - `dragged`: dangling while she's dragged, or falling after a drop.
+ * - `flung`: thrown, flying through the air, tumbling head over heels, arms and legs flailing.
+ * - `splat`: a hard landing: down on her bottom in a puff of dust, her hat knocked down over her
+ *   eyes and stars going round her head; she pushes it back up, shakes her head and gets up, with
+ *   a sheepish smile (for LANDING.splatMs).
  * - one of the FIDGETS, or one of the SPELL_POSES.
  */
-export type Pose = 'idle' | 'walk-left' | 'walk-right' | 'dragged' | Fidget | SpellPose
+export type Pose =
+  'idle' | 'walk-left' | 'walk-right' | 'dragged' | 'flung' | 'splat' | Fidget | SpellPose
+
+/** Her hard landing (the `splat` pose): how long it lasts (ms). */
+export const LANDING = { splatMs: 3200 } as const
 
 /** How long each fidget plays (ms): the main process goes back to idle after it. */
 export const FIDGET_MS: Record<Fidget, number> = {
@@ -92,6 +125,11 @@ export const FIDGET_MS: Record<Fidget, number> = {
   vision: 8600,
   curtsy: 2200,
   orb: 4400,
+  flame: 3600,
+  frost: 4000,
+  bloom: 4400,
+  sigil: 3600,
+  rainbow: 4000,
   read: 4000,
   spell: 2400,
   levitate: 3600,
@@ -104,6 +142,11 @@ export const FIDGET_MS: Record<Fidget, number> = {
   bubbles: 4400,
   wisp: 4800,
   sneeze: 3000,
+  hat: 3600,
+  star: 4400,
+  rain: 4400,
+  potion: 4000,
+  tome: 4800,
   dance: 3200,
 }
 
@@ -122,6 +165,13 @@ export const VISION = {
   ascend: [6800, 8000],
   lightOut: [7900, 8600],
 } as const
+
+/**
+ * While she's carried, her page says every `everyMs` that the mouse button is still down; without
+ * that for `staleMs` (the release went missing, as a busy PC can lose it, or the page is stuck),
+ * the main process lets her go, so she never stays stuck to the pointer.
+ */
+export const DRAG_CHECK = { everyMs: 250, staleMs: 2000 } as const
 
 /**
  * Her clones (the Clones spell): how many, how long they last (ms), and how long they take to

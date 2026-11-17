@@ -18,6 +18,12 @@ const PreferencesSchema = z.object({
   /** She stays where she stands, and doesn't do her idle animations: both off unless turned on. */
   standStill: z.boolean().optional(),
   noIdles: z.boolean().optional(),
+  /** Her robe's colour, chosen in Settings; the company's colour unless one is. */
+  robeColor: z
+    .string()
+    .regex(/^#[0-9a-f]{6}$/i)
+    .nullable()
+    .optional(),
   /** Apps starred in the Apps list (their IDs), shown first. */
   favoriteApps: z.array(z.string().min(1).max(200)).max(500).optional(),
   /** How big she is, as a multiple of her usual size (see CHARACTER_SIZES). */
@@ -75,6 +81,7 @@ export class SettingsService {
       theme: this.prefs.theme ?? 'dark',
       standStill: this.prefs.standStill ?? false,
       noIdles: this.prefs.noIdles ?? false,
+      robeColor: this.prefs.robeColor ?? null,
       canUninstall: available,
     }
   }
@@ -107,6 +114,12 @@ export class SettingsService {
   /** Whether she wanders about and does her idle animations on her own (either, or both). */
   async setHabits(habits: Partial<Habits>): Promise<Settings> {
     await this.save(habits)
+    return this.get()
+  }
+
+  /** Her robe's colour (`#rrggbb`), or null for the company's again. */
+  async setRobeColor(robeColor: string | null): Promise<Settings> {
+    await this.save({ robeColor })
     return this.get()
   }
 

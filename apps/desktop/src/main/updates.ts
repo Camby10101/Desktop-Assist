@@ -99,6 +99,34 @@ export function releaseOf(payload: unknown, downloads: string): Release | null {
 }
 
 /**
+ * The newest release in GitHub's list of a repository's releases, by version: whatever order they
+ * were published in, and whichever one GitHub calls the latest (a release published after a newer
+ * one becomes "latest" unless that's unticked). Drafts and pre-releases don't count, nor tags that
+ * aren't versions. `release` is the newest with its installer attached (see releaseOf);
+ * `unfinished`, the version of any newer one still without its installer, or null.
+ */
+export function newestRelease(
+  payload: unknown,
+  downloads: string,
+): { release: Release | null; unfinished: string | null } {
+  let release: Release | null = null
+  let unfinished: string | null = null
+  for (const item of Array.isArray(payload) ? payload : []) {
+    if (!isObject(item) || item['draft'] === true || item['prerelease'] === true) continue
+    const version = parseVersion(typeof item['tag_name'] === 'string' ? item['tag_name'] : '')
+    if (!version) continue
+    const found = releaseOf(item, downloads)
+    if (found) {
+      if (!release || isNewer(found.version, release.version)) release = found
+    } else if (!unfinished || isNewer(version.join('.'), unfinished)) {
+      unfinished = version.join('.')
+    }
+  }
+  if (unfinished && release && !isNewer(unfinished, release.version)) unfinished = null
+  return { release, unfinished }
+}
+
+/**
  * What a release's signature signs: the version and the installer's SHA-256. Signing the version
  * too means a genuine older installer can't be passed off as a newer release.
  * scripts/release-signing.mjs signs the same text. It still says "desktop-assist", from the app's
@@ -136,8 +164,11 @@ export type Fetch = (url: string, init?: RequestInit) => Promise<Response>
 export interface UpdaterDeps {
   /** This copy's version (package.json). */
   currentVersion: string
-  /** GitHub's API address for the latest release: …/repos/<owner>/<name>/releases/latest. */
-  latestUrl: string
+  /**
+   * GitHub's API address for the repository's releases, newest first:
+   * …/repos/<owner>/<name>/releases?per_page=30 (see newestRelease).
+   */
+  releasesUrl: string
   /** Where the repository's release files are downloaded from; nothing else is downloaded. */
   downloads: string
   /**
@@ -165,8 +196,8 @@ export interface UpdaterDeps {
 }
 
 /**
- * Settings → Check for updates: asks GitHub for the latest release and, if it's newer than this
- * copy, downloads its installer, checks it's exactly the file GitHub has and that the release key
+ * Settings → Check for updates: asks GitHub for the repository's releases and, if the newest (by
+ * version) is newer than this copy, downloads its installer, checks it's exactly the file GitHub has and that the release key
  * signed it, and runs it. The installer replaces this copy silently and starts the new one; this
  * app quits to let it.
  */
@@ -183,13 +214,23 @@ export class Updater {
   async checkAndInstall(): Promise<UpdateState> {
     if (['checking', 'downloading', 'installing'].includes(this.state.status)) return this.state
     this.setState({ status: 'checking' })
-    let release: Release | null
+    let newest: ReturnType<typeof newestRelease>
     try {
-      release = await this.latest()
+      newest = await this.latest()
     } catch (error) {
       return this.fail("Couldn't check for updates", error)
     }
+    const { release, unfinished } = newest
     if (!release || !isNewer(release.version, this.deps.currentVersion)) {
+      // A newer version is out, but its release has no installer to download yet: say so, rather
+      // than that this copy is up to date.
+      if (unfinished && isNewer(unfinished, this.deps.currentVersion)) {
+        this.deps.onError?.(`Release ${unfinished} has no installer (and .sig) attached`)
+        return this.setState({
+          status: 'error',
+          message: `Version ${unfinished} is out, but its installer isn't attached yet`,
+        })
+      }
       return this.setState({ status: 'up-to-date', version: this.deps.currentVersion })
     }
     const { version } = release
@@ -216,16 +257,16 @@ export class Updater {
     return this.state
   }
 
-  private async latest(): Promise<Release | null> {
-    const response = await this.deps.fetch(this.deps.latestUrl, {
+  private async latest(): Promise<ReturnType<typeof newestRelease>> {
+    const response = await this.deps.fetch(this.deps.releasesUrl, {
       headers: { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
       signal: AbortSignal.timeout(15_000),
     })
-    // No releases yet.
-    if (response.status === 404) return null
+    // No such repository (yet).
+    if (response.status === 404) return { release: null, unfinished: null }
     if (response.status === 403 || response.status === 429) throw new Busy()
     if (!response.ok) throw new Error(`GitHub answered ${response.status}`)
-    return releaseOf(await response.json(), this.deps.downloads)
+    return newestRelease(await response.json(), this.deps.downloads)
   }
 
   /**

@@ -192,7 +192,11 @@ async function start(): Promise<void> {
   panelWindow.on('blur', () => bubble.panelBlurred())
 
   // Her clones: a window along the taskbar.
-  const clones = new Clones({ accentColor: tenant.accentColor, open: openOverlay('clones') })
+  const clones = new Clones({
+    accentColor: tenant.accentColor,
+    robeColor: () => settings.get().robeColor,
+    open: openOverlay('clones'),
+  })
 
   // The screen saver: a window over the whole of every display, in front of the taskbar too (from
   // the "screen-saver" level up, Windows keeps it there), the one on her display taking the focus
@@ -200,6 +204,7 @@ async function start(): Promise<void> {
   // with another scale by the first's, until it's there.
   const screenSaver = new ScreenSaver({
     accentColor: tenant.accentColor,
+    robeColor: () => settings.get().robeColor,
     displays: () => screen.getAllDisplays().map(({ id, bounds }) => ({ id, bounds })),
     herDisplay: () => screen.getDisplayMatching(bubbleWindow.getBounds()).id,
     open: (bounds, query, focus) => {
@@ -298,7 +303,7 @@ async function start(): Promise<void> {
   const updater = updates
     ? new Updater({
         currentVersion: app.getVersion(),
-        latestUrl: `${updates.api}/repos/${updates.repo}/releases/latest`,
+        releasesUrl: `${updates.api}/repos/${updates.repo}/releases?per_page=30`,
         downloads: `${updates.downloads}/${updates.repo}/releases/download/`,
         publicKey: updates.publicKey,
         fetch: netFetch,

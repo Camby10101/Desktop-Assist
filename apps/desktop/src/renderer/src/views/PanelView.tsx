@@ -565,6 +565,9 @@ function Panel({ state }: { state: AppState }) {
           onSetHabits={async (habits) =>
             setSettings(await window.assist.settings.setHabits(habits))
           }
+          onSetRobeColor={async (color) =>
+            setSettings(await window.assist.settings.setRobeColor(color))
+          }
           onToggleAutoStart={async () =>
             setSettings(await window.assist.settings.setAutoStart(!settings.autoStart))
           }

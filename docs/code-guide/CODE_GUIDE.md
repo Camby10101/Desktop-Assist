@@ -219,9 +219,10 @@ Settings → **Uninstall Desktop Wizard** (click twice) → IPC `assist:app-unin
 1. Settings → **Check for updates** → `window.assist.updates.check()` → IPC
    `assist:updates-check` → `Updater.checkAndInstall()` in `src/main/updates.ts`, which the call
    doesn't wait for; the menu row follows along through `assist:update-state`.
-2. `Updater` asks GitHub's API for the tenant's repository's latest release
-   (`Camby10101/Desktop-Wizard` for Morse Micro). With no release, or none newer than this copy
-   (`app.getVersion()`), the row says it's up to date.
+2. `Updater` asks GitHub's API for the tenant's repository's releases
+   (`Camby10101/Desktop-Wizard` for Morse Micro) and takes the highest version with its installer
+   attached. With no release, or none newer than this copy (`app.getVersion()`), the row says it's
+   up to date, or that a newer version is out without its installer attached yet.
 3. Otherwise it downloads the installer attached to the release (from the repository's own
    releases only) into `%TEMP%\Desktop Wizard update`, showing the percentage, and checks its size
    and SHA-256 against GitHub's, and its signature (the release's `.sig`) against the release

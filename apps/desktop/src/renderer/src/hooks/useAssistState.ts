@@ -21,6 +21,9 @@ export function useAssistState(): AppState | null {
       window.assist.onPoseChanged((pose) => update((s) => ({ ...s, pose }))),
       window.assist.onCornerChanged((corner) => update((s) => ({ ...s, corner }))),
       window.assist.onSizeChanged((size) => update((s) => ({ ...s, size }))),
+      window.assist.onRobeColorChanged((robeColor) =>
+        update((s) => ({ ...s, settings: { ...s.settings, robeColor } })),
+      ),
       window.assist.onAuthStatus((auth) => update((s) => ({ ...s, auth }))),
       window.assist.onChatMessage((message) =>
         update((s) => ({ ...s, chat: upsert(s.chat, message) })),
@@ -45,6 +48,18 @@ function upsert(messages: ChatMessage[], message: ChatMessage): ChatMessage[] {
   const next = messages.slice()
   next[index] = message
   return next
+}
+
+/**
+ * Colours her robe and hat (character.css) with `color`, or, without one, the accent colour. Only
+ * her: the panel keeps the company's colour.
+ */
+export function useRobeColor(color: string | null | undefined): void {
+  useEffect(() => {
+    const root = document.documentElement.style
+    if (color && /^#[0-9a-f]{6}$/i.test(color)) root.setProperty('--color-robe', color)
+    else root.removeProperty('--color-robe')
+  }, [color])
 }
 
 /** Applies the tenant's accent colour to the `accent` Tailwind colour. */

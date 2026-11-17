@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { CLONES } from '@shared/character'
 import { bubbleMetrics, DEFAULT_SIZE, snapSize } from '@shared/geometry'
 import { Character } from '../components/Character'
-import { useAccentColor } from '../hooks/useAssistState'
+import { useAccentColor, useRobeColor } from '../hooks/useAssistState'
 import { clonePose, spawnClones, stepClone, type Clone, type Room } from '../lib/clones'
 
 /**
@@ -17,6 +17,7 @@ export function ClonesView() {
   const scale = snapSize(Number(params.get('scale')) || DEFAULT_SIZE)
   const { box } = bubbleMetrics(scale)
   useAccentColor(params.get('accent') ?? undefined)
+  useRobeColor(params.get('robe'))
 
   // With Windows' reduced-motion setting they stand still, spread along the taskbar.
   const [still] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches)

@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
-import { SPELL_POSE_MS } from '@shared/character'
+import { DRAG_CHECK, SPELL_POSE_MS } from '@shared/character'
 import { bubbleMetrics, DEFAULT_SIZE, isLeftCorner } from '@shared/geometry'
 import type { Mode } from '@shared/types'
 import { Character } from '../components/Character'
-import { useAccentColor, useAssistState } from '../hooks/useAssistState'
+import { useAccentColor, useAssistState, useRobeColor } from '../hooks/useAssistState'
 
 const ACTION_LABEL: Record<Mode, string> = {
   collapsed: 'Open',
@@ -29,6 +29,7 @@ export function BubbleView() {
   // No useClickThrough here: the bubble window always takes the mouse (see bubble/windows.ts).
   const state = useAssistState()
   useAccentColor(state?.branding.accentColor)
+  useRobeColor(state?.settings.robeColor)
   const mode = state?.mode ?? 'collapsed'
   const appName = state?.branding.appName ?? 'Desktop Wizard'
   // Her window, as big as she is (with room above her hat); she faces the middle of the screen,
@@ -51,6 +52,33 @@ export function BubbleView() {
     return () => {
       stop()
       clearTimeout(timer)
+    }
+  }, [])
+
+  // Whether the main mouse button is down, as the latest pointer event anywhere in the window
+  // says. While she's carried, a button found up means the release went missing (a busy PC can
+  // lose it): she's let go at once. And every so often the main process is told it's still down;
+  // without that word it lets her go itself (DRAG_CHECK), so she never stays stuck to the pointer.
+  const held = useRef(false)
+  const carried = useRef(false)
+  useEffect(() => {
+    carried.current = mode === 'dragging'
+    if (!carried.current) return
+    const timer = setInterval(() => {
+      if (held.current) window.assist.bubbleDragHold()
+      else window.assist.bubbleDragEnd()
+    }, DRAG_CHECK.everyMs)
+    return () => clearInterval(timer)
+  }, [mode])
+  useEffect(() => {
+    const track = (event: globalThis.PointerEvent) => {
+      held.current = event.type !== 'pointercancel' && (event.buttons & 1) === 1
+      if (!held.current && carried.current) window.assist.bubbleDragEnd()
+    }
+    const kinds = ['pointerdown', 'pointermove', 'pointerup', 'pointercancel'] as const
+    for (const kind of kinds) window.addEventListener(kind, track, true)
+    return () => {
+      for (const kind of kinds) window.removeEventListener(kind, track, true)
     }
   }, [])
 

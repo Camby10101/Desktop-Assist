@@ -48,6 +48,8 @@ export interface Settings {
   standStill: boolean
   /** She doesn't do her idle animations, her habits, on her own (off until turned on). */
   noIdles: boolean
+  /** Her robe's colour (`#rrggbb`; her hat is a darker shade of it), or null for the company's. */
+  robeColor: string | null
 }
 
 /** What she does on her own, from Settings: whether she wanders, and her idle animations. */
