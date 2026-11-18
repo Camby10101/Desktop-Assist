@@ -14,6 +14,7 @@ export const ACTION_IDS = [
   'settings',
   'spells',
   'screensaver',
+  'familiar',
   'close',
 ] as const
 
@@ -32,6 +33,8 @@ export const ACTIONS = {
   spells: { label: 'Spells', kind: 'popover' },
   // Every screen fades to white, then to a sunset she watches (src/shared/screenSaver.ts).
   screensaver: { label: 'Screen saver', kind: 'command' },
+  // Her black cat, for a minute (src/main/familiar.ts).
+  familiar: { label: 'Summon familiar', kind: 'command' },
   close: { label: 'Close Desktop Wizard', kind: 'command' },
 } as const satisfies Record<ActionId, { label: string; kind: 'command' | 'popover' }>
 

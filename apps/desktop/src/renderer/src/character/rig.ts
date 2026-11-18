@@ -158,6 +158,14 @@ export interface Pose {
   dizzy?: number
   /** Dust puffing out along the ground either side of her after a hard landing, 0 to 1. */
   dust?: number
+  /** Confetti bursting up from her hands and fluttering down round her, 0 to 1. */
+  confetti?: number
+  /** Hearts floating up from her (petted), 0 to 1. */
+  hearts?: number
+  /** A scroll held open in front of her in both hands (from the front). */
+  scroll?: boolean
+  /** A bead of sweat by her forehead (nervous). */
+  sweat?: boolean
 }
 
 const DOWN: Arm = { shoulder: 0.08, elbow: 0 }
@@ -292,6 +300,23 @@ const FLOWER_HALF = ['.c.c.', 'ccYcc', '.cmc.']
 const FLOWER = ['.cc.cc.', 'cccmccc', '.cmYmc.', 'cccmccc', '.cc.cc.']
 /** The rainbow's bands, outside in: red, orange, yellow, teal, and her colour for its violet. */
 const RAINBOW_BANDS = ['m', 'I', 'j', 'G', 'a']
+/** A heart, big and small: pink, outlined in red. */
+const HEART = ['.m.m.', 'mcmcm', 'mcccm', '.mcm.', '..m..']
+const HEART_SMALL = ['c.c', 'ccc', '.c.']
+/** A scroll: a sheet of parchment between its two rolled ends, lines of writing and a red seal. */
+const SCROLL = [
+  'Ff.........fF',
+  'FflllllllllfF',
+  'FflDDDlDDllfF',
+  'FflDDlDDDllfF',
+  'FflDDDDlDllfF',
+  'FfllllllmmlfF',
+  'Ff.........fF',
+]
+/** A bead of sweat. */
+const SWEAT = ['.w.', 'wGw', 'GGG', '.G.']
+/** Confetti's colours: pink, teal, gold, her colour, red, yellow and white. */
+const CONFETTI = ['c', 'G', 'Y', 'a', 'm', 'j', 'w']
 
 /** How far `t` is through the stretch from `from` to `to`: 0 before it, 1 after it. */
 const stage = (t: number, from: number, to: number) =>
@@ -1936,6 +1961,65 @@ export function draw(pose: Pose): string[] {
           set({ x: at.x - half + dx, y: at.y - half + dy }, letter, behind ? '.' : undefined)
         }),
       )
+    }
+  }
+
+  // A scroll held open in front of her, its rolled ends in her hands.
+  if (pose.scroll && farHand) {
+    const middle = { x: (hand.x + farHand.x) / 2, y: (hand.y + farHand.y) / 2 }
+    canvas.stamp(SCROLL, middle.x - (SCROLL[0]!.length - 1) / 2, middle.y - SCROLL.length + 2)
+  }
+
+  // A bead of sweat beside her forehead, on the side away from her hat's tip.
+  if (pose.sweat) {
+    const at = onHead({ x: -10, y: -4 })
+    canvas.stamp(SWEAT, at.x - 1, at.y - 1)
+  }
+
+  // Hearts floating up from her, swaying, one after another, big then small, and gone.
+  const hearts = pose.hearts ?? 0
+  if (hearts > 0 && hearts < 1) {
+    for (let k = 0; k < 4; k++) {
+      const life = hearts * 1.6 - k * 0.2
+      if (life <= 0 || life >= 1) continue
+      const side = k % 2 === 0 ? 1 : -1
+      const at = onHead({
+        x: side * (6 + life * 6) + Math.sin(life * 9 + k) * 1.5,
+        y: -8 - life * 24,
+      })
+      const heart = life < 0.55 ? HEART : HEART_SMALL
+      canvas.stamp(heart, at.x - (heart[0]!.length - 1) / 2, at.y - (heart.length - 1) / 2)
+    }
+  }
+
+  // Confetti: a burst from her raised hands, the pieces flying up and out, then fluttering down
+  // round her, side to side, each its own colour, until they're gone.
+  const confetti = pose.confetti ?? 0
+  if (confetti > 0.08 && confetti < 1) {
+    const from = farHand
+      ? { x: (hand.x + farHand.x) / 2, y: Math.min(hand.y, farHand.y) - 2 }
+      : hand
+    const t = (confetti - 0.08) / 0.92
+    for (let k = 0; k < 34; k++) {
+      const spread = (hash(k, 1, 13) - 0.5) * 2
+      const rise = 18 + hash(k, 2, 13) * 22
+      const up = Math.min(1, t / 0.25)
+      const down = Math.max(0, t - 0.25)
+      const at = {
+        x:
+          from.x +
+          spread * 30 * Math.min(1, t / 0.3) +
+          Math.sin(t * 14 + k) * 2 * Math.min(1, down * 4),
+        y: from.y - rise * (1 - (1 - up) ** 2) + down * down * 140 + down * 20,
+      }
+      if (at.y > 94 || t > 0.97) continue
+      const colour = CONFETTI[k % CONFETTI.length]!
+      set(at, colour)
+      // Every other piece a little strip, turning as it falls.
+      if (k % 2 === 0) {
+        const flat = Math.floor(t * 20 + k) % 2 === 0
+        set({ x: at.x + (flat ? 1 : 0), y: at.y + (flat ? 0 : 1) }, colour)
+      }
     }
   }
 

@@ -43,6 +43,8 @@ import { EXPLOSION, TELEPORT } from './spells'
  * - `tome`: her spellbook floats open in front of her, its pages turning by themselves and glowing
  *   letters rising out of it, then closes and vanishes.
  * - `dance`: a little jig, stepping side to side, an arm up and a hand on her hip, then the other.
+ * - `yawn`: a big yawn behind her hand, then a sleepy sway (late at night only: see TIMED).
+ * - `confetti`: a cheer and a burst of confetti (Friday evenings only, and often then: see TIMED).
  */
 export const FIDGETS = [
   'hop',
@@ -74,6 +76,8 @@ export const FIDGETS = [
   'rain',
   'potion',
   'tome',
+  'yawn',
+  'confetti',
   'dance',
 ] as const
 export type Fidget = (typeof FIDGETS)[number]
@@ -108,10 +112,19 @@ export const isSpellPose = (pose: Pose): pose is SpellPose =>
  * - `splat`: a hard landing: down on her bottom in a puff of dust, her hat knocked down over her
  *   eyes and stars going round her head; she pushes it back up, shakes her head and gets up, with
  *   a sheepish smile (for LANDING.splatMs).
- * - one of the FIDGETS, or one of the SPELL_POSES.
+ * - one of the FIDGETS, the SPELL_POSES, the REACTIONS or the HELD_POSES.
  */
 export type Pose =
-  'idle' | 'walk-left' | 'walk-right' | 'dragged' | 'flung' | 'splat' | Fidget | SpellPose
+  | 'idle'
+  | 'walk-left'
+  | 'walk-right'
+  | 'dragged'
+  | 'flung'
+  | 'splat'
+  | Fidget
+  | SpellPose
+  | Reaction
+  | HeldPose
 
 /** Her hard landing (the `splat` pose): how long it lasts (ms). */
 export const LANDING = { splatMs: 3200 } as const
@@ -147,8 +160,79 @@ export const FIDGET_MS: Record<Fidget, number> = {
   rain: 4400,
   potion: 4000,
   tome: 4800,
+  yawn: 3600,
+  confetti: 3200,
   dance: 3200,
 }
+
+/**
+ * Habits only for certain times (local time): yawning late at night (from `from` o'clock to `to`,
+ * across midnight), and confetti on Friday evenings (day 5, 16:00 to 20:00), five times as likely
+ * then as any other habit.
+ */
+export const TIMED = {
+  yawn: { from: 22, to: 6, weight: 1 },
+  confetti: { day: 5, from: 16, to: 20, weight: 5 },
+} as const
+
+/** Whether a timed habit (TIMED) can happen at `when`; any other habit always can. */
+export function inSeason(fidget: Fidget, when: Date): boolean {
+  const hour = when.getHours()
+  if (fidget === 'yawn') return hour >= TIMED.yawn.from || hour < TIMED.yawn.to
+  if (fidget === 'confetti') {
+    return (
+      when.getDay() === TIMED.confetti.day &&
+      hour >= TIMED.confetti.from &&
+      hour < TIMED.confetti.to
+    )
+  }
+  return true
+}
+
+/**
+ * Things she does in answer to something, played once (see REACTION_MS):
+ * - `pet`: double-clicked: a happy wiggle, hearts floating up.
+ * - `scroll`: a new Jira notification or reply to a request: she hops up holding a scroll.
+ * - `startle`: the pointer zipped past her: she jumps.
+ * - `pounce-left`, `pounce-right`: the pointer wiggled near her: she leaps at it, that way.
+ * - `lift`, `lower`: her arms rise (lifting something by magic), or come down (setting it down).
+ * - `guilty`: caught out (after a prank): nervous glances either way, a bead of sweat.
+ * - `toss`: juggling, hands only (what she juggles is drawn elsewhere: the taskbar's icons).
+ */
+export const REACTIONS = [
+  'pet',
+  'scroll',
+  'startle',
+  'pounce-left',
+  'pounce-right',
+  'lift',
+  'lower',
+  'guilty',
+  'toss',
+] as const
+export type Reaction = (typeof REACTIONS)[number]
+
+/** How long each reaction lasts (ms). */
+export const REACTION_MS: Record<Reaction, number> = {
+  pet: 1800,
+  scroll: 2400,
+  startle: 1000,
+  'pounce-left': 1400,
+  'pounce-right': 1400,
+  lift: 800,
+  lower: 800,
+  guilty: 2400,
+  toss: 4400,
+}
+
+/**
+ * Poses that go round and round for as long as something else says (her performances):
+ * - `watch`: her eyes on the pointer, wherever it is (the gaze comes from the main process).
+ * - `peek-left`, `peek-right`: leaning out round the edge of a window she's behind, that way.
+ * - `ride`: sitting on top of a window, arms up, the wind in her hair.
+ */
+export const HELD_POSES = ['watch', 'peek-left', 'peek-right', 'ride'] as const
+export type HeldPose = (typeof HELD_POSES)[number]
 
 export const isFidget = (pose: Pose): pose is Fidget =>
   (FIDGETS as readonly string[]).includes(pose)
@@ -172,6 +256,12 @@ export const VISION = {
  * the main process lets her go, so she never stays stuck to the pointer.
  */
 export const DRAG_CHECK = { everyMs: 250, staleMs: 2000 } as const
+
+/**
+ * Her familiar, the black cat: summoned from its icon it stays `summonMs`; visiting, as one of her
+ * habits, `visitMs` (ms).
+ */
+export const FAMILIAR = { summonMs: 60_000, visitMs: 16_000 } as const
 
 /**
  * Her clones (the Clones spell): how many, how long they last (ms), and how long they take to

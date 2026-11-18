@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { DRAG_CHECK, FIDGET_MS, LANDING, SPELL_POSE_MS, type Pose } from '@shared/character'
+import {
+  DRAG_CHECK,
+  FIDGET_MS,
+  LANDING,
+  REACTION_MS,
+  SPELL_POSE_MS,
+  type Pose,
+} from '@shared/character'
 import { UI, type CharacterSize, type Corner, type Point, type Rect } from '@shared/geometry'
 import type { Habits, Mode } from '@shared/types'
 import {
@@ -9,7 +16,9 @@ import {
   OPEN_BLUR_GRACE_MS,
   PANEL_FADE_MS,
   type BubbleAnchor,
+  type BubbleControllerDeps,
   type DisplayArea,
+  type Performance,
 } from '../src/main/bubble/BubbleController'
 import { bubbleWindowBounds, panelWindowBounds, restPosition } from '../src/main/bubble/layout'
 import { FLING, WANDER } from '../src/main/bubble/wander'
@@ -65,6 +74,7 @@ function makeController(
   initialAnchor: BubbleAnchor | null = null,
   initialScale?: number,
   initialHabits?: Habits,
+  extra: Partial<BubbleControllerDeps> = {},
 ) {
   return new BubbleController({
     bubble,
@@ -91,11 +101,14 @@ function makeController(
     // With 0.5 every time: the first thing it does comes 8.5 s after settling, then one every
     // 14 s; a walk goes to the middle of the stretches far enough away.
     random: () => 0.5,
+    ...extra,
   })
 }
 
 beforeEach(() => {
   vi.useFakeTimers()
+  // A Wednesday at noon: no yawning (late at night) or confetti (Friday evenings).
+  vi.setSystemTime(new Date(2026, 10, 18, 12, 0))
   screens = [
     { ...PRIMARY, bounds: { ...PRIMARY.bounds }, workArea: { ...PRIMARY.workArea } },
     SECOND,
@@ -739,6 +752,120 @@ describe('throwing her, and hard landings', () => {
     controller.clickBubble()
     expect(controller.currentMode).toBe('expanded')
     expect(controller.currentPose).toBe('idle')
+  })
+})
+
+describe('her performances', () => {
+  /**
+   * Starts her again with a performer offering `peek`, getting ready `performance` (or null), and
+   * random numbers from `queue` before 0.5 as usual.
+   */
+  function withPerformer(performance: Performance | null) {
+    const queue: number[] = []
+    const asked: string[] = []
+    controller.dispose()
+    controller = makeController(null, undefined, undefined, {
+      random: () => queue.shift() ?? 0.5,
+      performer: {
+        available: () => ['peek'],
+        prepare: async (name) => {
+          asked.push(name)
+          return performance
+        },
+      },
+    })
+    controller.start()
+    return { queue, asked }
+  }
+  /** A performance: walking her 300 DIP to the left over a second, peeking, then it's over. */
+  function walkLeft() {
+    const ended: boolean[] = []
+    const from = boxOf(home())
+    const performance: Performance = {
+      at: (t) => (t >= 1000 ? null : { x: from.x - 0.3 * t, y: from.y, pose: 'peek-left' }),
+      end: (finished) => void ended.push(finished),
+    }
+    return { performance, ended }
+  }
+  /** Moves time on to her third thing to do (39 s in), with rolls that pick the performance. */
+  async function untilPerformance(queue: number[]) {
+    vi.advanceTimersByTime(38_000)
+    queue.push(0.1, 0.999)
+    await vi.advanceTimersByTimeAsync(1_100)
+  }
+
+  it('plays one: she goes where it says, doing what it says, and stands there after', async () => {
+    const { performance, ended } = walkLeft()
+    const { queue, asked } = withPerformer(performance)
+    const start = home().x
+    await untilPerformance(queue)
+    expect(asked).toEqual(['peek'])
+    expect(controller.currentPose).toBe('peek-left')
+    expect(bubble.bounds!.x).toBeLessThan(start)
+    await vi.advanceTimersByTimeAsync(1_100)
+    expect(ended).toEqual([true])
+    expect(controller.currentPose).toBe('idle')
+    expect(bubble.bounds!.y).toBe(home().y) // on the taskbar
+    expect(bubble.bounds!.x).toBeLessThan(start - 250) // where it took her
+  })
+
+  it('is cut short by a click: it ends, and she stands on the taskbar where she was', async () => {
+    const { performance, ended } = walkLeft()
+    const { queue } = withPerformer(performance)
+    await untilPerformance(queue)
+    expect(controller.currentPose).toBe('peek-left')
+    controller.clickBubble()
+    expect(ended).toEqual([false])
+    expect(controller.currentMode).toBe('expanded')
+    expect(controller.currentPose).toBe('idle')
+    expect(bubble.bounds!.y).toBe(home().y)
+  })
+
+  it('carries on as usual when one can’t be done just now', async () => {
+    const { queue, asked } = withPerformer(null)
+    await untilPerformance(queue)
+    expect(asked).toEqual(['peek'])
+    expect(controller.currentPose).toBe('idle')
+    vi.advanceTimersByTime(WANDER.delay[1] + 100)
+    expect(poses.length).toBeGreaterThan(4)
+  })
+})
+
+describe('her reactions', () => {
+  it('plays one with the panel open, then stands idle, the panel still open', () => {
+    controller.clickBubble()
+    controller.react('scroll')
+    expect(controller.currentPose).toBe('scroll')
+    vi.advanceTimersByTime(REACTION_MS.scroll - 50)
+    expect(controller.currentPose).toBe('scroll')
+    vi.advanceTimersByTime(100)
+    expect(controller.currentPose).toBe('idle')
+    expect(controller.currentMode).toBe('expanded')
+  })
+
+  it('is petted: hearts and a wiggle, then idle and on with her day', () => {
+    controller.pet()
+    expect(controller.currentPose).toBe('pet')
+    vi.advanceTimersByTime(REACTION_MS.pet + 50)
+    expect(controller.currentPose).toBe('idle')
+    expect(controller.currentMode).toBe('collapsed')
+  })
+
+  it('jumps when the pointer zips past her, and not again for a while', () => {
+    const middle = { x: boxOf(home()).x + 48, y: boxOf(home()).y + 48 }
+    const zip = () => {
+      cursor = { x: middle.x - 300, y: middle.y }
+      vi.advanceTimersByTime(50)
+      cursor = { x: middle.x + 300, y: middle.y }
+      vi.advanceTimersByTime(50)
+    }
+    vi.advanceTimersByTime(1000)
+    zip()
+    expect(controller.currentPose).toBe('startle')
+    vi.advanceTimersByTime(REACTION_MS.startle + 50)
+    expect(controller.currentPose).toBe('idle')
+    zip()
+    expect(controller.currentPose).toBe('idle') // resting from it
   })
 })
 

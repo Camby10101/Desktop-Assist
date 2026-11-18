@@ -5,7 +5,7 @@ corner of the screen and opens a panel when clicked. Built for Morse Micro first
 [`tenants/`](tenants/README.md), so another business can use it later.
 
 **Download:** the newest installer is in [`installer/`](installer/)
-([Desktop Wizard-Setup-2.3.0.exe](installer/Desktop%20Wizard-Setup-2.3.0.exe), with its signature
+([Desktop Wizard-Setup-2.4.0.exe](installer/Desktop%20Wizard-Setup-2.4.0.exe), with its signature
 beside it). Run it to install Desktop Wizard for yourself (no admin needed); an installed copy
 updates itself from Settings → Check for updates.
 
@@ -29,8 +29,9 @@ sign-in) and 4 (logos, favourites, service desk, light/dark mode, bubble-click f
 3.1 (questions open in Claude Desktop) and 3.2 (Apps list, Uninstall) are complete, as are
 Milestone 5 (the app-opening spinner; Jira and the service desk) and its fixes 5.1 and 5.2 (the
 bubble kept in front, and Check for updates). Version **1.0.0** was the first release (see
-[PLAN.md](docs/PLAN.md) §7h and [RELEASING.md](docs/RELEASING.md)); this is version **2.3.0**, with
-the animated character (thirty habits, ten of them magic; throw her and she tumbles), her spells,
+[PLAN.md](docs/PLAN.md) §7h and [RELEASING.md](docs/RELEASING.md)); this is version **2.4.0**, with
+the animated character (thirty-two habits, ten of them magic; throw her and she tumbles; tricks
+with the taskbar's icons and the windows on the screen; her familiar, a black cat), her spells,
 the screen saver, and Robe colour, Stand still and No idle animations in Settings
 (PLAN.md §7i).
 
@@ -75,7 +76,23 @@ name are sent on to it.
   the pointer's moving and she flies on, tumbling, bouncing off the sides and top of the screen
   (you can catch her in mid-air). Land her hard, from a throw or dropped from high up, and she
   thumps down on her bottom with her hat over her eyes and stars going round her head, then gets
-  back up.
+  back up. Throws fall a little faster than drops, and lose most of their speed off the screen's
+  edges.
+- **Pet her**: double-click her for hearts and a happy wiggle (the first click opens or closes the
+  panel as usual; the second only pets her).
+- **Left to herself**, besides her habits she now and then: peeks round the edge of a window that
+  comes down to the taskbar near her (hidden behind it), or teleports onto the top of a window and
+  rides along if it's dragged (falling off if it's minimised or closed); has a visit from her
+  familiar, a little black cat that wanders, follows her and joins in; and, rarely, does tricks with
+  the taskbar's icons (carrying one about, juggling three, swapping two and swapping them back,
+  sitting on one, sneezing one flying, a wand tap) or watches the pointer for ten seconds. The
+  tricks are pretend: copies of the icons, cut from a screenshot that never leaves the PC, are drawn
+  over the taskbar; nothing on it really moves. She yawns late at night (10pm to 6am), and throws
+  confetti on Friday evenings (4pm to 8pm).
+- **The pointer**: zip it past her and she may jump; wiggle it near her and she may pounce at it
+  (not every time, and not again for a while).
+- **News**: when a new Jira notification or a reply to one of your requests arrives, she hops up
+  holding a scroll.
 - **Ask Claude**: type a question in the box beside the bubble (a speech bubble pointing at her
   mouth) and press Enter (or **Ask in Claude**). The Claude Desktop app opens a new chat and the question is sent there, with any
   attached screenshots pasted in, and Claude answers. It's your own Claude account, so it counts
@@ -137,6 +154,8 @@ name are sent on to it.
     gliding by and fireflies over the grass, and she stands on the nearest hill, her back to you,
     watching it; on any other screens, shooting stars fall through the night sky. Move the mouse,
     click or press a key and it fades away, and she forms again on the taskbar.
+  - **Summon familiar** (a cat): her black cat appears beside her in a puff of smoke and wanders
+    the taskbar for a minute, following her and joining in with what she does.
   - **Close**: she dissolves into white motes, and the app quits.
 - **Attach screenshot** adds the newest screenshot to your next question; click it again to add
   the one before, and so on (it says when there are no more). **Report to IT** turns

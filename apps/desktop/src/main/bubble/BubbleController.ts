@@ -2,11 +2,13 @@ import {
   DRAG_CHECK,
   FIDGET_MS,
   LANDING,
+  REACTION_MS,
+  REACTIONS,
   SPELL_POSE_MS,
   isFidget,
-  isSpellPose,
   type Fidget,
   type Pose,
+  type Reaction,
   type SpellPose,
 } from '@shared/character'
 import {
@@ -40,7 +42,10 @@ import {
   flightStep,
   impactSpeed,
   isHardLanding,
+  pointerReaction,
+  POINTER,
   releaseVelocity,
+  type PerformanceName,
   type PointerSample,
   nextActivity,
   type Pastimes,
@@ -82,6 +87,30 @@ export interface BubbleAnchor {
   corner: Corner
 }
 
+/**
+ * One of her performances, under way (see Performer): where her box is and what she's doing at
+ * each moment.
+ */
+export interface Performance {
+  /** At `t` ms since it began: where her box is (DIP) and her pose; null once it's over. */
+  at(t: number): { x: number; y: number; pose: Pose } | null
+  /** It's over: finished, or cut short (the user picked her up, say). */
+  end(finished: boolean): void
+}
+
+/**
+ * Her performances (wander.ts PERFORMANCES): what can be done just now, and getting one ready
+ * (looking at the taskbar's icons or the windows on the screen, say), or null if it can't be.
+ */
+export interface Performer {
+  /** The performances that can be done now; `canMove` is false when she's to stand still. */
+  available(canMove: boolean): readonly PerformanceName[]
+  prepare(
+    name: PerformanceName,
+    standing: { workArea: Rect; bounds: Rect; scale: number; box: Point },
+  ): Promise<Performance | null>
+}
+
 export interface BubbleControllerDeps {
   bubble: Surface
   panel: PanelSurface
@@ -102,9 +131,16 @@ export interface BubbleControllerDeps {
   onSizeChange?(size: CharacterSize): void
   now?: () => number
   random?: () => number
+  /** Her performances (the taskbar tricks and the like), if there are any. */
+  performer?: Performer
   /** Things worth a line in the log, such as a click on the bubble that didn't open it. */
   onDiagnostic?: (message: string) => void
 }
+
+/** Poses she's in when not doing anything in particular (anything else stops when she's interrupted). */
+const MOVING: readonly Pose[] = ['idle', 'walk-left', 'walk-right', 'dragged', 'flung']
+
+const isReaction = (pose: Pose): pose is Reaction => (REACTIONS as readonly string[]).includes(pose)
 
 /** What she may do on her own, from the Settings (both, unless they say otherwise). */
 function pastimesOf(habits?: Habits): Pastimes {
@@ -164,8 +200,8 @@ export class BubbleController {
   /** The next thing it does on its own, or the end of a fidget. */
   private idleTimer: ReturnType<typeof setTimeout> | null = null
   private walking = false
-  /** The fidget she did last, so the next one is different. */
-  private lastFidget: Fidget | undefined
+  /** The fidget (or performance) she did last, so the next one is different. */
+  private lastFidget: Fidget | PerformanceName | undefined
   /** When the user last did something with it (a mode change); fidgets wait for a quiet spell. */
   private lastInteraction: number
   private lastBlurCollapse = Number.NEGATIVE_INFINITY
@@ -179,6 +215,16 @@ export class BubbleController {
   private lastHeld = 0
   /** While she's carried: where the pointer has been lately, for how fast she's thrown. */
   private pointerTrail: PointerSample[] = []
+  /** The performance under way, if one is. */
+  private performance: Performance | null = null
+  /** Counts performances asked for, so one that's ready after she's been interrupted is dropped. */
+  private performances = 0
+  /** The end of a reaction played while the panel's open (or of a pet), if one is playing. */
+  private reactionTimer: ReturnType<typeof setTimeout> | null = null
+  /** Watching the pointer for her reactions (see watchPointer), and when she last reacted. */
+  private pointerWatch: ReturnType<typeof setInterval> | null = null
+  private pointerSeen: PointerSample[] = []
+  private lastReaction = Number.NEGATIVE_INFINITY
   /** She's away while the screen saver is on (sleep): hidden, doing nothing, until wake(). */
   private asleep = false
   private sleepTimer: ReturnType<typeof setTimeout> | null = null
@@ -264,6 +310,37 @@ export class BubbleController {
     this.placeWindows()
     this.deps.bubble.show()
     this.scheduleActivity(true)
+    this.pointerWatch = setInterval(() => this.watchPointer(), POINTER.everyMs)
+  }
+
+  /** Where she stands just now, for her performances: as `standing`, and her box's top-left. */
+  get standingBox(): { workArea: Rect; bounds: Rect; scale: number; box: Point } {
+    return { ...this.standing, box: { ...this.position } }
+  }
+
+  /**
+   * Plays one of her reactions (REACTIONS) for its time: double-clicked (`pet`), a notification
+   * (`scroll`), the pointer (`startle`, `pounce-…`). With the panel closed it's like any of her
+   * habits (see act); with it open, she still plays it, and stands idle again after.
+   */
+  react(pose: Reaction): void {
+    if (this.leaving || this.asleep) return
+    if (this.mode === 'collapsed') {
+      this.act(pose)
+      return
+    }
+    if (this.mode !== 'expanded') return
+    if (this.reactionTimer) clearTimeout(this.reactionTimer)
+    this.setPose(pose)
+    this.reactionTimer = setTimeout(() => {
+      this.reactionTimer = null
+      if (this.pose === pose) this.setPose('idle')
+    }, REACTION_MS[pose])
+  }
+
+  /** Double-clicked: hearts and a happy wiggle (the click before it opened or closed the panel). */
+  pet(): void {
+    this.react('pet')
   }
 
   /** A click on the bubble. `pressedAt` is when its mouse button went down (wall-clock ms). */
@@ -406,7 +483,7 @@ export class BubbleController {
    * her day. As with a fidget, anything the user does stops it (and `then` never comes).
    * Collapsed only: casting a spell closes the panel first.
    */
-  act(pose: Fidget | SpellPose | 'splat', then?: () => void): void {
+  act(pose: Fidget | SpellPose | Reaction | 'splat', then?: () => void): void {
     if (this.mode !== 'collapsed') return
     this.stopIdling()
     this.setPose(pose)
@@ -417,7 +494,13 @@ export class BubbleController {
         this.setPose('idle')
         this.scheduleActivity(false)
       },
-      isFidget(pose) ? FIDGET_MS[pose] : pose === 'splat' ? LANDING.splatMs : SPELL_POSE_MS[pose],
+      isFidget(pose)
+        ? FIDGET_MS[pose]
+        : pose === 'splat'
+          ? LANDING.splatMs
+          : isReaction(pose)
+            ? REACTION_MS[pose]
+            : SPELL_POSE_MS[pose],
     )
   }
 
@@ -522,6 +605,10 @@ export class BubbleController {
     this.cancelHide()
     this.cancelActivity()
     if (this.sleepTimer) clearTimeout(this.sleepTimer)
+    if (this.reactionTimer) clearTimeout(this.reactionTimer)
+    if (this.pointerWatch) clearInterval(this.pointerWatch)
+    this.performances++
+    this.endPerformance(false)
   }
 
   /** The anchor's display, or the main display if it's gone. */
@@ -672,9 +759,18 @@ export class BubbleController {
       this.random,
       this.lastFidget,
       this.pastimes,
+      {
+        when: new Date(this.now()),
+        performances: this.deps.performer?.available(this.pastimes.walk) ?? [],
+      },
     )
     if (activity.kind === 'rest') {
       this.scheduleActivity(false)
+      return
+    }
+    if (activity.kind === 'perform') {
+      this.lastFidget = activity.name
+      this.prepare(activity.name)
       return
     }
     if (activity.kind === 'walk') {
@@ -727,9 +823,104 @@ export class BubbleController {
   private stopIdling(): void {
     this.cancelActivity()
     this.stopWalking()
-    if (isFidget(this.pose) || isSpellPose(this.pose) || this.pose === 'splat') {
+    // A performance being got ready is dropped when it's ready; one under way ends here.
+    this.performances++
+    this.endPerformance(false)
+    if (this.reactionTimer) clearTimeout(this.reactionTimer)
+    this.reactionTimer = null
+    if (!MOVING.includes(this.pose)) this.setPose('idle')
+  }
+
+  /** Gets a performance ready (see Performer), then plays it, if nothing's happened meanwhile. */
+  private prepare(name: PerformanceName): void {
+    const performer = this.deps.performer
+    if (!performer) return this.scheduleActivity(false)
+    const asked = ++this.performances
+    performer
+      .prepare(name, this.standingBox)
+      .catch((error: unknown) => {
+        this.deps.onDiagnostic?.(`Getting ${name} ready failed: ${String(error)}`)
+        return null
+      })
+      .then((performance) => {
+        if (
+          asked !== this.performances ||
+          this.mode !== 'collapsed' ||
+          this.leaving ||
+          this.asleep
+        ) {
+          performance?.end(false)
+          return
+        }
+        if (!performance) return this.scheduleActivity(false)
+        this.perform(performance)
+      })
+  }
+
+  /** Plays a performance: each frame, she's where it says, doing what it says, until it's over. */
+  private perform(performance: Performance): void {
+    this.cancelActivity()
+    this.performance = performance
+    const startedAt = this.now()
+    this.runTicker(() => {
+      const step = performance.at(this.now() - startedAt)
+      if (!step) {
+        this.endPerformance(true)
+        return
+      }
+      if (step.pose !== this.pose) this.setPose(step.pose)
+      this.moveBubble({ x: step.x, y: step.y })
+    })
+  }
+
+  /**
+   * The performance is over (`finished`) or cut short: she stands on the taskbar where she's got
+   * to (or straight below it), and, finished, gets on with her day.
+   */
+  private endPerformance(finished: boolean): void {
+    const performance = this.performance
+    if (!performance) return
+    this.performance = null
+    this.stopTicker()
+    performance.end(finished)
+    const area = this.display().workArea
+    this.inset = Math.min(
+      Math.max(0, insetAt(area, this.anchor.corner, this.position.x, this.scale)),
+      maxInset(area, this.scale),
+    )
+    this.position = this.rest()
+    this.placeWindows()
+    if (finished) {
       this.setPose('idle')
+      this.scheduleActivity(false)
     }
+  }
+
+  /**
+   * Every POINTER.everyMs while she's standing about on her own: where the pointer is. Zipping
+   * past close to her, it startles her; wiggled near her, she pounces at it. Now and then, not
+   * every time (POINTER.chance), and not again for a while (POINTER.restMs).
+   */
+  private watchPointer(): void {
+    const free =
+      this.mode === 'collapsed' && this.pose === 'idle' && !this.walking && !this.performance
+    if (!free || this.leaving || this.asleep) {
+      this.pointerSeen = []
+      return
+    }
+    const now = this.now()
+    const cursor = this.deps.displays.cursor()
+    this.pointerSeen.push({ t: now, ...cursor })
+    this.pointerSeen = this.pointerSeen.filter((s) => s.t >= now - POINTER.wiggleMs)
+    if (now - this.lastReaction < POINTER.restMs) return
+    const size = bubbleMetrics(this.scale).size
+    const her = { x: this.position.x + size / 2, y: this.position.y + size / 2 }
+    const reaction = pointerReaction(this.pointerSeen, her, this.scale)
+    if (!reaction) return
+    this.lastReaction = now
+    if (this.random() >= POINTER.chance) return
+    this.pointerSeen = []
+    this.act(reaction)
   }
 
   private cancelActivity(): void {

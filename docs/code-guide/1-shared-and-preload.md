@@ -537,7 +537,7 @@ timetable of one of her habits, and `CLONES` the numbers for her clones, which b
 
 <!-- code: apps/desktop/src/shared/character.ts#FIDGETS,Fidget,Pose,FIDGET_MS,isFidget -->
 
-[`src/shared/character.ts`, lines 6–154](../../apps/desktop/src/shared/character.ts#L6-L154)
+[`src/shared/character.ts`, lines 6–238](../../apps/desktop/src/shared/character.ts#L6-L238)
 
 ```ts
 /**
@@ -580,6 +580,8 @@ timetable of one of her habits, and `CLONES` the numbers for her clones, which b
  * - `tome`: her spellbook floats open in front of her, its pages turning by themselves and glowing
  *   letters rising out of it, then closes and vanishes.
  * - `dance`: a little jig, stepping side to side, an arm up and a hand on her hip, then the other.
+ * - `yawn`: a big yawn behind her hand, then a sleepy sway (late at night only: see TIMED).
+ * - `confetti`: a cheer and a burst of confetti (Friday evenings only, and often then: see TIMED).
  */
 export const FIDGETS = [
   'hop',
@@ -611,6 +613,8 @@ export const FIDGETS = [
   'rain',
   'potion',
   'tome',
+  'yawn',
+  'confetti',
   'dance',
 ] as const
 
@@ -624,10 +628,19 @@ export type Fidget = (typeof FIDGETS)[number]
  * - `splat`: a hard landing: down on her bottom in a puff of dust, her hat knocked down over her
  *   eyes and stars going round her head; she pushes it back up, shakes her head and gets up, with
  *   a sheepish smile (for LANDING.splatMs).
- * - one of the FIDGETS, or one of the SPELL_POSES.
+ * - one of the FIDGETS, the SPELL_POSES, the REACTIONS or the HELD_POSES.
  */
 export type Pose =
-  'idle' | 'walk-left' | 'walk-right' | 'dragged' | 'flung' | 'splat' | Fidget | SpellPose
+  | 'idle'
+  | 'walk-left'
+  | 'walk-right'
+  | 'dragged'
+  | 'flung'
+  | 'splat'
+  | Fidget
+  | SpellPose
+  | Reaction
+  | HeldPose
 
 /** How long each fidget plays (ms): the main process goes back to idle after it. */
 export const FIDGET_MS: Record<Fidget, number> = {
@@ -660,6 +673,8 @@ export const FIDGET_MS: Record<Fidget, number> = {
   rain: 4400,
   potion: 4000,
   tome: 4800,
+  yawn: 3600,
+  confetti: 3200,
   dance: 3200,
 }
 
@@ -713,7 +728,7 @@ export const isFidget = (pose: Pose): pose is Fidget =>
 
 <!-- code: apps/desktop/src/shared/character.ts#SPELL_POSES,SpellPose,SPELL_POSE_MS,isSpellPose -->
 
-[`src/shared/character.ts`, lines 81–101](../../apps/desktop/src/shared/character.ts#L81-L101)
+[`src/shared/character.ts`, lines 85–105](../../apps/desktop/src/shared/character.ts#L85-L105)
 
 ```ts
 /**
@@ -767,7 +782,7 @@ the main process plays them on purpose (`BubbleController.act()` and `teleport()
 
 <!-- code: apps/desktop/src/shared/character.ts#VISION -->
 
-[`src/shared/character.ts`, lines 156–167](../../apps/desktop/src/shared/character.ts#L156-L167)
+[`src/shared/character.ts`, lines 240–251](../../apps/desktop/src/shared/character.ts#L240-L251)
 
 ```ts
 /**
@@ -806,7 +821,7 @@ pages. Each entry is a `[from, to]` pair:
 
 <!-- code: apps/desktop/src/shared/character.ts#CLONES -->
 
-[`src/shared/character.ts`, lines 176–180](../../apps/desktop/src/shared/character.ts#L176-L180)
+[`src/shared/character.ts`, lines 266–270](../../apps/desktop/src/shared/character.ts#L266-L270)
 
 ```ts
 /**
@@ -1165,7 +1180,7 @@ is a `Record<ActionId, ...>` (it must have an icon for every action), and `Actio
 
 <!-- code: apps/desktop/src/shared/actions.ts#ACTION_IDS,ActionId -->
 
-[`src/shared/actions.ts`, lines 1–20](../../apps/desktop/src/shared/actions.ts#L1-L20)
+[`src/shared/actions.ts`, lines 1–21](../../apps/desktop/src/shared/actions.ts#L1-L21)
 
 ```ts
 // The action registry: every icon that can appear in the stack above the bubble. A tenant's
@@ -1184,6 +1199,7 @@ export const ACTION_IDS = [
   'settings',
   'spells',
   'screensaver',
+  'familiar',
   'close',
 ] as const
 
@@ -1209,7 +1225,7 @@ The list of every action that exists, and the type of one of its entries.
 
 <!-- code: apps/desktop/src/shared/actions.ts#ACTIONS -->
 
-[`src/shared/actions.ts`, lines 22–36](../../apps/desktop/src/shared/actions.ts#L22-L36)
+[`src/shared/actions.ts`, lines 23–39](../../apps/desktop/src/shared/actions.ts#L23-L39)
 
 ```ts
 export const ACTIONS = {
@@ -1225,6 +1241,8 @@ export const ACTIONS = {
   spells: { label: 'Spells', kind: 'popover' },
   // Every screen fades to white, then to a sunset she watches (src/shared/screenSaver.ts).
   screensaver: { label: 'Screen saver', kind: 'command' },
+  // Her black cat, for a minute (src/main/familiar.ts).
+  familiar: { label: 'Summon familiar', kind: 'command' },
   close: { label: 'Close Desktop Wizard', kind: 'command' },
 } as const satisfies Record<ActionId, { label: string; kind: 'command' | 'popover' }>
 ```
@@ -1262,7 +1280,7 @@ screen-reader name, and gives `popover` actions (and the service desk, when it o
 
 <!-- code: apps/desktop/src/shared/actions.ts#CommandActionId -->
 
-[`src/shared/actions.ts`, lines 38–40](../../apps/desktop/src/shared/actions.ts#L38-L40)
+[`src/shared/actions.ts`, lines 41–43](../../apps/desktop/src/shared/actions.ts#L41-L43)
 
 ```ts
 export type CommandActionId = {
@@ -1289,7 +1307,7 @@ It's worked out from `ACTIONS`, so it can't drift out of step with it.
 
 <!-- code: apps/desktop/src/shared/actions.ts#COMMAND_ACTION_IDS -->
 
-[`src/shared/actions.ts`, lines 42–44](../../apps/desktop/src/shared/actions.ts#L42-L44)
+[`src/shared/actions.ts`, lines 45–47](../../apps/desktop/src/shared/actions.ts#L45-L47)
 
 ```ts
 export const COMMAND_ACTION_IDS = ACTION_IDS.filter(
@@ -2153,7 +2171,7 @@ Messages come in three styles:
 
 <!-- code: apps/desktop/src/shared/ipc.ts#IPC -->
 
-[`src/shared/ipc.ts`, lines 33–116](../../apps/desktop/src/shared/ipc.ts#L33-L116)
+[`src/shared/ipc.ts`, lines 33–122](../../apps/desktop/src/shared/ipc.ts#L33-L122)
 
 ```ts
 /** IPC channel names. The preload maps them onto `window.assist`; src/main/ipc.ts handles them. */
@@ -2163,6 +2181,8 @@ export const IPC = {
   bubbleDragStart: 'assist:bubble-drag-start',
   bubbleDragEnd: 'assist:bubble-drag-end',
   bubbleDragHold: 'assist:bubble-drag-hold',
+  bubblePet: 'assist:bubble-pet',
+  trickReady: 'assist:trick-ready',
   collapse: 'assist:collapse',
   setInteractive: 'assist:set-interactive',
   invokeAction: 'assist:invoke-action',
@@ -2229,6 +2249,10 @@ export const IPC = {
   bubbleArrive: 'assist:bubble-arrive',
   screensaverEnd: 'assist:screensaver-end',
   robeColorChanged: 'assist:robe-color-changed',
+  gaze: 'assist:gaze',
+  familiarSees: 'assist:familiar-sees',
+  occlude: 'assist:occlude',
+  trickPlan: 'assist:trick-plan',
   cornerChanged: 'assist:corner-changed',
   sizeChanged: 'assist:size-changed',
   clickThroughReset: 'assist:click-through-reset',
@@ -2289,7 +2313,7 @@ name: a typo is a compile error instead of a message nobody hears.
 
 <!-- code: apps/desktop/src/shared/ipc.ts#AssistApi -->
 
-[`src/shared/ipc.ts`, lines 118–290](../../apps/desktop/src/shared/ipc.ts#L118-L290)
+[`src/shared/ipc.ts`, lines 124–316](../../apps/desktop/src/shared/ipc.ts#L124-L316)
 
 ```ts
 /** The API the preload exposes to renderers as `window.assist`. */
@@ -2306,6 +2330,10 @@ export interface AssistApi {
    * for DRAG_CHECK.staleMs, the main process lets her go.
    */
   bubbleDragHold(): void
+  /** Double-clicked: petted (the click before it opened or closed the panel as usual). */
+  bubblePet(): void
+  /** A trick's page is ready for its plan and icons (they come back through onTrickPlan). */
+  trickReady(): void
   collapse(): void
   /** Tell the main process whether the pointer is over real UI (true) or a see-through area. */
   setInteractive(interactive: boolean): void
@@ -2446,6 +2474,22 @@ export interface AssistApi {
   onScreensaverEnd(callback: () => void): () => void
   /** Her robe's colour was changed in Settings (null: the company's again). */
   onRobeColorChanged(callback: (color: string | null) => void): () => void
+  /** Which way she's to look at the pointer while she watches it (null: done watching). */
+  onGaze(callback: (gaze: { x: number; y: number } | null) => void): () => void
+  /**
+   * Where she is (the middle of her, DIPs across the cat's window), what she's doing, and when the
+   * cat goes: her familiar's page.
+   */
+  onFamiliarSees(callback: (seen: { x: number; pose: Pose; ends: number }) => void): () => void
+  /** A trick's plan and its icons (JSON): the trick's page. */
+  onTrickPlan(callback: (trick: string) => void): () => void
+  /**
+   * A window in front of her (its rect on the screen, DIPs) while she's behind it, peeking round
+   * it: the part of her behind it is hidden. Null: nothing in front of her.
+   */
+  onOcclude(
+    callback: (rect: { x: number; y: number; width: number; height: number } | null) => void,
+  ): () => void
   onModeChanged(callback: (mode: Mode) => void): () => void
   /** The character's pose changed (walking, fidgeting, dangling...). */
   onPoseChanged(callback: (pose: Pose) => void): () => void
@@ -2811,7 +2855,7 @@ listening. Every `on...` method in `api` uses it.
 
 <!-- code: apps/desktop/src/preload/index.ts#api -->
 
-[`src/preload/index.ts`, lines 12–119](../../apps/desktop/src/preload/index.ts#L12-L119)
+[`src/preload/index.ts`, lines 12–125](../../apps/desktop/src/preload/index.ts#L12-L125)
 
 ```ts
 const api: AssistApi = {
@@ -2820,6 +2864,8 @@ const api: AssistApi = {
   bubbleDragStart: () => ipcRenderer.send(IPC.bubbleDragStart),
   bubbleDragEnd: () => ipcRenderer.send(IPC.bubbleDragEnd),
   bubbleDragHold: () => ipcRenderer.send(IPC.bubbleDragHold),
+  bubblePet: () => ipcRenderer.send(IPC.bubblePet),
+  trickReady: () => ipcRenderer.send(IPC.trickReady),
   collapse: () => ipcRenderer.send(IPC.collapse),
   setInteractive: (interactive) => ipcRenderer.send(IPC.setInteractive, interactive),
   invokeAction: (id) => ipcRenderer.invoke(IPC.invokeAction, id),
@@ -2908,6 +2954,10 @@ const api: AssistApi = {
   },
   onScreensaverEnd: (callback) => subscribe(IPC.screensaverEnd, () => callback()),
   onRobeColorChanged: (callback) => subscribe(IPC.robeColorChanged, callback),
+  onGaze: (callback) => subscribe(IPC.gaze, callback),
+  onFamiliarSees: (callback) => subscribe(IPC.familiarSees, callback),
+  onOcclude: (callback) => subscribe(IPC.occlude, callback),
+  onTrickPlan: (callback) => subscribe(IPC.trickPlan, callback),
   onModeChanged: (callback) => subscribe(IPC.modeChanged, callback),
   onPoseChanged: (callback) => subscribe(IPC.poseChanged, callback),
   onArrive: (callback) => subscribe(IPC.bubbleArrive, callback),

@@ -4,10 +4,16 @@ import type { Size } from '@shared/geometry'
 import { IPC } from '@shared/ipc'
 import type { PanelSurface, Surface } from './BubbleController'
 
-export type View = 'bubble' | 'panel' | 'clones' | 'vision' | 'spell' | 'screensaver'
+export type View =
+  'bubble' | 'panel' | 'clones' | 'vision' | 'spell' | 'screensaver' | 'familiar' | 'trick'
 
 /** Windows that only show something: they never take the mouse or the focus. */
-const passive = (view: View) => view === 'clones' || view === 'vision' || view === 'spell'
+const passive = (view: View) =>
+  view === 'clones' ||
+  view === 'vision' ||
+  view === 'spell' ||
+  view === 'familiar' ||
+  view === 'trick'
 
 /**
  * How the overlay windows stay on top. Electron's default level for always-on-top, "floating",

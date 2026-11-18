@@ -1,4 +1,4 @@
-import { FIDGETS, type Fidget } from '@shared/character'
+import { FIDGETS, inSeason, TIMED, type Fidget } from '@shared/character'
 import type { Point } from '@shared/geometry'
 
 // What the character does on its own while nobody is using it, and how it falls when dropped.
@@ -25,8 +25,9 @@ export const WANDER = {
 /**
  * Throwing her: let go while the pointer's moving, she flies on with its speed (measured over the
  * last `sampleMs` before letting go; slower than `minSpeed`, DIP per second, she just drops, and
- * never faster than `maxSpeed`), falling under WANDER.gravity, keeping `bounce` of her speed off
- * the sides and top of her screen, until she lands on its taskbar. Landing at `splatSpeed` or
+ * never faster than `maxSpeed`), falling under `gravity` (DIP per second squared: a little more than
+ * a drop's, WANDER.gravity, so a throw doesn't float), keeping `bounce` of her speed off the sides
+ * and top of her screen (a dull thud more than a bounce), until she lands on its taskbar. Landing at `splatSpeed` or
  * faster (as from a fall of a third of a screen or so, or a throw down) is a hard landing: she
  * goes splat.
  */
@@ -34,7 +35,8 @@ export const FLING = {
   sampleMs: 100,
   minSpeed: 350,
   maxSpeed: 4200,
-  bounce: 0.55,
+  gravity: 3000,
+  bounce: 0.35,
   splatSpeed: 1300,
 } as const
 
@@ -75,7 +77,7 @@ export interface Flight {
 }
 
 /**
- * One frame of flying (`dtMs`): gravity pulls her down; the sides of her screen (`minX`, `maxX`)
+ * One frame of flying (`dtMs`): gravity (FLING.gravity) pulls her down; the sides of her screen (`minX`, `maxX`)
  * and its top (`minY`) turn her back, keeping FLING.bounce of her speed; at `floor` (where she
  * stands on the taskbar) she lands, and `impact` is how fast she was falling (DIP per second).
  */
@@ -86,7 +88,7 @@ export function flightStep(
 ): { flight: Flight; landed: boolean; impact: number } {
   const dt = Math.min(Math.max(dtMs, 0), 50) / 1000
   let { x, y, vx, vy } = flight
-  vy += WANDER.gravity * dt
+  vy += FLING.gravity * dt
   x += vx * dt
   y += vy * dt
   if (x < room.minX) {
@@ -106,6 +108,73 @@ export function flightStep(
   return { flight: { x, y, vx, vy }, landed: false, impact: 0 }
 }
 
+/**
+ * Her reactions to the pointer, looked at every `everyMs`: it startles her zipping past within
+ * `zipNear` DIP of her middle (at her usual size) faster than `zipSpeed` DIP a second; and she
+ * pounces at it when it's wiggled (`wiggles` turns back and forth, each at least `wiggleStep`
+ * DIP) within `wiggleNear` of her, in `wiggleMs`. She answers `chance` of the time, and then not
+ * again for `restMs`.
+ */
+export const POINTER = {
+  everyMs: 50,
+  zipNear: 110,
+  zipSpeed: 2000,
+  wiggleNear: 160,
+  wiggles: 4,
+  wiggleStep: 4,
+  wiggleMs: 1200,
+  chance: 0.6,
+  restMs: 45_000,
+} as const
+
+/**
+ * What she does about the pointer, from where it's been lately (`seen`, oldest first, DIP) and
+ * where her middle is: `startle` if it just zipped past close to her, `pounce-left` or
+ * `pounce-right` (toward it) if it's been wiggled near her, or null.
+ */
+export function pointerReaction(
+  seen: readonly PointerSample[],
+  her: Point,
+  scale = 1,
+): 'startle' | 'pounce-left' | 'pounce-right' | null {
+  const last = seen.at(-1)
+  const before = seen.at(-2)
+  if (!last || !before) return null
+  const dt = (last.t - before.t) / 1000
+  if (dt > 0) {
+    const speed = Math.hypot(last.x - before.x, last.y - before.y) / dt
+    if (
+      speed > POINTER.zipSpeed &&
+      distanceToSegment(her, before, last) < POINTER.zipNear * scale
+    ) {
+      return 'startle'
+    }
+  }
+  const near = seen.filter((s) => Math.hypot(s.x - her.x, s.y - her.y) < POINTER.wiggleNear * scale)
+  if (near.length < POINTER.wiggles + 1 || near.length !== seen.length) return null
+  let turns = 0
+  let heading = 0
+  for (let i = 1; i < near.length; i++) {
+    const dx = near[i]!.x - near[i - 1]!.x
+    if (Math.abs(dx) < POINTER.wiggleStep) continue
+    const way = Math.sign(dx)
+    if (heading !== 0 && way !== heading) turns++
+    heading = way
+  }
+  if (turns < POINTER.wiggles) return null
+  return last.x < her.x ? 'pounce-left' : 'pounce-right'
+}
+
+/** How far `p` is from the line from `a` to `b` (the nearest point of it). */
+function distanceToSegment(p: Point, a: Point, b: Point): number {
+  const dx = b.x - a.x
+  const dy = b.y - a.y
+  const length = dx * dx + dy * dy
+  const t =
+    length === 0 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / length))
+  return Math.hypot(p.x - (a.x + dx * t), p.y - (a.y + dy * t))
+}
+
 /** How fast she's falling (DIP per second) when she lands after dropping `height` DIP. */
 export const impactSpeed = (height: number): number =>
   Math.sqrt(2 * WANDER.gravity * Math.max(0, height))
@@ -116,6 +185,7 @@ export const isHardLanding = (speed: number): boolean => speed >= FLING.splatSpe
 export type Activity =
   | { kind: 'walk'; to: number }
   | { kind: 'fidget'; pose: Fidget }
+  | { kind: 'perform'; name: PerformanceName }
   /** Nothing this time (she stands still, as asked in Settings). */
   | { kind: 'rest' }
 
@@ -131,6 +201,55 @@ export interface Pastimes {
  */
 export const FIDGET_WEIGHT: Partial<Record<Fidget, number>> = { vision: 0.2 }
 
+/**
+ * Her performances: longer things she does that move her about and draw outside her own window
+ * (see Performer in BubbleController.ts): watching the pointer; tricks with the taskbar's icons
+ * (carrying one about, juggling three, swapping two as a prank, perching on one, sneezing one
+ * flying, a wand tap); peeking round a window; riding on a window; and a visit from her familiar.
+ */
+export const PERFORMANCES = [
+  'watch',
+  'carry',
+  'juggle-icons',
+  'swap',
+  'perch',
+  'knock',
+  'tap',
+  'peek',
+  'ride',
+  'familiar',
+] as const
+export type PerformanceName = (typeof PERFORMANCES)[number]
+
+/**
+ * How likely each performance is when it can be done, against 1 for a habit: the taskbar tricks
+ * and watching the pointer are rare (a tenth as likely), the rest as likely as a habit.
+ */
+export const PERFORMANCE_WEIGHT: Record<PerformanceName, number> = {
+  watch: 0.1,
+  carry: 0.1,
+  'juggle-icons': 0.1,
+  swap: 0.1,
+  perch: 0.1,
+  knock: 0.1,
+  tap: 0.1,
+  peek: 1,
+  ride: 1,
+  familiar: 1,
+}
+
+/** Performances that don't move her from where she stands (so they're fine when she's to stand still). */
+export const STAYING_PUT: readonly PerformanceName[] = ['watch', 'familiar']
+
+/**
+ * What she might do besides her habits: the time (`when`, local), for the timed habits (TIMED;
+ * without it they never come up), and the performances that can be done just now.
+ */
+export interface Choices {
+  when?: Date
+  performances?: readonly PerformanceName[]
+}
+
 /** How long until the next thing the character does on its own (ms). */
 export function activityDelay(random: () => number, first: boolean): number {
   const [from, to] = first ? WANDER.firstDelay : WANDER.delay
@@ -142,27 +261,50 @@ export function activityDelay(random: () => number, first: boolean): number {
  * room to wander up to `zone` (WANDER.zone, or less on a narrow screen). Until she's been alone a
  * while she only strolls about; after that, more often than not she does one of her fidgets
  * instead, any but the one she did last (`last`), so she doesn't repeat herself, picked at random
- * by FIDGET_WEIGHT (so the vision is rare). Without walking (`allowed`), the walks become rests;
- * without fidgets, she only ever walks.
+ * by FIDGET_WEIGHT (so the vision is rare). The timed habits come up only in their time
+ * (`choices.when`, see TIMED), with their own weights; and the performances that can be done
+ * (`choices.performances`) are in the draw too, by PERFORMANCE_WEIGHT. Without walking
+ * (`allowed`), the walks become rests; without fidgets, she only ever walks.
  */
 export function nextActivity(
   idleMs: number,
   inset: number,
   zone: number,
   random: () => number,
-  last?: Fidget,
+  last?: Fidget | PerformanceName,
   allowed: Pastimes = { walk: true, fidget: true },
+  choices: Choices = {},
 ): Activity {
   if (allowed.fidget && idleMs >= WANDER.fidgetAfter && random() < 0.6) {
-    const choices = FIDGETS.filter((fidget) => fidget !== last)
-    const weights = choices.map((fidget) => FIDGET_WEIGHT[fidget] ?? 1)
-    // A point along all the weights laid end to end; the fidget whose stretch it falls in.
-    let roll = random() * weights.reduce((total, weight) => total + weight, 0)
-    for (const [i, fidget] of choices.entries()) {
-      roll -= weights[i]!
-      if (roll < 0) return { kind: 'fidget', pose: fidget }
+    const { when } = choices
+    const options: { activity: Activity; weight: number }[] = [
+      ...FIDGETS.filter((fidget) => fidget !== last).flatMap((fidget) => {
+        if (!(fidget in TIMED)) {
+          return [
+            {
+              activity: { kind: 'fidget', pose: fidget } as const,
+              weight: FIDGET_WEIGHT[fidget] ?? 1,
+            },
+          ]
+        }
+        if (!when || !inSeason(fidget, when)) return []
+        const weight = TIMED[fidget as keyof typeof TIMED].weight
+        return [{ activity: { kind: 'fidget', pose: fidget } as const, weight }]
+      }),
+      ...(choices.performances ?? [])
+        .filter((name) => name !== last)
+        .map((name) => ({
+          activity: { kind: 'perform', name } as const,
+          weight: PERFORMANCE_WEIGHT[name],
+        })),
+    ]
+    // A point along all the weights laid end to end; the one whose stretch it falls in.
+    let roll = random() * options.reduce((total, option) => total + option.weight, 0)
+    for (const option of options) {
+      roll -= option.weight
+      if (roll < 0) return option.activity
     }
-    return { kind: 'fidget', pose: choices.at(-1)! }
+    return options.at(-1)!.activity
   }
   if (!allowed.walk) return { kind: 'rest' }
   return { kind: 'walk', to: walkTarget(inset, zone, random()) }

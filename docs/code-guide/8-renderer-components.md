@@ -2276,7 +2276,7 @@ lists request types), `dotted` (icons that get a small dot) and `onAction`, whic
 
 <!-- code: apps/desktop/src/renderer/src/components/ActionStack.tsx#ICONS -->
 
-[`src/renderer/src/components/ActionStack.tsx`, lines 18–28](../../apps/desktop/src/renderer/src/components/ActionStack.tsx#L18-L28)
+[`src/renderer/src/components/ActionStack.tsx`, lines 19–30](../../apps/desktop/src/renderer/src/components/ActionStack.tsx#L19-L30)
 
 ```tsx
 const ICONS: Record<ActionId, LucideIcon> = {
@@ -2288,6 +2288,7 @@ const ICONS: Record<ActionId, LucideIcon> = {
   settings: Settings,
   spells: WandSparkles,
   screensaver: Sunset,
+  familiar: Cat,
   close: Power,
 }
 ```
@@ -2308,7 +2309,7 @@ horizon, for the scene it shows, and Close is `Power`, a power button.
 
 <!-- code: apps/desktop/src/renderer/src/components/ActionStack.tsx#ActionStack -->
 
-[`src/renderer/src/components/ActionStack.tsx`, lines 30–105](../../apps/desktop/src/renderer/src/components/ActionStack.tsx#L30-L105)
+[`src/renderer/src/components/ActionStack.tsx`, lines 32–107](../../apps/desktop/src/renderer/src/components/ActionStack.tsx#L32-L107)
 
 ```tsx
 /**
@@ -3202,7 +3203,7 @@ const LIGHT: Point = { x: -1, y: -1 }
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#View,Face,Arm,Leg,Pose,DOWN,STAND,LEG_LENGTH -->
 
-[`src/renderer/src/character/rig.ts`, lines 53–167](../../apps/desktop/src/renderer/src/character/rig.ts#L53-L167)
+[`src/renderer/src/character/rig.ts`, lines 53–175](../../apps/desktop/src/renderer/src/character/rig.ts#L53-L175)
 
 ```ts
 export type View = 'front' | 'diagonal' | 'side'
@@ -3315,6 +3316,14 @@ export interface Pose {
   dizzy?: number
   /** Dust puffing out along the ground either side of her after a hard landing, 0 to 1. */
   dust?: number
+  /** Confetti bursting up from her hands and fluttering down round her, 0 to 1. */
+  confetti?: number
+  /** Hearts floating up from her (petted), 0 to 1. */
+  hearts?: number
+  /** A scroll held open in front of her in both hands (from the front). */
+  scroll?: boolean
+  /** A bead of sweat by her forehead (nervous). */
+  sweat?: boolean
 }
 
 const DOWN: Arm = { shoulder: 0.08, elbow: 0 }
@@ -3405,7 +3414,7 @@ What a pose is made of.
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#EYES,MOUTHS,SPARKLE,TWINKLE,BUTTERFLY_OPEN,BUTTERFLY_SHUT,Z_BIG,Z_SMALL,ORBS,BUBBLE_SMALL,BUBBLE_BIG,WAND_RING,WISP -->
 
-[`src/renderer/src/character/rig.ts`, lines 169–264](../../apps/desktop/src/renderer/src/character/rig.ts#L169-L264)
+[`src/renderer/src/character/rig.ts`, lines 177–272](../../apps/desktop/src/renderer/src/character/rig.ts#L177-L272)
 
 ```ts
 // Face pictures, facing right; `.` is see-through. Eyes have a thick upper lid, a dark-to-light
@@ -3578,7 +3587,7 @@ As the comment says, they face right; frames facing left are mirrored with every
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#TRAIL,JUGGLE,BUBBLES,wispAt -->
 
-[`src/renderer/src/character/rig.ts`, lines 370–428](../../apps/desktop/src/renderer/src/character/rig.ts#L370-L428)
+[`src/renderer/src/character/rig.ts`, lines 395–453](../../apps/desktop/src/renderer/src/character/rig.ts#L395-L453)
 
 ```ts
 /**
@@ -3669,7 +3678,7 @@ puff before each bubble, her eyes following the wisp).
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#FADE,hash,dissolveAt -->
 
-[`src/renderer/src/character/rig.ts`, lines 377–393](../../apps/desktop/src/renderer/src/character/rig.ts#L377-L393)
+[`src/renderer/src/character/rig.ts`, lines 402–418](../../apps/desktop/src/renderer/src/character/rig.ts#L402-L418)
 
 ```ts
 /**
@@ -3719,7 +3728,7 @@ vanishes or appears. `draw()` uses them at its very end (below).
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#eyesFor -->
 
-[`src/renderer/src/character/rig.ts`, lines 430–437](../../apps/desktop/src/renderer/src/character/rig.ts#L430-L437)
+[`src/renderer/src/character/rig.ts`, lines 455–462](../../apps/desktop/src/renderer/src/character/rig.ts#L455-L462)
 
 ```ts
 /** Which eyes a face uses. */
@@ -3741,7 +3750,7 @@ and `awe` and `up` both look up (their mouths are what differ).
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#draw -->
 
-[`src/renderer/src/character/rig.ts`, lines 439–1972](../../apps/desktop/src/renderer/src/character/rig.ts#L439-L1972)
+[`src/renderer/src/character/rig.ts`, lines 464–2056](../../apps/desktop/src/renderer/src/character/rig.ts#L464-L2056)
 
 ```ts
 /** Draws one pose as rows of palette letters. */
@@ -5247,6 +5256,65 @@ export function draw(pose: Pose): string[] {
     }
   }
 
+  // A scroll held open in front of her, its rolled ends in her hands.
+  if (pose.scroll && farHand) {
+    const middle = { x: (hand.x + farHand.x) / 2, y: (hand.y + farHand.y) / 2 }
+    canvas.stamp(SCROLL, middle.x - (SCROLL[0]!.length - 1) / 2, middle.y - SCROLL.length + 2)
+  }
+
+  // A bead of sweat beside her forehead, on the side away from her hat's tip.
+  if (pose.sweat) {
+    const at = onHead({ x: -10, y: -4 })
+    canvas.stamp(SWEAT, at.x - 1, at.y - 1)
+  }
+
+  // Hearts floating up from her, swaying, one after another, big then small, and gone.
+  const hearts = pose.hearts ?? 0
+  if (hearts > 0 && hearts < 1) {
+    for (let k = 0; k < 4; k++) {
+      const life = hearts * 1.6 - k * 0.2
+      if (life <= 0 || life >= 1) continue
+      const side = k % 2 === 0 ? 1 : -1
+      const at = onHead({
+        x: side * (6 + life * 6) + Math.sin(life * 9 + k) * 1.5,
+        y: -8 - life * 24,
+      })
+      const heart = life < 0.55 ? HEART : HEART_SMALL
+      canvas.stamp(heart, at.x - (heart[0]!.length - 1) / 2, at.y - (heart.length - 1) / 2)
+    }
+  }
+
+  // Confetti: a burst from her raised hands, the pieces flying up and out, then fluttering down
+  // round her, side to side, each its own colour, until they're gone.
+  const confetti = pose.confetti ?? 0
+  if (confetti > 0.08 && confetti < 1) {
+    const from = farHand
+      ? { x: (hand.x + farHand.x) / 2, y: Math.min(hand.y, farHand.y) - 2 }
+      : hand
+    const t = (confetti - 0.08) / 0.92
+    for (let k = 0; k < 34; k++) {
+      const spread = (hash(k, 1, 13) - 0.5) * 2
+      const rise = 18 + hash(k, 2, 13) * 22
+      const up = Math.min(1, t / 0.25)
+      const down = Math.max(0, t - 0.25)
+      const at = {
+        x:
+          from.x +
+          spread * 30 * Math.min(1, t / 0.3) +
+          Math.sin(t * 14 + k) * 2 * Math.min(1, down * 4),
+        y: from.y - rise * (1 - (1 - up) ** 2) + down * down * 140 + down * 20,
+      }
+      if (at.y > 94 || t > 0.97) continue
+      const colour = CONFETTI[k % CONFETTI.length]!
+      set(at, colour)
+      // Every other piece a little strip, turning as it falls.
+      if (k % 2 === 0) {
+        const flat = Math.floor(t * 20 + k) % 2 === 0
+        set({ x: at.x + (flat ? 1 : 0), y: at.y + (flat ? 0 : 1) }, colour)
+      }
+    }
+  }
+
   castShadows(canvas)
 
   // Dissolving: her pixels go one by one (dissolveAt), each turning white just before (so a white
@@ -5735,7 +5803,7 @@ Math.PI) % 2`), which turn with `spin`. Six white runes (`w`) go round the outer
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#HAT,HAIR,ROBE,castShadows -->
 
-[`src/renderer/src/character/rig.ts`, lines 1974–2006](../../apps/desktop/src/renderer/src/character/rig.ts#L1974-L2006)
+[`src/renderer/src/character/rig.ts`, lines 2058–2090](../../apps/desktop/src/renderer/src/character/rig.ts#L2058-L2090)
 
 ```ts
 /** Letters by part, for castShadows. */
@@ -5911,7 +5979,7 @@ kept, and `Character` (below) plays them.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#SPRITE_SIZE,SPRITE_HEADROOM,PALETTE -->
 
-[`src/renderer/src/character/sprite.ts`, lines 26–88](../../apps/desktop/src/renderer/src/character/sprite.ts#L26-L88)
+[`src/renderer/src/character/sprite.ts`, lines 32–94](../../apps/desktop/src/renderer/src/character/sprite.ts#L32-L94)
 
 ```ts
 // The character's animations: for each pose, a list of frames drawn by the rig (rig.ts) from key
@@ -6007,7 +6075,7 @@ export const PALETTE: Record<string, string> = {
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#Frame,Key -->
 
-[`src/renderer/src/character/sprite.ts`, lines 90–103](../../apps/desktop/src/renderer/src/character/sprite.ts#L90-L103)
+[`src/renderer/src/character/sprite.ts`, lines 96–109](../../apps/desktop/src/renderer/src/character/sprite.ts#L96-L109)
 
 ```ts
 /**
@@ -6038,7 +6106,7 @@ interface Key {
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#smooth,lerp,mixArm,mixLeg,ARM_DOWN,LEG_STAND,mix -->
 
-[`src/renderer/src/character/sprite.ts`, lines 105–146](../../apps/desktop/src/renderer/src/character/sprite.ts#L105-L146)
+[`src/renderer/src/character/sprite.ts`, lines 111–152](../../apps/desktop/src/renderer/src/character/sprite.ts#L111-L152)
 
 ```ts
 // ------------------------------------------------------------------------------------- tweening
@@ -6118,7 +6186,7 @@ _Tweening_: working out the poses between two key poses.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#FRAME_MS,tween,hold,crouch -->
 
-[`src/renderer/src/character/sprite.ts`, lines 148–174](../../apps/desktop/src/renderer/src/character/sprite.ts#L148-L174)
+[`src/renderer/src/character/sprite.ts`, lines 154–180](../../apps/desktop/src/renderer/src/character/sprite.ts#L154-L180)
 
 ```ts
 /** In-betweens come about this often (ms): 25 frames a second. */
@@ -6180,7 +6248,7 @@ function crouch(depth: number): [Leg, Leg] {
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#FRONT,DIAGONAL,idle -->
 
-[`src/renderer/src/character/sprite.ts`, lines 176–198](../../apps/desktop/src/renderer/src/character/sprite.ts#L176-L198)
+[`src/renderer/src/character/sprite.ts`, lines 182–204](../../apps/desktop/src/renderer/src/character/sprite.ts#L182-L204)
 
 ```ts
 // ----------------------------------------------------------------------------------- the poses
@@ -6227,7 +6295,7 @@ function idle(): Key[] {
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#walk -->
 
-[`src/renderer/src/character/sprite.ts`, lines 200–231](../../apps/desktop/src/renderer/src/character/sprite.ts#L200-L231)
+[`src/renderer/src/character/sprite.ts`, lines 206–237](../../apps/desktop/src/renderer/src/character/sprite.ts#L206-L237)
 
 ```ts
 /**
@@ -6298,7 +6366,7 @@ a cycle ahead: positive while that leg swings forward, negative while it pushes 
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#hop -->
 
-[`src/renderer/src/character/sprite.ts`, lines 233–291](../../apps/desktop/src/renderer/src/character/sprite.ts#L233-L291)
+[`src/renderer/src/character/sprite.ts`, lines 239–297](../../apps/desktop/src/renderer/src/character/sprite.ts#L239-L297)
 
 ```ts
 /** A hop: crouch, spring up with her arms flung up, float, fall, land with a bounce. */
@@ -6387,7 +6455,7 @@ named, and `tween()` eases from each to the next, about 30 frames altogether.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#wave -->
 
-[`src/renderer/src/character/sprite.ts`, lines 293–313](../../apps/desktop/src/renderer/src/character/sprite.ts#L293-L313)
+[`src/renderer/src/character/sprite.ts`, lines 299–319](../../apps/desktop/src/renderer/src/character/sprite.ts#L299-L319)
 
 ```ts
 /** A wave, seen diagonally: her hand up, waving to and fro, head tilted, smiling. */
@@ -6430,7 +6498,7 @@ As the comment says, a wave, seen diagonally, smiling, with her head tilted.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#stretch -->
 
-[`src/renderer/src/character/sprite.ts`, lines 315–338](../../apps/desktop/src/renderer/src/character/sprite.ts#L315-L338)
+[`src/renderer/src/character/sprite.ts`, lines 321–344](../../apps/desktop/src/renderer/src/character/sprite.ts#L321-L344)
 
 ```ts
 /** A stretch: arms up, a yawn, a lean one way and the other, arms down. */
@@ -6472,7 +6540,7 @@ As the comment says, a stretch, from the front.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#sip -->
 
-[`src/renderer/src/character/sprite.ts`, lines 340–372](../../apps/desktop/src/renderer/src/character/sprite.ts#L340-L372)
+[`src/renderer/src/character/sprite.ts`, lines 346–378](../../apps/desktop/src/renderer/src/character/sprite.ts#L346-L378)
 
 ```ts
 /** A sip of tea, seen diagonally: the cup up to her mouth, a sip, down, a contented smile. */
@@ -6527,7 +6595,7 @@ As the comment says, a sip of tea, seen diagonally.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#read -->
 
-[`src/renderer/src/character/sprite.ts`, lines 374–404](../../apps/desktop/src/renderer/src/character/sprite.ts#L374-L404)
+[`src/renderer/src/character/sprite.ts`, lines 380–410](../../apps/desktop/src/renderer/src/character/sprite.ts#L380-L410)
 
 ```ts
 /** Reading her spellbook, seen diagonally: head down, turning a page, a smile at something. */
@@ -6580,7 +6648,7 @@ As the comment says, reading her spellbook, seen diagonally.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#spell -->
 
-[`src/renderer/src/character/sprite.ts`, lines 406–429](../../apps/desktop/src/renderer/src/character/sprite.ts#L406-L429)
+[`src/renderer/src/character/sprite.ts`, lines 412–435](../../apps/desktop/src/renderer/src/character/sprite.ts#L412-L435)
 
 ```ts
 /** A little spell: her hand up, sparkles circling it, then gone with a smile. */
@@ -6625,7 +6693,7 @@ As the comment says, a little spell, seen diagonally.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#vision -->
 
-[`src/renderer/src/character/sprite.ts`, lines 431–465](../../apps/desktop/src/renderer/src/character/sprite.ts#L431-L465)
+[`src/renderer/src/character/sprite.ts`, lines 437–471](../../apps/desktop/src/renderer/src/character/sprite.ts#L437-L471)
 
 ```ts
 /**
@@ -6694,7 +6762,7 @@ blinking once; she watches it rise away, then settles and blinks.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#levitate -->
 
-[`src/renderer/src/character/sprite.ts`, lines 467–517](../../apps/desktop/src/renderer/src/character/sprite.ts#L467-L517)
+[`src/renderer/src/character/sprite.ts`, lines 473–523](../../apps/desktop/src/renderer/src/character/sprite.ts#L473-L523)
 
 ```ts
 /**
@@ -6771,7 +6839,7 @@ As the comment says, she levitates, from the front.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#sit -->
 
-[`src/renderer/src/character/sprite.ts`, lines 519–559](../../apps/desktop/src/renderer/src/character/sprite.ts#L519-L559)
+[`src/renderer/src/character/sprite.ts`, lines 525–565](../../apps/desktop/src/renderer/src/character/sprite.ts#L525-L565)
 
 ```ts
 /** Sitting on the taskbar, her robe spread round her, swaying gently, looking about, then up again. */
@@ -6835,7 +6903,7 @@ As the comment says, sitting on the taskbar with her robe spread round her, the 
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#curtsy -->
 
-[`src/renderer/src/character/sprite.ts`, lines 561–586](../../apps/desktop/src/renderer/src/character/sprite.ts#L561-L586)
+[`src/renderer/src/character/sprite.ts`, lines 567–592](../../apps/desktop/src/renderer/src/character/sprite.ts#L567-L592)
 
 ```ts
 /** A curtsy, from the front: her robe held out at the sides, a dip with her head tilted, smiling. */
@@ -6886,7 +6954,7 @@ tilted, smiling.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#orb -->
 
-[`src/renderer/src/character/sprite.ts`, lines 588–621](../../apps/desktop/src/renderer/src/character/sprite.ts#L588-L621)
+[`src/renderer/src/character/sprite.ts`, lines 594–627](../../apps/desktop/src/renderer/src/character/sprite.ts#L594-L627)
 
 ```ts
 /**
@@ -6946,7 +7014,7 @@ sees and puts it away.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#twirl -->
 
-[`src/renderer/src/character/sprite.ts`, lines 623–659](../../apps/desktop/src/renderer/src/character/sprite.ts#L623-L659)
+[`src/renderer/src/character/sprite.ts`, lines 629–665](../../apps/desktop/src/renderer/src/character/sprite.ts#L629-L665)
 
 ```ts
 /**
@@ -7014,7 +7082,7 @@ frame, and it reuses a few drawings.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#butterfly -->
 
-[`src/renderer/src/character/sprite.ts`, lines 661–685](../../apps/desktop/src/renderer/src/character/sprite.ts#L661-L685)
+[`src/renderer/src/character/sprite.ts`, lines 667–691](../../apps/desktop/src/renderer/src/character/sprite.ts#L667-L691)
 
 ```ts
 /**
@@ -7067,7 +7135,7 @@ every frame is its own pose, rather than key poses with in-betweens.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#doze -->
 
-[`src/renderer/src/character/sprite.ts`, lines 687–738](../../apps/desktop/src/renderer/src/character/sprite.ts#L687-L738)
+[`src/renderer/src/character/sprite.ts`, lines 693–744](../../apps/desktop/src/renderer/src/character/sprite.ts#L693-L744)
 
 ```ts
 /**
@@ -7152,7 +7220,7 @@ one way and the other, and blinks. Like `butterfly()`, every frame is its own po
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#look -->
 
-[`src/renderer/src/character/sprite.ts`, lines 740–762](../../apps/desktop/src/renderer/src/character/sprite.ts#L740-L762)
+[`src/renderer/src/character/sprite.ts`, lines 746–768](../../apps/desktop/src/renderer/src/character/sprite.ts#L746-L768)
 
 ```ts
 /**
@@ -7197,7 +7265,7 @@ used again.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#between,juggle -->
 
-[`src/renderer/src/character/sprite.ts`, lines 764–798](../../apps/desktop/src/renderer/src/character/sprite.ts#L764-L798)
+[`src/renderer/src/character/sprite.ts`, lines 770–804](../../apps/desktop/src/renderer/src/character/sprite.ts#L770-L804)
 
 ```ts
 /** Between 0 and 1: how far `t` is from `from` to `to`, eased in and out. */
@@ -7276,7 +7344,7 @@ Like `butterfly()`, every frame is its own pose, worked out from how far through
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#bubbles -->
 
-[`src/renderer/src/character/sprite.ts`, lines 800–829](../../apps/desktop/src/renderer/src/character/sprite.ts#L800-L829)
+[`src/renderer/src/character/sprite.ts`, lines 806–835](../../apps/desktop/src/renderer/src/character/sprite.ts#L806-L835)
 
 ```ts
 /**
@@ -7335,7 +7403,7 @@ rig's `bubbles`, and the rig places the bubbles and the wand from that.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#wisp -->
 
-[`src/renderer/src/character/sprite.ts`, lines 831–858](../../apps/desktop/src/renderer/src/character/sprite.ts#L831-L858)
+[`src/renderer/src/character/sprite.ts`, lines 837–864](../../apps/desktop/src/renderer/src/character/sprite.ts#L837-L864)
 
 ```ts
 /**
@@ -7392,7 +7460,7 @@ pose: 120 frames of 40 ms, `FIDGET_MS.wisp` (4800 ms). The rig draws the wisp fr
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#sneeze -->
 
-[`src/renderer/src/character/sprite.ts`, lines 860–888](../../apps/desktop/src/renderer/src/character/sprite.ts#L860-L888)
+[`src/renderer/src/character/sprite.ts`, lines 866–894](../../apps/desktop/src/renderer/src/character/sprite.ts#L866-L894)
 
 ```ts
 /**
@@ -7453,7 +7521,7 @@ to 1, and the rig draws them big, then as twinkles, then as glints.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#dance -->
 
-[`src/renderer/src/character/sprite.ts`, lines 890–920](../../apps/desktop/src/renderer/src/character/sprite.ts#L890-L920)
+[`src/renderer/src/character/sprite.ts`, lines 896–926](../../apps/desktop/src/renderer/src/character/sprite.ts#L896-L926)
 
 ```ts
 /**
@@ -7516,7 +7584,7 @@ in-betweens again.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#chant -->
 
-[`src/renderer/src/character/sprite.ts`, lines 922–949](../../apps/desktop/src/renderer/src/character/sprite.ts#L922-L949)
+[`src/renderer/src/character/sprite.ts`, lines 928–955](../../apps/desktop/src/renderer/src/character/sprite.ts#L928-L955)
 
 ```ts
 /**
@@ -7576,7 +7644,7 @@ hair and robe lifting in the updraft. Unlike the fidgets, it isn't key poses wit
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#over,vanish,appear -->
 
-[`src/renderer/src/character/sprite.ts`, lines 951–985](../../apps/desktop/src/renderer/src/character/sprite.ts#L951-L985)
+[`src/renderer/src/character/sprite.ts`, lines 957–991](../../apps/desktop/src/renderer/src/character/sprite.ts#L957-L991)
 
 ```ts
 /**
@@ -7648,7 +7716,7 @@ the rig turns into her dissolving (see `FADE` in `rig.ts`).
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#dragged -->
 
-[`src/renderer/src/character/sprite.ts`, lines 987–1017](../../apps/desktop/src/renderer/src/character/sprite.ts#L987-L1017)
+[`src/renderer/src/character/sprite.ts`, lines 993–1023](../../apps/desktop/src/renderer/src/character/sprite.ts#L993-L1023)
 
 ```ts
 /**
@@ -7701,7 +7769,7 @@ Twelve frames of 55 ms, round and round.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#gaze -->
 
-[`src/renderer/src/character/sprite.ts`, lines 1019–1042](../../apps/desktop/src/renderer/src/character/sprite.ts#L1019-L1042)
+[`src/renderer/src/character/sprite.ts`, lines 1025–1048](../../apps/desktop/src/renderer/src/character/sprite.ts#L1025-L1048)
 
 ```ts
 /**
@@ -7754,7 +7822,7 @@ the screen saver is on), so it has no entry in `MAKERS`; `gazeFrames()`, below, 
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#drawn,MAKERS,LEFT_MAKERS,LOOPS -->
 
-[`src/renderer/src/character/sprite.ts`, lines 1427–1533](../../apps/desktop/src/renderer/src/character/sprite.ts#L1427-L1533)
+[`src/renderer/src/character/sprite.ts`, lines 1711–1848](../../apps/desktop/src/renderer/src/character/sprite.ts#L1711-L1848)
 
 ```ts
 // ------------------------------------------------------------------------------------- frames
@@ -7802,6 +7870,21 @@ const MAKERS: Record<Name, () => Frame[]> = {
   dragged: () => drawn(dragged()),
   flung,
   splat: () => drawn(splat()),
+  yawn: () => drawn(yawn()),
+  confetti: () => drawn(confetti()),
+  pet: () => drawn(pet()),
+  scroll: () => drawn(scroll()),
+  startle: () => drawn(startle()),
+  'pounce-left': () => drawn(pounce()),
+  'pounce-right': () => drawn(pounce()),
+  lift: () => drawn(lift()),
+  lower: () => drawn(lower()),
+  guilty: () => drawn(guilty()),
+  toss: () => drawn(toss()),
+  watch: () => drawn(watch()),
+  'peek-left': () => drawn(peek()),
+  'peek-right': () => drawn(peek()),
+  ride: () => drawn(ride()),
 }
 
 /**
@@ -7821,6 +7904,20 @@ export const LOOPS: Record<Name, boolean> = {
   // Tumbling through the air goes round until she lands; her hard landing plays once.
   flung: true,
   splat: false,
+  // Answers play once; her performances' poses go round until they're done with.
+  pet: false,
+  scroll: false,
+  startle: false,
+  'pounce-left': false,
+  'pounce-right': false,
+  lift: false,
+  lower: false,
+  guilty: false,
+  toss: false,
+  watch: true,
+  'peek-left': true,
+  'peek-right': true,
+  ride: true,
   hop: false,
   wave: false,
   stretch: false,
@@ -7841,6 +7938,8 @@ export const LOOPS: Record<Name, boolean> = {
   wisp: false,
   sneeze: false,
   dance: false,
+  yawn: false,
+  confetti: false,
   flame: false,
   frost: false,
   bloom: false,
@@ -7887,7 +7986,7 @@ export const LOOPS: Record<Name, boolean> = {
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#gazing,gazeFrames -->
 
-[`src/renderer/src/character/sprite.ts`, lines 1482–1488](../../apps/desktop/src/renderer/src/character/sprite.ts#L1482-L1488)
+[`src/renderer/src/character/sprite.ts`, lines 1781–1787](../../apps/desktop/src/renderer/src/character/sprite.ts#L1781-L1787)
 
 ```ts
 let gazing: Frame[] | null = null
@@ -7914,7 +8013,7 @@ In the source these sit between `LEFT_MAKERS` and `LOOPS`, above.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#Facing,made,framesOf -->
 
-[`src/renderer/src/character/sprite.ts`, lines 1535–1557](../../apps/desktop/src/renderer/src/character/sprite.ts#L1535-L1557)
+[`src/renderer/src/character/sprite.ts`, lines 1850–1874](../../apps/desktop/src/renderer/src/character/sprite.ts#L1850-L1874)
 
 ```ts
 export type Facing = 'left' | 'right'
@@ -7926,7 +8025,9 @@ const made = new Map<string, Frame[]>()
  * Drawn the first time they're asked for, then kept.
  */
 export function framesOf(pose: Name, facing: Facing): Frame[] {
-  const way = pose === 'walk-left' ? 'left' : pose === 'walk-right' ? 'right' : facing
+  // Poses with a way in their name (walking, pouncing, peeking) face that way, whatever `facing`
+  // says.
+  const way = pose.endsWith('-left') ? 'left' : pose.endsWith('-right') ? 'right' : facing
   const key = `${pose}:${way}`
   let frames = made.get(key)
   if (!frames) {
@@ -7958,7 +8059,7 @@ export function framesOf(pose: Name, facing: Facing): Frame[] {
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#animationLength,mirror -->
 
-[`src/renderer/src/character/sprite.ts`, lines 1559–1566](../../apps/desktop/src/renderer/src/character/sprite.ts#L1559-L1566)
+[`src/renderer/src/character/sprite.ts`, lines 1876–1883](../../apps/desktop/src/renderer/src/character/sprite.ts#L1876-L1883)
 
 ```ts
 /** How long a pose's frames last altogether (a fidget's must match FIDGET_MS). */
@@ -7984,7 +8085,7 @@ export function mirror(rows: string[]): string[] {
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#framePaths -->
 
-[`src/renderer/src/character/sprite.ts`, lines 1568–1592](../../apps/desktop/src/renderer/src/character/sprite.ts#L1568-L1592)
+[`src/renderer/src/character/sprite.ts`, lines 1885–1909](../../apps/desktop/src/renderer/src/character/sprite.ts#L1885-L1909)
 
 ```ts
 /**
@@ -8042,7 +8143,7 @@ the pose and way of facing from `lib/clones.ts`.
 
 <!-- code: apps/desktop/src/renderer/src/components/Character.tsx#paths,pathsOf,ALL_POSES,Character -->
 
-[`src/renderer/src/components/Character.tsx`, lines 14–76](../../apps/desktop/src/renderer/src/components/Character.tsx#L14-L76)
+[`src/renderer/src/components/Character.tsx`, lines 15–93](../../apps/desktop/src/renderer/src/components/Character.tsx#L15-L93)
 
 ```tsx
 /** Each frame's SVG paths, worked out the first time it shows. */
@@ -8067,6 +8168,8 @@ const ALL_POSES: Pose[] = [
   'splat',
   ...FIDGETS,
   ...SPELL_POSES,
+  ...REACTIONS,
+  ...HELD_POSES,
 ]
 
 /**
@@ -8077,7 +8180,14 @@ const ALL_POSES: Pose[] = [
  * `facing` (walking, she faces the way she walks). `expanded` tints her shadow while the panel is
  * open.
  */
-export function Character(props: { pose: Pose; facing: Facing; box: number; expanded?: boolean }) {
+export function Character(props: {
+  pose: Pose
+  facing: Facing
+  box: number
+  expanded?: boolean
+  /** Watching the pointer (the `watch` pose): which way her eyes are on it. */
+  gaze?: { x: number; y: number } | null
+}) {
   const { facing } = props
 
   // Draws every pose's frames in the background, one pose at a time, so starting one never
@@ -8105,7 +8215,14 @@ export function Character(props: { pose: Pose; facing: Facing; box: number; expa
       aria-hidden
     >
       {/* A new pose (or way of facing) starts from its first frame. */}
-      <Frames key={`${props.pose}:${facing}`} pose={props.pose} facing={facing} />
+      {props.pose === 'watch' && props.gaze ? (
+        // Watching the pointer: a frame for where it is (not mirrored: it's which way on the screen).
+        pathsOf(gazeFrame(props.gaze)).map(({ className, d }) => (
+          <path key={className} className={className} d={d} />
+        ))
+      ) : (
+        <Frames key={`${props.pose}:${facing}`} pose={props.pose} facing={facing} />
+      )}
     </svg>
   )
 }
@@ -8167,7 +8284,7 @@ export function Character(props: { pose: Pose; facing: Facing; box: number; expa
 
 <!-- code: apps/desktop/src/renderer/src/components/Character.tsx#Frames -->
 
-[`src/renderer/src/components/Character.tsx`, lines 78–97](../../apps/desktop/src/renderer/src/components/Character.tsx#L78-L97)
+[`src/renderer/src/components/Character.tsx`, lines 95–114](../../apps/desktop/src/renderer/src/components/Character.tsx#L95-L114)
 
 ```tsx
 /**

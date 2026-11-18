@@ -2,7 +2,9 @@ import {
   app,
   clipboard,
   ClipboardItem,
+  desktopCapturer,
   dialog,
+  ipcMain,
   Menu,
   net,
   Notification,
@@ -19,8 +21,9 @@ import { hostname, release, version as osVersion } from 'node:os'
 import { join } from 'node:path'
 import { bubbleMetrics, panelWindowSize, type Rect } from '@shared/geometry'
 import { IPC } from '@shared/ipc'
+import { FAMILIAR } from '@shared/character'
 import { CAST_POSE, type Spell } from '@shared/spells'
-import type { AppsState, AtlassianState, AuthStatus } from '@shared/types'
+import type { AppsState, AtlassianState, AuthStatus, JiraFeed } from '@shared/types'
 import tenantConfig from '@tenant/tenant.json'
 import { createActionHandlers } from './actions'
 import { fetchLogo } from './apps/logos'
@@ -58,6 +61,14 @@ import { NotesStore } from './notes/NotesStore'
 import { ScreenshotService } from './screenshots/ScreenshotService'
 import { myRequestsUrl, ServiceDesk, windowsVersion } from './serviceDesk'
 import { adoptFormerData, FORMER_NAME, PRODUCT_NAME } from './formerName'
+import { hasNews } from './atlassian/news'
+import { Performances, type Standing } from './performances/performances'
+import { TRICKS, type TrickName } from '@shared/tricks'
+import { Familiar } from './familiar'
+import { TaskbarTricks } from './performances/taskbarTricks'
+import { WindowTricks } from './performances/windowTricks'
+import { ShellProbe, type PhysicalRect } from './shell/probe'
+import { familiarVisit } from './performances/familiarVisit'
 import { ScreenSaver } from './screenSaver'
 import { SettingsService } from './settings'
 import { readJsonFile, writeJsonFile } from './storage/jsonFile'
@@ -149,23 +160,152 @@ async function start(): Promise<void> {
    * or a spell's effects): it shows once its page is drawn, behind her own window, which is put
    * back in front.
    */
+  // `above`: over her too (her taskbar tricks' icons pass in front of her); otherwise she's put
+  // back in front of it.
   const openOverlay =
-    (view: 'clones' | 'vision' | 'spell') => (bounds: Rect, query: Record<string, string>) => {
+    (view: 'clones' | 'vision' | 'spell' | 'familiar' | 'trick', above = false) =>
+    (bounds: Rect, query: Record<string, string>) => {
       const win = createOverlayWindow(view, { width: bounds.width, height: bounds.height }, query)
       win.setBounds(bounds)
       win.once('ready-to-show', () => {
         win.showInactive()
-        bringToFront(bubbleWindow, false)
+        if (!above) bringToFront(bubbleWindow, false)
       })
-      return { close: () => !win.isDestroyed() && win.destroy() }
+      return {
+        id: win.webContents.id,
+        close: () => !win.isDestroyed() && win.destroy(),
+        send: (channel: string, payload: unknown) => {
+          if (!win.isDestroyed()) win.webContents.send(channel, payload)
+        },
+      }
     }
+  // Her familiar, the black cat: summoned, or visiting; it's told where she is as she moves.
+  const familiar = new Familiar({ open: openOverlay('familiar') })
   // Her vision's light and logo, over her for as long as she's having it.
   const vision = new Vision({ open: openOverlay('vision') })
   // Her spells' effects, drawn over the screen (all but her clones and her teleport).
   const effects = new SpellEffects({ accentColor: tenant.accentColor, open: openOverlay('spell') })
 
+  // Her performances: watching the pointer (its gaze goes to her page), and more (see below).
+  const herWindow = bubbleSurface(bubbleWindow)
+  // Windows' own shell, looked at (never touched) through UI Automation: the taskbar's buttons and
+  // the windows on the screen, for her tricks. Windows only.
+  const shellProbe =
+    process.platform === 'win32'
+      ? new ShellProbe({
+          spawn: (encoded) =>
+            spawn(
+              'powershell.exe',
+              [
+                '-NoLogo',
+                '-NoProfile',
+                '-NonInteractive',
+                '-ExecutionPolicy',
+                'Bypass',
+                '-EncodedCommand',
+                encoded,
+              ],
+              { windowsHide: true },
+            ),
+        })
+      : null
+  const toDip = (r: PhysicalRect): Rect => {
+    const d = screen.screenToDipRect(null, r)
+    return { x: d.x, y: d.y, width: d.width, height: d.height }
+  }
+  const displayAt = (p: { x: number; y: number }) => {
+    const d = screen.getDisplayNearestPoint({ x: Math.round(p.x), y: Math.round(p.y) })
+    return { id: d.id, bounds: d.bounds, workArea: d.workArea, scaleFactor: d.scaleFactor }
+  }
+  // A trick's plan and icons, for its page when it asks (only its own page gets them).
+  const tricksWaiting = new Map<number, string>()
+  ipcMain.on(IPC.trickReady, (event) => {
+    const trick = tricksWaiting.get(event.sender.id)
+    if (trick) event.sender.send(IPC.trickPlan, trick)
+  })
+  // Her tricks with the taskbar's icons: copies cut out of a screenshot (it never leaves the PC).
+  const taskbarTricks = shellProbe
+    ? new TaskbarTricks({
+        taskbar: () => shellProbe.taskbar(),
+        toDip,
+        displayAt,
+        capture: async (display) => {
+          const sources = await desktopCapturer.getSources({
+            types: ['screen'],
+            thumbnailSize: {
+              width: Math.round(display.bounds.width * display.scaleFactor),
+              height: Math.round(display.bounds.height * display.scaleFactor),
+            },
+          })
+          const source =
+            sources.find((s) => s.display_id === String(display.id)) ??
+            (sources.length === 1 ? sources[0] : undefined)
+          if (!source || source.thumbnail.isEmpty()) return null
+          const image = source.thumbnail
+          return { crop: (r) => image.crop(r).toDataURL() }
+        },
+        open: (bounds, query, trick) => {
+          const window = openOverlay('trick', true)(bounds, query)
+          tricksWaiting.set(window.id, trick)
+          return {
+            close: () => {
+              tricksWaiting.delete(window.id)
+              window.close()
+            },
+          }
+        },
+        random: Math.random,
+      })
+    : null
+  // Her tricks with the windows on the screen: peeking round one, and riding on one.
+  const windowTricks = shellProbe
+    ? new WindowTricks({
+        windows: () => shellProbe.windows(),
+        window: (handle) => shellProbe.window(handle),
+        toDip,
+        displayAt,
+        occlude: (rect) => bubbleWindow.webContents.send(IPC.occlude, rect),
+        ownPid: process.pid,
+      })
+    : null
+  const trick = (name: TrickName) =>
+    taskbarTricks
+      ? { moves: true, prepare: (standing: Standing) => taskbarTricks.prepare(name, standing) }
+      : undefined
+  const performances = new Performances({
+    displays: electronDisplays,
+    onGaze: (gaze) => bubbleWindow.webContents.send(IPC.gaze, gaze),
+    more: {
+      // Peeking round a window, and riding on one (Windows only).
+      ...(windowTricks
+        ? {
+            peek: { moves: true, prepare: (standing: Standing) => windowTricks.peek(standing) },
+            ride: { moves: true, prepare: (standing: Standing) => windowTricks.ride(standing) },
+          }
+        : {}),
+      // Her tricks with the taskbar's icons (Windows only).
+      ...Object.fromEntries(TRICKS.flatMap((name) => (trick(name) ? [[name, trick(name)!]] : []))),
+      // A visit from her familiar: it appears beside her, and she sits down with it a while.
+      familiar: {
+        moves: false,
+        prepare: async (standing) => {
+          familiar.start(standing, FAMILIAR.visitMs)
+          return familiarVisit(standing)
+        },
+      },
+    },
+  })
+
   const bubble = new BubbleController({
-    bubble: bubbleSurface(bubbleWindow),
+    performer: performances,
+    bubble: {
+      ...herWindow,
+      // Her familiar watches where she goes.
+      setBounds: (bounds) => {
+        herWindow.setBounds(bounds)
+        familiar.see(bounds, null)
+      },
+    },
     panel: panelSurface(panelWindow),
     displays: electronDisplays,
     actionCount,
@@ -176,6 +316,7 @@ async function start(): Promise<void> {
     onModeChange: (mode) => broadcast(IPC.modeChanged, mode),
     onPoseChange: (pose) => {
       broadcast(IPC.poseChanged, pose)
+      familiar.see(bubbleWindow.getBounds(), pose)
       if (pose === 'vision') vision.start(bubble.standing)
       else vision.stop()
       // The explosion is called off if she stops chanting before it's done (someone clicked her,
@@ -359,6 +500,8 @@ async function start(): Promise<void> {
   const requests = serviceDesk?.requests
   const memoryPath = join(userData, 'atlassian.json')
   let atlassianStatus: AtlassianState['status'] = 'loading'
+  /** The feed last time, to tell what's new (see hasNews). */
+  let lastFeed: JiraFeed | null = null
   const atlassian = tenant.atlassian
     ? new Atlassian({
         appName: tenant.appName,
@@ -394,7 +537,12 @@ async function start(): Promise<void> {
           if (atlassianStatus === 'signing-in' && state.status !== 'signing-in') bubble.expand()
           atlassianStatus = state.status
         },
-        onFeed: (feed) => broadcast(IPC.jiraFeed, feed),
+        onFeed: (feed) => {
+          broadcast(IPC.jiraFeed, feed)
+          // Something new: she hops up holding a scroll.
+          if (hasNews(lastFeed, feed)) bubble.react('scroll')
+          lastFeed = feed
+        },
         notify,
         onError: (message, error) => log(message, error),
       })
@@ -444,6 +592,7 @@ async function start(): Promise<void> {
       screenshots,
       openServiceDesk: serviceDesk ? () => shell.openExternal(serviceDesk.url) : null,
       startScreenSaver: () => screenSaver.start(),
+      summonFamiliar: () => familiar.start(bubble.standing, FAMILIAR.summonMs),
       quit: () => app.quit(),
     }),
     castSpell,
@@ -503,6 +652,8 @@ async function start(): Promise<void> {
     clones.stop()
     vision.stop()
     effects.stop()
+    familiar.stop()
+    shellProbe?.dispose()
     screenSaver.dispose()
     for (const stop of stopKeepingOnTop) stop()
     builtIn?.chat.stop()
