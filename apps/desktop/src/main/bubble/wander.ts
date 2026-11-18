@@ -205,7 +205,8 @@ export const FIDGET_WEIGHT: Partial<Record<Fidget, number>> = { vision: 0.2 }
  * Her performances: longer things she does that move her about and draw outside her own window
  * (see Performer in BubbleController.ts): watching the pointer; tricks with the taskbar's icons
  * (carrying one about, juggling three, swapping two as a prank, perching on one, sneezing one
- * flying, a wand tap); peeking round a window; riding on a window; and a visit from her familiar.
+ * flying, a wand tap); peeking round a window; waving through a portal on top of a window; and a visit from her
+ * familiar.
  */
 export const PERFORMANCES = [
   'watch',
@@ -216,7 +217,7 @@ export const PERFORMANCES = [
   'knock',
   'tap',
   'peek',
-  'ride',
+  'portal',
   'familiar',
 ] as const
 export type PerformanceName = (typeof PERFORMANCES)[number]
@@ -234,7 +235,7 @@ export const PERFORMANCE_WEIGHT: Record<PerformanceName, number> = {
   knock: 0.1,
   tap: 0.1,
   peek: 1,
-  ride: 1,
+  portal: 1,
   familiar: 1,
 }
 

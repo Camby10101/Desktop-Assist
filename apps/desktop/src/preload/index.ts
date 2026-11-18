@@ -16,6 +16,7 @@ const api: AssistApi = {
   bubbleDragEnd: () => ipcRenderer.send(IPC.bubbleDragEnd),
   bubbleDragHold: () => ipcRenderer.send(IPC.bubbleDragHold),
   bubblePet: () => ipcRenderer.send(IPC.bubblePet),
+  bubblePointerInside: () => ipcRenderer.invoke(IPC.bubblePointerInside),
   trickReady: () => ipcRenderer.send(IPC.trickReady),
   collapse: () => ipcRenderer.send(IPC.collapse),
   setInteractive: (interactive) => ipcRenderer.send(IPC.setInteractive, interactive),

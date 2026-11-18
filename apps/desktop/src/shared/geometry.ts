@@ -13,6 +13,13 @@ export interface Size {
 
 export interface Rect extends Point, Size {}
 
+/** Whether `point` is inside `rect` (its left and top edges in, its right and bottom out). */
+export const isInside = (point: Point, rect: Rect): boolean =>
+  point.x >= rect.x &&
+  point.x < rect.x + rect.width &&
+  point.y >= rect.y &&
+  point.y < rect.y + rect.height
+
 /**
  * A screen corner. The character lives near a bottom one; the panel lays itself out from the
  * bubble's corner (any of the four) to open toward the screen's middle.

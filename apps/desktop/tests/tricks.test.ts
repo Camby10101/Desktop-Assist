@@ -1,5 +1,6 @@
 import { PassThrough } from 'node:stream'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { PORTAL_BACK_MS, PORTAL_MS, SPELL_POSE_MS } from '@shared/character'
 import { UI, type Rect } from '@shared/geometry'
 import {
   iconOf,
@@ -18,7 +19,7 @@ import {
 import {
   peekEdge,
   peekSteps,
-  rideSpot,
+  portalSpot,
   stepAt,
   usableWindows,
   WindowTricks,
@@ -336,11 +337,14 @@ describe('the window tricks', () => {
     expect(peeking.x + SIZE).toBeGreaterThan(1600) // ...with a little of her out past its edge
   })
 
-  it('rides on a window high enough above the taskbar, sitting along it near her', () => {
+  it('opens a portal on a window high enough above the taskbar, along it near her', () => {
     const high: UsableWindow = { handle: 2, rect: { x: 1000, y: 300, width: 600, height: 400 } }
     const low: UsableWindow = { handle: 3, rect: { x: 1000, y: 900, width: 600, height: 100 } }
-    expect(rideSpot([low], standing())).toBeNull()
-    expect(rideSpot([high, low], standing(1808))).toEqual({ window: high, along: 600 - SIZE - 10 })
+    expect(portalSpot([low], standing())).toBeNull()
+    expect(portalSpot([high, low], standing(1808))).toEqual({
+      window: high,
+      along: 600 - SIZE - 10,
+    })
   })
 
   describe('under way', () => {
@@ -377,28 +381,63 @@ describe('the window tricks', () => {
       expect(occluded.at(-1)).toBeNull()
     })
 
-    it('rides along on the window as it moves, and falls off (hard, from up there) when it goes', async () => {
+    it('opens a portal on top of the window, which goes along with it, then she’s back home', async () => {
       const rect = { x: 1000, y: 300, width: 600, height: 400 }
       let current: { state: string; rect: Rect | null } = { state: 'normal', rect }
       const { performer } = tricks([win(2, rect)], () => current)
-      const ride = (await performer.ride(standing(1808)))!
-      expect(ride.at(0)!.pose).toBe('vanish')
+      const portal = (await performer.portal(standing(1808)))!
+      const home = standing(1808).box
+      expect(portal.at(0)).toEqual({ ...home, pose: 'vanish' })
       await vi.advanceTimersByTimeAsync(200)
-      const seat = ride.at(2000)!
-      expect(seat.pose).toBe('ride')
-      expect(seat.y + SIZE + PAD).toBeCloseTo(300 + 2, 0)
+      const spot = portal.at(2000)!
+      expect(spot.pose).toBe('portal')
+      expect(spot.y + SIZE + PAD).toBeCloseTo(300 + 2, 0) // standing on the window's top edge
       current = { state: 'normal', rect: { ...rect, x: 1200, y: 250 } }
       await vi.advanceTimersByTimeAsync(200)
-      const moved = ride.at(2500)!
-      expect(moved.x - seat.x).toBeCloseTo(200)
-      expect(moved.y - seat.y).toBeCloseTo(-50)
+      const moved = portal.at(2500)!
+      expect(moved.x - spot.x).toBeCloseTo(200)
+      expect(moved.y - spot.y).toBeCloseTo(-50)
+      // Once her portal pose is over, she appears back home, and that's it.
+      const after = SPELL_POSE_MS.vanish + PORTAL_MS
+      expect(portal.at(after - 10)!.pose).toBe('portal')
+      expect(portal.at(after + 10)).toEqual({ ...home, pose: 'appear' })
+      expect(portal.at(after + SPELL_POSE_MS.appear + 10)).toBeNull()
+      portal.end(true)
+    })
+
+    it('sends her back home when she’s clicked in the portal, and only then', async () => {
+      const rect = { x: 1000, y: 300, width: 600, height: 400 }
+      const { performer } = tricks([win(2, rect)], () => ({ state: 'normal', rect }))
+      const portal = (await performer.portal(standing(1808)))!
+      const home = standing(1808).box
+      expect(portal.clicked!(100)).toBe(false) // still vanishing from the taskbar: just a click
+      await vi.advanceTimersByTimeAsync(200)
+      const clickedAt = SPELL_POSE_MS.vanish + 2500 // waving
+      expect(portal.at(clickedAt)!.pose).toBe('portal')
+      expect(portal.clicked!(clickedAt)).toBe(true)
+      const spot = portal.at(clickedAt + 10)!
+      expect(spot.pose).toBe('portal-back') // she sinks away and the portal closes, where it is
+      expect(portal.at(clickedAt + PORTAL_BACK_MS - 10)!.pose).toBe('portal-back')
+      expect(portal.clicked!(clickedAt + 300)).toBe(true) // more clicks on the way: nothing more
+      expect(portal.at(clickedAt + PORTAL_BACK_MS + 10)).toEqual({ ...home, pose: 'appear' })
+      expect(portal.at(clickedAt + PORTAL_BACK_MS + SPELL_POSE_MS.appear + 10)).toBeNull()
+      portal.end(true)
+    })
+
+    it('drops her (hard, from up there) when the window goes from under the portal', async () => {
+      const rect = { x: 1000, y: 300, width: 600, height: 400 }
+      let current: { state: string; rect: Rect | null } = { state: 'normal', rect }
+      const { performer } = tricks([win(2, rect)], () => current)
+      const portal = (await performer.portal(standing(1808)))!
+      await vi.advanceTimersByTimeAsync(200)
+      expect(portal.at(2000)!.pose).toBe('portal')
       current = { state: 'minimized', rect: null }
       await vi.advanceTimersByTimeAsync(200)
-      expect(ride.at(3000)!.pose).toBe('flung')
-      const poses = Array.from({ length: 200 }, (_, i) => ride.at(3000 + i * 40)?.pose)
+      expect(portal.at(3000)!.pose).toBe('flung')
+      const poses = Array.from({ length: 200 }, (_, i) => portal.at(3000 + i * 40)?.pose)
       expect(poses).toContain('splat')
       expect(poses.at(-1)).toBeUndefined() // over
-      ride.end(true)
+      portal.end(true)
     })
   })
 })

@@ -241,11 +241,31 @@ export const SNOOZE = { afterMs: 5 * 60_000, wakeMs: 1500 } as const
  * Poses that go round and round for as long as something else says (her performances):
  * - `watch`: her eyes on the pointer, wherever it is (the gaze comes from the main process).
  * - `peek-left`, `peek-right`: leaning out round the edge of a window she's behind, that way.
- * - `ride`: sitting on top of a window, arms up, the wind in her hair.
+ * - `portal`: waving through a portal open on top of a window (it opens, she rises into it, waves,
+ *   sinks away and it closes: played once, for PORTAL_MS).
+ * - `portal-back`: clicked in her portal: she sinks away at once and it closes (PORTAL_BACK_MS).
  * - `snooze`: sitting asleep, head nodding, z's floating up (nobody's been at the PC a while).
  */
-export const HELD_POSES = ['watch', 'peek-left', 'peek-right', 'ride', 'snooze'] as const
+export const HELD_POSES = [
+  'watch',
+  'peek-left',
+  'peek-right',
+  'portal',
+  'portal-back',
+  'snooze',
+] as const
 export type HeldPose = (typeof HELD_POSES)[number]
+
+/**
+ * Her portal (the `portal` performance, on top of a window: see windowTricks.ts), in order (ms): it
+ * opens, she rises into it (as if on its far side), waves a while, sinks away, and it closes. Her
+ * `portal` pose plays the lot once (sprite.ts), and the performance waits for it.
+ */
+export const PORTAL = { openMs: 600, riseMs: 320, waveMs: 5440, sinkMs: 320, closeMs: 520 } as const
+export const PORTAL_MS =
+  PORTAL.openMs + PORTAL.riseMs + PORTAL.waveMs + PORTAL.sinkMs + PORTAL.closeMs
+/** Clicked in her portal, she goes back at once: she sinks away, and it closes (her `portal-back` pose). */
+export const PORTAL_BACK_MS = PORTAL.sinkMs + PORTAL.closeMs
 
 export const isFidget = (pose: Pose): pose is Fidget =>
   (FIDGETS as readonly string[]).includes(pose)

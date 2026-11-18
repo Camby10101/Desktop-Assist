@@ -3,6 +3,9 @@ import {
   FIDGET_MS,
   FIDGETS,
   LANDING,
+  PORTAL,
+  PORTAL_BACK_MS,
+  PORTAL_MS,
   SPELL_POSE_MS,
   SPELL_POSES,
   type Pose as PoseName,
@@ -75,6 +78,31 @@ describe('the animations', { timeout: 30_000 }, () => {
       expect(lowRows(rows)).not.toMatch(FEET)
       expect(rows.join('')).not.toContain('x') // no shadow while she's carried
     }
+  })
+
+  it('open a portal, show her waving through it from the knees up, then close it, leaving nothing', () => {
+    const frames = framesOf('portal', 'right')
+    expect(LOOPS.portal).toBe(false)
+    expect(animationLength('portal')).toBe(PORTAL_MS)
+    const portalPixels = (rows: string[]) => rows.join('').replace(/[^dprR]/g, '').length
+    const opened = frames.findIndex((f) => portalPixels(f.rows) > 2000)
+    expect(opened).toBeGreaterThan(0) // it grows open
+    expect(portalPixels(frames[0]!.rows)).toBeLessThan(portalPixels(frames[opened]!.rows))
+    // Waving, half way through: her face (skin) and hair inside it, and none of her below it.
+    const waving = frames[Math.floor(frames.length / 2)]!.rows
+    expect(waving.join('')).toMatch(/s/)
+    expect(waving.join('')).toMatch(/h/)
+    expect(waving.join('')).not.toContain('x') // no shadow: she's on its far side
+    expect(lowRows(waving)).not.toMatch(/[^.dprRw]/) // her feet are cut away
+    // Closed at the end: nothing at all.
+    expect(frames.at(-1)!.rows.join('')).toMatch(/^\.+$/)
+    expect(PORTAL.waveMs).toBeGreaterThan(PORTAL_MS / 2) // mostly waving
+    // Sent back: she sinks away from the start, and it closes.
+    const back = framesOf('portal-back', 'right')
+    expect(LOOPS['portal-back']).toBe(false)
+    expect(animationLength('portal-back')).toBe(PORTAL_BACK_MS)
+    expect(back[0]!.rows.join('')).toMatch(/s/) // she's there to start with
+    expect(back.at(-1)!.rows.join('')).toMatch(/^\.+$/)
   })
 
   it('tumble her round and round when she’s thrown, front, side and back, with no shadow', () => {

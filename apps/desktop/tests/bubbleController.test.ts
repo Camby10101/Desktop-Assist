@@ -822,6 +822,31 @@ describe('her performances', () => {
     expect(bubble.bounds!.y).toBe(home().y)
   })
 
+  it('leaves a click to a performance that answers clicks itself (her portal), panel shut', async () => {
+    const { performance, ended } = walkLeft()
+    const clicks: number[] = []
+    performance.clicked = (t) => {
+      clicks.push(t)
+      return true
+    }
+    const { queue } = withPerformer(performance)
+    await untilPerformance(queue)
+    vi.advanceTimersByTime(200)
+    controller.clickBubble()
+    controller.pet() // the second click of a double-click: the performance has it too
+    expect(controller.currentMode).toBe('collapsed')
+    expect(controller.currentPose).toBe('peek-left') // still under way
+    expect(ended).toEqual([])
+    expect(clicks).toHaveLength(2)
+    expect(clicks[0]).toBeGreaterThan(0) // told how far in it is
+    expect(clicks[0]).toBeLessThan(1000)
+    // One that doesn't take it: the click opens the panel, ending it as usual.
+    performance.clicked = () => false
+    controller.clickBubble()
+    expect(controller.currentMode).toBe('expanded')
+    expect(ended).toEqual([false])
+  })
+
   it('carries on as usual when one can’t be done just now', async () => {
     const { queue, asked } = withPerformer(null)
     await untilPerformance(queue)

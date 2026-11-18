@@ -71,7 +71,7 @@ Plain shapes for positions and sizes, used all over the main process and the ren
 
 <!-- code: apps/desktop/src/shared/geometry.ts#Corner,isLeftCorner,isTopCorner -->
 
-[`src/shared/geometry.ts`, lines 16–23](../../apps/desktop/src/shared/geometry.ts#L16-L23)
+[`src/shared/geometry.ts`, lines 23–30](../../apps/desktop/src/shared/geometry.ts#L23-L30)
 
 ```ts
 /**
@@ -109,7 +109,7 @@ itself.
 
 <!-- code: apps/desktop/src/shared/geometry.ts#UI -->
 
-[`src/shared/geometry.ts`, lines 25–52](../../apps/desktop/src/shared/geometry.ts#L25-L52)
+[`src/shared/geometry.ts`, lines 32–59](../../apps/desktop/src/shared/geometry.ts#L32-L59)
 
 ```ts
 export const UI = {
@@ -178,7 +178,7 @@ scales them.
 
 <!-- code: apps/desktop/src/shared/geometry.ts#BUBBLE_BOX -->
 
-[`src/shared/geometry.ts`, lines 54–58](../../apps/desktop/src/shared/geometry.ts#L54-L58)
+[`src/shared/geometry.ts`, lines 61–65](../../apps/desktop/src/shared/geometry.ts#L61-L65)
 
 ```ts
 /**
@@ -204,7 +204,7 @@ above it (`SPRITE_HEADROOM`), one pixel a DIP.
 
 <!-- code: apps/desktop/src/shared/geometry.ts#CHARACTER_SIZES,DEFAULT_SIZE -->
 
-[`src/shared/geometry.ts`, lines 60–65](../../apps/desktop/src/shared/geometry.ts#L60-L65)
+[`src/shared/geometry.ts`, lines 67–72](../../apps/desktop/src/shared/geometry.ts#L67-L72)
 
 ```ts
 /**
@@ -234,7 +234,7 @@ The sizes she comes in, and the one she starts at.
 
 <!-- code: apps/desktop/src/shared/geometry.ts#CharacterSize -->
 
-[`src/shared/geometry.ts`, lines 67–71](../../apps/desktop/src/shared/geometry.ts#L67-L71)
+[`src/shared/geometry.ts`, lines 74–78](../../apps/desktop/src/shared/geometry.ts#L74-L78)
 
 ```ts
 /** How big she is, and the biggest she can be on her screen (see largestSize). */
@@ -256,7 +256,7 @@ menu needs both numbers: `scale` to show, and `max` to know when to grey out Big
 
 <!-- code: apps/desktop/src/shared/geometry.ts#snapSize -->
 
-[`src/shared/geometry.ts`, lines 73–79](../../apps/desktop/src/shared/geometry.ts#L73-L79)
+[`src/shared/geometry.ts`, lines 80–86](../../apps/desktop/src/shared/geometry.ts#L80-L86)
 
 ```ts
 /** The nearest of CHARACTER_SIZES to `scale` (a saved size from an older version, say). */
@@ -285,7 +285,7 @@ an older version with a different list.
 
 <!-- code: apps/desktop/src/shared/geometry.ts#bubbleMetrics -->
 
-[`src/shared/geometry.ts`, lines 81–98](../../apps/desktop/src/shared/geometry.ts#L81-L98)
+[`src/shared/geometry.ts`, lines 88–105](../../apps/desktop/src/shared/geometry.ts#L88-L105)
 
 ```ts
 /**
@@ -327,7 +327,7 @@ of each clone). Note the names: `box` here is the window's width, while elsewher
 
 <!-- code: apps/desktop/src/shared/geometry.ts#PanelLayout,panelLayout -->
 
-[`src/shared/geometry.ts`, lines 100–123](../../apps/desktop/src/shared/geometry.ts#L100-L123)
+[`src/shared/geometry.ts`, lines 107–130](../../apps/desktop/src/shared/geometry.ts#L107-L130)
 
 ```ts
 /**
@@ -411,7 +411,7 @@ her box) and 16 + 160 + 12 = 188 up, and the chat card starts 188 across.
 
 <!-- code: apps/desktop/src/shared/geometry.ts#actionStackHeight,actionOffset -->
 
-[`src/shared/geometry.ts`, lines 125–132](../../apps/desktop/src/shared/geometry.ts#L125-L132)
+[`src/shared/geometry.ts`, lines 132–139](../../apps/desktop/src/shared/geometry.ts#L132-L139)
 
 ```ts
 export function actionStackHeight(actionCount: number): number {
@@ -440,7 +440,7 @@ Two small sums over the icon stack.
 
 <!-- code: apps/desktop/src/shared/geometry.ts#panelWindowSize -->
 
-[`src/shared/geometry.ts`, lines 134–142](../../apps/desktop/src/shared/geometry.ts#L134-L142)
+[`src/shared/geometry.ts`, lines 141–149](../../apps/desktop/src/shared/geometry.ts#L141-L149)
 
 ```ts
 export function panelWindowSize(actionCount: number, scale: number = DEFAULT_SIZE): Size {
@@ -480,7 +480,7 @@ The numbers below are at her usual size:
 
 <!-- code: apps/desktop/src/shared/geometry.ts#largestSize -->
 
-[`src/shared/geometry.ts`, lines 144–159](../../apps/desktop/src/shared/geometry.ts#L144-L159)
+[`src/shared/geometry.ts`, lines 151–166](../../apps/desktop/src/shared/geometry.ts#L151-L166)
 
 ```ts
 /**
@@ -537,7 +537,7 @@ timetable of one of her habits, and `CLONES` the numbers for her clones, which b
 
 <!-- code: apps/desktop/src/shared/character.ts#FIDGETS,Fidget,Pose,FIDGET_MS,isFidget -->
 
-[`src/shared/character.ts`, lines 6–251](../../apps/desktop/src/shared/character.ts#L6-L251)
+[`src/shared/character.ts`, lines 6–271](../../apps/desktop/src/shared/character.ts#L6-L271)
 
 ```ts
 /**
@@ -782,7 +782,7 @@ the main process plays them on purpose (`BubbleController.act()` and `teleport()
 
 <!-- code: apps/desktop/src/shared/character.ts#VISION -->
 
-[`src/shared/character.ts`, lines 253–264](../../apps/desktop/src/shared/character.ts#L253-L264)
+[`src/shared/character.ts`, lines 273–284](../../apps/desktop/src/shared/character.ts#L273-L284)
 
 ```ts
 /**
@@ -821,7 +821,7 @@ pages. Each entry is a `[from, to]` pair:
 
 <!-- code: apps/desktop/src/shared/character.ts#CLONES -->
 
-[`src/shared/character.ts`, lines 279–283](../../apps/desktop/src/shared/character.ts#L279-L283)
+[`src/shared/character.ts`, lines 299–303](../../apps/desktop/src/shared/character.ts#L299-L303)
 
 ```ts
 /**
@@ -2051,14 +2051,17 @@ export type AskAboutIssueResult = { ok: true; inChat: boolean } | { ok: false; m
 
 <!-- code: apps/desktop/src/shared/types.ts#NewRequest,RaiseResult -->
 
-[`src/shared/types.ts`, lines 307–318](../../apps/desktop/src/shared/types.ts#L307-L318)
+[`src/shared/types.ts`, lines 307–321](../../apps/desktop/src/shared/types.ts#L307-L321)
 
 ```ts
-/** A request filled in on the panel, to finish on the help centre portal. */
+/**
+ * A request filled in on the panel, to finish on the help centre portal: its type and summary, and
+ * whether the PC's details go in its description. (There's no box for more: some request types
+ * have no description, and what was typed there was lost. The rest is written on the portal.)
+ */
 export interface NewRequest {
   requestTypeId: string
   summary: string
-  details: string
   includePcDetails: boolean
 }
 
@@ -2084,7 +2087,7 @@ The service desk page's form, and the answer to sending it (see `ServiceDesk.rai
 
 <!-- code: apps/desktop/src/shared/types.ts#UpdateState -->
 
-[`src/shared/types.ts`, lines 320–332](../../apps/desktop/src/shared/types.ts#L320-L332)
+[`src/shared/types.ts`, lines 323–335](../../apps/desktop/src/shared/types.ts#L323-L335)
 
 ```ts
 /**
@@ -2122,7 +2125,7 @@ it.
 
 <!-- code: apps/desktop/src/shared/types.ts#ActionResult,AttachResult -->
 
-[`src/shared/types.ts`, lines 334–341](../../apps/desktop/src/shared/types.ts#L334-L341)
+[`src/shared/types.ts`, lines 337–344](../../apps/desktop/src/shared/types.ts#L337-L344)
 
 ```ts
 export type ActionResult = { ok: true; message?: string } | { ok: false; message: string }
@@ -2170,7 +2173,7 @@ Messages come in three styles:
 
 <!-- code: apps/desktop/src/shared/ipc.ts#IPC -->
 
-[`src/shared/ipc.ts`, lines 33–122](../../apps/desktop/src/shared/ipc.ts#L33-L122)
+[`src/shared/ipc.ts`, lines 33–123](../../apps/desktop/src/shared/ipc.ts#L33-L123)
 
 ```ts
 /** IPC channel names. The preload maps them onto `window.assist`; src/main/ipc.ts handles them. */
@@ -2181,6 +2184,7 @@ export const IPC = {
   bubbleDragEnd: 'assist:bubble-drag-end',
   bubbleDragHold: 'assist:bubble-drag-hold',
   bubblePet: 'assist:bubble-pet',
+  bubblePointerInside: 'assist:bubble-pointer-inside',
   trickReady: 'assist:trick-ready',
   collapse: 'assist:collapse',
   setInteractive: 'assist:set-interactive',
@@ -2312,7 +2316,7 @@ name: a typo is a compile error instead of a message nobody hears.
 
 <!-- code: apps/desktop/src/shared/ipc.ts#AssistApi -->
 
-[`src/shared/ipc.ts`, lines 124–316](../../apps/desktop/src/shared/ipc.ts#L124-L316)
+[`src/shared/ipc.ts`, lines 125–322](../../apps/desktop/src/shared/ipc.ts#L125-L322)
 
 ```ts
 /** The API the preload exposes to renderers as `window.assist`. */
@@ -2465,6 +2469,11 @@ export interface AssistApi {
   }
   /** Starts Desktop Wizard's uninstaller and quits (installed copies only). */
   uninstall(): Promise<UninstallResult>
+  /**
+   * Whether the mouse pointer is over her window now (it's showing, and the pointer's inside it):
+   * her page checks its glow with it, as the page isn't always told when the pointer leaves.
+   */
+  bubblePointerInside(): Promise<boolean>
   screensaver: {
     /** The user's back (the mouse moved, a click, a key): the screen saver's pages. */
     wake(): void
@@ -2854,7 +2863,7 @@ listening. Every `on...` method in `api` uses it.
 
 <!-- code: apps/desktop/src/preload/index.ts#api -->
 
-[`src/preload/index.ts`, lines 12–125](../../apps/desktop/src/preload/index.ts#L12-L125)
+[`src/preload/index.ts`, lines 12–126](../../apps/desktop/src/preload/index.ts#L12-L126)
 
 ```ts
 const api: AssistApi = {
@@ -2864,6 +2873,7 @@ const api: AssistApi = {
   bubbleDragEnd: () => ipcRenderer.send(IPC.bubbleDragEnd),
   bubbleDragHold: () => ipcRenderer.send(IPC.bubbleDragHold),
   bubblePet: () => ipcRenderer.send(IPC.bubblePet),
+  bubblePointerInside: () => ipcRenderer.invoke(IPC.bubblePointerInside),
   trickReady: () => ipcRenderer.send(IPC.trickReady),
   collapse: () => ipcRenderer.send(IPC.collapse),
   setInteractive: (interactive) => ipcRenderer.send(IPC.setInteractive, interactive),

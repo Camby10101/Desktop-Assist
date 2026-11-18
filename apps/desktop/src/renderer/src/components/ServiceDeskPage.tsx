@@ -106,9 +106,9 @@ export function ServiceDeskPage(props: {
 function NewRequestForm(props: Parameters<typeof ServiceDeskPage>[0] & { connected: boolean }) {
   const { requestTypes, showToast } = props
   const [requestTypeId, setRequestTypeId] = useState(requestTypes[0]?.id ?? '')
-  // Starts from the text box: its first line as the summary, all of it as the details.
+  // Starts from the text box: its first line as the summary. (No box for details: some request
+  // types have no description, and what was typed there was lost. The rest goes on the portal.)
   const [summary, setSummary] = useState(() => firstLine(props.draft))
-  const [details, setDetails] = useState(props.draft.trim())
   const [includePc, setIncludePc] = useState(true)
   const [pcDetails, setPcDetails] = useState('')
   const [articles, setArticles] = useState<ConfluencePage[]>([])
@@ -123,7 +123,7 @@ function NewRequestForm(props: Parameters<typeof ServiceDeskPage>[0] & { connect
   }, [])
 
   // How-to articles about what they're typing, from the company's knowledge spaces.
-  const lookFor = `${summary} ${details}`.trim().slice(0, 300)
+  const lookFor = summary.trim().slice(0, 300)
   const lookingFor = props.connected && lookFor.length >= 4
   const shownArticles = lookingFor ? articles : []
   useEffect(() => {
@@ -141,13 +141,13 @@ function NewRequestForm(props: Parameters<typeof ServiceDeskPage>[0] & { connect
   async function raise() {
     setSending(true)
     const result = await window.assist.serviceDesk
-      .raise({ requestTypeId, summary, details, includePcDetails: includePc })
+      .raise({ requestTypeId, summary, includePcDetails: includePc })
       .finally(() => setSending(false))
     // On success the panel has closed and the portal's form is opening in the browser.
     if (!result.ok) showToast(RAISE_ERRORS[result.reason], 'error')
   }
 
-  const canSend = !sending && (summary.trim() !== '' || details.trim() !== '')
+  const canSend = !sending && summary.trim() !== ''
   const screenshots = props.attachments.length
 
   return (
@@ -180,14 +180,6 @@ function NewRequestForm(props: Parameters<typeof ServiceDeskPage>[0] & { connect
             placeholder="e.g. Outlook keeps crashing"
             autoFocus
             className="w-full rounded-lg bg-zinc-100 px-2.5 py-1.5 text-xs outline-none placeholder:text-zinc-400 dark:bg-zinc-800"
-          />
-        </Field>
-        <Field label="Details">
-          <textarea
-            value={details}
-            onChange={(event) => setDetails(event.target.value)}
-            placeholder="What happened, and what you've tried"
-            className="block max-h-32 min-h-16 w-full resize-none rounded-lg bg-zinc-100 px-2.5 py-1.5 text-xs outline-none field-sizing-content placeholder:text-zinc-400 dark:bg-zinc-800"
           />
         </Field>
 

@@ -2275,19 +2275,13 @@ screenshot, which a link can't carry. Like the others, it has no Electron in it,
 `tests/serviceDesk.test.ts` checks it. `start()` in `index.ts` creates it when the tenant has
 `serviceDesk.requests`.
 
-### `MAX_LINK_DESCRIPTION` and `PcInfo`
+### `PcInfo`
 
-<!-- code: apps/desktop/src/main/serviceDesk.ts#MAX_LINK_DESCRIPTION,PcInfo -->
+<!-- code: apps/desktop/src/main/serviceDesk.ts#PcInfo -->
 
-[`src/main/serviceDesk.ts`, lines 3–15](../../apps/desktop/src/main/serviceDesk.ts#L3-L15)
+[`src/main/serviceDesk.ts`, lines 3–9](../../apps/desktop/src/main/serviceDesk.ts#L3-L9)
 
 ```ts
-/**
- * The longest description put in the portal link. Browsers and Atlassian accept much longer
- * addresses, but past a few thousand characters some proxies don't.
- */
-export const MAX_LINK_DESCRIPTION = 1800
-
 /** What's sent about the PC, so IT doesn't have to ask. */
 export interface PcInfo {
   computerName: string
@@ -2299,8 +2293,6 @@ export interface PcInfo {
 
 <!-- /code -->
 
-- `MAX_LINK_DESCRIPTION = 1800`: the description travels in the form's address, and, as the
-  comment says, some company proxies refuse very long addresses.
 - `PcInfo`: what **Include PC details** sends about the PC, so IT doesn't have to ask: its name,
   the Windows version, and the app's own name and version.
 
@@ -2308,7 +2300,7 @@ export interface PcInfo {
 
 <!-- code: apps/desktop/src/main/serviceDesk.ts#windowsVersion,pcDetails -->
 
-[`src/main/serviceDesk.ts`, lines 17–33](../../apps/desktop/src/main/serviceDesk.ts#L17-L33)
+[`src/main/serviceDesk.ts`, lines 11–27](../../apps/desktop/src/main/serviceDesk.ts#L11-L27)
 
 ```ts
 /**
@@ -2336,37 +2328,14 @@ export function pcDetails(info: PcInfo): string {
   and `os.release()`. As the comment says, Windows 11 still reports itself as "Windows 10 ..." for
   old programs' sake; its build number, the third part of `10.0.26200`, is 22000 or more, so the
   name is corrected. `\b` makes sure "Windows 10" is a whole word.
-- `pcDetails(info)`: the three lines that go at the end of the description, such as
-  `PC: MM-LAPTOP-42`.
-
-### `requestDescription()`
-
-<!-- code: apps/desktop/src/main/serviceDesk.ts#requestDescription -->
-
-[`src/main/serviceDesk.ts`, lines 35–42](../../apps/desktop/src/main/serviceDesk.ts#L35-L42)
-
-```ts
-/** The request's description: the user's words, then (if they want) the PC's details. */
-export function requestDescription(details: string, pc: string | null): string {
-  const parts = [details.trim(), pc ? `---\n${pc}` : ''].filter(Boolean)
-  const description = parts.join('\n\n')
-  return description.length > MAX_LINK_DESCRIPTION
-    ? `${description.slice(0, MAX_LINK_DESCRIPTION - 30).trimEnd()}\n… (shortened)`
-    : description
-}
-```
-
-<!-- /code -->
-
-The description for the form: the user's words, then (if they want) a `---` line and the PC's
-details. If it's over `MAX_LINK_DESCRIPTION`, it's cut and ends with "… (shortened)", leaving room
-(30 characters) for that note; the user can add the rest on the portal.
+- `pcDetails(info)`: the three lines that make the description, such as `PC: MM-LAPTOP-42`,
+  when **Include PC details** is ticked.
 
 ### `requestFormUrl()` and `myRequestsUrl()`
 
 <!-- code: apps/desktop/src/main/serviceDesk.ts#requestFormUrl,myRequestsUrl -->
 
-[`src/main/serviceDesk.ts`, lines 44–67](../../apps/desktop/src/main/serviceDesk.ts#L44-L67)
+[`src/main/serviceDesk.ts`, lines 29–52](../../apps/desktop/src/main/serviceDesk.ts#L29-L52)
 
 ```ts
 /**
@@ -2409,7 +2378,7 @@ export function myRequestsUrl(helpCentre: string): string {
 
 <!-- code: apps/desktop/src/main/serviceDesk.ts#ServiceDeskDeps -->
 
-[`src/main/serviceDesk.ts`, lines 69–81](../../apps/desktop/src/main/serviceDesk.ts#L69-L81)
+[`src/main/serviceDesk.ts`, lines 54–66](../../apps/desktop/src/main/serviceDesk.ts#L54-L66)
 
 ```ts
 export interface ServiceDeskDeps {
@@ -2444,7 +2413,7 @@ What `ServiceDesk` needs from outside; `index.ts` passes the real ones.
 
 <!-- code: apps/desktop/src/main/serviceDesk.ts#ServiceDesk.class -->
 
-[`src/main/serviceDesk.ts`, lines 83–88](../../apps/desktop/src/main/serviceDesk.ts#L83-L88)
+[`src/main/serviceDesk.ts`, lines 68–73](../../apps/desktop/src/main/serviceDesk.ts#L68-L73)
 
 ```ts
 /**
@@ -2461,7 +2430,7 @@ export class ServiceDesk {
 
 <!-- code: apps/desktop/src/main/serviceDesk.ts#ServiceDesk.constructor,pcDetails -->
 
-[`src/main/serviceDesk.ts`, lines 89–94](../../apps/desktop/src/main/serviceDesk.ts#L89-L94)
+[`src/main/serviceDesk.ts`, lines 74–79](../../apps/desktop/src/main/serviceDesk.ts#L74-L79)
 
 ```ts
 constructor(private readonly deps: ServiceDeskDeps) {}
@@ -2483,11 +2452,11 @@ pcDetails(): string {
 
 <!-- code: apps/desktop/src/main/serviceDesk.ts#ServiceDesk.raise -->
 
-[`src/main/serviceDesk.ts`, lines 96–130](../../apps/desktop/src/main/serviceDesk.ts#L96-L130)
+[`src/main/serviceDesk.ts`, lines 81–114](../../apps/desktop/src/main/serviceDesk.ts#L81-L114)
 
 ```ts
 async raise(request: NewRequest, attachments: Attachment[]): Promise<RaiseResult> {
-  if (!request.summary.trim() && !request.details.trim()) return { ok: false, reason: 'empty' }
+  if (!request.summary.trim()) return { ok: false, reason: 'empty' }
   if (!this.deps.requestTypeIds.includes(request.requestTypeId)) {
     return { ok: false, reason: 'failed' }
   }
@@ -2496,10 +2465,9 @@ async raise(request: NewRequest, attachments: Attachment[]): Promise<RaiseResult
     if (paths.length > 0 && !(await this.deps.copyScreenshots(paths))) {
       return { ok: false, reason: 'missing-screenshot' }
     }
-    const description = requestDescription(
-      request.details,
-      request.includePcDetails ? this.pcDetails() : null,
-    )
+    // Only the PC's details, if they're wanted: the rest is written on the portal (some request
+    // types have no description at all, and anything put there would be lost).
+    const description = request.includePcDetails ? this.pcDetails() : ''
     await this.deps.openLink(
       requestFormUrl({
         helpCentre: this.deps.helpCentre,
@@ -2528,7 +2496,10 @@ async raise(request: NewRequest, attachments: Attachment[]): Promise<RaiseResult
 **Continue on the portal**. `ipc.ts` passes the form's fields and the screenshots attached to the
 text box.
 
-- `if (!request.summary.trim() && !request.details.trim())`: a request needs a summary or details.
+- `if (!request.summary.trim())`: a request needs a summary.
+- `const description = request.includePcDetails ? this.pcDetails() : ''`: as the comment says, the
+  description has only the PC's details. There's no box for the user's own: some request types have
+  no description at all, and what was typed there was lost. They write the rest on the portal.
 - `if (!this.deps.requestTypeIds.includes(request.requestTypeId))`: only the tenant's own request
   types; anything else is refused.
 - `await this.deps.copyScreenshots(paths)`: the screenshots go on the clipboard first. If one is
@@ -2564,10 +2535,11 @@ in-memory store and memory; and a fixed clock.
   Claude with the issue's details in the prompt; and going back to Connect when the connection
   ends, and forgetting it on Disconnect.
 
-`tests/serviceDesk.test.ts` checks the portal's form address for a request type, the PC details
-under the description with the link kept a sensible length, and Windows 11 called by its name.
-It runs `ServiceDesk` with fakes: opening the filled-in form with the screenshot copied to paste;
-leaving the PC details out when asked, with no screenshot needed; and refusing an empty request,
+`tests/serviceDesk.test.ts` checks the portal's form address for a request type, the PC's
+details, and Windows 11 called by its name.
+It runs `ServiceDesk` with fakes: opening the filled-in form (its description just the PC's
+details) with the screenshot copied to paste; leaving the PC details out when asked (no
+description at all), with no screenshot needed; and refusing an empty request,
 an unknown request type and a missing screenshot.
 
 `tests/tenants.test.ts` checks the request types (at least one, with numeric IDs, passed to the

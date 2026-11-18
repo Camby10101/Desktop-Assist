@@ -38,6 +38,7 @@ export const IPC = {
   bubbleDragEnd: 'assist:bubble-drag-end',
   bubbleDragHold: 'assist:bubble-drag-hold',
   bubblePet: 'assist:bubble-pet',
+  bubblePointerInside: 'assist:bubble-pointer-inside',
   trickReady: 'assist:trick-ready',
   collapse: 'assist:collapse',
   setInteractive: 'assist:set-interactive',
@@ -271,6 +272,11 @@ export interface AssistApi {
   }
   /** Starts Desktop Wizard's uninstaller and quits (installed copies only). */
   uninstall(): Promise<UninstallResult>
+  /**
+   * Whether the mouse pointer is over her window now (it's showing, and the pointer's inside it):
+   * her page checks its glow with it, as the page isn't always told when the pointer leaves.
+   */
+  bubblePointerInside(): Promise<boolean>
   screensaver: {
     /** The user's back (the mouse moved, a click, a key): the screen saver's pages. */
     wake(): void

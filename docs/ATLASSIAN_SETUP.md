@@ -124,8 +124,9 @@ Atlassian's guide: [Available Atlassian Rovo MCP server domains](https://support
   first). It goes to Claude Desktop like any other question.
 - **New request** never creates anything itself: the person sends the request from the portal,
   signed in as themselves, where the request type's own form (and any extra fields IT added) is
-  shown. The summary and description are filled in from the link; the PC details are the PC's
-  name, Windows version and Desktop Wizard version.
+  shown. The summary is filled in from the link, and the description with the PC details (the PC's
+  name, Windows version and Desktop Wizard version) if they're included. The rest is written on
+  the portal: some request types have no description field, so the panel doesn't ask for one.
 
 ## Troubleshooting
 

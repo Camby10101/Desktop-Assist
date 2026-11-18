@@ -5,11 +5,13 @@ corner of the screen and opens a panel when clicked. Built for Morse Micro first
 [`tenants/`](tenants/README.md), so another business can use it later.
 
 **Download:** the newest installer is in [`installer/`](installer/)
-([Desktop Wizard-Setup-2.4.1.exe](installer/Desktop%20Wizard-Setup-2.4.1.exe), with its signature
+([Desktop Wizard-Setup-2.4.2.exe](installer/Desktop%20Wizard-Setup-2.4.2.exe), with its signature
 beside it). Run it to install Desktop Wizard for yourself (no admin needed); an installed copy
 updates itself from Settings → Check for updates.
 
 - [docs/PLAN.md](docs/PLAN.md): the plan, architecture, milestones and decisions.
+- [docs/how-it-works.pdf](docs/how-it-works.pdf): new to the code? A guided tour of every part, with
+  code examples, diagrams, walkthroughs of real moments, security, the tests and releasing.
 - [docs/code-guide/CODE_GUIDE.md](docs/code-guide/CODE_GUIDE.md): how the code fits together, with the code of every
   function shown and explained.
 - [docs/CLAUDE_DESKTOP_SETUP.md](docs/CLAUDE_DESKTOP_SETUP.md): for IT, what each PC needs so
@@ -29,7 +31,7 @@ sign-in) and 4 (logos, favourites, service desk, light/dark mode, bubble-click f
 3.1 (questions open in Claude Desktop) and 3.2 (Apps list, Uninstall) are complete, as are
 Milestone 5 (the app-opening spinner; Jira and the service desk) and its fixes 5.1 and 5.2 (the
 bubble kept in front, and Check for updates). Version **1.0.0** was the first release (see
-[PLAN.md](docs/PLAN.md) §7h and [RELEASING.md](docs/RELEASING.md)); this is version **2.4.1**, with
+[PLAN.md](docs/PLAN.md) §7h and [RELEASING.md](docs/RELEASING.md)); this is version **2.4.2**, with
 the animated character (thirty-two habits, ten of them magic; throw her and she tumbles; tricks
 with the taskbar's icons and the windows on the screen; her familiar, a black cat), her spells,
 the screen saver, and Robe colour, Stand still and No idle animations in Settings
@@ -81,8 +83,10 @@ name are sent on to it.
 - **Pet her**: double-click her for hearts and a happy wiggle (the first click opens or closes the
   panel as usual; the second only pets her).
 - **Left to herself**, besides her habits she now and then: peeks round the edge of a window that
-  comes down to the taskbar near her (hidden behind it), or teleports onto the top of a window and
-  rides along if it's dragged (falling off if it's minimised or closed); has a visit from her
+  comes down to the taskbar near her (hidden behind it), or vanishes and opens a swirling portal on
+  top of a window, waving through it for a few seconds (it goes along with the window if it's
+  dragged, and drops her if it's minimised or closed; click her in it and she goes straight back
+  home); has a visit from her
   familiar, a little black cat that wanders, follows her and joins in; and, rarely, does tricks with
   the taskbar's icons (carrying one about, juggling three, swapping two and swapping them back,
   sitting on one, sneezing one flying, a wand tap) or watches the pointer for ten seconds. The
@@ -121,9 +125,10 @@ name are sent on to it.
     issues and Confluence pages. Click an issue to see it, ask Claude to summarise it, draft a reply or
     suggest next steps, move it to another status, comment, or log time. The first time,
     **Connect to Atlassian** connects Desktop Wizard to your Atlassian account in your browser.
-  - **IT service desk**: **New request** fills in a request from what's in the text box (pick the
-    kind of request, attach a screenshot, include your PC's details; helpful IT articles show
-    while you type) and opens it on the service desk portal for you to send. **My requests** shows
+  - **IT service desk**: **New request** starts a request from what's in the text box (pick the
+    kind of request, give it a summary, attach a screenshot, include your PC's details; helpful IT
+    articles show while you type) and opens it on the service desk portal, where you add the rest
+    and send it. **My requests** shows
     your IT requests and tells you (with a Windows notification) when IT replies or changes one.
   - **Screenshot** saves the screen the bubble is on to `Pictures\Desktop Wizard`.
   - **Settings**: **Light mode** (switches Desktop Wizard's colours; it starts dark), **Size**
@@ -207,6 +212,7 @@ npm run typecheck
 npm run dist        # installer (and its .sig for updates) → apps/desktop/dist/
 npm run docs        # refresh the code shown in docs/code-guide after changing code
 npm run docs:pdf    # rebuild docs/CODE_GUIDE.pdf from those pages
+npm run docs:how    # rebuild docs/how-it-works.pdf from docs/how-it-works/
 ```
 
 The first `npm run dev` downloads the Electron binary. Dev runs keep their data (including the

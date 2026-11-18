@@ -15,6 +15,7 @@
     "docs": "node scripts/code-guide.mjs",
     "docs:check": "node scripts/code-guide.mjs --check",
     "docs:pdf": "electron scripts/code-guide-pdf.mjs",
+    "docs:how": "electron scripts/how-it-works-pdf.mjs",
     "release:key": "node scripts/release-signing.mjs key"
   },
   "devDependencies": {
