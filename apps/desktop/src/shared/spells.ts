@@ -8,6 +8,7 @@ import type { Fidget, SpellPose } from './character'
 export const SPELLS = [
   'clones',
   'teleport',
+  'familiar',
   'butterflies',
   'starfall',
   'fireworks',
@@ -23,6 +24,7 @@ export type Spell = (typeof SPELLS)[number]
 export const SPELL_LABELS: Record<Spell, string> = {
   clones: 'Clones',
   teleport: 'Teleport',
+  familiar: 'Summon familiar',
   butterflies: 'Butterflies',
   starfall: 'Starfall',
   fireworks: 'Fireworks',

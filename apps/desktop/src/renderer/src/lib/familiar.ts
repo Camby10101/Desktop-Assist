@@ -47,7 +47,7 @@ export const CAT = {
 } as const
 
 /** What she's doing that the cat joins in with: curling up, hopping about, or sitting to watch. */
-const RESTFUL: readonly Pose[] = ['sit', 'doze', 'yawn', 'splat']
+const RESTFUL: readonly Pose[] = ['sit', 'doze', 'yawn', 'splat', 'settle', 'snooze']
 const LIVELY: readonly Pose[] = [
   'dance',
   'twirl',

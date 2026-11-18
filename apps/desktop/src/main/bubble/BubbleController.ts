@@ -4,6 +4,7 @@ import {
   LANDING,
   REACTION_MS,
   REACTIONS,
+  SNOOZE,
   SPELL_POSE_MS,
   isFidget,
   type Fidget,
@@ -133,6 +134,8 @@ export interface BubbleControllerDeps {
   random?: () => number
   /** Her performances (the taskbar tricks and the like), if there are any. */
   performer?: Performer
+  /** How long since anyone used the mouse or keyboard (seconds), for her snooze (see SNOOZE). */
+  idleSeconds?: () => number
   /** Things worth a line in the log, such as a click on the bubble that didn't open it. */
   onDiagnostic?: (message: string) => void
 }
@@ -225,6 +228,10 @@ export class BubbleController {
   private pointerWatch: ReturnType<typeof setInterval> | null = null
   private pointerSeen: PointerSample[] = []
   private lastReaction = Number.NEGATIVE_INFINITY
+  /** Snoozing (nobody's at the PC: see SNOOZE), and the moment she's settled down into it. */
+  private snoozing = false
+  private snoozeTimer: ReturnType<typeof setTimeout> | null = null
+  private idleWatch: ReturnType<typeof setInterval> | null = null
   /** She's away while the screen saver is on (sleep): hidden, doing nothing, until wake(). */
   private asleep = false
   private sleepTimer: ReturnType<typeof setTimeout> | null = null
@@ -311,6 +318,7 @@ export class BubbleController {
     this.deps.bubble.show()
     this.scheduleActivity(true)
     this.pointerWatch = setInterval(() => this.watchPointer(), POINTER.everyMs)
+    if (this.deps.idleSeconds) this.idleWatch = setInterval(() => this.watchIdle(), 1000)
   }
 
   /** Where she stands just now, for her performances: as `standing`, and her box's top-left. */
@@ -607,6 +615,8 @@ export class BubbleController {
     if (this.sleepTimer) clearTimeout(this.sleepTimer)
     if (this.reactionTimer) clearTimeout(this.reactionTimer)
     if (this.pointerWatch) clearInterval(this.pointerWatch)
+    if (this.idleWatch) clearInterval(this.idleWatch)
+    if (this.snoozeTimer) clearTimeout(this.snoozeTimer)
     this.performances++
     this.endPerformance(false)
   }
@@ -743,7 +753,7 @@ export class BubbleController {
    */
   private scheduleActivity(first: boolean): void {
     this.cancelActivity()
-    if (this.mode !== 'collapsed' || this.leaving || this.asleep) return
+    if (this.mode !== 'collapsed' || this.leaving || this.asleep || this.snoozing) return
     if (!this.pastimes.walk && !this.pastimes.fidget) return
     this.idleTimer = setTimeout(() => this.doActivity(), activityDelay(this.random, first))
   }
@@ -828,7 +838,39 @@ export class BubbleController {
     this.endPerformance(false)
     if (this.reactionTimer) clearTimeout(this.reactionTimer)
     this.reactionTimer = null
+    this.snoozing = false
+    if (this.snoozeTimer) clearTimeout(this.snoozeTimer)
+    this.snoozeTimer = null
     if (!MOVING.includes(this.pose)) this.setPose('idle')
+  }
+
+  /**
+   * Every second: has anyone used the mouse or keyboard lately? Not for SNOOZE.afterMs, with the
+   * panel closed (and the screen saver off), she settles down and snoozes; as soon as someone's
+   * back, she wakes up and gets on with her day.
+   */
+  private watchIdle(): void {
+    const idleMs = (this.deps.idleSeconds?.() ?? 0) * 1000
+    if (this.snoozing) {
+      if (idleMs < SNOOZE.wakeMs) {
+        this.snoozing = false
+        this.act('rouse')
+      }
+      return
+    }
+    if (idleMs < SNOOZE.afterMs || this.mode !== 'collapsed' || this.asleep || this.leaving) return
+    this.stopIdling()
+    this.snoozing = true
+    this.setPose('settle')
+    this.snoozeTimer = setTimeout(() => {
+      this.snoozeTimer = null
+      if (this.snoozing) this.setPose('snooze')
+    }, REACTION_MS.settle)
+  }
+
+  /** Whether she's snoozing (nobody's been at the PC a while). */
+  get isSnoozing(): boolean {
+    return this.snoozing
   }
 
   /** Gets a performance ready (see Performer), then plays it, if nothing's happened meanwhile. */

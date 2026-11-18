@@ -4,6 +4,7 @@ import {
   FIDGET_MS,
   LANDING,
   REACTION_MS,
+  SNOOZE,
   SPELL_POSE_MS,
   type Pose,
 } from '@shared/character'
@@ -229,12 +230,12 @@ describe('on its own', () => {
     vi.advanceTimersByTime(500)
     expect(bubble.bounds!.x).toBeLessThan(home().x)
     expect(bubble.bounds!.y).toBe(home().y)
-    // To 140 from the corner (the middle of 40–240, the stretch far enough away).
-    vi.advanceTimersByTime(walkMs(140))
+    // To 110 from the corner (the middle of 40–180, the stretch far enough away).
+    vi.advanceTimersByTime(walkMs(110))
     expect(controller.currentPose).toBe('idle')
-    expect(bubble.bounds).toEqual(home(PRIMARY.workArea, 'bottom-right', 140))
+    expect(bubble.bounds).toEqual(home(PRIMARY.workArea, 'bottom-right', 110))
     // The panel would open from where it now stands.
-    const position = restPosition(PRIMARY.workArea, 'bottom-right', 140)
+    const position = restPosition(PRIMARY.workArea, 'bottom-right', 110)
     expect(panel.bounds).toEqual(panelWindowBounds(position, 4, 'bottom-right'))
     expect(modes).toEqual([]) // walking on its own isn't a change of mode
   })
@@ -242,9 +243,9 @@ describe('on its own', () => {
   it('walks both ways, and fidgets only once it has been left alone a while', () => {
     vi.advanceTimersByTime(46_000)
     expect(poses).toEqual([
-      'walk-left', // at 8.5 s, to 140 from the corner
+      'walk-left', // at 8.5 s, to 110 from the corner
       'idle',
-      'walk-right', // at 24 s, back to 80
+      'walk-right', // at 24 s, back to 50
       'idle',
       'sit', // at 39 s: alone for 30 s now (for six seconds)
       'idle',
@@ -828,6 +829,57 @@ describe('her performances', () => {
     expect(controller.currentPose).toBe('idle')
     vi.advanceTimersByTime(WANDER.delay[1] + 100)
     expect(poses.length).toBeGreaterThan(4)
+  })
+})
+
+describe('snoozing', () => {
+  /** Starts her again with Windows saying nobody's used the mouse or keyboard for `idle()` seconds. */
+  function withIdle(idle: () => number) {
+    controller.dispose()
+    controller = makeController(null, undefined, undefined, { idleSeconds: idle })
+    controller.start()
+  }
+
+  it('settles down and snoozes when nobody’s been at the PC for five minutes, until someone is', () => {
+    let idle = 0
+    withIdle(() => idle)
+    vi.advanceTimersByTime(2000)
+    expect(controller.isSnoozing).toBe(false)
+    idle = SNOOZE.afterMs / 1000
+    vi.advanceTimersByTime(1000)
+    expect(controller.isSnoozing).toBe(true)
+    expect(controller.currentPose).toBe('settle')
+    vi.advanceTimersByTime(REACTION_MS.settle + 100)
+    expect(controller.currentPose).toBe('snooze')
+    // It goes on: nothing else of hers comes along meanwhile.
+    idle += 600
+    vi.advanceTimersByTime(600_000)
+    expect(controller.currentPose).toBe('snooze')
+    // Someone's back: she wakes, gets up, and carries on.
+    idle = 0
+    vi.advanceTimersByTime(1000)
+    expect(controller.isSnoozing).toBe(false)
+    expect(controller.currentPose).toBe('rouse')
+    vi.advanceTimersByTime(REACTION_MS.rouse + 100)
+    expect(controller.currentPose).toBe('idle')
+  })
+
+  it('wakes when she’s clicked, opening the panel', () => {
+    withIdle(() => SNOOZE.afterMs / 1000 + 10)
+    vi.advanceTimersByTime(1000 + REACTION_MS.settle + 100)
+    expect(controller.currentPose).toBe('snooze')
+    controller.clickBubble()
+    expect(controller.currentMode).toBe('expanded')
+    expect(controller.isSnoozing).toBe(false)
+    expect(controller.currentPose).toBe('idle')
+  })
+
+  it('doesn’t snooze while the screen saver’s on', () => {
+    withIdle(() => SNOOZE.afterMs / 1000 + 10)
+    controller.sleep()
+    vi.advanceTimersByTime(5000)
+    expect(controller.isSnoozing).toBe(false)
+    expect(controller.currentPose).not.toBe('snooze')
   })
 })
 

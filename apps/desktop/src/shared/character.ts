@@ -198,6 +198,8 @@ export function inSeason(fidget: Fidget, when: Date): boolean {
  * - `lift`, `lower`: her arms rise (lifting something by magic), or come down (setting it down).
  * - `guilty`: caught out (after a prank): nervous glances either way, a bead of sweat.
  * - `toss`: juggling, hands only (what she juggles is drawn elsewhere: the taskbar's icons).
+ * - `settle`: nodding off: she sits down, eyes closing (into her `snooze`).
+ * - `rouse`: woken from her snooze: she blinks awake and gets up.
  */
 export const REACTIONS = [
   'pet',
@@ -209,6 +211,8 @@ export const REACTIONS = [
   'lower',
   'guilty',
   'toss',
+  'settle',
+  'rouse',
 ] as const
 export type Reaction = (typeof REACTIONS)[number]
 
@@ -223,15 +227,24 @@ export const REACTION_MS: Record<Reaction, number> = {
   lower: 800,
   guilty: 2400,
   toss: 4400,
+  settle: 900,
+  rouse: 1400,
 }
+
+/**
+ * Snoozing: with no mouse or keyboard about for `afterMs` (nobody at the PC), she sits down and
+ * snoozes until there is again (input less than `wakeMs` ago). Not while the screen saver's on.
+ */
+export const SNOOZE = { afterMs: 5 * 60_000, wakeMs: 1500 } as const
 
 /**
  * Poses that go round and round for as long as something else says (her performances):
  * - `watch`: her eyes on the pointer, wherever it is (the gaze comes from the main process).
  * - `peek-left`, `peek-right`: leaning out round the edge of a window she's behind, that way.
  * - `ride`: sitting on top of a window, arms up, the wind in her hair.
+ * - `snooze`: sitting asleep, head nodding, z's floating up (nobody's been at the PC a while).
  */
-export const HELD_POSES = ['watch', 'peek-left', 'peek-right', 'ride'] as const
+export const HELD_POSES = ['watch', 'peek-left', 'peek-right', 'ride', 'snooze'] as const
 export type HeldPose = (typeof HELD_POSES)[number]
 
 export const isFidget = (pose: Pose): pose is Fidget =>

@@ -1685,6 +1685,55 @@ function peek(): Key[] {
   ]
 }
 
+/** Sitting asleep, from the front: hugging her knees, eyes shut, her head drooping a little more and less. */
+const asleep = (i: number, count: number, flipText = false): Pose => {
+  const phase = (i / count) * Math.PI * 2
+  return {
+    view: 'front',
+    sitting: true,
+    face: 'blink',
+    tilt: 0.1 + Math.sin(phase) * 0.025,
+    zzz: i / count,
+    flipText,
+    arms: [
+      { shoulder: 0.55, elbow: -1.15 },
+      { shoulder: 0.55, elbow: -1.15 },
+    ],
+    legs: [
+      { hip: 0.3, knee: 0.3 },
+      { hip: 0.3, knee: 0.3 },
+    ],
+  }
+}
+
+/** Nodding off, from the front: she crouches and sits down, her eyes closing. */
+function settle(): Key[] {
+  const squat: Pose = { view: 'front', face: 'blink', y: 5, legs: crouch(5) }
+  return [
+    ...tween({ ...FRONT, face: 'down' }, squat, 300),
+    ...hold({ ...asleep(0, 1), zzz: undefined }, 600),
+  ]
+}
+
+/** Snoozing, round and round: sitting asleep, z's floating up from her. */
+function snooze(flipText = false): Key[] {
+  return Array.from({ length: 26 }, (_, i) => ({ pose: asleep(i, 26, flipText), ms: 100 }))
+}
+
+/** Woken from her snooze, from the front: she blinks awake, gets up, and smiles. */
+function rouse(): Key[] {
+  const sat = { ...asleep(0, 1), zzz: undefined }
+  const squat: Pose = { view: 'front', face: 'neutral', y: 5, legs: crouch(5) }
+  return [
+    ...hold(sat, 200),
+    ...hold({ ...sat, face: 'surprised', tilt: 0 }, 200),
+    ...hold({ ...sat, face: 'blink', tilt: 0 }, 100),
+    ...tween({ ...sat, face: 'neutral', tilt: 0 }, squat, 250),
+    ...tween(squat, FRONT, 300),
+    ...hold({ view: 'front', face: 'happy' }, 350),
+  ]
+}
+
 /** Riding on top of a window, from the front: sitting, arms up, hair flying, kicking her feet. */
 function ride(): Key[] {
   return Array.from({ length: 12 }, (_, i) => {
@@ -1768,6 +1817,9 @@ const MAKERS: Record<Name, () => Frame[]> = {
   'peek-left': () => drawn(peek()),
   'peek-right': () => drawn(peek()),
   ride: () => drawn(ride()),
+  settle: () => drawn(settle()),
+  rouse: () => drawn(rouse()),
+  snooze: () => drawn(snooze()),
 }
 
 /**
@@ -1776,6 +1828,7 @@ const MAKERS: Record<Name, () => Frame[]> = {
  */
 const LEFT_MAKERS: Partial<Record<Name, () => Frame[]>> = {
   doze: () => drawn(doze(true)),
+  snooze: () => drawn(snooze(true)),
 }
 
 let gazing: Frame[] | null = null
@@ -1809,6 +1862,9 @@ export const LOOPS: Record<Name, boolean> = {
   'peek-left': true,
   'peek-right': true,
   ride: true,
+  settle: false,
+  rouse: false,
+  snooze: true,
   hop: false,
   wave: false,
   stretch: false,

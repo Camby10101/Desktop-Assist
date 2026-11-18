@@ -537,7 +537,7 @@ timetable of one of her habits, and `CLONES` the numbers for her clones, which b
 
 <!-- code: apps/desktop/src/shared/character.ts#FIDGETS,Fidget,Pose,FIDGET_MS,isFidget -->
 
-[`src/shared/character.ts`, lines 6–238](../../apps/desktop/src/shared/character.ts#L6-L238)
+[`src/shared/character.ts`, lines 6–251](../../apps/desktop/src/shared/character.ts#L6-L251)
 
 ```ts
 /**
@@ -782,7 +782,7 @@ the main process plays them on purpose (`BubbleController.act()` and `teleport()
 
 <!-- code: apps/desktop/src/shared/character.ts#VISION -->
 
-[`src/shared/character.ts`, lines 240–251](../../apps/desktop/src/shared/character.ts#L240-L251)
+[`src/shared/character.ts`, lines 253–264](../../apps/desktop/src/shared/character.ts#L253-L264)
 
 ```ts
 /**
@@ -821,7 +821,7 @@ pages. Each entry is a `[from, to]` pair:
 
 <!-- code: apps/desktop/src/shared/character.ts#CLONES -->
 
-[`src/shared/character.ts`, lines 266–270](../../apps/desktop/src/shared/character.ts#L266-L270)
+[`src/shared/character.ts`, lines 279–283](../../apps/desktop/src/shared/character.ts#L279-L283)
 
 ```ts
 /**
@@ -864,7 +864,7 @@ first when the app runs.
 
 <!-- code: apps/desktop/src/shared/spells.ts#SPELLS,Spell,SPELL_LABELS -->
 
-[`src/shared/spells.ts`, lines 3–34](../../apps/desktop/src/shared/spells.ts#L3-L34)
+[`src/shared/spells.ts`, lines 3–36](../../apps/desktop/src/shared/spells.ts#L3-L36)
 
 ```ts
 // Her spells, cast from the Spells menu beside the stack of icons above her: what each is called,
@@ -875,6 +875,7 @@ first when the app runs.
 export const SPELLS = [
   'clones',
   'teleport',
+  'familiar',
   'butterflies',
   'starfall',
   'fireworks',
@@ -891,6 +892,7 @@ export type Spell = (typeof SPELLS)[number]
 export const SPELL_LABELS: Record<Spell, string> = {
   clones: 'Clones',
   teleport: 'Teleport',
+  familiar: 'Summon familiar',
   butterflies: 'Butterflies',
   starfall: 'Starfall',
   fireworks: 'Fireworks',
@@ -927,7 +929,7 @@ string>` makes TypeScript insist on one for every spell.
 
 <!-- code: apps/desktop/src/shared/spells.ts#STARFALL,EXPLOSION,TELEPORT -->
 
-[`src/shared/spells.ts`, lines 36–50](../../apps/desktop/src/shared/spells.ts#L36-L50)
+[`src/shared/spells.ts`, lines 38–52](../../apps/desktop/src/shared/spells.ts#L38-L52)
 
 ```ts
 /** Starfall: shooting stars across her screen for this long (ms), this many starting a second. */
@@ -967,7 +969,7 @@ are read by the main process (how long to keep the effects' window open) and by 
 
 <!-- code: apps/desktop/src/shared/spells.ts#FIREWORKS,THUNDERSTORM,BLIZZARD,VORTEX,BUTTERFLIES,PHOENIX -->
 
-[`src/shared/spells.ts`, lines 52–74](../../apps/desktop/src/shared/spells.ts#L52-L74)
+[`src/shared/spells.ts`, lines 54–76](../../apps/desktop/src/shared/spells.ts#L54-L76)
 
 ```ts
 /**
@@ -1021,7 +1023,7 @@ which fades everything out by then. The rest only the drawing reads.
 
 <!-- code: apps/desktop/src/shared/spells.ts#SPELL_EFFECT_MS,SpellEffect -->
 
-[`src/shared/spells.ts`, lines 76–87](../../apps/desktop/src/shared/spells.ts#L76-L87)
+[`src/shared/spells.ts`, lines 78–89](../../apps/desktop/src/shared/spells.ts#L78-L89)
 
 ```ts
 /** The spells drawn in a window of their own over the screen, and how long it stays open (ms). */
@@ -1058,7 +1060,7 @@ window.
 
 <!-- code: apps/desktop/src/shared/spells.ts#CAST_POSE -->
 
-[`src/shared/spells.ts`, lines 89–102](../../apps/desktop/src/shared/spells.ts#L89-L102)
+[`src/shared/spells.ts`, lines 91–104](../../apps/desktop/src/shared/spells.ts#L91-L104)
 
 ```ts
 /**
@@ -1180,7 +1182,7 @@ is a `Record<ActionId, ...>` (it must have an icon for every action), and `Actio
 
 <!-- code: apps/desktop/src/shared/actions.ts#ACTION_IDS,ActionId -->
 
-[`src/shared/actions.ts`, lines 1–21](../../apps/desktop/src/shared/actions.ts#L1-L21)
+[`src/shared/actions.ts`, lines 1–20](../../apps/desktop/src/shared/actions.ts#L1-L20)
 
 ```ts
 // The action registry: every icon that can appear in the stack above the bubble. A tenant's
@@ -1199,7 +1201,6 @@ export const ACTION_IDS = [
   'settings',
   'spells',
   'screensaver',
-  'familiar',
   'close',
 ] as const
 
@@ -1225,7 +1226,7 @@ The list of every action that exists, and the type of one of its entries.
 
 <!-- code: apps/desktop/src/shared/actions.ts#ACTIONS -->
 
-[`src/shared/actions.ts`, lines 23–39](../../apps/desktop/src/shared/actions.ts#L23-L39)
+[`src/shared/actions.ts`, lines 22–36](../../apps/desktop/src/shared/actions.ts#L22-L36)
 
 ```ts
 export const ACTIONS = {
@@ -1241,8 +1242,6 @@ export const ACTIONS = {
   spells: { label: 'Spells', kind: 'popover' },
   // Every screen fades to white, then to a sunset she watches (src/shared/screenSaver.ts).
   screensaver: { label: 'Screen saver', kind: 'command' },
-  // Her black cat, for a minute (src/main/familiar.ts).
-  familiar: { label: 'Summon familiar', kind: 'command' },
   close: { label: 'Close Desktop Wizard', kind: 'command' },
 } as const satisfies Record<ActionId, { label: string; kind: 'command' | 'popover' }>
 ```
@@ -1280,7 +1279,7 @@ screen-reader name, and gives `popover` actions (and the service desk, when it o
 
 <!-- code: apps/desktop/src/shared/actions.ts#CommandActionId -->
 
-[`src/shared/actions.ts`, lines 41–43](../../apps/desktop/src/shared/actions.ts#L41-L43)
+[`src/shared/actions.ts`, lines 38–40](../../apps/desktop/src/shared/actions.ts#L38-L40)
 
 ```ts
 export type CommandActionId = {
@@ -1307,7 +1306,7 @@ It's worked out from `ACTIONS`, so it can't drift out of step with it.
 
 <!-- code: apps/desktop/src/shared/actions.ts#COMMAND_ACTION_IDS -->
 
-[`src/shared/actions.ts`, lines 45–47](../../apps/desktop/src/shared/actions.ts#L45-L47)
+[`src/shared/actions.ts`, lines 42–44](../../apps/desktop/src/shared/actions.ts#L42-L44)
 
 ```ts
 export const COMMAND_ACTION_IDS = ACTION_IDS.filter(

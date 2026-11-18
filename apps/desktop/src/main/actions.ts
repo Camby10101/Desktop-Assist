@@ -11,8 +11,6 @@ export function createActionHandlers(deps: {
   screenshots: ScreenshotService
   /** Starts the screen saver (main/screenSaver.ts). */
   startScreenSaver: () => void
-  /** Summons her familiar, the black cat, for a minute (main/familiar.ts). */
-  summonFamiliar: () => void
   /** Opens the company's IT service desk in the browser, or null if the tenant has none. */
   openServiceDesk: (() => Promise<void>) | null
   quit: () => void
@@ -42,11 +40,6 @@ export function createActionHandlers(deps: {
     async screensaver() {
       deps.controller.collapse()
       deps.startScreenSaver()
-      return { ok: true }
-    },
-    async familiar() {
-      deps.controller.collapse()
-      deps.summonFamiliar()
       return { ok: true }
     },
     async close() {

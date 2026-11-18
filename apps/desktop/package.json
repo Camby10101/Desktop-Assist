@@ -1,7 +1,7 @@
 {
   "name": "@desktop-assist/desktop",
   "productName": "Desktop Wizard",
-  "version": "2.4.0",
+  "version": "2.4.1",
   "private": true,
   "description": "Desktop assistant bubble for Windows",
   "author": "Morse Micro",
