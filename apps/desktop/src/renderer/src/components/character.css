@@ -136,6 +136,20 @@
   fill: #a8704f;
 }
 
+/* Her portal (her `portal` pose): a swirl of deep to light teal, and a glowing rim. */
+.px-portal-deep {
+  fill: #0c2a3e;
+}
+.px-portal {
+  fill: #1d6e8a;
+}
+.px-portal-light {
+  fill: #5fd8e9;
+}
+.px-portal-rim {
+  fill: #dcfbff;
+}
+
 /* Her shadow on the taskbar, in the accent colour while the panel is open. */
 .px-shadow {
   fill: rgb(0 0 0 / 0.22);
@@ -144,10 +158,11 @@
   fill: color-mix(in srgb, var(--color-accent) 70%, transparent);
 }
 
-/* A soft glow round her when the pointer is over her. */
+/* A soft glow round her when the pointer is over her (BubbleView keeps track; not :hover, which can
+   stick when her window moves out from under a still pointer). */
 .character {
   transition: filter 0.15s ease-out;
 }
-button:hover .character {
+button[data-hovered] .character {
   filter: drop-shadow(0 0 2px rgb(255 255 255 / 0.9));
 }

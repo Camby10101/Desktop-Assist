@@ -1,11 +1,5 @@
 import type { Attachment, NewRequest, RaiseResult } from '@shared/types'
 
-/**
- * The longest description put in the portal link. Browsers and Atlassian accept much longer
- * addresses, but past a few thousand characters some proxies don't.
- */
-export const MAX_LINK_DESCRIPTION = 1800
-
 /** What's sent about the PC, so IT doesn't have to ask. */
 export interface PcInfo {
   computerName: string
@@ -30,15 +24,6 @@ export function pcDetails(info: PcInfo): string {
     `Windows: ${info.windows}`,
     `${info.appName}: ${info.appVersion}`,
   ].join('\n')
-}
-
-/** The request's description: the user's words, then (if they want) the PC's details. */
-export function requestDescription(details: string, pc: string | null): string {
-  const parts = [details.trim(), pc ? `---\n${pc}` : ''].filter(Boolean)
-  const description = parts.join('\n\n')
-  return description.length > MAX_LINK_DESCRIPTION
-    ? `${description.slice(0, MAX_LINK_DESCRIPTION - 30).trimEnd()}\n… (shortened)`
-    : description
 }
 
 /**
@@ -94,7 +79,7 @@ export class ServiceDesk {
   }
 
   async raise(request: NewRequest, attachments: Attachment[]): Promise<RaiseResult> {
-    if (!request.summary.trim() && !request.details.trim()) return { ok: false, reason: 'empty' }
+    if (!request.summary.trim()) return { ok: false, reason: 'empty' }
     if (!this.deps.requestTypeIds.includes(request.requestTypeId)) {
       return { ok: false, reason: 'failed' }
     }
@@ -103,10 +88,9 @@ export class ServiceDesk {
       if (paths.length > 0 && !(await this.deps.copyScreenshots(paths))) {
         return { ok: false, reason: 'missing-screenshot' }
       }
-      const description = requestDescription(
-        request.details,
-        request.includePcDetails ? this.pcDetails() : null,
-      )
+      // Only the PC's details, if they're wanted: the rest is written on the portal (some request
+      // types have no description at all, and anything put there would be lost).
+      const description = request.includePcDetails ? this.pcDetails() : ''
       await this.deps.openLink(
         requestFormUrl({
           helpCentre: this.deps.helpCentre,

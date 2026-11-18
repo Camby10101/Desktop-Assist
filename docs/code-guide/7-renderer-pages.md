@@ -1344,7 +1344,7 @@ const DRAG_THRESHOLD = 5
 
 <!-- code: apps/desktop/src/renderer/src/views/BubbleView.tsx#BubbleView -->
 
-[`src/renderer/src/views/BubbleView.tsx`, lines 22–189](../../apps/desktop/src/renderer/src/views/BubbleView.tsx#L22-L189)
+[`src/renderer/src/views/BubbleView.tsx`, lines 24–215](../../apps/desktop/src/renderer/src/views/BubbleView.tsx#L24-L215)
 
 ```tsx
 /**
@@ -1441,6 +1441,26 @@ export function BubbleView() {
     }
   }, [])
 
+  // The glow round her while the pointer's over her. Not CSS's :hover: the page is only told about
+  // the pointer when it moves over her window, so when her window moves out from under a still
+  // pointer (she walks off, falls after a drag, hides for the screen saver), :hover stayed on. So
+  // the page keeps it itself, and while it's on, checks with the main process, which knows where
+  // the pointer really is, every HOVER_CHECK_MS.
+  const [hovered, setHovered] = useState(false)
+  useEffect(() => {
+    if (!hovered) return
+    let alive = true
+    const timer = setInterval(() => {
+      void window.assist.bubblePointerInside().then((inside) => {
+        if (alive && !inside) setHovered(false)
+      })
+    }, HOVER_CHECK_MS)
+    return () => {
+      alive = false
+      clearInterval(timer)
+    }
+  }, [hovered])
+
   // Which way she looks while she watches the pointer (the main process says, as it moves).
   const [gaze, setGaze] = useState<{ x: number; y: number } | null>(null)
   useEffect(() => window.assist.onGaze(setGaze), [])
@@ -1461,6 +1481,7 @@ export function BubbleView() {
   }
 
   function onPointerMove(event: PointerEvent<HTMLButtonElement>) {
+    setHovered(true)
     const current = press.current
     if (!current || current.dragging) return
     // Screen coordinates, because the window itself moves once the drag starts.
@@ -1486,6 +1507,8 @@ export function BubbleView() {
       type="button"
       aria-label={`${ACTION_LABEL[mode]} ${appName}`}
       onPointerDown={onPointerDown}
+      onPointerEnter={() => setHovered(true)}
+      onPointerLeave={() => setHovered(false)}
       onPointerMove={onPointerMove}
       onPointerUp={endPress}
       onLostPointerCapture={endPress}
@@ -1498,6 +1521,7 @@ export function BubbleView() {
         else window.assist.bubbleClick(pressedAt.current ?? Date.now())
         pressedAt.current = undefined
       }}
+      data-hovered={hovered || undefined}
       style={{ width: box, height: box + headroom }}
       // No focus outline: clicking her focuses the button, and Chromium can count that as
       // keyboard focus and draw the accent-coloured ring round her window.

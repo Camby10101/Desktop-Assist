@@ -3,6 +3,7 @@ import {
   actionOffset,
   BUBBLE_BOX,
   CHARACTER_SIZES,
+  isInside,
   largestSize,
   panelLayout,
   panelWindowSize,
@@ -258,5 +259,18 @@ describe('cloneStrip', () => {
       width: 1280,
       height: (BUBBLE_BOX + UI.bubbleHeadroom) * 2,
     })
+  })
+})
+
+describe('isInside (is the pointer over her window?)', () => {
+  const win = { x: 100, y: 900, width: 96, height: 104 }
+  it('counts the left and top edges in, and the right and bottom edges out', () => {
+    expect(isInside({ x: 100, y: 900 }, win)).toBe(true)
+    expect(isInside({ x: 148, y: 950 }, win)).toBe(true)
+    expect(isInside({ x: 195, y: 1003 }, win)).toBe(true)
+    expect(isInside({ x: 196, y: 950 }, win)).toBe(false)
+    expect(isInside({ x: 148, y: 1004 }, win)).toBe(false)
+    expect(isInside({ x: 99, y: 950 }, win)).toBe(false)
+    expect(isInside({ x: 148, y: 899 }, win)).toBe(false)
   })
 })

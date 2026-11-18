@@ -66,6 +66,8 @@ export interface IpcContext {
   screenSaver: { wakeFrom(senderId: number): void }
   /** Settings → Uninstall. */
   uninstall(): UninstallResult
+  /** Whether the mouse pointer is over her window (showing) now. */
+  pointerOverBubble(): boolean
   getState(): AppState
 }
 
@@ -139,6 +141,7 @@ export function registerIpc(ctx: IpcContext): void {
   on(IPC.bubbleDragEnd, NoArgs, () => ctx.controller.endDrag())
   on(IPC.bubbleDragHold, NoArgs, () => ctx.controller.dragHeld())
   on(IPC.bubblePet, NoArgs, () => ctx.controller.pet())
+  handle(IPC.bubblePointerInside, NoArgs, () => ctx.pointerOverBubble())
   on(IPC.collapse, NoArgs, () => ctx.controller.collapse())
   on(IPC.setInteractive, z.boolean(), (interactive, event) => {
     BrowserWindow.fromWebContents(event.sender)?.setIgnoreMouseEvents(!interactive, {
@@ -325,7 +328,6 @@ export function registerIpc(ctx: IpcContext): void {
       z.object({
         requestTypeId: z.string().regex(/^\d{1,10}$/),
         summary: z.string().max(255),
-        details: z.string().max(MAX_NOTE_LENGTH),
         includePcDetails: z.boolean(),
       }),
       async (request): Promise<RaiseResult> => {

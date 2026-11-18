@@ -1,6 +1,7 @@
 import {
   FIDGET_MS,
   LANDING,
+  PORTAL,
   REACTION_MS,
   SPELL_POSE_MS,
   type Pose as Name,
@@ -91,6 +92,11 @@ export const PALETTE: Record<string, string> = {
   B: 'px-boot-shade',
   y: 'px-boot-light',
   x: 'px-shadow',
+  // Her portal's swirl, deep to light teal, and its glowing rim.
+  d: 'px-portal-deep',
+  p: 'px-portal',
+  r: 'px-portal-light',
+  R: 'px-portal-rim',
 }
 
 /**
@@ -1734,26 +1740,119 @@ function rouse(): Key[] {
   ]
 }
 
-/** Riding on top of a window, from the front: sitting, arms up, hair flying, kicking her feet. */
-function ride(): Key[] {
-  return Array.from({ length: 12 }, (_, i) => {
-    const phase = (i / 12) * Math.PI * 2
-    const arm = { shoulder: 2.55 + 0.12 * Math.sin(phase), elbow: 0.35 }
-    return {
-      pose: {
-        view: 'front',
-        sitting: true,
-        face: i === 7 ? 'blink' : 'happy',
-        wind: Math.sin(phase) * 2,
-        lift: 1.5,
-        arms: [arm, arm],
-        legs: [
-          { hip: 0.4 + 0.25 * Math.sin(phase), knee: 0.3 },
-          { hip: 0.4 - 0.25 * Math.sin(phase), knee: 0.3 },
-        ],
-      },
-      ms: 90,
+/** The portal's middle, and its half-width and half-height when fully open (grid pixels). */
+const PORTAL_SHAPE = { x: 48, y: 50, rx: 29, ry: 42 }
+/** How far down she's drawn in the portal (her hips, pixels): seen from the knees up; and hidden. */
+const PORTAL_SHOWN = 18
+const PORTAL_HIDDEN = 72
+
+const fraction = (v: number) => v - Math.floor(v)
+
+/**
+ * A frame of the portal: `her` frame (or none) seen through it, open `open` (0 to 1), its swirl
+ * turned to `t` seconds. Inside, her pixels over the swirl (deep, mid and light teal bands turning
+ * round its middle); outside it, nothing (so whatever of her is outside it is cut away, as if she
+ * were on its far side); round its edge, a glowing rim, in front of her, with sparkles running
+ * round it.
+ */
+function portalFrame(her: string[] | null, open: number, t: number): string[] {
+  const { x: cx, y: cy, rx, ry } = PORTAL_SHAPE
+  return Array.from({ length: GRID + HEADROOM }, (_, row) => {
+    const y = row - HEADROOM
+    let line = ''
+    for (let x = 0; x < GRID; x++) {
+      if (open <= 0.02) {
+        line += '.'
+        continue
+      }
+      const dx = (x + 0.5 - cx) / (rx * open)
+      const dy = (y + 0.5 - cy) / (ry * open)
+      const d = Math.hypot(dx, dy)
+      if (d > 1) {
+        line += '.'
+        continue
+      }
+      // How far in from the rim, in pixels (about).
+      const edge = (1 - d) * Math.min(rx, ry) * open
+      const angle = Math.atan2(dy, dx) / (Math.PI * 2)
+      if (edge < 2.2) {
+        const sparkle = edge < 1.4 && fraction(angle * 10 - t * 0.8) < 0.06
+        line += sparkle ? 'w' : edge < 1.1 ? 'R' : 'r'
+        continue
+      }
+      const pixel = her?.[row]?.[x] ?? '.'
+      if (pixel !== '.' && pixel !== 'x') {
+        line += pixel
+        continue
+      }
+      const band = fraction(angle * 3 + d * 2.2 - t * 0.9)
+      line += d < 0.18 ? 'r' : band < 0.16 ? 'r' : band < 0.5 ? 'p' : 'd'
     }
+    return line
+  })
+}
+
+/** Her in the portal: from the front, `y` pixels down, waving (`wave`, 0 to 1 round a wave). */
+function inPortal(y: number, wave: number, face: Face = 'happy'): Pose {
+  const swing = Math.sin(wave * Math.PI * 2)
+  return {
+    view: 'front',
+    y,
+    shadow: false,
+    face,
+    tilt: 0.05 * swing,
+    arms: [
+      { shoulder: 2.55 + 0.12 * swing, elbow: 0.3 + 0.55 * swing },
+      { shoulder: 0.3, elbow: 0.35 },
+    ],
+  }
+}
+
+/**
+ * Waving through a portal on top of a window (her `portal` pose, played once: PORTAL): a ring of
+ * light opens; she rises into it from below, as if on its far side, seen from the knees up; waves
+ * a while, blinking now and then; sinks away; and it closes, leaving nothing. `back`: clicked, she
+ * goes back at once (her `portal-back` pose): just the sinking away and the closing.
+ */
+function portal(back = false): Frame[] {
+  const keys: { open: number; her: Pose | null; ms: number }[] = []
+  // `ms` split into frames of about `step` ms whose lengths add up to exactly `ms`.
+  const phase = (
+    ms: number,
+    step: number,
+    at: (u: number, i: number) => Omit<(typeof keys)[number], 'ms'>,
+  ) => {
+    const count = Math.max(1, Math.round(ms / step))
+    for (let i = 0; i < count; i++) {
+      keys.push({
+        ...at((i + 1) / count, i),
+        ms: Math.round(((i + 1) * ms) / count) - Math.round((i * ms) / count),
+      })
+    }
+  }
+  const { openMs, riseMs, waveMs, sinkMs, closeMs } = PORTAL
+  if (!back) {
+    phase(openMs, FRAME_MS, (u) => ({ open: smooth(u), her: null }))
+    phase(riseMs, FRAME_MS, (u) => ({
+      open: 1,
+      her: inPortal(lerp(PORTAL_HIDDEN, PORTAL_SHOWN, smooth(u)), 0),
+    }))
+    // A wave every eight frames.
+    phase(waveMs, 80, (_, i) => ({
+      open: 1,
+      her: inPortal(PORTAL_SHOWN, (i % 8) / 8, i % 23 === 11 ? 'blink' : 'happy'),
+    }))
+  }
+  phase(sinkMs, FRAME_MS, (u) => ({
+    open: 1,
+    her: inPortal(lerp(PORTAL_SHOWN, PORTAL_HIDDEN, smooth(u)), 0),
+  }))
+  phase(closeMs, FRAME_MS, (u) => ({ open: 1 - smooth(u), her: null }))
+  let t = 0
+  return keys.map(({ open, her, ms }) => {
+    const rows = portalFrame(her ? draw(her) : null, open, t)
+    t += ms / 1000
+    return { rows, ms }
   })
 }
 
@@ -1816,7 +1915,8 @@ const MAKERS: Record<Name, () => Frame[]> = {
   watch: () => drawn(watch()),
   'peek-left': () => drawn(peek()),
   'peek-right': () => drawn(peek()),
-  ride: () => drawn(ride()),
+  portal: () => portal(),
+  'portal-back': () => portal(true),
   settle: () => drawn(settle()),
   rouse: () => drawn(rouse()),
   snooze: () => drawn(snooze()),
@@ -1861,7 +1961,8 @@ export const LOOPS: Record<Name, boolean> = {
   watch: true,
   'peek-left': true,
   'peek-right': true,
-  ride: true,
+  portal: false,
+  'portal-back': false,
   settle: false,
   rouse: false,
   snooze: true,

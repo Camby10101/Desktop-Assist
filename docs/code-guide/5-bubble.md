@@ -271,7 +271,7 @@ not saved, so after a restart it starts right in its corner.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleControllerDeps -->
 
-[`src/main/bubble/BubbleController.ts`, lines 115–141](../../apps/desktop/src/main/bubble/BubbleController.ts#L115-L141)
+[`src/main/bubble/BubbleController.ts`, lines 121–147](../../apps/desktop/src/main/bubble/BubbleController.ts#L121-L147)
 
 ```ts
 export interface BubbleControllerDeps {
@@ -345,7 +345,7 @@ Everything the constructor needs, passed as one object (its _dependencies_).
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#pastimesOf -->
 
-[`src/main/bubble/BubbleController.ts`, lines 148–151](../../apps/desktop/src/main/bubble/BubbleController.ts#L148-L151)
+[`src/main/bubble/BubbleController.ts`, lines 154–157](../../apps/desktop/src/main/bubble/BubbleController.ts#L154-L157)
 
 ```ts
 /** What she may do on her own, from the Settings (both, unless they say otherwise). */
@@ -369,7 +369,7 @@ say what she _doesn't_ do (stand still, no idle animations), so each is turned r
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#FRAME_MS,DEFAULT_CORNER,PANEL_FADE_MS,BLUR_CLICK_GRACE_MS,PRESS_SLACK_MS,OPEN_BLUR_GRACE_MS,HIDE_SETTLE_MS -->
 
-[`src/main/bubble/BubbleController.ts`, lines 153–173](../../apps/desktop/src/main/bubble/BubbleController.ts#L153-L173)
+[`src/main/bubble/BubbleController.ts`, lines 159–179](../../apps/desktop/src/main/bubble/BubbleController.ts#L159-L179)
 
 ```ts
 const FRAME_MS = 16
@@ -423,7 +423,7 @@ The class, with the comment that describes it:
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.class -->
 
-[`src/main/bubble/BubbleController.ts`, lines 175–191](../../apps/desktop/src/main/bubble/BubbleController.ts#L175-L191)
+[`src/main/bubble/BubbleController.ts`, lines 181–197](../../apps/desktop/src/main/bubble/BubbleController.ts#L181-L197)
 
 ```ts
 /**
@@ -455,7 +455,7 @@ fields:
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.mode,pose,position,anchor,inset,chosenScale,scale,ticker,hideTimer,idleTimer,walking,lastFidget,lastInteraction,lastBlurCollapse,expandedAt,expandAfterReturn,leaving,pastimes,asleep,sleepTimer,now,random -->
 
-[`src/main/bubble/BubbleController.ts`, lines 192–239](../../apps/desktop/src/main/bubble/BubbleController.ts#L192-L239)
+[`src/main/bubble/BubbleController.ts`, lines 198–247](../../apps/desktop/src/main/bubble/BubbleController.ts#L198-L247)
 
 ```ts
 private mode: Mode = 'collapsed'
@@ -571,7 +571,7 @@ private readonly random: () => number
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.constructor -->
 
-[`src/main/bubble/BubbleController.ts`, lines 241–257](../../apps/desktop/src/main/bubble/BubbleController.ts#L241-L257)
+[`src/main/bubble/BubbleController.ts`, lines 249–265](../../apps/desktop/src/main/bubble/BubbleController.ts#L249-L265)
 
 ```ts
 constructor(private readonly deps: BubbleControllerDeps) {
@@ -640,7 +640,7 @@ Nothing appears on screen until `start()`.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.currentMode,currentPose,bubblePosition,corner -->
 
-[`src/main/bubble/BubbleController.ts`, lines 259–273](../../apps/desktop/src/main/bubble/BubbleController.ts#L259-L273)
+[`src/main/bubble/BubbleController.ts`, lines 267–281](../../apps/desktop/src/main/bubble/BubbleController.ts#L267-L281)
 
 ```ts
 get currentMode(): Mode {
@@ -674,7 +674,7 @@ can't assign to it. `index.ts` reads `currentMode`, `currentPose` and `corner` i
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.size,standing -->
 
-[`src/main/bubble/BubbleController.ts`, lines 275–290](../../apps/desktop/src/main/bubble/BubbleController.ts#L275-L290)
+[`src/main/bubble/BubbleController.ts`, lines 283–298](../../apps/desktop/src/main/bubble/BubbleController.ts#L283-L298)
 
 ```ts
 /** How big she is, and the biggest she can be on her display. */
@@ -718,7 +718,7 @@ Two more read-only properties, both about her size.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.setScale -->
 
-[`src/main/bubble/BubbleController.ts`, lines 292–301](../../apps/desktop/src/main/bubble/BubbleController.ts#L292-L301)
+[`src/main/bubble/BubbleController.ts`, lines 300–309](../../apps/desktop/src/main/bubble/BubbleController.ts#L300-L309)
 
 ```ts
 /**
@@ -752,7 +752,7 @@ sends the result back to the page.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.setHabits -->
 
-[`src/main/bubble/BubbleController.ts`, lines 303–312](../../apps/desktop/src/main/bubble/BubbleController.ts#L303-L312)
+[`src/main/bubble/BubbleController.ts`, lines 311–320](../../apps/desktop/src/main/bubble/BubbleController.ts#L311-L320)
 
 ```ts
 /**
@@ -791,7 +791,7 @@ effect at once, without a restart.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.start -->
 
-[`src/main/bubble/BubbleController.ts`, lines 314–322](../../apps/desktop/src/main/bubble/BubbleController.ts#L314-L322)
+[`src/main/bubble/BubbleController.ts`, lines 322–330](../../apps/desktop/src/main/bubble/BubbleController.ts#L322-L330)
 
 ```ts
 /** Stands the character in its saved corner (or bottom-right of the main display) and shows it. */
@@ -825,7 +825,7 @@ anchor was already chosen in the constructor; this just puts the windows there.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.clickBubble -->
 
-[`src/main/bubble/BubbleController.ts`, lines 354–381](../../apps/desktop/src/main/bubble/BubbleController.ts#L354-L381)
+[`src/main/bubble/BubbleController.ts`, lines 375–404](../../apps/desktop/src/main/bubble/BubbleController.ts#L375-L404)
 
 ```ts
 /** A click on the bubble. `pressedAt` is when its mouse button went down (wall-clock ms). */
@@ -833,6 +833,8 @@ clickBubble(pressedAt?: number): void {
   if (this.leaving || this.asleep) return
   switch (this.mode) {
     case 'collapsed': {
+      // In the middle of a performance that answers clicks itself (her portal sends her home).
+      if (this.performanceTakesClick()) return
       const closedByThisPress =
         pressedAt === undefined
           ? this.now() - this.lastBlurCollapse < BLUR_CLICK_GRACE_MS
@@ -898,7 +900,7 @@ which knows the mode and when the panel last closed.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.expand -->
 
-[`src/main/bubble/BubbleController.ts`, lines 383–405](../../apps/desktop/src/main/bubble/BubbleController.ts#L383-L405)
+[`src/main/bubble/BubbleController.ts`, lines 406–428](../../apps/desktop/src/main/bubble/BubbleController.ts#L406-L428)
 
 ```ts
 /** Opens the panel where the character stands. While she's falling, once she lands. */
@@ -955,7 +957,7 @@ the browser, and clicking one of the app's Windows notifications (all in `index.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.collapse -->
 
-[`src/main/bubble/BubbleController.ts`, lines 407–415](../../apps/desktop/src/main/bubble/BubbleController.ts#L407-L415)
+[`src/main/bubble/BubbleController.ts`, lines 430–438](../../apps/desktop/src/main/bubble/BubbleController.ts#L430-L438)
 
 ```ts
 collapse(): void {
@@ -988,7 +990,7 @@ a spell, and `farewell()` as the app closes.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.panelBlurred -->
 
-[`src/main/bubble/BubbleController.ts`, lines 417–425](../../apps/desktop/src/main/bubble/BubbleController.ts#L417-L425)
+[`src/main/bubble/BubbleController.ts`, lines 440–448](../../apps/desktop/src/main/bubble/BubbleController.ts#L440-L448)
 
 ```ts
 panelBlurred(): void {
@@ -1021,7 +1023,7 @@ behaves like a popup and closes.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.startDrag -->
 
-[`src/main/bubble/BubbleController.ts`, lines 427–453](../../apps/desktop/src/main/bubble/BubbleController.ts#L427-L453)
+[`src/main/bubble/BubbleController.ts`, lines 450–476](../../apps/desktop/src/main/bubble/BubbleController.ts#L450-L476)
 
 ```ts
 /** The mouse pressed on the character and moved: it dangles from the pointer until released. */
@@ -1083,7 +1085,7 @@ it.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.endDrag -->
 
-[`src/main/bubble/BubbleController.ts`, lines 460–486](../../apps/desktop/src/main/bubble/BubbleController.ts#L460-L486)
+[`src/main/bubble/BubbleController.ts`, lines 483–509](../../apps/desktop/src/main/bubble/BubbleController.ts#L483-L509)
 
 ```ts
 /**
@@ -1150,7 +1152,7 @@ walks back once it has landed.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.act -->
 
-[`src/main/bubble/BubbleController.ts`, lines 488–513](../../apps/desktop/src/main/bubble/BubbleController.ts#L488-L513)
+[`src/main/bubble/BubbleController.ts`, lines 511–536](../../apps/desktop/src/main/bubble/BubbleController.ts#L511-L536)
 
 ```ts
 /**
@@ -1217,7 +1219,7 @@ appearing.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.teleport -->
 
-[`src/main/bubble/BubbleController.ts`, lines 515–526](../../apps/desktop/src/main/bubble/BubbleController.ts#L515-L526)
+[`src/main/bubble/BubbleController.ts`, lines 538–549](../../apps/desktop/src/main/bubble/BubbleController.ts#L538-L549)
 
 ```ts
 /**
@@ -1256,7 +1258,7 @@ there's room, with the panel moved to open from there.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.farewell -->
 
-[`src/main/bubble/BubbleController.ts`, lines 528–541](../../apps/desktop/src/main/bubble/BubbleController.ts#L528-L541)
+[`src/main/bubble/BubbleController.ts`, lines 551–564](../../apps/desktop/src/main/bubble/BubbleController.ts#L551-L564)
 
 ```ts
 /**
@@ -1300,7 +1302,7 @@ panel closes, she vanishes into white motes where she is (her `vanish` pose), an
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.sleep,wake -->
 
-[`src/main/bubble/BubbleController.ts`, lines 543–571](../../apps/desktop/src/main/bubble/BubbleController.ts#L543-L571)
+[`src/main/bubble/BubbleController.ts`, lines 566–594](../../apps/desktop/src/main/bubble/BubbleController.ts#L566-L594)
 
 ```ts
 /**
@@ -1376,7 +1378,7 @@ on.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.whileHidden -->
 
-[`src/main/bubble/BubbleController.ts`, lines 573–589](../../apps/desktop/src/main/bubble/BubbleController.ts#L573-L589)
+[`src/main/bubble/BubbleController.ts`, lines 596–612](../../apps/desktop/src/main/bubble/BubbleController.ts#L596-L612)
 
 ```ts
 /** Hides both windows, runs `task` (a screenshot), then reopens the panel. */
@@ -1423,7 +1425,7 @@ hidden first and brought back afterwards.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.displayChanged -->
 
-[`src/main/bubble/BubbleController.ts`, lines 591–609](../../apps/desktop/src/main/bubble/BubbleController.ts#L591-L609)
+[`src/main/bubble/BubbleController.ts`, lines 614–632](../../apps/desktop/src/main/bubble/BubbleController.ts#L614-L632)
 
 ```ts
 /**
@@ -1485,7 +1487,7 @@ taskbar moving or resizing (which changes the work area).
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.dispose -->
 
-[`src/main/bubble/BubbleController.ts`, lines 611–622](../../apps/desktop/src/main/bubble/BubbleController.ts#L611-L622)
+[`src/main/bubble/BubbleController.ts`, lines 634–645](../../apps/desktop/src/main/bubble/BubbleController.ts#L634-L645)
 
 ```ts
 dispose(): void {
@@ -1513,7 +1515,7 @@ fires against a window that is being destroyed. The tests call it after each tes
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.display,rest -->
 
-[`src/main/bubble/BubbleController.ts`, lines 624–632](../../apps/desktop/src/main/bubble/BubbleController.ts#L624-L632)
+[`src/main/bubble/BubbleController.ts`, lines 647–655](../../apps/desktop/src/main/bubble/BubbleController.ts#L647-L655)
 
 ```ts
 /** The anchor's display, or the main display if it's gone. */
@@ -1541,7 +1543,7 @@ private rest(): Point {
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.largestScale,fitScale -->
 
-[`src/main/bubble/BubbleController.ts`, lines 634–655](../../apps/desktop/src/main/bubble/BubbleController.ts#L634-L655)
+[`src/main/bubble/BubbleController.ts`, lines 657–678](../../apps/desktop/src/main/bubble/BubbleController.ts#L657-L678)
 
 ```ts
 /** The biggest she can be on her display (see largestSize). */
@@ -1599,7 +1601,7 @@ call it when her display may have changed.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.fall -->
 
-[`src/main/bubble/BubbleController.ts`, lines 657–674](../../apps/desktop/src/main/bubble/BubbleController.ts#L657-L674)
+[`src/main/bubble/BubbleController.ts`, lines 680–697](../../apps/desktop/src/main/bubble/BubbleController.ts#L680-L697)
 
 ```ts
 /** After a drop: falls onto the taskbar, then walks back toward its corner if it's far off. */
@@ -1651,7 +1653,7 @@ anchor and the inset, so `rest()` is where it lands: straight below where it was
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.settle -->
 
-[`src/main/bubble/BubbleController.ts`, lines 732–742](../../apps/desktop/src/main/bubble/BubbleController.ts#L732-L742)
+[`src/main/bubble/BubbleController.ts`, lines 755–765](../../apps/desktop/src/main/bubble/BubbleController.ts#L755-L765)
 
 ```ts
 /** The end of a fall: standing, collapsed, and opening if that was asked for. */
@@ -1683,7 +1685,7 @@ As its comment says, the end of a fall. `fall()` calls it when the character lan
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.zone -->
 
-[`src/main/bubble/BubbleController.ts`, lines 744–748](../../apps/desktop/src/main/bubble/BubbleController.ts#L744-L748)
+[`src/main/bubble/BubbleController.ts`, lines 767–771](../../apps/desktop/src/main/bubble/BubbleController.ts#L767-L771)
 
 ```ts
 /** How far from its corner it wanders on its display: further when she's bigger. */
@@ -1708,7 +1710,7 @@ choose where to walk.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.scheduleActivity -->
 
-[`src/main/bubble/BubbleController.ts`, lines 750–759](../../apps/desktop/src/main/bubble/BubbleController.ts#L750-L759)
+[`src/main/bubble/BubbleController.ts`, lines 773–782](../../apps/desktop/src/main/bubble/BubbleController.ts#L773-L782)
 
 ```ts
 /**
@@ -1747,7 +1749,7 @@ of a spell's pose, from `act()`), and by `displayChanged()`.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.doActivity -->
 
-[`src/main/bubble/BubbleController.ts`, lines 761–797](../../apps/desktop/src/main/bubble/BubbleController.ts#L761-L797)
+[`src/main/bubble/BubbleController.ts`, lines 784–820](../../apps/desktop/src/main/bubble/BubbleController.ts#L784-L820)
 
 ```ts
 private doActivity(): void {
@@ -1824,7 +1826,7 @@ done, waits for the next.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.walkTo -->
 
-[`src/main/bubble/BubbleController.ts`, lines 799–820](../../apps/desktop/src/main/bubble/BubbleController.ts#L799-L820)
+[`src/main/bubble/BubbleController.ts`, lines 822–843](../../apps/desktop/src/main/bubble/BubbleController.ts#L822-L843)
 
 ```ts
 /** Walks along the taskbar to `target` (an inset), then waits for the next thing to do. */
@@ -1885,7 +1887,7 @@ panel, a press and move picks it up.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.stopWalking -->
 
-[`src/main/bubble/BubbleController.ts`, lines 822–830](../../apps/desktop/src/main/bubble/BubbleController.ts#L822-L830)
+[`src/main/bubble/BubbleController.ts`, lines 845–853](../../apps/desktop/src/main/bubble/BubbleController.ts#L845-L853)
 
 ```ts
 /** Stops a walk where it is, standing idle, with the panel moved to open from there. */
@@ -1919,7 +1921,7 @@ Ends a walk cleanly, wherever the character has got to. This is how a walk is in
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.stopIdling,cancelActivity -->
 
-[`src/main/bubble/BubbleController.ts`, lines 832–971](../../apps/desktop/src/main/bubble/BubbleController.ts#L832-L971)
+[`src/main/bubble/BubbleController.ts`, lines 855–995](../../apps/desktop/src/main/bubble/BubbleController.ts#L855-L995)
 
 ```ts
 /** Stops whatever it was doing on its own: the next activity, a fidget or a spell, a walk. */
@@ -1958,7 +1960,7 @@ private cancelActivity(): void {
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.runTicker,stopTicker -->
 
-[`src/main/bubble/BubbleController.ts`, lines 973–986](../../apps/desktop/src/main/bubble/BubbleController.ts#L973-L986)
+[`src/main/bubble/BubbleController.ts`, lines 997–1010](../../apps/desktop/src/main/bubble/BubbleController.ts#L997-L1010)
 
 ```ts
 private runTicker(onFrame: (dtMs: number) => void): void {
@@ -1995,7 +1997,7 @@ The 60 fps ticker. It drives every animation (drag, fall and walk), but only one
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.moveBubble,placeWindows -->
 
-[`src/main/bubble/BubbleController.ts`, lines 988–998](../../apps/desktop/src/main/bubble/BubbleController.ts#L988-L998)
+[`src/main/bubble/BubbleController.ts`, lines 1012–1022](../../apps/desktop/src/main/bubble/BubbleController.ts#L1012-L1022)
 
 ```ts
 private moveBubble(position: Point): void {
@@ -2030,7 +2032,7 @@ private placeWindows(): void {
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.setAnchor,cancelHide,setMode,setPose -->
 
-[`src/main/bubble/BubbleController.ts`, lines 1000–1030](../../apps/desktop/src/main/bubble/BubbleController.ts#L1000-L1030)
+[`src/main/bubble/BubbleController.ts`, lines 1024–1054](../../apps/desktop/src/main/bubble/BubbleController.ts#L1024-L1054)
 
 ```ts
 private setAnchor(anchor: BubbleAnchor): void {
@@ -2095,7 +2097,7 @@ Small helpers, though `setMode()` does more than it used to.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#bottomOf -->
 
-[`src/main/bubble/BubbleController.ts`, lines 1033–1037](../../apps/desktop/src/main/bubble/BubbleController.ts#L1033-L1037)
+[`src/main/bubble/BubbleController.ts`, lines 1057–1061](../../apps/desktop/src/main/bubble/BubbleController.ts#L1057-L1061)
 
 ```ts
 /** The bottom corner on the same side: the character always stands at the bottom. */
@@ -2528,7 +2530,7 @@ export const FIDGET_WEIGHT: Partial<Record<Fidget, number>> = { vision: 0.2 }
 
 <!-- code: apps/desktop/src/main/bubble/wander.ts#activityDelay -->
 
-[`src/main/bubble/wander.ts`, lines 253–257](../../apps/desktop/src/main/bubble/wander.ts#L253-L257)
+[`src/main/bubble/wander.ts`, lines 254–258](../../apps/desktop/src/main/bubble/wander.ts#L254-L258)
 
 ```ts
 /** How long until the next thing the character does on its own (ms). */
@@ -2552,7 +2554,7 @@ How long the character waits before doing something on its own, in milliseconds.
 
 <!-- code: apps/desktop/src/main/bubble/wander.ts#nextActivity -->
 
-[`src/main/bubble/wander.ts`, lines 259–311](../../apps/desktop/src/main/bubble/wander.ts#L259-L311)
+[`src/main/bubble/wander.ts`, lines 260–312](../../apps/desktop/src/main/bubble/wander.ts#L260-L312)
 
 ```ts
 /**
@@ -2649,7 +2651,7 @@ they wait for a quiet spell rather than starting up while someone has just been 
 
 <!-- code: apps/desktop/src/main/bubble/wander.ts#walkTarget -->
 
-[`src/main/bubble/wander.ts`, lines 313–325](../../apps/desktop/src/main/bubble/wander.ts#L313-L325)
+[`src/main/bubble/wander.ts`, lines 314–326](../../apps/desktop/src/main/bubble/wander.ts#L314-L326)
 
 ```ts
 /**
@@ -2691,7 +2693,7 @@ toward its corner or away from it, with `roll` choosing the spot.
 
 <!-- code: apps/desktop/src/main/bubble/wander.ts#walkStep -->
 
-[`src/main/bubble/wander.ts`, lines 327–339](../../apps/desktop/src/main/bubble/wander.ts#L327-L339)
+[`src/main/bubble/wander.ts`, lines 328–340](../../apps/desktop/src/main/bubble/wander.ts#L328-L340)
 
 ```ts
 /**
@@ -2726,7 +2728,7 @@ One frame of a walk: the new inset, `dtMs` milliseconds of walking closer to `to
 
 <!-- code: apps/desktop/src/main/bubble/wander.ts#fallDuration -->
 
-[`src/main/bubble/wander.ts`, lines 341–349](../../apps/desktop/src/main/bubble/wander.ts#L341-L349)
+[`src/main/bubble/wander.ts`, lines 342–350](../../apps/desktop/src/main/bubble/wander.ts#L342-L350)
 
 ```ts
 /**
@@ -2755,7 +2757,7 @@ How long the fall after a drop takes, in milliseconds.
 
 <!-- code: apps/desktop/src/main/bubble/wander.ts#fallPosition -->
 
-[`src/main/bubble/wander.ts`, lines 351–357](../../apps/desktop/src/main/bubble/wander.ts#L351-L357)
+[`src/main/bubble/wander.ts`, lines 352–358](../../apps/desktop/src/main/bubble/wander.ts#L352-L358)
 
 ```ts
 /** Position at progress `t` (0–1) of the fall: speeding up as it falls, like a dropped thing. */

@@ -1307,15 +1307,15 @@ The page, with the comment that sums it up.
 
 <!-- code: apps/desktop/src/renderer/src/components/ServiceDeskPage.tsx#NewRequestForm -->
 
-[`src/renderer/src/components/ServiceDeskPage.tsx`, lines 106–270](../../apps/desktop/src/renderer/src/components/ServiceDeskPage.tsx#L106-L270)
+[`src/renderer/src/components/ServiceDeskPage.tsx`, lines 106–262](../../apps/desktop/src/renderer/src/components/ServiceDeskPage.tsx#L106-L262)
 
 ```tsx
 function NewRequestForm(props: Parameters<typeof ServiceDeskPage>[0] & { connected: boolean }) {
   const { requestTypes, showToast } = props
   const [requestTypeId, setRequestTypeId] = useState(requestTypes[0]?.id ?? '')
-  // Starts from the text box: its first line as the summary, all of it as the details.
+  // Starts from the text box: its first line as the summary. (No box for details: some request
+  // types have no description, and what was typed there was lost. The rest goes on the portal.)
   const [summary, setSummary] = useState(() => firstLine(props.draft))
-  const [details, setDetails] = useState(props.draft.trim())
   const [includePc, setIncludePc] = useState(true)
   const [pcDetails, setPcDetails] = useState('')
   const [articles, setArticles] = useState<ConfluencePage[]>([])
@@ -1330,7 +1330,7 @@ function NewRequestForm(props: Parameters<typeof ServiceDeskPage>[0] & { connect
   }, [])
 
   // How-to articles about what they're typing, from the company's knowledge spaces.
-  const lookFor = `${summary} ${details}`.trim().slice(0, 300)
+  const lookFor = summary.trim().slice(0, 300)
   const lookingFor = props.connected && lookFor.length >= 4
   const shownArticles = lookingFor ? articles : []
   useEffect(() => {
@@ -1348,13 +1348,13 @@ function NewRequestForm(props: Parameters<typeof ServiceDeskPage>[0] & { connect
   async function raise() {
     setSending(true)
     const result = await window.assist.serviceDesk
-      .raise({ requestTypeId, summary, details, includePcDetails: includePc })
+      .raise({ requestTypeId, summary, includePcDetails: includePc })
       .finally(() => setSending(false))
     // On success the panel has closed and the portal's form is opening in the browser.
     if (!result.ok) showToast(RAISE_ERRORS[result.reason], 'error')
   }
 
-  const canSend = !sending && (summary.trim() !== '' || details.trim() !== '')
+  const canSend = !sending && summary.trim() !== ''
   const screenshots = props.attachments.length
 
   return (
@@ -1387,14 +1387,6 @@ function NewRequestForm(props: Parameters<typeof ServiceDeskPage>[0] & { connect
             placeholder="e.g. Outlook keeps crashing"
             autoFocus
             className="w-full rounded-lg bg-zinc-100 px-2.5 py-1.5 text-xs outline-none placeholder:text-zinc-400 dark:bg-zinc-800"
-          />
-        </Field>
-        <Field label="Details">
-          <textarea
-            value={details}
-            onChange={(event) => setDetails(event.target.value)}
-            placeholder="What happened, and what you've tried"
-            className="block max-h-32 min-h-16 w-full resize-none rounded-lg bg-zinc-100 px-2.5 py-1.5 text-xs outline-none field-sizing-content placeholder:text-zinc-400 dark:bg-zinc-800"
           />
         </Field>
 
@@ -1485,23 +1477,24 @@ New request: the request filled in here, then finished on the portal.
   page (`Parameters<...>[0]` is the type of `ServiceDeskPage`'s first argument), plus whether
   Atlassian is connected.
 - `requestTypeId`: starts on the first request type in the tenant's list.
-- `useState(() => firstLine(props.draft))`, `useState(props.draft.trim())`: as the comment says,
-  the form starts from the text box: its first line as the summary, all of it as the details.
-  They're only starting values: editing the form doesn't change the text box.
+- `useState(() => firstLine(props.draft))`: as the comment says, the form starts from the text
+  box: its first line as the summary. It's only a starting value: editing the form doesn't change
+  the text box. There's no box for details: some request types have no description, and what was
+  typed there was lost; the rest is written on the portal.
 - `includePc`: **Include PC details**, on to start with. `pcDetails`: what it adds, asked for once
   (`serviceDesk.pcDetails()`) to show under the checkbox.
-- `lookFor`, `lookingFor`: the words to look for articles about: the summary and details, up to
+- `lookFor`, `lookingFor`: the words to look for articles about: the summary, up to
   300 characters, once there are at least 4 and Atlassian is connected.
 - The `useEffect` on `[lookFor, lookingFor]`: like the Search tab's, a pause in typing sends
   `atlassian.articles(lookFor)`, and a late answer for old words is ignored. `shownArticles` is
   empty whenever there's nothing to look for, so old articles don't linger.
 - `raise()`: **Continue on the portal**: sends the form's fields
-  (`serviceDesk.raise({ requestTypeId, summary, details, includePcDetails })`). As the comment
+  (`serviceDesk.raise({ requestTypeId, summary, includePcDetails })`). As the comment
   says, on success the main process has closed the panel and the browser is opening the portal's
   form. A failure shows its message from `RAISE_ERRORS`.
-- `canSend`: not while sending, and only with a summary or some details.
-- The form: **What kind of request?** (a list of the tenant's request types), **Summary** (255
-  characters at most, Jira's limit) and **Details**, each in a `Field`.
+- `canSend`: not while sending, and only with a summary.
+- The form: **What kind of request?** (a list of the tenant's request types) and **Summary** (255
+  characters at most, Jira's limit), each in a `Field`.
 - "These might help:": the articles, each opening in the browser, with the page's snippet as its
   tooltip.
 - The screenshots, as `AttachmentChip`s (open, remove), and **Attach screenshot**, which attaches
@@ -1515,7 +1508,7 @@ New request: the request filled in here, then finished on the portal.
 
 <!-- code: apps/desktop/src/renderer/src/components/ServiceDeskPage.tsx#MyRequests -->
 
-[`src/renderer/src/components/ServiceDeskPage.tsx`, lines 272–356](../../apps/desktop/src/renderer/src/components/ServiceDeskPage.tsx#L272-L356)
+[`src/renderer/src/components/ServiceDeskPage.tsx`, lines 264–348](../../apps/desktop/src/renderer/src/components/ServiceDeskPage.tsx#L264-L348)
 
 ```tsx
 function MyRequests(props: {
@@ -1624,7 +1617,7 @@ My requests: the user's requests, newest change first.
 
 <!-- code: apps/desktop/src/renderer/src/components/ServiceDeskPage.tsx#Field,firstLine -->
 
-[`src/renderer/src/components/ServiceDeskPage.tsx`, lines 358–371](../../apps/desktop/src/renderer/src/components/ServiceDeskPage.tsx#L358-L371)
+[`src/renderer/src/components/ServiceDeskPage.tsx`, lines 350–363](../../apps/desktop/src/renderer/src/components/ServiceDeskPage.tsx#L350-L363)
 
 ```tsx
 function Field(props: { label: string; children: ReactNode }) {

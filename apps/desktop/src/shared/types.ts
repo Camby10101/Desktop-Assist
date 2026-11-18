@@ -304,11 +304,14 @@ export type IssuePrompt = 'summarise' | 'reply' | 'next-steps'
 /** Asking Claude about an issue: `inChat` when it went to the chat in the panel. */
 export type AskAboutIssueResult = { ok: true; inChat: boolean } | { ok: false; message: string }
 
-/** A request filled in on the panel, to finish on the help centre portal. */
+/**
+ * A request filled in on the panel, to finish on the help centre portal: its type and summary, and
+ * whether the PC's details go in its description. (There's no box for more: some request types
+ * have no description, and what was typed there was lost. The rest is written on the portal.)
+ */
 export interface NewRequest {
   requestTypeId: string
   summary: string
-  details: string
   includePcDetails: boolean
 }
 

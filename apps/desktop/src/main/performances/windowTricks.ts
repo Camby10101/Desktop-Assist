@@ -1,4 +1,11 @@
-import { LANDING, SPELL_POSE_MS, type Pose } from '@shared/character'
+import {
+  LANDING,
+  PORTAL,
+  PORTAL_BACK_MS,
+  PORTAL_MS,
+  SPELL_POSE_MS,
+  type Pose,
+} from '@shared/character'
 import { bubbleMetrics, UI, type Point, type Rect } from '@shared/geometry'
 import type { Performance } from '../bubble/BubbleController'
 import { fallDuration, impactSpeed, isHardLanding } from '../bubble/wander'
@@ -8,7 +15,8 @@ import type { TrickDisplay } from './taskbarTricks'
 
 // Her tricks with the windows on the screen (looked at, never touched): peeking round the edge of
 // one that comes down to the taskbar near her (she goes behind it: her window is clipped where it
-// is), and riding on top of one, which she rides along on if it's dragged, and falls off if it goes.
+// is), and waving through a portal she opens on top of one, which goes along with it if it's
+// dragged, and drops her if it goes.
 
 /** A window she can use: where it is (DIPs) and how to ask after it. */
 export interface UsableWindow {
@@ -149,18 +157,21 @@ export function stepAt(steps: readonly Step[], t: number): { x: number; pose: Po
   return null
 }
 
-/** A ride: the window, and where along its top she sits (DIPs from its left edge to her box's). */
-export interface RidePlan {
+/** A portal: the window, and where along its top it opens (DIPs from its left edge to her box's). */
+export interface PortalPlan {
   window: UsableWindow
   along: number
 }
 
 /**
- * A window she can ride on, if there's one: its top edge well above the taskbar (with room for her
- * above it on the screen), wide enough; the one whose top is nearest above her, sitting at the
- * point along it nearest her.
+ * A window she can open a portal on, if there's one: its top edge well above the taskbar (with room
+ * above it on the screen for the portal), wide enough; the one whose top is nearest above her, the
+ * portal at the point along it nearest her.
  */
-export function rideSpot(windows: readonly UsableWindow[], standing: Standing): RidePlan | null {
+export function portalSpot(
+  windows: readonly UsableWindow[],
+  standing: Standing,
+): PortalPlan | null {
   const size = bubbleMetrics(standing.scale).size
   const area = standing.workArea
   const ground = standing.box.y
@@ -180,8 +191,8 @@ export function rideSpot(windows: readonly UsableWindow[], standing: Standing): 
   return { window: nearest, along }
 }
 
-/** A ride's timetable (ms): how long she rides at most, and how often the window's asked after. */
-export const RIDE = { rideMs: 20_000, pollMs: 100 } as const
+/** How often the window under her portal is asked after, so the portal goes along with it (ms). */
+export const PORTAL_WATCH_MS = 100
 
 export interface WindowTricksDeps {
   windows(): Promise<ShellWindow[]>
@@ -196,8 +207,8 @@ export interface WindowTricksDeps {
 }
 
 /**
- * Her tricks with the windows on the screen: peeking round one (see peekEdge) and riding on one
- * (see rideSpot). Getting one ready asks the shell for the windows; while it's under way the
+ * Her tricks with the windows on the screen: peeking round one (see peekEdge) and waving through a
+ * portal on top of one (see portalSpot). Getting one ready asks the shell for the windows; while it's under way the
  * window is asked after now and then, so she goes along with it, or stops if it goes.
  */
 export class WindowTricks {
@@ -270,16 +281,27 @@ export class WindowTricks {
     }
   }
 
-  async ride(standing: Standing): Promise<Performance | null> {
-    const plan = rideSpot(await this.usable(standing), standing)
+  /**
+   * Waving through a portal on top of a window: she vanishes from the taskbar, a portal opens on
+   * the window's top edge and she waves through it a while (her `portal` pose, PORTAL_MS), and then
+   * she appears back home. Clicked meanwhile, she goes back at once: she sinks away, the portal
+   * closes (her `portal-back` pose, PORTAL_BACK_MS), and she appears back home. Dragged, the window
+   * takes the portal (and her) with it; minimised, maximised or closed, it drops her to the
+   * taskbar, hard from up there.
+   */
+  async portal(standing: Standing): Promise<Performance | null> {
+    const plan = portalSpot(await this.usable(standing), standing)
     if (!plan) return null
     const size = bubbleMetrics(standing.scale).size
-    const watching = this.watch(plan.window.handle, RIDE.pollMs)
+    const watching = this.watch(plan.window.handle, PORTAL_WATCH_MS)
     const home = standing.box
     let window = plan.window.rect
-    // Falling off (the window went): from where, when, how long the fall takes and how hard she lands.
+    // Dropped (the window went): from where, when, how long the fall takes and how hard she lands.
     let fall: { from: Point; at: number; ms: number; hard: boolean } | null = null
+    // Clicked in the portal: when she started going back.
+    let back: number | null = null
     const pad = UI.bubblePad * standing.scale
+    // Her box with her feet (the portal's foot) on the window's top edge.
     const top = () => ({ x: window.x + plan.along, y: window.y - size - pad + 2 * standing.scale })
     const vanish = SPELL_POSE_MS.vanish
     const appear = SPELL_POSE_MS.appear
@@ -299,28 +321,40 @@ export class WindowTricks {
             return { x: fall.from.x, y: home.y, pose: 'splat' }
           return null
         }
-        // Vanishing from the taskbar and appearing on top of the window.
+        // Vanishing from the taskbar.
         if (t < vanish) return { x: home.x, y: home.y, pose: 'vanish' }
-        const now = watching.now()
-        if (now) window = now
-        const seat = top()
-        if (now === null) {
-          // The window's gone from under her: she falls to the taskbar.
-          const drop = home.y - seat.y
-          fall = {
-            from: seat,
-            at: t,
-            ms: fallDuration({ x: 0, y: 0 }, { x: 0, y: Math.max(0, drop) }),
-            hard: isHardLanding(impactSpeed(drop)),
+        // The portal's open until it closes on its own, or sooner if she was sent back.
+        const closes = back === null ? vanish + PORTAL_MS : back + PORTAL_BACK_MS
+        if (t < closes) {
+          const now = watching.now()
+          if (now) window = now
+          const spot = top()
+          if (now === null) {
+            // The window's gone from under the portal: she drops to the taskbar.
+            const drop = home.y - spot.y
+            fall = {
+              from: spot,
+              at: t,
+              ms: fallDuration({ x: 0, y: 0 }, { x: 0, y: Math.max(0, drop) }),
+              hard: isHardLanding(impactSpeed(drop)),
+            }
+            return { x: spot.x, y: spot.y, pose: 'flung' }
           }
-          return { x: seat.x, y: seat.y, pose: 'flung' }
+          return { ...spot, pose: back === null ? 'portal' : 'portal-back' }
         }
-        if (t < vanish + appear) return { ...seat, pose: 'appear' }
-        if (t < vanish + appear + RIDE.rideMs) return { ...seat, pose: 'ride' }
-        // Time's up: vanishing from the window, and appearing back home.
-        if (t < vanish * 2 + appear + RIDE.rideMs) return { ...seat, pose: 'vanish' }
-        if (t < (vanish + appear) * 2 + RIDE.rideMs) return { x: home.x, y: home.y, pose: 'appear' }
+        // The portal's closed: she appears back home.
+        if (t < closes + appear) return { x: home.x, y: home.y, pose: 'appear' }
         return null
+      },
+      clicked: (t) => {
+        // Before the portal opens, and once she's falling or home again, a click is just a click.
+        if (fall || t < vanish) return false
+        if (back !== null) return t < back + PORTAL_BACK_MS + appear // already on her way
+        const sinking = vanish + PORTAL.openMs + PORTAL.riseMs + PORTAL.waveMs
+        if (t >= vanish + PORTAL_MS) return false
+        // Still waving (or rising): she goes back now. Sinking already: she's going anyway.
+        if (t < sinking) back = t
+        return true
       },
       end: () => watching.stop(),
     }

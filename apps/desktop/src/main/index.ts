@@ -20,7 +20,7 @@ import { existsSync } from 'node:fs'
 import { readFile, rm } from 'node:fs/promises'
 import { hostname, release, version as osVersion } from 'node:os'
 import { join } from 'node:path'
-import { bubbleMetrics, panelWindowSize, type Rect } from '@shared/geometry'
+import { bubbleMetrics, isInside, panelWindowSize, type Rect } from '@shared/geometry'
 import { IPC } from '@shared/ipc'
 import { FAMILIAR } from '@shared/character'
 import { CAST_POSE, type Spell } from '@shared/spells'
@@ -277,11 +277,11 @@ async function start(): Promise<void> {
     displays: electronDisplays,
     onGaze: (gaze) => bubbleWindow.webContents.send(IPC.gaze, gaze),
     more: {
-      // Peeking round a window, and riding on one (Windows only).
+      // Peeking round a window, and waving through a portal on top of one (Windows only).
       ...(windowTricks
         ? {
             peek: { moves: true, prepare: (standing: Standing) => windowTricks.peek(standing) },
-            ride: { moves: true, prepare: (standing: Standing) => windowTricks.ride(standing) },
+            portal: { moves: true, prepare: (standing: Standing) => windowTricks.portal(standing) },
           }
         : {}),
       // Her tricks with the taskbar's icons (Windows only).
@@ -603,6 +603,8 @@ async function start(): Promise<void> {
     }),
     castSpell,
     screenSaver,
+    pointerOverBubble: () =>
+      bubbleWindow.isVisible() && isInside(screen.getCursorScreenPoint(), bubbleWindow.getBounds()),
     uninstall: () =>
       uninstall({
         isPackaged: app.isPackaged,

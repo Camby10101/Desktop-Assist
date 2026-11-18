@@ -774,7 +774,7 @@ const updater = updates
 - `new Updater({`: Settings → Check for updates (see
   [`updates.ts`](#srcmainupdatests-checking-for-updates)).
 - `currentVersion: app.getVersion()`: this copy's version, from `apps/desktop/package.json`
-  (`2.4.1` at the moment; `1.0.0` was the first release).
+  (`2.4.2` at the moment; `1.0.0` was the first release).
 - `` releasesUrl: `${updates.api}/repos/${updates.repo}/releases?per_page=30` ``: GitHub's API
   address for the repository's releases (the newest 30), such as
   `https://api.github.com/repos/Camby10101/Desktop-Wizard/releases?per_page=30`.
@@ -1000,7 +1000,7 @@ Two statements follow:
 
 <!-- code: apps/desktop/src/main/index.ts#start.onDisplayChange -->
 
-[`src/main/index.ts`, lines 642–646](../../apps/desktop/src/main/index.ts#L642-L646)
+[`src/main/index.ts`, lines 644–648](../../apps/desktop/src/main/index.ts#L644-L648)
 
 ```ts
 const onDisplayChange = () => {
@@ -1071,7 +1071,7 @@ Everything else in this part of `start()` is plain statements:
 
 <!-- code: apps/desktop/src/main/index.ts#start.shuttingDown -->
 
-[`src/main/index.ts`, lines 651–652](../../apps/desktop/src/main/index.ts#L651-L652)
+[`src/main/index.ts`, lines 653–654](../../apps/desktop/src/main/index.ts#L653-L654)
 
 ```ts
 // Save the text box before quitting. before-quit fires again after the second app.quit().
@@ -1116,7 +1116,7 @@ there, and none of it is lost before the window shows.
 
 <!-- code: apps/desktop/src/main/index.ts#start.stopWatchingFront -->
 
-[`src/main/index.ts`, lines 679–689](../../apps/desktop/src/main/index.ts#L679-L689)
+[`src/main/index.ts`, lines 681–691](../../apps/desktop/src/main/index.ts#L681-L691)
 
 ```ts
 // For its first ten minutes, make sure the bubble isn't stuck behind other apps' windows.
@@ -1168,7 +1168,7 @@ was part of `start()`. It returns a [`BuiltInChat`](#builtinchat): the `AuthMana
 
 <!-- code: apps/desktop/src/main/index.ts#startBuiltInChat.devBaseUrl,lastIdToken,backend,chat -->
 
-[`src/main/index.ts`, lines 709–733](../../apps/desktop/src/main/index.ts#L709-L733)
+[`src/main/index.ts`, lines 711–735](../../apps/desktop/src/main/index.ts#L711-L735)
 
 ```ts
 // Dev runs may point at a local test server; an installed app always talks to Anthropic.
@@ -1241,7 +1241,7 @@ const chat = new ChatSession({
 
 <!-- code: apps/desktop/src/main/index.ts#startBuiltInChat.missing,localIssuer,authState,auth -->
 
-[`src/main/index.ts`, lines 735–759](../../apps/desktop/src/main/index.ts#L735-L759)
+[`src/main/index.ts`, lines 737–761](../../apps/desktop/src/main/index.ts#L737-L761)
 
 ```ts
 const missing = missingSettings(signIn, claudeAccess)
@@ -1318,7 +1318,7 @@ Two statements end the function:
 
 <!-- code: apps/desktop/src/main/index.ts#safeStorageEncryptor -->
 
-[`src/main/index.ts`, lines 765–770](../../apps/desktop/src/main/index.ts#L765-L770)
+[`src/main/index.ts`, lines 767–772](../../apps/desktop/src/main/index.ts#L767-L772)
 
 ```ts
 /** Windows DPAPI through Electron: only this Windows user can decrypt what it encrypts. */
@@ -1346,7 +1346,7 @@ The encryption `SecretStore` uses for the saved sign-in. `SecretStore` only know
 
 <!-- code: apps/desktop/src/main/index.ts#withDevOverrides -->
 
-[`src/main/index.ts`, lines 772–795](../../apps/desktop/src/main/index.ts#L772-L795)
+[`src/main/index.ts`, lines 774–797](../../apps/desktop/src/main/index.ts#L774-L797)
 
 ```ts
 /**
@@ -1402,7 +1402,7 @@ example to try the built-in chat against a test identity provider, without editi
 
 <!-- code: apps/desktop/src/main/index.ts#isLoopback -->
 
-[`src/main/index.ts`, lines 797–799](../../apps/desktop/src/main/index.ts#L797-L799)
+[`src/main/index.ts`, lines 799–801](../../apps/desktop/src/main/index.ts#L799-L801)
 
 ```ts
 function isLoopback(url: URL): boolean {
@@ -1420,7 +1420,7 @@ in `hostname`. Used only to decide whether plain `http` is allowed for a dev ide
 
 <!-- code: apps/desktop/src/main/index.ts#toArea,electronDisplays -->
 
-[`src/main/index.ts`, lines 801–816](../../apps/desktop/src/main/index.ts#L801-L816)
+[`src/main/index.ts`, lines 803–818](../../apps/desktop/src/main/index.ts#L803-L818)
 
 ```ts
 /** Electron's `screen`, in the shape the bubble controller uses. All coordinates are DIPs. */
@@ -1467,7 +1467,7 @@ method is called, which happens after `start()` has begun.
 
 <!-- code: apps/desktop/src/main/index.ts#fail -->
 
-[`src/main/index.ts`, lines 818–822](../../apps/desktop/src/main/index.ts#L818-L822)
+[`src/main/index.ts`, lines 820–824](../../apps/desktop/src/main/index.ts#L820-L824)
 
 ```ts
 function fail(error: unknown): void {
@@ -1871,7 +1871,7 @@ which one exists without the other.
 
 <!-- code: apps/desktop/src/main/ipc.ts#IpcContext -->
 
-[`src/main/ipc.ts`, lines 43–70](../../apps/desktop/src/main/ipc.ts#L43-L70)
+[`src/main/ipc.ts`, lines 43–72](../../apps/desktop/src/main/ipc.ts#L43-L72)
 
 ```ts
 export interface IpcContext {
@@ -1900,6 +1900,8 @@ export interface IpcContext {
   screenSaver: { wakeFrom(senderId: number): void }
   /** Settings → Uninstall. */
   uninstall(): UninstallResult
+  /** Whether the mouse pointer is over her window (showing) now. */
+  pointerOverBubble(): boolean
   getState(): AppState
 }
 ```
@@ -1934,7 +1936,7 @@ are created there, so this file only needs their types, not how to build them.
 
 <!-- code: apps/desktop/src/main/ipc.ts#NoArgs,FilePath,IssueKey,TimeSpent,ASK_PROBLEMS,ExternalUrl -->
 
-[`src/main/ipc.ts`, lines 72–99](../../apps/desktop/src/main/ipc.ts#L72-L99)
+[`src/main/ipc.ts`, lines 74–101](../../apps/desktop/src/main/ipc.ts#L74-L101)
 
 ```ts
 const NoArgs = z.undefined()
@@ -1996,7 +1998,7 @@ Schemas used by several channels.
 
 <!-- code: apps/desktop/src/main/ipc.ts#registerIpc -->
 
-[`src/main/ipc.ts`, lines 101–386](../../apps/desktop/src/main/ipc.ts#L101-L386)
+[`src/main/ipc.ts`, lines 103–388](../../apps/desktop/src/main/ipc.ts#L103-L388)
 
 ```ts
 /** Wires every renderer request to the main process. All arguments are validated with zod. */
@@ -2040,6 +2042,7 @@ export function registerIpc(ctx: IpcContext): void {
   on(IPC.bubbleDragEnd, NoArgs, () => ctx.controller.endDrag())
   on(IPC.bubbleDragHold, NoArgs, () => ctx.controller.dragHeld())
   on(IPC.bubblePet, NoArgs, () => ctx.controller.pet())
+  handle(IPC.bubblePointerInside, NoArgs, () => ctx.pointerOverBubble())
   on(IPC.collapse, NoArgs, () => ctx.controller.collapse())
   on(IPC.setInteractive, z.boolean(), (interactive, event) => {
     BrowserWindow.fromWebContents(event.sender)?.setIgnoreMouseEvents(!interactive, {
@@ -2226,7 +2229,6 @@ export function registerIpc(ctx: IpcContext): void {
       z.object({
         requestTypeId: z.string().regex(/^\d{1,10}$/),
         summary: z.string().max(255),
-        details: z.string().max(MAX_NOTE_LENGTH),
         includePcDetails: z.boolean(),
       }),
       async (request): Promise<RaiseResult> => {

@@ -213,7 +213,8 @@ describe('the new poses', () => {
   })
 
   it('hold her performances’ poses round and round, and pounce and peek either way', () => {
-    for (const pose of HELD_POSES) expect(LOOPS[pose], pose).toBe(true)
+    // All but the portal's, which open, have her wave through it (or go back), and close, once.
+    for (const pose of HELD_POSES) expect(LOOPS[pose], pose).toBe(!pose.startsWith('portal'))
     for (const pose of REACTIONS) expect(LOOPS[pose], pose).toBe(false)
     const right = framesOf('pounce-right', 'left').map((f) => f.rows.join(''))
     const left = framesOf('pounce-left', 'right').map((f) => f.rows.join(''))

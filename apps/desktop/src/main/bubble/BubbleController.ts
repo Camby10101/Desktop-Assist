@@ -97,6 +97,12 @@ export interface Performance {
   at(t: number): { x: number; y: number; pose: Pose } | null
   /** It's over: finished, or cut short (the user picked her up, say). */
   end(finished: boolean): void
+  /**
+   * She was clicked `t` ms in. True: the performance takes care of it (and carries on: her portal
+   * sends her home, say), and the click does nothing else. False, or left out: the click is a click
+   * (it opens the panel, ending the performance).
+   */
+  clicked?(t: number): boolean
 }
 
 /**
@@ -220,6 +226,8 @@ export class BubbleController {
   private pointerTrail: PointerSample[] = []
   /** The performance under way, if one is. */
   private performance: Performance | null = null
+  /** When the performance under way began (the controller's clock). */
+  private performanceStartedAt = 0
   /** Counts performances asked for, so one that's ready after she's been interrupted is dropped. */
   private performances = 0
   /** The end of a reaction played while the panel's open (or of a pet), if one is playing. */
@@ -348,7 +356,20 @@ export class BubbleController {
 
   /** Double-clicked: hearts and a happy wiggle (the click before it opened or closed the panel). */
   pet(): void {
+    // The second click of a double-click, in a performance that answers clicks: it's had the first.
+    if (this.performanceTakesClick()) return
     this.react('pet')
+  }
+
+  /**
+   * Whether the performance under way (if any) takes a click on her itself (see
+   * Performance.clicked). If it does, that counts as the user doing something with her.
+   */
+  private performanceTakesClick(): boolean {
+    const performance = this.performance
+    if (!performance?.clicked?.(this.now() - this.performanceStartedAt)) return false
+    this.lastInteraction = this.now()
+    return true
   }
 
   /** A click on the bubble. `pressedAt` is when its mouse button went down (wall-clock ms). */
@@ -356,6 +377,8 @@ export class BubbleController {
     if (this.leaving || this.asleep) return
     switch (this.mode) {
       case 'collapsed': {
+        // In the middle of a performance that answers clicks itself (her portal sends her home).
+        if (this.performanceTakesClick()) return
         const closedByThisPress =
           pressedAt === undefined
             ? this.now() - this.lastBlurCollapse < BLUR_CLICK_GRACE_MS
@@ -904,6 +927,7 @@ export class BubbleController {
     this.cancelActivity()
     this.performance = performance
     const startedAt = this.now()
+    this.performanceStartedAt = startedAt
     this.runTicker(() => {
       const step = performance.at(this.now() - startedAt)
       if (!step) {

@@ -1,10 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { Attachment, NewRequest } from '@shared/types'
 import {
-  MAX_LINK_DESCRIPTION,
   myRequestsUrl,
   pcDetails,
-  requestDescription,
   requestFormUrl,
   ServiceDesk,
   windowsVersion,
@@ -46,14 +44,10 @@ describe('service desk links', () => {
     )
   })
 
-  it('adds the PC details under the description, and keeps the link a sensible length', () => {
-    expect(requestDescription('It broke', pcDetails(PC))).toBe(
-      'It broke\n\n---\nPC: MM-LT-042\nWindows: Windows 11 Pro (10.0.26200)\nDesktop Wizard: 0.1.0',
+  it('describes the PC', () => {
+    expect(pcDetails(PC)).toBe(
+      'PC: MM-LT-042\nWindows: Windows 11 Pro (10.0.26200)\nDesktop Wizard: 0.1.0',
     )
-    expect(requestDescription('  ', null)).toBe('')
-    const long = requestDescription('x'.repeat(5000), null)
-    expect(long.length).toBeLessThanOrEqual(MAX_LINK_DESCRIPTION)
-    expect(long.endsWith('… (shortened)')).toBe(true)
   })
 
   it('calls Windows 11 by its name', () => {
@@ -74,7 +68,6 @@ describe('ServiceDesk', () => {
   const request: NewRequest = {
     requestTypeId: '1561',
     summary: 'Printer jammed',
-    details: 'Level 4 printer',
     includePcDetails: true,
   }
 
@@ -102,21 +95,22 @@ describe('ServiceDesk', () => {
     const url = new URL(world.opened[0]!)
     expect(url.pathname).toBe('/servicedesk/customer/portal/1/create/1561')
     expect(url.searchParams.get('summary')).toBe('Printer jammed')
-    expect(url.searchParams.get('description')).toContain('Level 4 printer\n\n---\nPC: MM-LT-042')
+    // The description has only the PC's details: some request types have no description at all.
+    expect(url.searchParams.get('description')).toBe(pcDetails(PC))
     expect(world.notified).toEqual(['Screenshot copied'])
   })
 
   it('leaves the PC details out when asked, and needs no screenshot', async () => {
     const { serviceDesk, world } = desk()
     await serviceDesk.raise({ ...request, includePcDetails: false }, [])
-    expect(new URL(world.opened[0]!).searchParams.get('description')).toBe('Level 4 printer')
+    expect(new URL(world.opened[0]!).searchParams.has('description')).toBe(false)
     expect(world.copied).toEqual([])
     expect(world.notified).toEqual([])
   })
 
   it('refuses an empty request, an unknown request type and a missing screenshot', async () => {
     const { serviceDesk, world } = desk({ screenshotsExist: false })
-    expect(await serviceDesk.raise({ ...request, summary: '', details: ' ' }, [])).toEqual({
+    expect(await serviceDesk.raise({ ...request, summary: ' ' }, [])).toEqual({
       ok: false,
       reason: 'empty',
     })
