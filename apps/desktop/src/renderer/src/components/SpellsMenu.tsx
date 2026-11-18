@@ -1,5 +1,6 @@
 import {
   Bird,
+  Cat,
   CloudLightning,
   Flame,
   Flower,
@@ -23,6 +24,7 @@ const MENU_WIDTH = 176
 const ICONS: Record<Spell, LucideIcon> = {
   clones: UsersRound,
   teleport: Orbit,
+  familiar: Cat,
   butterflies: Flower,
   starfall: Sparkles,
   fireworks: Rocket,

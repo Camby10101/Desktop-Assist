@@ -7,7 +7,7 @@ import type { Point } from '@shared/geometry'
 
 export const WANDER = {
   /** How far from its corner the character wanders (DIP). */
-  zone: 240,
+  zone: 180,
   /** Walking speed (DIP per second). */
   walkSpeed: 80,
   /** Shorter walks aren't worth it. */

@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { FAMILIAR, FIDGET_MS, type Pose } from '@shared/character'
 import { UI, BUBBLE_BOX, type Rect } from '@shared/geometry'
 import { IPC } from '@shared/ipc'
-import { createActionHandlers } from '../src/main/actions'
+import { ACTION_IDS } from '@shared/actions'
+import { SPELL_LABELS, SPELLS } from '@shared/spells'
 import { Familiar, SEE_EVERY_MS } from '../src/main/familiar'
 import { familiarVisit, VISIT_GREETING_MS } from '../src/main/performances/familiarVisit'
 import { CAT_SIZE, catFrames, PUFF_MS } from '../src/renderer/src/character/cat'
@@ -98,18 +99,10 @@ describe('Familiar (the cat’s window)', () => {
     expect(familiar.running).toBe(false)
   })
 
-  it('is summoned from its icon, closing the panel', async () => {
-    const calls: string[] = []
-    const handlers = createActionHandlers({
-      controller: { collapse: () => calls.push('collapse') } as never,
-      screenshots: {} as never,
-      openServiceDesk: null,
-      startScreenSaver: () => {},
-      summonFamiliar: () => calls.push('summon'),
-      quit: () => {},
-    })
-    expect(await handlers.familiar()).toEqual({ ok: true })
-    expect(calls).toEqual(['collapse', 'summon'])
+  it('is summoned from the Spells menu, after her teleport', () => {
+    expect(SPELLS.indexOf('familiar')).toBe(SPELLS.indexOf('teleport') + 1)
+    expect(SPELL_LABELS.familiar).toBe('Summon familiar')
+    expect(ACTION_IDS as readonly string[]).not.toContain('familiar')
   })
 })
 

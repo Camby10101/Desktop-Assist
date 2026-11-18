@@ -8,6 +8,7 @@ import {
   Menu,
   net,
   Notification,
+  powerMonitor,
   safeStorage,
   screen,
   shell,
@@ -298,6 +299,8 @@ async function start(): Promise<void> {
 
   const bubble = new BubbleController({
     performer: performances,
+    // How long since anyone used the mouse or keyboard, anywhere: she snoozes when it's a while.
+    idleSeconds: () => powerMonitor.getSystemIdleTime(),
     bubble: {
       ...herWindow,
       // Her familiar watches where she goes.
@@ -376,6 +379,10 @@ async function start(): Promise<void> {
       bubble.act('spell')
     } else if (spell === 'teleport') {
       bubble.teleport()
+    } else if (spell === 'familiar') {
+      // Her black cat, for a minute, as she casts.
+      familiar.start(bubble.standing, FAMILIAR.summonMs)
+      bubble.act('spell')
     } else {
       // The rest are drawn over the screen while she acts them out (the explosion while she
       // chants).
@@ -592,7 +599,6 @@ async function start(): Promise<void> {
       screenshots,
       openServiceDesk: serviceDesk ? () => shell.openExternal(serviceDesk.url) : null,
       startScreenSaver: () => screenSaver.start(),
-      summonFamiliar: () => familiar.start(bubble.standing, FAMILIAR.summonMs),
       quit: () => app.quit(),
     }),
     castSpell,

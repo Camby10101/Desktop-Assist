@@ -2136,7 +2136,7 @@ closes.
 
 <!-- code: apps/desktop/src/renderer/src/components/SpellsMenu.tsx#MENU_WIDTH,ICONS -->
 
-[`src/renderer/src/components/SpellsMenu.tsx`, lines 21–34](../../apps/desktop/src/renderer/src/components/SpellsMenu.tsx#L21-L34)
+[`src/renderer/src/components/SpellsMenu.tsx`, lines 22–36](../../apps/desktop/src/renderer/src/components/SpellsMenu.tsx#L22-L36)
 
 ```tsx
 const MENU_WIDTH = 176
@@ -2144,6 +2144,7 @@ const MENU_WIDTH = 176
 const ICONS: Record<Spell, LucideIcon> = {
   clones: UsersRound,
   teleport: Orbit,
+  familiar: Cat,
   butterflies: Flower,
   starfall: Sparkles,
   fireworks: Rocket,
@@ -2169,7 +2170,7 @@ const ICONS: Record<Spell, LucideIcon> = {
 
 <!-- code: apps/desktop/src/renderer/src/components/SpellsMenu.tsx#SpellsMenu -->
 
-[`src/renderer/src/components/SpellsMenu.tsx`, lines 36–88](../../apps/desktop/src/renderer/src/components/SpellsMenu.tsx#L36-L88)
+[`src/renderer/src/components/SpellsMenu.tsx`, lines 38–90](../../apps/desktop/src/renderer/src/components/SpellsMenu.tsx#L38-L90)
 
 ```tsx
 /**
@@ -2276,7 +2277,7 @@ lists request types), `dotted` (icons that get a small dot) and `onAction`, whic
 
 <!-- code: apps/desktop/src/renderer/src/components/ActionStack.tsx#ICONS -->
 
-[`src/renderer/src/components/ActionStack.tsx`, lines 19–30](../../apps/desktop/src/renderer/src/components/ActionStack.tsx#L19-L30)
+[`src/renderer/src/components/ActionStack.tsx`, lines 18–28](../../apps/desktop/src/renderer/src/components/ActionStack.tsx#L18-L28)
 
 ```tsx
 const ICONS: Record<ActionId, LucideIcon> = {
@@ -2288,7 +2289,6 @@ const ICONS: Record<ActionId, LucideIcon> = {
   settings: Settings,
   spells: WandSparkles,
   screensaver: Sunset,
-  familiar: Cat,
   close: Power,
 }
 ```
@@ -2309,7 +2309,7 @@ horizon, for the scene it shows, and Close is `Power`, a power button.
 
 <!-- code: apps/desktop/src/renderer/src/components/ActionStack.tsx#ActionStack -->
 
-[`src/renderer/src/components/ActionStack.tsx`, lines 32–107](../../apps/desktop/src/renderer/src/components/ActionStack.tsx#L32-L107)
+[`src/renderer/src/components/ActionStack.tsx`, lines 30–105](../../apps/desktop/src/renderer/src/components/ActionStack.tsx#L30-L105)
 
 ```tsx
 /**
@@ -7822,7 +7822,7 @@ the screen saver is on), so it has no entry in `MAKERS`; `gazeFrames()`, below, 
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#drawn,MAKERS,LEFT_MAKERS,LOOPS -->
 
-[`src/renderer/src/character/sprite.ts`, lines 1711–1848](../../apps/desktop/src/renderer/src/character/sprite.ts#L1711-L1848)
+[`src/renderer/src/character/sprite.ts`, lines 1760–1904](../../apps/desktop/src/renderer/src/character/sprite.ts#L1760-L1904)
 
 ```ts
 // ------------------------------------------------------------------------------------- frames
@@ -7885,6 +7885,9 @@ const MAKERS: Record<Name, () => Frame[]> = {
   'peek-left': () => drawn(peek()),
   'peek-right': () => drawn(peek()),
   ride: () => drawn(ride()),
+  settle: () => drawn(settle()),
+  rouse: () => drawn(rouse()),
+  snooze: () => drawn(snooze()),
 }
 
 /**
@@ -7893,6 +7896,7 @@ const MAKERS: Record<Name, () => Frame[]> = {
  */
 const LEFT_MAKERS: Partial<Record<Name, () => Frame[]>> = {
   doze: () => drawn(doze(true)),
+  snooze: () => drawn(snooze(true)),
 }
 
 /** Whether a pose's animation repeats (the fidgets play once, for FIDGET_MS). */
@@ -7918,6 +7922,9 @@ export const LOOPS: Record<Name, boolean> = {
   'peek-left': true,
   'peek-right': true,
   ride: true,
+  settle: false,
+  rouse: false,
+  snooze: true,
   hop: false,
   wave: false,
   stretch: false,
@@ -7986,7 +7993,7 @@ export const LOOPS: Record<Name, boolean> = {
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#gazing,gazeFrames -->
 
-[`src/renderer/src/character/sprite.ts`, lines 1781–1787](../../apps/desktop/src/renderer/src/character/sprite.ts#L1781-L1787)
+[`src/renderer/src/character/sprite.ts`, lines 1834–1840](../../apps/desktop/src/renderer/src/character/sprite.ts#L1834-L1840)
 
 ```ts
 let gazing: Frame[] | null = null
@@ -8013,7 +8020,7 @@ In the source these sit between `LEFT_MAKERS` and `LOOPS`, above.
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#Facing,made,framesOf -->
 
-[`src/renderer/src/character/sprite.ts`, lines 1850–1874](../../apps/desktop/src/renderer/src/character/sprite.ts#L1850-L1874)
+[`src/renderer/src/character/sprite.ts`, lines 1906–1930](../../apps/desktop/src/renderer/src/character/sprite.ts#L1906-L1930)
 
 ```ts
 export type Facing = 'left' | 'right'
@@ -8059,7 +8066,7 @@ export function framesOf(pose: Name, facing: Facing): Frame[] {
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#animationLength,mirror -->
 
-[`src/renderer/src/character/sprite.ts`, lines 1876–1883](../../apps/desktop/src/renderer/src/character/sprite.ts#L1876-L1883)
+[`src/renderer/src/character/sprite.ts`, lines 1932–1939](../../apps/desktop/src/renderer/src/character/sprite.ts#L1932-L1939)
 
 ```ts
 /** How long a pose's frames last altogether (a fidget's must match FIDGET_MS). */
@@ -8085,7 +8092,7 @@ export function mirror(rows: string[]): string[] {
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#framePaths -->
 
-[`src/renderer/src/character/sprite.ts`, lines 1885–1909](../../apps/desktop/src/renderer/src/character/sprite.ts#L1885-L1909)
+[`src/renderer/src/character/sprite.ts`, lines 1941–1965](../../apps/desktop/src/renderer/src/character/sprite.ts#L1941-L1965)
 
 ```ts
 /**

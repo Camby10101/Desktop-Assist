@@ -5,7 +5,7 @@ corner of the screen and opens a panel when clicked. Built for Morse Micro first
 [`tenants/`](tenants/README.md), so another business can use it later.
 
 **Download:** the newest installer is in [`installer/`](installer/)
-([Desktop Wizard-Setup-2.4.0.exe](installer/Desktop%20Wizard-Setup-2.4.0.exe), with its signature
+([Desktop Wizard-Setup-2.4.1.exe](installer/Desktop%20Wizard-Setup-2.4.1.exe), with its signature
 beside it). Run it to install Desktop Wizard for yourself (no admin needed); an installed copy
 updates itself from Settings → Check for updates.
 
@@ -29,7 +29,7 @@ sign-in) and 4 (logos, favourites, service desk, light/dark mode, bubble-click f
 3.1 (questions open in Claude Desktop) and 3.2 (Apps list, Uninstall) are complete, as are
 Milestone 5 (the app-opening spinner; Jira and the service desk) and its fixes 5.1 and 5.2 (the
 bubble kept in front, and Check for updates). Version **1.0.0** was the first release (see
-[PLAN.md](docs/PLAN.md) §7h and [RELEASING.md](docs/RELEASING.md)); this is version **2.4.0**, with
+[PLAN.md](docs/PLAN.md) §7h and [RELEASING.md](docs/RELEASING.md)); this is version **2.4.1**, with
 the animated character (thirty-two habits, ten of them magic; throw her and she tumbles; tricks
 with the taskbar's icons and the windows on the screen; her familiar, a black cat), her spells,
 the screen saver, and Robe colour, Stand still and No idle animations in Settings
@@ -88,7 +88,9 @@ name are sent on to it.
   sitting on one, sneezing one flying, a wand tap) or watches the pointer for ten seconds. The
   tricks are pretend: copies of the icons, cut from a screenshot that never leaves the PC, are drawn
   over the taskbar; nothing on it really moves. She yawns late at night (10pm to 6am), and throws
-  confetti on Friday evenings (4pm to 8pm).
+  confetti on Friday evenings (4pm to 8pm). With nobody at the PC for five minutes (no mouse or
+  keyboard), she sits down and snoozes until someone is, then wakes and gets up (not while the
+  screen saver's on). She wanders a little less far from her corner than she used to.
 - **The pointer**: zip it past her and she may jump; wiggle it near her and she may pounce at it
   (not every time, and not again for a while).
 - **News**: when a new Jira notification or a reply to one of your requests arrives, she hops up
@@ -136,10 +138,12 @@ name are sent on to it.
     new version) and **Uninstall Desktop Wizard**. (With the
     built-in chat: Response style (Fast / Balanced / Thorough), New conversation, and who you're
     signed in as with **Log out**.)
-  - **Spells** (a wand) opens a menu of her ten spells; the panel closes and she casts the one you
+  - **Spells** (a wand) opens a menu of her eleven spells; the panel closes and she casts the one you
     pick. They're only pictures: clicks go straight through them, and clicking her stops a spell.
     - **Clones**: ten of her walk about the taskbar for thirty seconds, now and then waving.
     - **Teleport**: she vanishes into white motes and pops up elsewhere along the taskbar.
+    - **Summon familiar**: her black cat appears beside her in a puff of smoke and wanders the
+      taskbar for a minute, following her and joining in with what she does.
     - **Butterflies**: a swarm of little magic butterflies bursts out of her and flutters away.
     - **Starfall**: shooting stars streak across the screen for ten seconds.
     - **Fireworks**: rockets burst high over the screen, ending in a finale.
@@ -154,8 +158,6 @@ name are sent on to it.
     gliding by and fireflies over the grass, and she stands on the nearest hill, her back to you,
     watching it; on any other screens, shooting stars fall through the night sky. Move the mouse,
     click or press a key and it fades away, and she forms again on the taskbar.
-  - **Summon familiar** (a cat): her black cat appears beside her in a puff of smoke and wanders
-    the taskbar for a minute, following her and joining in with what she does.
   - **Close**: she dissolves into white motes, and the app quits.
 - **Attach screenshot** adds the newest screenshot to your next question; click it again to add
   the one before, and so on (it says when there are no more). **Report to IT** turns

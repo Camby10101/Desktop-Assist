@@ -1,7 +1,6 @@
 import {
   Bell,
   Camera,
-  Cat,
   Headset,
   LayoutGrid,
   MessageCircle,
@@ -25,7 +24,6 @@ const ICONS: Record<ActionId, LucideIcon> = {
   settings: Settings,
   spells: WandSparkles,
   screensaver: Sunset,
-  familiar: Cat,
   close: Power,
 }
 
