@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { FIDGETS, SPELL_POSES, type Pose } from '@shared/character'
+import { FIDGETS, HELD_POSES, REACTIONS, SPELL_POSES, type Pose } from '@shared/character'
 import {
   framePaths,
   framesOf,
+  gazeFrame,
   LOOPS,
   SPRITE_HEADROOM,
   SPRITE_SIZE,
@@ -32,6 +33,8 @@ const ALL_POSES: Pose[] = [
   'splat',
   ...FIDGETS,
   ...SPELL_POSES,
+  ...REACTIONS,
+  ...HELD_POSES,
 ]
 
 /**
@@ -42,7 +45,14 @@ const ALL_POSES: Pose[] = [
  * `facing` (walking, she faces the way she walks). `expanded` tints her shadow while the panel is
  * open.
  */
-export function Character(props: { pose: Pose; facing: Facing; box: number; expanded?: boolean }) {
+export function Character(props: {
+  pose: Pose
+  facing: Facing
+  box: number
+  expanded?: boolean
+  /** Watching the pointer (the `watch` pose): which way her eyes are on it. */
+  gaze?: { x: number; y: number } | null
+}) {
   const { facing } = props
 
   // Draws every pose's frames in the background, one pose at a time, so starting one never
@@ -70,7 +80,14 @@ export function Character(props: { pose: Pose; facing: Facing; box: number; expa
       aria-hidden
     >
       {/* A new pose (or way of facing) starts from its first frame. */}
-      <Frames key={`${props.pose}:${facing}`} pose={props.pose} facing={facing} />
+      {props.pose === 'watch' && props.gaze ? (
+        // Watching the pointer: a frame for where it is (not mirrored: it's which way on the screen).
+        pathsOf(gazeFrame(props.gaze)).map(({ className, d }) => (
+          <path key={className} className={className} d={d} />
+        ))
+      ) : (
+        <Frames key={`${props.pose}:${facing}`} pose={props.pose} facing={facing} />
+      )}
     </svg>
   )
 }

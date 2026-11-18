@@ -73,7 +73,7 @@ names start with a capital letter and return JSX. In JSX, `<BubbleView />` means
 
 <!-- code: apps/desktop/src/renderer/src/main.tsx -->
 
-[`src/renderer/src/main.tsx`, lines 1–30](../../apps/desktop/src/renderer/src/main.tsx#L1-L30)
+[`src/renderer/src/main.tsx`, lines 1–36](../../apps/desktop/src/renderer/src/main.tsx#L1-L36)
 
 ```tsx
 import { StrictMode } from 'react'
@@ -81,6 +81,8 @@ import { createRoot } from 'react-dom/client'
 import './styles.css'
 import { BubbleView } from './views/BubbleView'
 import { ClonesView } from './views/ClonesView'
+import { FamiliarView } from './views/FamiliarView'
+import { TrickView } from './views/TrickView'
 import { PanelView } from './views/PanelView'
 import { ScreenSaverView } from './views/ScreenSaverView'
 import { SpellView } from './views/SpellView'
@@ -101,6 +103,10 @@ createRoot(document.getElementById('root')!).render(
       <SpellView />
     ) : view === 'screensaver' ? (
       <ScreenSaverView />
+    ) : view === 'familiar' ? (
+      <FamiliarView />
+    ) : view === 'trick' ? (
+      <TrickView />
     ) : (
       <PanelView />
     )}
@@ -1338,7 +1344,7 @@ const DRAG_THRESHOLD = 5
 
 <!-- code: apps/desktop/src/renderer/src/views/BubbleView.tsx#BubbleView -->
 
-[`src/renderer/src/views/BubbleView.tsx`, lines 22–149](../../apps/desktop/src/renderer/src/views/BubbleView.tsx#L22-L149)
+[`src/renderer/src/views/BubbleView.tsx`, lines 22–189](../../apps/desktop/src/renderer/src/views/BubbleView.tsx#L22-L189)
 
 ```tsx
 /**
@@ -1404,6 +1410,41 @@ export function BubbleView() {
     }
   }, [])
 
+  // Behind a window (peeking round it): the part of her it covers is hidden, kept up to date
+  // every frame as her window moves.
+  const button = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    let frame = 0
+    let occluder: { x: number; y: number; width: number; height: number } | null = null
+    const clip = () => {
+      const element = button.current
+      if (!element) return
+      if (!occluder) {
+        element.style.clipPath = ''
+        return
+      }
+      const { width, height } = element.getBoundingClientRect()
+      const x = occluder.x - window.screenX
+      const y = occluder.y - window.screenY
+      const hole = `M${x} ${y} H${x + occluder.width} V${y + occluder.height} H${x} Z`
+      element.style.clipPath = `path(evenodd, "M0 0 H${width} V${height} H0 Z ${hole}")`
+      frame = requestAnimationFrame(clip)
+    }
+    const stop = window.assist.onOcclude((rect) => {
+      occluder = rect
+      cancelAnimationFrame(frame)
+      clip()
+    })
+    return () => {
+      stop()
+      cancelAnimationFrame(frame)
+    }
+  }, [])
+
+  // Which way she looks while she watches the pointer (the main process says, as it moves).
+  const [gaze, setGaze] = useState<{ x: number; y: number } | null>(null)
+  useEffect(() => window.assist.onGaze(setGaze), [])
+
   const press = useRef<{ x: number; y: number; dragging: boolean } | null>(null)
   // When the button last went down: the main process uses it to tell whether this press is what
   // closed the panel (see BubbleController.clickBubble).
@@ -1440,6 +1481,7 @@ export function BubbleView() {
 
   return (
     <button
+      ref={button}
       data-hit
       type="button"
       aria-label={`${ACTION_LABEL[mode]} ${appName}`}
@@ -1447,8 +1489,11 @@ export function BubbleView() {
       onPointerMove={onPointerMove}
       onPointerUp={endPress}
       onLostPointerCapture={endPress}
-      onClick={() => {
+      onClick={(event) => {
         if (swallowClick.current) swallowClick.current = false
+        // The second click of a double-click pets her, and only that: the first one opened or
+        // closed the panel.
+        else if (event.detail >= 2) window.assist.bubblePet()
         // A click from the keyboard has no press: it's "now".
         else window.assist.bubbleClick(pressedAt.current ?? Date.now())
         pressedAt.current = undefined
@@ -1464,6 +1509,7 @@ export function BubbleView() {
           facing={isLeftCorner(corner) ? 'right' : 'left'}
           box={box}
           expanded={mode === 'expanded'}
+          gaze={gaze}
         />
       )}
     </button>

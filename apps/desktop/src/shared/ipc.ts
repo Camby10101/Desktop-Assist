@@ -37,6 +37,8 @@ export const IPC = {
   bubbleDragStart: 'assist:bubble-drag-start',
   bubbleDragEnd: 'assist:bubble-drag-end',
   bubbleDragHold: 'assist:bubble-drag-hold',
+  bubblePet: 'assist:bubble-pet',
+  trickReady: 'assist:trick-ready',
   collapse: 'assist:collapse',
   setInteractive: 'assist:set-interactive',
   invokeAction: 'assist:invoke-action',
@@ -103,6 +105,10 @@ export const IPC = {
   bubbleArrive: 'assist:bubble-arrive',
   screensaverEnd: 'assist:screensaver-end',
   robeColorChanged: 'assist:robe-color-changed',
+  gaze: 'assist:gaze',
+  familiarSees: 'assist:familiar-sees',
+  occlude: 'assist:occlude',
+  trickPlan: 'assist:trick-plan',
   cornerChanged: 'assist:corner-changed',
   sizeChanged: 'assist:size-changed',
   clickThroughReset: 'assist:click-through-reset',
@@ -129,6 +135,10 @@ export interface AssistApi {
    * for DRAG_CHECK.staleMs, the main process lets her go.
    */
   bubbleDragHold(): void
+  /** Double-clicked: petted (the click before it opened or closed the panel as usual). */
+  bubblePet(): void
+  /** A trick's page is ready for its plan and icons (they come back through onTrickPlan). */
+  trickReady(): void
   collapse(): void
   /** Tell the main process whether the pointer is over real UI (true) or a see-through area. */
   setInteractive(interactive: boolean): void
@@ -269,6 +279,22 @@ export interface AssistApi {
   onScreensaverEnd(callback: () => void): () => void
   /** Her robe's colour was changed in Settings (null: the company's again). */
   onRobeColorChanged(callback: (color: string | null) => void): () => void
+  /** Which way she's to look at the pointer while she watches it (null: done watching). */
+  onGaze(callback: (gaze: { x: number; y: number } | null) => void): () => void
+  /**
+   * Where she is (the middle of her, DIPs across the cat's window), what she's doing, and when the
+   * cat goes: her familiar's page.
+   */
+  onFamiliarSees(callback: (seen: { x: number; pose: Pose; ends: number }) => void): () => void
+  /** A trick's plan and its icons (JSON): the trick's page. */
+  onTrickPlan(callback: (trick: string) => void): () => void
+  /**
+   * A window in front of her (its rect on the screen, DIPs) while she's behind it, peeking round
+   * it: the part of her behind it is hidden. Null: nothing in front of her.
+   */
+  onOcclude(
+    callback: (rect: { x: number; y: number; width: number; height: number } | null) => void,
+  ): () => void
   onModeChanged(callback: (mode: Mode) => void): () => void
   /** The character's pose changed (walking, fidgeting, dangling...). */
   onPoseChanged(callback: (pose: Pose) => void): () => void

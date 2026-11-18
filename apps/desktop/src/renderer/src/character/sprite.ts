@@ -1,4 +1,10 @@
-import { FIDGET_MS, LANDING, SPELL_POSE_MS, type Pose as Name } from '@shared/character'
+import {
+  FIDGET_MS,
+  LANDING,
+  REACTION_MS,
+  SPELL_POSE_MS,
+  type Pose as Name,
+} from '@shared/character'
 import {
   BLOOM,
   BUBBLES,
@@ -1424,6 +1430,284 @@ function splat(): Key[] {
   ]
 }
 
+// ------------------------------------------------------------------------- answers and moments
+
+/**
+ * A yawn, from the front: she lifts her hand to her mouth and her head goes back in a big yawn,
+ * then she blinks sleepily, swaying, and comes round.
+ */
+function yawn(): Key[] {
+  const handUp: [Arm, Arm] = [{ shoulder: 0.35, elbow: -2.55 }, ARM_DOWN]
+  const yawning = (tilt: number): Pose => ({ view: 'front', face: 'yawn', tilt, arms: handUp })
+  const sleepy = (i: number): Pose => ({
+    view: 'front',
+    face: i % 4 === 1 ? 'blink' : 'down',
+    tilt: 0.05 * Math.sin((i / 8) * Math.PI * 2),
+    x: Math.round(Math.sin((i / 8) * Math.PI * 2)),
+  })
+  return [
+    ...hold(FRONT, 200),
+    ...tween(FRONT, yawning(-0.06), 520),
+    ...tween(yawning(-0.06), yawning(-0.1), 1000),
+    ...tween(yawning(-0.1), { ...sleepy(0), arms: [ARM_DOWN, ARM_DOWN] }, 360),
+    ...Array.from({ length: 8 }, (_, i) => ({ pose: sleepy(i), ms: 140 })),
+    ...hold({ view: 'front', face: 'blink' }, 160),
+    ...hold(FRONT, 240),
+  ]
+}
+
+/**
+ * Confetti, from the front (Friday evenings): she throws her hands up with a little hop, confetti
+ * bursting up from them and fluttering down round her as she cheers, waving her arms.
+ */
+function confetti(): Key[] {
+  return through(FIDGET_MS.confetti, (t) => {
+    const up = between(t, 0.02, 0.1) * (1 - between(t, 0.86, 0.96))
+    const hop = t > 0.08 && t < 0.26 ? Math.sin(between(t, 0.08, 0.26) * Math.PI) : 0
+    const wave = Math.sin(t * 40) * 0.2 * between(t, 0.25, 0.3)
+    const arm = (side: number): Arm => toward({ shoulder: 2.6 + wave * side, elbow: 0.3 }, up)
+    return {
+      view: 'front',
+      confetti: t,
+      y: Math.round(-6 * hop),
+      lift: 2 * hop,
+      face: t < 0.04 ? 'neutral' : blinking(t, 0.9, 'happy'),
+      arms: [arm(1), arm(-1)],
+    }
+  })
+}
+
+/** Petted, from the front: a happy little wiggle, her hands clasped, hearts floating up. */
+function pet(): Key[] {
+  return through(REACTION_MS.pet, (t) => {
+    const wiggle = Math.sin(t * Math.PI * 8) * (1 - between(t, 0.75, 1))
+    const clasp = between(t, 0, 0.1) * (1 - between(t, 0.85, 1))
+    const hands = toward({ shoulder: 0.3, elbow: -0.9 }, clasp)
+    return {
+      view: 'front',
+      hearts: t,
+      x: Math.round(wiggle),
+      tilt: wiggle * 0.06,
+      face: blinking(t, 0.5, 'happy'),
+      arms: [hands, hands],
+    }
+  })
+}
+
+/** A new notification, from the front: she hops up holding a scroll open in front of her, delighted. */
+function scroll(): Key[] {
+  return through(REACTION_MS.scroll, (t) => {
+    const up = between(t, 0, 0.12) * (1 - between(t, 0.82, 0.94))
+    const hop = (from: number) =>
+      t > from && t < from + 0.16 ? Math.sin(between(t, from, from + 0.16) * Math.PI) : 0
+    const bounce = hop(0.12) + hop(0.34) * 0.6
+    const arm = toward({ shoulder: 1.25, elbow: -2.35 }, up)
+    return {
+      view: 'front',
+      scroll: up > 0.85,
+      y: Math.round(-5 * bounce),
+      lift: 2 * bounce,
+      face: blinking(t, 0.7, 'happy'),
+      arms: [arm, arm],
+    }
+  })
+}
+
+/** Startled, from the front: a jump straight up, hair flying, arms out, wide-eyed; then a blink. */
+function startle(): Key[] {
+  const crouched: Pose = { view: 'front', face: 'surprised', y: 2, legs: crouch(2) }
+  const air: Pose = {
+    view: 'front',
+    face: 'surprised',
+    y: -8,
+    lift: 4,
+    arms: [
+      { shoulder: 1.6, elbow: 0.3 },
+      { shoulder: 1.6, elbow: 0.3 },
+    ],
+  }
+  return [
+    ...hold(crouched, 80),
+    ...tween(crouched, air, 160),
+    ...hold(air, 140),
+    ...tween(air, { ...FRONT, face: 'surprised' }, 200),
+    ...hold({ ...FRONT, face: 'surprised' }, 180),
+    ...hold({ view: 'front', face: 'blink' }, 120),
+    ...hold(FRONT, 120),
+  ]
+}
+
+/**
+ * Pouncing at the pointer, seen diagonally (mirrored to go left): she crouches, leaps up and
+ * forward with both hands reaching to grab it, lands, and looks at her empty hands.
+ */
+function pounce(): Key[] {
+  const crouched: Pose = { ...DIAGONAL, face: 'down', y: 4, legs: crouch(4), tilt: 0.05 }
+  const leap: Pose = {
+    ...DIAGONAL,
+    face: 'surprised',
+    x: 4,
+    y: -8,
+    lift: 3,
+    arms: [
+      { shoulder: 2.3, elbow: 0.2 },
+      { shoulder: 2.1, elbow: 0.2 },
+    ],
+    legs: [
+      { hip: -0.3, knee: 0.6 },
+      { hip: 0.4, knee: 0.8 },
+    ],
+  }
+  const landed: Pose = {
+    ...DIAGONAL,
+    face: 'down',
+    x: 6,
+    arms: [{ shoulder: 0.8, elbow: 1.2 }, ARM_DOWN],
+  }
+  return [
+    ...tween(DIAGONAL, crouched, 200),
+    ...hold(crouched, 120),
+    ...tween(crouched, leap, 180),
+    ...hold(leap, 120),
+    ...tween(leap, landed, 200),
+    ...hold(landed, 300),
+    ...hold({ ...landed, face: 'blink' }, 100),
+    ...tween(landed, DIAGONAL, 180),
+  ]
+}
+
+/** Lifting something by magic, from the front: her arms rise overhead, palms up, eyes on it. */
+function lift(): Key[] {
+  const up: Pose = {
+    view: 'front',
+    face: 'up',
+    arms: [
+      { shoulder: 2.6, elbow: 0.5 },
+      { shoulder: 2.6, elbow: 0.5 },
+    ],
+  }
+  return [...tween({ ...FRONT, face: 'down' }, up, 560), ...hold(up, 240)]
+}
+
+/** Setting something down by magic, from the front: her arms come down from overhead, eyes on it. */
+function lower(): Key[] {
+  const up: Pose = {
+    view: 'front',
+    face: 'up',
+    arms: [
+      { shoulder: 2.6, elbow: 0.5 },
+      { shoulder: 2.6, elbow: 0.5 },
+    ],
+  }
+  return [...hold(up, 120), ...tween(up, { ...FRONT, face: 'down' }, 520), ...hold(FRONT, 160)]
+}
+
+/**
+ * Guilty, from the front (after a prank): hands behind her back, she glances one way and the
+ * other, a bead of sweat by her forehead, then gives a sheepish smile.
+ */
+function guilty(): Key[] {
+  const behind: [Arm, Arm] = [
+    { shoulder: 0.02, elbow: -0.35 },
+    { shoulder: 0.02, elbow: -0.35 },
+  ]
+  const glance = (look: number, face: Face = 'neutral'): Pose => ({
+    view: 'front',
+    face,
+    look,
+    sweat: true,
+    tilt: look * 0.04,
+    arms: behind,
+  })
+  return [
+    ...tween(FRONT, glance(0), 200),
+    ...hold(glance(-1), 320),
+    ...hold(glance(1), 320),
+    ...hold(glance(-1), 280),
+    ...hold(glance(1), 280),
+    ...hold(glance(0, 'blink'), 120),
+    ...hold(glance(0, 'happy'), 640),
+    ...tween(glance(0, 'happy'), FRONT, 240),
+  ]
+}
+
+/** Juggling with her hands alone (what she juggles is drawn by someone else): see juggle. */
+function toss(): Key[] {
+  return juggle().map(({ pose, ms }) => ({ pose: { ...pose, juggle: undefined }, ms }))
+}
+
+/**
+ * Watching the pointer, from the front: her eyes (and a little of her head) toward `gaze`, each
+ * of x and y -1, 0 or 1 (left or up is -1). A frame each, drawn once and kept.
+ */
+const gazes = new Map<string, Frame>()
+export function gazeFrame(gaze: { x: number; y: number }): Frame {
+  const x = Math.max(-1, Math.min(1, Math.round(gaze.x)))
+  const y = Math.max(-1, Math.min(1, Math.round(gaze.y)))
+  const key = `${x},${y}`
+  let frame = gazes.get(key)
+  if (!frame) {
+    const face: Face = y < 0 ? 'up' : y > 0 ? 'down' : 'neutral'
+    frame = { rows: draw({ view: 'front', look: x, face, tilt: x * 0.04 }), ms: 1000 }
+    gazes.set(key, frame)
+  }
+  return frame
+}
+
+/** Watching, before the main process says where the pointer is: looking ahead, blinking now and then. */
+function watch(): Key[] {
+  return [...hold(FRONT, 2400), ...hold({ view: 'front', face: 'blink' }, 120)]
+}
+
+/**
+ * Peeking round the edge of a window, from the front (mirrored to peek the other way): leaning
+ * out to the right, looking that way, a blink, a smile and a little wave, round and round.
+ */
+function peek(): Key[] {
+  const out = (face: Face, wave = 0): Pose => ({
+    view: 'front',
+    face,
+    look: 1,
+    lean: 0.22,
+    x: 2,
+    tilt: 0.06,
+    arms: wave ? [{ shoulder: 2.9, elbow: 0.2 + 0.35 * wave }, ARM_DOWN] : [ARM_DOWN, ARM_DOWN],
+  })
+  return [
+    ...hold(out('neutral'), 700),
+    ...hold(out('blink'), 120),
+    ...hold(out('happy'), 400),
+    ...Array.from({ length: 8 }, (_, i) => ({
+      pose: out('happy', Math.sin((i / 4) * Math.PI * 2)),
+      ms: 70,
+    })),
+    ...hold(out('neutral'), 500),
+  ]
+}
+
+/** Riding on top of a window, from the front: sitting, arms up, hair flying, kicking her feet. */
+function ride(): Key[] {
+  return Array.from({ length: 12 }, (_, i) => {
+    const phase = (i / 12) * Math.PI * 2
+    const arm = { shoulder: 2.55 + 0.12 * Math.sin(phase), elbow: 0.35 }
+    return {
+      pose: {
+        view: 'front',
+        sitting: true,
+        face: i === 7 ? 'blink' : 'happy',
+        wind: Math.sin(phase) * 2,
+        lift: 1.5,
+        arms: [arm, arm],
+        legs: [
+          { hip: 0.4 + 0.25 * Math.sin(phase), knee: 0.3 },
+          { hip: 0.4 - 0.25 * Math.sin(phase), knee: 0.3 },
+        ],
+      },
+      ms: 90,
+    }
+  })
+}
+
 // ------------------------------------------------------------------------------------- frames
 
 const drawn = (keys: Key[]): Frame[] => keys.map(({ pose, ms }) => ({ rows: draw(pose), ms }))
@@ -1469,6 +1753,21 @@ const MAKERS: Record<Name, () => Frame[]> = {
   dragged: () => drawn(dragged()),
   flung,
   splat: () => drawn(splat()),
+  yawn: () => drawn(yawn()),
+  confetti: () => drawn(confetti()),
+  pet: () => drawn(pet()),
+  scroll: () => drawn(scroll()),
+  startle: () => drawn(startle()),
+  'pounce-left': () => drawn(pounce()),
+  'pounce-right': () => drawn(pounce()),
+  lift: () => drawn(lift()),
+  lower: () => drawn(lower()),
+  guilty: () => drawn(guilty()),
+  toss: () => drawn(toss()),
+  watch: () => drawn(watch()),
+  'peek-left': () => drawn(peek()),
+  'peek-right': () => drawn(peek()),
+  ride: () => drawn(ride()),
 }
 
 /**
@@ -1496,6 +1795,20 @@ export const LOOPS: Record<Name, boolean> = {
   // Tumbling through the air goes round until she lands; her hard landing plays once.
   flung: true,
   splat: false,
+  // Answers play once; her performances' poses go round until they're done with.
+  pet: false,
+  scroll: false,
+  startle: false,
+  'pounce-left': false,
+  'pounce-right': false,
+  lift: false,
+  lower: false,
+  guilty: false,
+  toss: false,
+  watch: true,
+  'peek-left': true,
+  'peek-right': true,
+  ride: true,
   hop: false,
   wave: false,
   stretch: false,
@@ -1516,6 +1829,8 @@ export const LOOPS: Record<Name, boolean> = {
   wisp: false,
   sneeze: false,
   dance: false,
+  yawn: false,
+  confetti: false,
   flame: false,
   frost: false,
   bloom: false,
@@ -1541,7 +1856,9 @@ const made = new Map<string, Frame[]>()
  * Drawn the first time they're asked for, then kept.
  */
 export function framesOf(pose: Name, facing: Facing): Frame[] {
-  const way = pose === 'walk-left' ? 'left' : pose === 'walk-right' ? 'right' : facing
+  // Poses with a way in their name (walking, pouncing, peeking) face that way, whatever `facing`
+  // says.
+  const way = pose.endsWith('-left') ? 'left' : pose.endsWith('-right') ? 'right' : facing
   const key = `${pose}:${way}`
   let frames = made.get(key)
   if (!frames) {
