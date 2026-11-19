@@ -3,6 +3,7 @@ import { SCREEN_SAVER, type SaverScene } from '@shared/screenSaver'
 import { GRID, HEADROOM } from '../character/rig'
 import { gazeFrames, PALETTE, setHat, type Frame } from '../character/sprite'
 import { useAccentColor, useRobeColor } from '../hooks/useAssistState'
+import { paintDragon } from '../lib/screensaver/dragon'
 import { backlit, paintHer } from '../lib/screensaver/her'
 import type { SaverFrame } from '../lib/screensaver/scene'
 import { paintNight, paintStarfall } from '../lib/screensaver/stars'
@@ -206,6 +207,8 @@ function sunsetPainter(g: CanvasRenderingContext2D, w: number, h: number): (t: n
     paintEveningStars(p, frame)
     paintSun(p, frame)
     paintClouds(p, frame)
+    // Now and then a dragon flying by, far off: behind the hills and her.
+    paintDragon(p, frame)
     g.globalAlpha = 1
     g.drawImage(hills, 0, 0)
     paintLife(p, frame)

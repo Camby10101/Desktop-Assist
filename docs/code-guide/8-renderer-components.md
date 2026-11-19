@@ -3766,7 +3766,7 @@ and `awe` and `up` both look up (their mouths are what differ).
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#draw -->
 
-[`src/renderer/src/character/rig.ts`, lines 552–2338](../../apps/desktop/src/renderer/src/character/rig.ts#L552-L2338)
+[`src/renderer/src/character/rig.ts`, lines 552–2352](../../apps/desktop/src/renderer/src/character/rig.ts#L552-L2352)
 
 ```ts
 /** Draws one pose as rows of palette letters. */
@@ -3859,6 +3859,11 @@ export function draw(pose: Pose): string[] {
           ? { x: side === 1 ? -4.5 : 4.5, y: 2.5 }
           : { x: 0.5, y: 2.5 },
     )
+  /**
+   * Her arms when she's seen from behind: drawn before her head and hair (see below), so her long
+   * hair falls over them while they're still in front of her robe. Null otherwise.
+   */
+  let armsFromBehind: { hand: Point; farHand: Point } | null = null
   const drawArm = (arm: Arm, side: 1 | -1) => {
     const layer = new Layer(GRID, HEADROOM)
     // From the front, positive angles swing each arm outward; otherwise forward.
@@ -4245,6 +4250,10 @@ export function draw(pose: Pose): string[] {
     }
     if (!fromBehind) motif(onBody({ x: off, y: 18.5 }), ['YYY', 'YkY'], 'Aqav')
 
+    // From behind, her arms go here: in front of her robe, and behind her hair, which falls down
+    // her back over them (drawn after them). Drawn last, as from the front, they floated over it.
+    if (fromBehind) armsFromBehind = { farHand: drawArm(farArm, -1), hand: drawArm(nearArm, 1) }
+
     // Her head: neck, face and chin.
     const face = new Layer(GRID, HEADROOM)
     face.capsule(
@@ -4589,7 +4598,12 @@ export function draw(pose: Pose): string[] {
   let hand: Point
   // The far hand too, from the front (where she can use both, to juggle).
   let farHand: Point | null = null
-  if (frontView) {
+  const behind = armsFromBehind as { hand: Point; farHand: Point } | null
+  if (behind) {
+    // From behind they're drawn already, under her hair.
+    hand = behind.hand
+    farHand = behind.farHand
+  } else if (frontView) {
     farHand = drawArm(farArm, -1)
     hand = drawArm(nearArm, 1)
   } else {
@@ -6013,7 +6027,7 @@ Math.PI) % 2`), which turn with `spin`. Six white runes (`w`) go round the outer
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#HAT,HAIR,ROBE,castShadows -->
 
-[`src/renderer/src/character/rig.ts`, lines 2340–2372](../../apps/desktop/src/renderer/src/character/rig.ts#L2340-L2372)
+[`src/renderer/src/character/rig.ts`, lines 2354–2386](../../apps/desktop/src/renderer/src/character/rig.ts#L2354-L2386)
 
 ```ts
 /** Letters by part, for castShadows. */

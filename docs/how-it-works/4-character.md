@@ -370,6 +370,16 @@ fades to white, then into its scene. Moving the mouse, a click, a key, or the wi
 focus calls `wakeFrom(senderId)`; it listens only to its own windows, tells every page to fade away,
 closes them 0.8 seconds later, and calls `BubbleController.wake()`.
 
+The scenes are drawn by `lib/screensaver/` on a small canvas, about 360 pixels high, scaled up
+into chunky pixels. The sunset is painted back to front each frame: the sky, the stars coming out,
+the sun, the clouds, a dragon now and then (`dragon.ts`), the hills, the birds and fireflies, and
+her. `dragonAt(t, w, h)` says where the dragon is at any moment, or that it isn't by: the first one
+comes 40 seconds in, then one every two minutes, taking 22 seconds to cross the whole sky, the
+other way and at a different height each time (the height comes from the pass's number, so it's
+the same every time for that pass). Its wings beat through six frames, then it glides a moment.
+Like everything in the scenes, it's a function of the time, so the tests can ask where it is at
+any moment without waiting.
+
 ## 19. performances/ and shell/ — her bigger acts
 
 **Folders:** `src/main/performances/`, `src/main/shell/`, plus `familiar.ts` and `shared/tricks.ts`
