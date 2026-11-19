@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { checkOnTop, type OnTopWindow } from '../src/main/bubble/frontCheck'
 import {
   FRONT_CHECKS_MS,
   describe as describeCheck,
@@ -133,5 +134,39 @@ describe('watchBubbleFront', () => {
     stop()
     await until(600_000)
     expect(world.checks).toBe(0)
+  })
+})
+
+describe('checkOnTop (keeping her window on top)', () => {
+  function window(onTop: boolean, destroyed = false) {
+    const calls: string[] = []
+    const win: OnTopWindow = {
+      isDestroyed: () => destroyed,
+      isAlwaysOnTop: () => onTop,
+      putOnTop: () => void calls.push('putOnTop'),
+    }
+    return { win, calls }
+  }
+
+  it('gives a window back its always-on-top when it lost it, and leaves one that has it', () => {
+    const lost = window(false)
+    checkOnTop(lost.win, false)
+    expect(lost.calls).toEqual(['putOnTop'])
+    const fine = window(true)
+    checkOnTop(fine.win, false)
+    expect(fine.calls).toEqual([])
+  })
+
+  it('puts her back at the top while she stands about, even with her always-on-top style set', () => {
+    // Windows can push her below ordinary windows and leave the style set: the style can't be trusted.
+    const pushedDown = window(true)
+    checkOnTop(pushedDown.win, true)
+    expect(pushedDown.calls).toEqual(['putOnTop'])
+  })
+
+  it('leaves a closed window alone', () => {
+    const gone = window(false, true)
+    checkOnTop(gone.win, true)
+    expect(gone.calls).toEqual([])
   })
 })

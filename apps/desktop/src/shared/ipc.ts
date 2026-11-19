@@ -106,6 +106,7 @@ export const IPC = {
   bubbleArrive: 'assist:bubble-arrive',
   screensaverEnd: 'assist:screensaver-end',
   robeColorChanged: 'assist:robe-color-changed',
+  hatChanged: 'assist:hat-changed',
   gaze: 'assist:gaze',
   familiarSees: 'assist:familiar-sees',
   occlude: 'assist:occlude',
@@ -285,6 +286,8 @@ export interface AssistApi {
   onScreensaverEnd(callback: () => void): () => void
   /** Her robe's colour was changed in Settings (null: the company's again). */
   onRobeColorChanged(callback: (color: string | null) => void): () => void
+  /** Settings → No hat was flipped (true: her hat's off): her windows. */
+  onHatChanged(callback: (noHat: boolean) => void): () => void
   /** Which way she's to look at the pointer while she watches it (null: done watching). */
   onGaze(callback: (gaze: { x: number; y: number } | null) => void): () => void
   /**

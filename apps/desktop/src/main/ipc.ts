@@ -184,10 +184,22 @@ export function registerIpc(ctx: IpcContext): void {
   handle(IPC.settingsSetTheme, z.enum(['dark', 'light']), (theme) => ctx.settings.setTheme(theme))
   handle(
     IPC.settingsSetHabits,
-    z.object({ standStill: z.boolean().optional(), noIdles: z.boolean().optional() }).strict(),
+    z
+      .object({
+        standStill: z.boolean().optional(),
+        noIdles: z.boolean().optional(),
+        noHat: z.boolean().optional(),
+      })
+      .strict(),
     async (habits) => {
       const settings = await ctx.settings.setHabits(habits)
       ctx.controller.setHabits(settings)
+      // Her hat on or off: her windows redraw her.
+      if (habits.noHat !== undefined) {
+        for (const window of ctx.windows) {
+          if (!window.isDestroyed()) window.webContents.send(IPC.hatChanged, settings.noHat)
+        }
+      }
       return settings
     },
   )

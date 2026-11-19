@@ -1,6 +1,6 @@
 import type { Rect } from '@shared/geometry'
 import { SCREEN_SAVER, type SaverScene } from '@shared/screenSaver'
-import { robeQuery } from './bubble/clones'
+import { hatQuery, robeQuery } from './bubble/clones'
 
 /** One of the screen saver's windows, as ScreenSaver uses it. index.ts makes them. */
 export interface SaverWindow {
@@ -16,6 +16,8 @@ export interface ScreenSaverDeps {
   accentColor: string
   /** ...unless another is chosen for her robe in Settings (`#rrggbb`, or null). */
   robeColor?: () => string | null
+  /** Whether her hat's off (Settings → No hat), so she watches the sunset without it. */
+  noHat?: () => boolean
   /** Every display, the whole of it (the taskbar too). */
   displays(): { id: number; bounds: Rect }[]
   /** The display she's on. */
@@ -61,6 +63,7 @@ export class ScreenSaver {
         starts,
         accent: this.deps.accentColor,
         ...robeQuery(this.deps.robeColor?.()),
+        ...hatQuery(this.deps.noHat?.()),
       }
       return this.deps.open(display.bounds, query, display.id === her)
     })

@@ -52,7 +52,7 @@ bottom-right corner, and her last habit was a wave.
    or a performance rather than a stroll.
 3. The options: 29 habits (all but the two timed ones out of their hours, and the wave, done last),
    each weighing 1, with the vision at 0.2; and what `Performances.available(true)` offers: `watch`,
-   `peek`, `portal`, the six tricks and `familiar`. The weights add up to about 32.
+   `peek`, `portal`, the six tricks and `familiar`. The weights add up to about 31.
 4. The second roll lands in `peek`'s stretch. `doActivity()` calls `prepare('peek')`.
 5. `WindowTricks.peek()` asks the shell probe for the windows, keeps the usable ones on her screen,
    and `peekEdge()` finds a browser window whose right edge is 150 DIPs to her left, coming down over

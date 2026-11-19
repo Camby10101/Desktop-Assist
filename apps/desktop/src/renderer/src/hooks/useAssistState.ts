@@ -24,6 +24,9 @@ export function useAssistState(): AppState | null {
       window.assist.onRobeColorChanged((robeColor) =>
         update((s) => ({ ...s, settings: { ...s.settings, robeColor } })),
       ),
+      window.assist.onHatChanged((noHat) =>
+        update((s) => ({ ...s, settings: { ...s.settings, noHat } })),
+      ),
       window.assist.onAuthStatus((auth) => update((s) => ({ ...s, auth }))),
       window.assist.onChatMessage((message) =>
         update((s) => ({ ...s, chat: upsert(s.chat, message) })),

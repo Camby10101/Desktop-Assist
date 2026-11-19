@@ -1,6 +1,6 @@
 import { UI } from '@shared/geometry'
 import { Canvas, Layer, add, limb, rotate, type Point, type Ramp } from './raster'
-import { DIAGONAL, DIAGONAL_EYES, DIAGONAL_MOUTH, SIDE_FACE } from './pictures'
+import { DIAGONAL, DIAGONAL_EYES, DIAGONAL_HATLESS, DIAGONAL_MOUTH, SIDE_FACE } from './pictures'
 
 // The character's rig: her skeleton and the shapes that hang on it, drawn as pixel art for one
 // pose. She's an original design: an elf mage with long pointed ears, long silver-white hair
@@ -17,6 +17,17 @@ import { DIAGONAL, DIAGONAL_EYES, DIAGONAL_MOUTH, SIDE_FACE } from './pictures'
 // there are HEADROOM rows more above the grid for her hat when she rises off the ground.
 
 export const GRID = 96
+
+/** Whether she wears her hat: Settings → No hat takes it off (see setHat in sprite.ts). */
+let wearingHat = true
+
+/** Puts her hat on or takes it off, for every frame drawn after (sprite.ts redraws them). */
+export function wearHat(on: boolean): void {
+  wearingHat = on
+}
+
+/** Whether she's wearing her hat. */
+export const wearsHat = (): boolean => wearingHat
 /**
  * Rows above the grid (y from -HEADROOM to -1) for her hat when she's off the ground: a hop,
  * levitating, being carried. Her window has the same room above her (UI.bubbleHeadroom).
@@ -655,8 +666,10 @@ export function draw(pose: Pose): string[] {
     // Hand-drawn: one flat picture of her (pictures.ts), then her expression on its face.
     const dy = Math.round(pose.y ?? 0)
     // The picture has her shadow in it: left out when she has none (thrown, in the air).
+    // Without her hat (Settings → No hat), the picture of her with the top of her head drawn instead.
+    const drawing = wearingHat ? DIAGONAL : DIAGONAL_HATLESS
     const picture =
-      pose.shadow === false ? DIAGONAL.rows.map((row) => row.replace(/x/g, '.')) : DIAGONAL.rows
+      pose.shadow === false ? drawing.rows.map((row) => row.replace(/x/g, '.')) : drawing.rows
     canvas.stamp(picture, DIAGONAL.x + Math.round(pose.x ?? 0), DIAGONAL.y + dy)
     const expression = pose.face ?? 'neutral'
     if (expression !== 'neutral') {
@@ -1204,57 +1217,59 @@ export function draw(pose: Pose): string[] {
     }
     ink(ears)
 
-    // Her hat: a wide brim and a tall crooked crown with a silver band.
-    const hat = new Layer(GRID, HEADROOM)
-    // From behind the crown is mirrored too: its tip flops over to the other side of the picture.
-    const tipLean = view === 'side' || fromBehind ? -1 : 1
-    const hatCentre = view === 'side' ? 0.5 : 0
-    // Lifted off her head and turning (her hat trick): narrowing to its edge and widening again,
-    // its back to us, then its front (never quite to nothing); a point on it at `x`, `y`.
-    const hatLift = pose.hatLift ?? 0
-    const facing = Math.cos(pose.hatTurn ?? 0)
-    const across = (facing < 0 ? -1 : 1) * Math.max(0.15, Math.abs(facing))
-    const onHat = (x: number, y: number) => onHead({ x: hatCentre + x * across, y: y - hatLift })
-    hat.ellipse(onHat(0, -9), (view === 'side' ? 12.5 : 14) * Math.abs(across), 2.7, 'hat')
-    // The crown, rising to a tip that flops over to her right from the front; side on the whole
-    // crown is mirrored (`tipLean`), so the tip flops back over its back edge, and its front edge
-    // runs straight up to the bend.
-    hat.polygon(
-      shape(
-        [
-          [-6.5, -9.5],
-          [-4.8, -14],
-          [-2.5, -18],
-          [0.5, -20.5],
-          [4.5, -22],
-          [3.2, -19.5],
-          [3.4, -16],
-          [5, -12.5],
-          [6.5, -9.5],
-        ],
-        (p) => onHat(p.x * tipLean, p.y - lift * 0.15),
-      ),
-      'hat',
-    )
-    ink(hat)
-    for (let dx = -6; dx <= 6; dx += 0.5) {
-      set(onHat(dx, -11), 'f', 'ngN')
-      set(onHat(dx, -12), 'F', 'ngN')
-    }
-    for (let dx = 7.5; dx <= 13; dx += 2) {
-      set(onHat(dx, -8.6), 'F', 'ngN')
-      set(onHat(-dx, -8.6), 'F', 'ngN')
-    }
-    // Its buckle, and the gold moon and stars on its front (none from behind, nor while its back
-    // or its edge is to us as it turns).
-    if (!fromBehind && across > 0.5) {
-      const hatSide = view === 'side' ? 1 : 0
-      motif(onHat(hatSide * 3, -11.5), ['YYY', 'YGY', 'YYY'], 'ngNfFq')
-      const lifted = (x: number, y: number) => onHat(x * tipLean, y - lift * 0.15)
-      motif(lifted(-1.5, -15.5), ['.YY', 'Y..', 'Y..', '.YY'], 'ngN')
-      motif(lifted(2, -14.5), ['Y'], 'ngN')
-      motif(lifted(1.2, -18), ['k'], 'ngN')
-      motif(lifted(-3.8, -13), ['k'], 'ngN')
+    // Her hat: a wide brim and a tall crooked crown with a silver band (unless it's off: wearHat).
+    if (wearingHat) {
+      const hat = new Layer(GRID, HEADROOM)
+      // From behind the crown is mirrored too: its tip flops over to the other side of the picture.
+      const tipLean = view === 'side' || fromBehind ? -1 : 1
+      const hatCentre = view === 'side' ? 0.5 : 0
+      // Lifted off her head and turning (her hat trick): narrowing to its edge and widening again,
+      // its back to us, then its front (never quite to nothing); a point on it at `x`, `y`.
+      const hatLift = pose.hatLift ?? 0
+      const facing = Math.cos(pose.hatTurn ?? 0)
+      const across = (facing < 0 ? -1 : 1) * Math.max(0.15, Math.abs(facing))
+      const onHat = (x: number, y: number) => onHead({ x: hatCentre + x * across, y: y - hatLift })
+      hat.ellipse(onHat(0, -9), (view === 'side' ? 12.5 : 14) * Math.abs(across), 2.7, 'hat')
+      // The crown, rising to a tip that flops over to her right from the front; side on the whole
+      // crown is mirrored (`tipLean`), so the tip flops back over its back edge, and its front edge
+      // runs straight up to the bend.
+      hat.polygon(
+        shape(
+          [
+            [-6.5, -9.5],
+            [-4.8, -14],
+            [-2.5, -18],
+            [0.5, -20.5],
+            [4.5, -22],
+            [3.2, -19.5],
+            [3.4, -16],
+            [5, -12.5],
+            [6.5, -9.5],
+          ],
+          (p) => onHat(p.x * tipLean, p.y - lift * 0.15),
+        ),
+        'hat',
+      )
+      ink(hat)
+      for (let dx = -6; dx <= 6; dx += 0.5) {
+        set(onHat(dx, -11), 'f', 'ngN')
+        set(onHat(dx, -12), 'F', 'ngN')
+      }
+      for (let dx = 7.5; dx <= 13; dx += 2) {
+        set(onHat(dx, -8.6), 'F', 'ngN')
+        set(onHat(-dx, -8.6), 'F', 'ngN')
+      }
+      // Its buckle, and the gold moon and stars on its front (none from behind, nor while its back
+      // or its edge is to us as it turns).
+      if (!fromBehind && across > 0.5) {
+        const hatSide = view === 'side' ? 1 : 0
+        motif(onHat(hatSide * 3, -11.5), ['YYY', 'YGY', 'YYY'], 'ngNfFq')
+        const lifted = (x: number, y: number) => onHat(x * tipLean, y - lift * 0.15)
+        motif(lifted(-1.5, -15.5), ['.YY', 'Y..', 'Y..', '.YY'], 'ngN')
+        motif(lifted(2, -14.5), ['Y'], 'ngN')
+        motif(lifted(1.2, -18), ['k'], 'ngN')
+        motif(lifted(-3.8, -13), ['k'], 'ngN')
+      }
     }
   }
 

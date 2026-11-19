@@ -66,6 +66,21 @@ describe('Clones (the main process)', () => {
     expect(clones.running).toBe(true)
   })
 
+  it('draws them without her hat when it’s off (Settings → No hat)', () => {
+    clones.stop()
+    clones = new Clones({
+      accentColor: '#9333ea',
+      noHat: () => true,
+      open: (bounds, query) => {
+        const window = { bounds, query, closed: false }
+        opened.push(window)
+        return { close: () => void (window.closed = true) }
+      },
+    })
+    clones.start(standing(1808))
+    expect(opened.at(-1)!.query['hat']).toBe('off')
+  })
+
   it('closes the window once their time is up', () => {
     clones.start(standing(1808))
     vi.advanceTimersByTime(CLONES.durationMs - 1)

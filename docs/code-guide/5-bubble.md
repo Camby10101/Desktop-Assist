@@ -348,9 +348,9 @@ Everything the constructor needs, passed as one object (its _dependencies_).
 [`src/main/bubble/BubbleController.ts`, lines 154–157](../../apps/desktop/src/main/bubble/BubbleController.ts#L154-L157)
 
 ```ts
-/** What she may do on her own, from the Settings (both, unless they say otherwise). */
+/** What she may do on her own, from the Settings (all of it, unless they say otherwise). */
 function pastimesOf(habits?: Habits): Pastimes {
-  return { walk: !habits?.standStill, fidget: !habits?.noIdles }
+  return { walk: !habits?.standStill, fidget: !habits?.noIdles, hat: !habits?.noHat }
 }
 ```
 
@@ -1921,7 +1921,7 @@ Ends a walk cleanly, wherever the character has got to. This is how a walk is in
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.stopIdling,cancelActivity -->
 
-[`src/main/bubble/BubbleController.ts`, lines 855–995](../../apps/desktop/src/main/bubble/BubbleController.ts#L855-L995)
+[`src/main/bubble/BubbleController.ts`, lines 855–1005](../../apps/desktop/src/main/bubble/BubbleController.ts#L855-L1005)
 
 ```ts
 /** Stops whatever it was doing on its own: the next activity, a fidget or a spell, a walk. */
@@ -1960,7 +1960,7 @@ private cancelActivity(): void {
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.runTicker,stopTicker -->
 
-[`src/main/bubble/BubbleController.ts`, lines 997–1010](../../apps/desktop/src/main/bubble/BubbleController.ts#L997-L1010)
+[`src/main/bubble/BubbleController.ts`, lines 1007–1020](../../apps/desktop/src/main/bubble/BubbleController.ts#L1007-L1020)
 
 ```ts
 private runTicker(onFrame: (dtMs: number) => void): void {
@@ -1997,7 +1997,7 @@ The 60 fps ticker. It drives every animation (drag, fall and walk), but only one
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.moveBubble,placeWindows -->
 
-[`src/main/bubble/BubbleController.ts`, lines 1012–1022](../../apps/desktop/src/main/bubble/BubbleController.ts#L1012-L1022)
+[`src/main/bubble/BubbleController.ts`, lines 1022–1032](../../apps/desktop/src/main/bubble/BubbleController.ts#L1022-L1032)
 
 ```ts
 private moveBubble(position: Point): void {
@@ -2032,7 +2032,7 @@ private placeWindows(): void {
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#BubbleController.setAnchor,cancelHide,setMode,setPose -->
 
-[`src/main/bubble/BubbleController.ts`, lines 1024–1054](../../apps/desktop/src/main/bubble/BubbleController.ts#L1024-L1054)
+[`src/main/bubble/BubbleController.ts`, lines 1034–1064](../../apps/desktop/src/main/bubble/BubbleController.ts#L1034-L1064)
 
 ```ts
 private setAnchor(anchor: BubbleAnchor): void {
@@ -2097,7 +2097,7 @@ Small helpers, though `setMode()` does more than it used to.
 
 <!-- code: apps/desktop/src/main/bubble/BubbleController.ts#bottomOf -->
 
-[`src/main/bubble/BubbleController.ts`, lines 1057–1061](../../apps/desktop/src/main/bubble/BubbleController.ts#L1057-L1061)
+[`src/main/bubble/BubbleController.ts`, lines 1067–1071](../../apps/desktop/src/main/bubble/BubbleController.ts#L1067-L1071)
 
 ```ts
 /** The bottom corner on the same side: the character always stands at the bottom. */
@@ -2489,7 +2489,7 @@ tune. `as const` makes them read-only, and keeps each pair a fixed pair of numbe
 
 <!-- code: apps/desktop/src/main/bubble/wander.ts#Activity,Pastimes,FIDGET_WEIGHT -->
 
-[`src/main/bubble/wander.ts`, lines 185–202](../../apps/desktop/src/main/bubble/wander.ts#L185-L202)
+[`src/main/bubble/wander.ts`, lines 185–204](../../apps/desktop/src/main/bubble/wander.ts#L185-L204)
 
 ```ts
 export type Activity =
@@ -2503,6 +2503,8 @@ export type Activity =
 export interface Pastimes {
   walk: boolean
   fidget: boolean
+  /** Wearing her hat: without it (Settings → No hat), her hat trick is left out. */
+  hat?: boolean
 }
 
 /**
@@ -2530,7 +2532,7 @@ export const FIDGET_WEIGHT: Partial<Record<Fidget, number>> = { vision: 0.2 }
 
 <!-- code: apps/desktop/src/main/bubble/wander.ts#activityDelay -->
 
-[`src/main/bubble/wander.ts`, lines 254–258](../../apps/desktop/src/main/bubble/wander.ts#L254-L258)
+[`src/main/bubble/wander.ts`, lines 256–260](../../apps/desktop/src/main/bubble/wander.ts#L256-L260)
 
 ```ts
 /** How long until the next thing the character does on its own (ms). */
@@ -2554,7 +2556,7 @@ How long the character waits before doing something on its own, in milliseconds.
 
 <!-- code: apps/desktop/src/main/bubble/wander.ts#nextActivity -->
 
-[`src/main/bubble/wander.ts`, lines 260–312](../../apps/desktop/src/main/bubble/wander.ts#L260-L312)
+[`src/main/bubble/wander.ts`, lines 262–316](../../apps/desktop/src/main/bubble/wander.ts#L262-L316)
 
 ```ts
 /**
@@ -2579,7 +2581,9 @@ export function nextActivity(
   if (allowed.fidget && idleMs >= WANDER.fidgetAfter && random() < 0.6) {
     const { when } = choices
     const options: { activity: Activity; weight: number }[] = [
-      ...FIDGETS.filter((fidget) => fidget !== last).flatMap((fidget) => {
+      ...FIDGETS.filter(
+        (fidget) => fidget !== last && (fidget !== 'hat' || allowed.hat !== false),
+      ).flatMap((fidget) => {
         if (!(fidget in TIMED)) {
           return [
             {
@@ -2651,7 +2655,7 @@ they wait for a quiet spell rather than starting up while someone has just been 
 
 <!-- code: apps/desktop/src/main/bubble/wander.ts#walkTarget -->
 
-[`src/main/bubble/wander.ts`, lines 314–326](../../apps/desktop/src/main/bubble/wander.ts#L314-L326)
+[`src/main/bubble/wander.ts`, lines 318–330](../../apps/desktop/src/main/bubble/wander.ts#L318-L330)
 
 ```ts
 /**
@@ -2693,7 +2697,7 @@ toward its corner or away from it, with `roll` choosing the spot.
 
 <!-- code: apps/desktop/src/main/bubble/wander.ts#walkStep -->
 
-[`src/main/bubble/wander.ts`, lines 328–340](../../apps/desktop/src/main/bubble/wander.ts#L328-L340)
+[`src/main/bubble/wander.ts`, lines 332–344](../../apps/desktop/src/main/bubble/wander.ts#L332-L344)
 
 ```ts
 /**
@@ -2728,7 +2732,7 @@ One frame of a walk: the new inset, `dtMs` milliseconds of walking closer to `to
 
 <!-- code: apps/desktop/src/main/bubble/wander.ts#fallDuration -->
 
-[`src/main/bubble/wander.ts`, lines 342–350](../../apps/desktop/src/main/bubble/wander.ts#L342-L350)
+[`src/main/bubble/wander.ts`, lines 346–354](../../apps/desktop/src/main/bubble/wander.ts#L346-L354)
 
 ```ts
 /**
@@ -2757,7 +2761,7 @@ How long the fall after a drop takes, in milliseconds.
 
 <!-- code: apps/desktop/src/main/bubble/wander.ts#fallPosition -->
 
-[`src/main/bubble/wander.ts`, lines 352–358](../../apps/desktop/src/main/bubble/wander.ts#L352-L358)
+[`src/main/bubble/wander.ts`, lines 356–362](../../apps/desktop/src/main/bubble/wander.ts#L356-L362)
 
 ```ts
 /** Position at progress `t` (0–1) of the fall: speeding up as it falls, like a dropped thing. */
@@ -2810,7 +2814,7 @@ Vitest's fake timers to check the window closes after exactly thirty seconds.
 
 <!-- code: apps/desktop/src/main/bubble/clones.ts#CloneWindow,ClonesDeps -->
 
-[`src/main/bubble/clones.ts`, lines 9–26](../../apps/desktop/src/main/bubble/clones.ts#L9-L26)
+[`src/main/bubble/clones.ts`, lines 13–32](../../apps/desktop/src/main/bubble/clones.ts#L13-L32)
 
 ```ts
 /** A window of clones, as Clones uses it. index.ts makes them (see createOverlayWindow). */
@@ -2828,6 +2832,8 @@ export interface ClonesDeps {
   accentColor: string
   /** ...unless another is chosen for her robe in Settings (`#rrggbb`, or null). */
   robeColor?: () => string | null
+  /** Whether her hat's off (Settings → No hat), so her clones are drawn without it too. */
+  noHat?: () => boolean
   /** Wall-clock time (ms), shared with the page, which fades the clones out at the end. */
   now?: () => number
 }
@@ -2855,7 +2861,7 @@ What `Clones` needs, passed to its constructor.
 
 <!-- code: apps/desktop/src/main/bubble/clones.ts#Clones.class -->
 
-[`src/main/bubble/clones.ts`, lines 28–35](../../apps/desktop/src/main/bubble/clones.ts#L28-L35)
+[`src/main/bubble/clones.ts`, lines 34–41](../../apps/desktop/src/main/bubble/clones.ts#L34-L41)
 
 ```ts
 /**
@@ -2880,7 +2886,7 @@ while some are still out starts a new lot. Its fields and constructor:
 
 <!-- code: apps/desktop/src/main/bubble/clones.ts#Clones.current,constructor,running -->
 
-[`src/main/bubble/clones.ts`, lines 36–42](../../apps/desktop/src/main/bubble/clones.ts#L36-L42)
+[`src/main/bubble/clones.ts`, lines 42–48](../../apps/desktop/src/main/bubble/clones.ts#L42-L48)
 
 ```ts
 private current: { window: CloneWindow; timer: ReturnType<typeof setTimeout> } | null = null
@@ -2906,7 +2912,7 @@ get running(): boolean {
 
 <!-- code: apps/desktop/src/main/bubble/clones.ts#Clones.start -->
 
-[`src/main/bubble/clones.ts`, lines 44–57](../../apps/desktop/src/main/bubble/clones.ts#L44-L57)
+[`src/main/bubble/clones.ts`, lines 50–64](../../apps/desktop/src/main/bubble/clones.ts#L50-L64)
 
 ```ts
 /** Clones of her where she stands (`standing` from BubbleController), for their time. */
@@ -2919,6 +2925,7 @@ start(standing: { workArea: Rect; bounds: Rect; scale: number }): void {
     accent: this.deps.accentColor,
     ends: String((this.deps.now ?? Date.now)() + CLONES.durationMs),
     ...robeQuery(this.deps.robeColor?.()),
+    ...hatQuery(this.deps.noHat?.()),
   })
   const timer = setTimeout(() => this.stop(), CLONES.durationMs)
   this.current = { window, timer }
@@ -2951,7 +2958,7 @@ As its comment says, clones of her where she stands, for their time.
 
 <!-- code: apps/desktop/src/main/bubble/clones.ts#Clones.stop -->
 
-[`src/main/bubble/clones.ts`, lines 59–65](../../apps/desktop/src/main/bubble/clones.ts#L59-L65)
+[`src/main/bubble/clones.ts`, lines 66–72](../../apps/desktop/src/main/bubble/clones.ts#L66-L72)
 
 ```ts
 /** Closes the clones' window now, if there is one. */
@@ -3440,7 +3447,7 @@ Who uses it:
 
 <!-- code: apps/desktop/src/main/screenSaver.ts#SaverWindow,ScreenSaverDeps -->
 
-[`src/main/screenSaver.ts`, lines 5–35](../../apps/desktop/src/main/screenSaver.ts#L5-L35)
+[`src/main/screenSaver.ts`, lines 5–37](../../apps/desktop/src/main/screenSaver.ts#L5-L37)
 
 ```ts
 /** One of the screen saver's windows, as ScreenSaver uses it. index.ts makes them. */
@@ -3457,6 +3464,8 @@ export interface ScreenSaverDeps {
   accentColor: string
   /** ...unless another is chosen for her robe in Settings (`#rrggbb`, or null). */
   robeColor?: () => string | null
+  /** Whether her hat's off (Settings → No hat), so she watches the sunset without it. */
+  noHat?: () => boolean
   /** Every display, the whole of it (the taskbar too). */
   displays(): { id: number; bounds: Rect }[]
   /** The display she's on. */
@@ -3504,7 +3513,7 @@ What `ScreenSaver` needs from each window, and from the rest of the app.
 
 <!-- code: apps/desktop/src/main/screenSaver.ts#ScreenSaver.class -->
 
-[`src/main/screenSaver.ts`, lines 37–42](../../apps/desktop/src/main/screenSaver.ts#L37-L42)
+[`src/main/screenSaver.ts`, lines 39–44](../../apps/desktop/src/main/screenSaver.ts#L39-L44)
 
 ```ts
 /**
@@ -3525,7 +3534,7 @@ fields, constructor and one getter:
 
 <!-- code: apps/desktop/src/main/screenSaver.ts#ScreenSaver.windows,ending,constructor,running -->
 
-[`src/main/screenSaver.ts`, lines 43–50](../../apps/desktop/src/main/screenSaver.ts#L43-L50)
+[`src/main/screenSaver.ts`, lines 45–52](../../apps/desktop/src/main/screenSaver.ts#L45-L52)
 
 ```ts
 private windows: SaverWindow[] = []
@@ -3553,7 +3562,7 @@ get running(): boolean {
 
 <!-- code: apps/desktop/src/main/screenSaver.ts#ScreenSaver.start -->
 
-[`src/main/screenSaver.ts`, lines 52–68](../../apps/desktop/src/main/screenSaver.ts#L52-L68)
+[`src/main/screenSaver.ts`, lines 54–71](../../apps/desktop/src/main/screenSaver.ts#L54-L71)
 
 ```ts
 /** Covers every screen. Once is enough: starting it again while it's running does nothing. */
@@ -3568,6 +3577,7 @@ start(): void {
       starts,
       accent: this.deps.accentColor,
       ...robeQuery(this.deps.robeColor?.()),
+      ...hatQuery(this.deps.noHat?.()),
     }
     return this.deps.open(display.bounds, query, display.id === her)
   })
@@ -3593,7 +3603,7 @@ As its comment says, covers every screen; starting it again while it's running d
 
 <!-- code: apps/desktop/src/main/screenSaver.ts#ScreenSaver.wakeFrom,stop -->
 
-[`src/main/screenSaver.ts`, lines 70–83](../../apps/desktop/src/main/screenSaver.ts#L70-L83)
+[`src/main/screenSaver.ts`, lines 73–86](../../apps/desktop/src/main/screenSaver.ts#L73-L86)
 
 ```ts
 /**
@@ -3633,7 +3643,7 @@ stop(): void {
 
 <!-- code: apps/desktop/src/main/screenSaver.ts#ScreenSaver.dispose,close -->
 
-[`src/main/screenSaver.ts`, lines 85–97](../../apps/desktop/src/main/screenSaver.ts#L85-L97)
+[`src/main/screenSaver.ts`, lines 88–100](../../apps/desktop/src/main/screenSaver.ts#L88-L100)
 
 ```ts
 /** Closes its windows at once (the app is quitting). */
@@ -3704,7 +3714,7 @@ Key ideas:
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#View,passive -->
 
-[`src/main/bubble/windows.ts`, lines 7–16](../../apps/desktop/src/main/bubble/windows.ts#L7-L16)
+[`src/main/bubble/windows.ts`, lines 8–17](../../apps/desktop/src/main/bubble/windows.ts#L8-L17)
 
 ```ts
 export type View =
@@ -3732,7 +3742,7 @@ const passive = (view: View) =>
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#ON_TOP_LEVEL,ON_TOP_CHECK_MS -->
 
-[`src/main/bubble/windows.ts`, lines 18–29](../../apps/desktop/src/main/bubble/windows.ts#L18-L29)
+[`src/main/bubble/windows.ts`, lines 19–30](../../apps/desktop/src/main/bubble/windows.ts#L19-L30)
 
 ```ts
 /**
@@ -3772,7 +3782,7 @@ the windows' style: before, neither was on top; now both are.
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#createOverlayWindow -->
 
-[`src/main/bubble/windows.ts`, lines 31–98](../../apps/desktop/src/main/bubble/windows.ts#L31-L98)
+[`src/main/bubble/windows.ts`, lines 32–99](../../apps/desktop/src/main/bubble/windows.ts#L32-L99)
 
 ```ts
 /**
@@ -3931,19 +3941,24 @@ spells' windows, which the comment doesn't mention (`passive()` covers all three
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#keepOnTop -->
 
-[`src/main/bubble/windows.ts`, lines 100–111](../../apps/desktop/src/main/bubble/windows.ts#L100-L111)
+[`src/main/bubble/windows.ts`, lines 101–117](../../apps/desktop/src/main/bubble/windows.ts#L101-L117)
 
 ```ts
 /**
  * Puts the window back on top if something took that away. Windows can still demote an
- * always-on-top window (another app reordering windows, Explorer restarting), and nothing tells
- * the app when it happens, so the windows check every few seconds; it costs one look at the
- * window's style, and only a window that lost it is moved. Returns a function that stops it.
+ * always-on-top window (another app reordering windows, Explorer restarting, a full-screen app),
+ * and nothing tells the app when it happens, so the windows check every few seconds (checkOnTop).
+ * A window that lost its always-on-top gets it back; while `reassert()` says so (her window, while
+ * she's standing about), it's also put back at the top of the always-on-top windows each time, as
+ * Windows can push her down without taking the style away. Returns a function that stops it.
  */
-export function keepOnTop(win: BrowserWindow): () => void {
-  const timer = setInterval(() => {
-    if (!win.isDestroyed() && !win.isAlwaysOnTop()) win.setAlwaysOnTop(true, ON_TOP_LEVEL)
-  }, ON_TOP_CHECK_MS)
+export function keepOnTop(win: BrowserWindow, reassert: () => boolean = () => false): () => void {
+  const onTop: OnTopWindow = {
+    isDestroyed: () => win.isDestroyed(),
+    isAlwaysOnTop: () => win.isAlwaysOnTop(),
+    putOnTop: () => win.setAlwaysOnTop(true, ON_TOP_LEVEL),
+  }
+  const timer = setInterval(() => checkOnTop(onTop, reassert()), ON_TOP_CHECK_MS)
   return () => clearInterval(timer)
 }
 ```
@@ -3952,20 +3967,25 @@ export function keepOnTop(win: BrowserWindow): () => void {
 
 A safety net. Windows can still take always-on-top away from a window, for example when another
 app reorders windows or Explorer restarts, and nothing tells the app when it happens. So each
-window looks every five seconds and puts itself back if needed. `index.ts` starts this for both
-windows and stops it when quitting.
+window looks every five seconds and puts itself back if needed (`checkOnTop()` in `frontCheck.ts`).
+`index.ts` starts this for both windows and stops it when quitting.
 
-- `win.isAlwaysOnTop()`: reads the window's actual style, so it notices when Windows took it away.
-  Most of the time it's still on top and nothing else happens: the window isn't moved, so it never
-  jumps in front of another app's always-on-top window every few seconds.
-- `!win.isDestroyed()`: never touch a window that has been closed.
+- `onTop`: the window as `checkOnTop()` needs it; `putOnTop()` is `setAlwaysOnTop(true,
+ON_TOP_LEVEL)`, which also puts the window at the top of the always-on-top windows, without
+  taking the focus.
+- `checkOnTop(onTop, reassert())`: a window that lost its always-on-top gets it back. With
+  `reassert()` (her own window, while she's standing about), it's put back at the top each time
+  whatever its style says. Windows can push a window below ordinary ones and leave its style set:
+  it happened to her behind a second screen's taskbar, which Windows had pushed down (as it does
+  while it thinks a full-screen app is on that screen), and Chrome covered her while the style
+  check saw nothing wrong. A window already at the top doesn't move.
 - `return () => clearInterval(timer)`: the caller gets the way to stop it.
 
 ### `bringToFront()`
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#bringToFront -->
 
-[`src/main/bubble/windows.ts`, lines 113–125](../../apps/desktop/src/main/bubble/windows.ts#L113-L125)
+[`src/main/bubble/windows.ts`, lines 119–131](../../apps/desktop/src/main/bubble/windows.ts#L119-L131)
 
 ```ts
 /**
@@ -3998,7 +4018,7 @@ calls it for the bubble when Windows says something else is at the bubble's cent
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#bubbleSurface,panelSurface -->
 
-[`src/main/bubble/windows.ts`, lines 127–150](../../apps/desktop/src/main/bubble/windows.ts#L127-L150)
+[`src/main/bubble/windows.ts`, lines 133–156](../../apps/desktop/src/main/bubble/windows.ts#L133-L156)
 
 ```ts
 export function bubbleSurface(win: BrowserWindow): Surface {
@@ -4044,7 +4064,7 @@ forwards each call to the matching Electron method.
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#resetClickThrough -->
 
-[`src/main/bubble/windows.ts`, lines 152–164](../../apps/desktop/src/main/bubble/windows.ts#L152-L164)
+[`src/main/bubble/windows.ts`, lines 158–170](../../apps/desktop/src/main/bubble/windows.ts#L158-L170)
 
 ```ts
 /**
@@ -4082,7 +4102,7 @@ been hidden, for example for a screenshot.
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#lockDown -->
 
-[`src/main/bubble/windows.ts`, lines 166–175](../../apps/desktop/src/main/bubble/windows.ts#L166-L175)
+[`src/main/bubble/windows.ts`, lines 172–181](../../apps/desktop/src/main/bubble/windows.ts#L172-L181)
 
 ```ts
 function lockDown(win: BrowserWindow, view: View): void {
@@ -4117,7 +4137,7 @@ Basic safety and crash recovery for every overlay page.
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#addEditContextMenu -->
 
-[`src/main/bubble/windows.ts`, lines 177–198](../../apps/desktop/src/main/bubble/windows.ts#L177-L198)
+[`src/main/bubble/windows.ts`, lines 183–204](../../apps/desktop/src/main/bubble/windows.ts#L183-L204)
 
 ```ts
 /** Right-click menu for the text box: spelling suggestions plus the usual edit commands. */
@@ -4202,7 +4222,7 @@ Each check runs PowerShell for about a second, so there are only a few.
 
 <!-- code: apps/desktop/src/main/bubble/frontCheck.ts#FrontCheck -->
 
-[`src/main/bubble/frontCheck.ts`, lines 13–25](../../apps/desktop/src/main/bubble/frontCheck.ts#L13-L25)
+[`src/main/bubble/frontCheck.ts`, lines 35–47](../../apps/desktop/src/main/bubble/frontCheck.ts#L35-L47)
 
 ```ts
 /** What Windows says about the bubble's window. */
@@ -4235,7 +4255,7 @@ What Windows says about the bubble's window.
 
 <!-- code: apps/desktop/src/main/bubble/frontCheck.ts#frontCheckScript -->
 
-[`src/main/bubble/frontCheck.ts`, lines 27–78](../../apps/desktop/src/main/bubble/frontCheck.ts#L27-L78)
+[`src/main/bubble/frontCheck.ts`, lines 49–100](../../apps/desktop/src/main/bubble/frontCheck.ts#L49-L100)
 
 ```ts
 /**
@@ -4316,7 +4336,7 @@ The PowerShell. `Add-Type` compiles a few lines of C# that call Windows' own fun
 
 <!-- code: apps/desktop/src/main/bubble/frontCheck.ts#parseFrontCheck -->
 
-[`src/main/bubble/frontCheck.ts`, lines 80–96](../../apps/desktop/src/main/bubble/frontCheck.ts#L80-L96)
+[`src/main/bubble/frontCheck.ts`, lines 102–118](../../apps/desktop/src/main/bubble/frontCheck.ts#L102-L118)
 
 ```ts
 /** The check's answer: the JSON on the last line it printed. Null if there isn't any. */
@@ -4347,7 +4367,7 @@ is ignored). Null if that isn't the JSON expected.
 
 <!-- code: apps/desktop/src/main/bubble/frontCheck.ts#runFrontCheck -->
 
-[`src/main/bubble/frontCheck.ts`, lines 98–128](../../apps/desktop/src/main/bubble/frontCheck.ts#L98-L128)
+[`src/main/bubble/frontCheck.ts`, lines 120–150](../../apps/desktop/src/main/bubble/frontCheck.ts#L120-L150)
 
 ```ts
 /** Runs the check in Windows PowerShell, hidden. */
@@ -4393,7 +4413,7 @@ separate arguments, and stopped after 30 seconds if it hangs.
 
 <!-- code: apps/desktop/src/main/bubble/frontCheck.ts#needsHelp,describe -->
 
-[`src/main/bubble/frontCheck.ts`, lines 130–143](../../apps/desktop/src/main/bubble/frontCheck.ts#L130-L143)
+[`src/main/bubble/frontCheck.ts`, lines 152–165](../../apps/desktop/src/main/bubble/frontCheck.ts#L152-L165)
 
 ```ts
 /** Whether the check found anything wrong with a shown bubble. */
@@ -4422,7 +4442,7 @@ export function describe(check: FrontCheck): string {
 
 <!-- code: apps/desktop/src/main/bubble/frontCheck.ts#FrontWatchDeps,watchBubbleFront -->
 
-[`src/main/bubble/frontCheck.ts`, lines 145–191](../../apps/desktop/src/main/bubble/frontCheck.ts#L145-L191)
+[`src/main/bubble/frontCheck.ts`, lines 167–213](../../apps/desktop/src/main/bubble/frontCheck.ts#L167-L213)
 
 ```ts
 export interface FrontWatchDeps {

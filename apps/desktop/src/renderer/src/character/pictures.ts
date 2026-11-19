@@ -119,6 +119,31 @@ export const DIAGONAL: Picture = {
   ],
 }
 
+/**
+ * The top of her head in DIAGONAL without her hat (Settings → No hat), by row: her silver hair
+ * rounding over her crown, lit from the upper left, and her fringe without the brim's shadow and
+ * outline across it. The rows above it are empty.
+ */
+const HATLESS_TOP: Record<number, string> = {
+  11: '...........OOOOOOOOO...........',
+  12: '.........OOlLLlhhhhDOO.........',
+  13: '........OlLLlhhhhhhhDDO........',
+  14: '.......OlLlhhhhhhhhhhDDO.......',
+  15: '......OllhhhhhhhhhhhhhDDO......',
+  16: '..K..OlhhhhhhhhhhhhhhhhDDO.....',
+  17: '.KzKKlOhhhhhhhhhhhhhhhhDDO.....',
+  18: '.KzsSKKhhhhDhhhhDhhhhhhDDO.....',
+  19: '..KsssSKhOhhDhhhDhhhhhDODO.....',
+}
+
+/** DIAGONAL without her hat: the rows above her hair emptied, and HATLESS_TOP in their place. */
+export const DIAGONAL_HATLESS: Picture = {
+  ...DIAGONAL,
+  rows: DIAGONAL.rows.map((row, y) =>
+    y in HATLESS_TOP ? HATLESS_TOP[y]! : y < 17 ? '.'.repeat(row.length) : row,
+  ),
+}
+
 /** Where the eyes are in DIAGONAL (grid pixels): near eye 5 × 5, far eye 4 × 5. */
 export const DIAGONAL_EYES = { near: { x: 44, y: 27 }, far: { x: 51, y: 27 } }
 /** Where the mouth is in DIAGONAL: two pixels wide, below the far eye. */

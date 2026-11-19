@@ -28,6 +28,8 @@ import {
   type Face,
   type Leg,
   type Pose,
+  wearHat,
+  wearsHat,
 } from './rig'
 
 // The character's animations: for each pose, a list of frames drawn by the rig (rig.ts) from key
@@ -1934,6 +1936,18 @@ const LEFT_MAKERS: Partial<Record<Name, () => Frame[]>> = {
 let gazing: Frame[] | null = null
 
 /** Her frames watching the sunset, from behind (see gaze): round and round. Drawn once, then kept. */
+/**
+ * Puts her hat on or takes it off (Settings → No hat): frames drawn from now on have it or not,
+ * and those drawn already are forgotten, to be drawn again when they're asked for.
+ */
+export function setHat(on: boolean): void {
+  if (wearsHat() === on) return
+  wearHat(on)
+  made.clear()
+  gazes.clear()
+  gazing = null
+}
+
 export function gazeFrames(): Frame[] {
   gazing ??= drawn(gaze())
   return gazing

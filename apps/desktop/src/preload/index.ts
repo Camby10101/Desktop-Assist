@@ -106,6 +106,7 @@ const api: AssistApi = {
   },
   onScreensaverEnd: (callback) => subscribe(IPC.screensaverEnd, () => callback()),
   onRobeColorChanged: (callback) => subscribe(IPC.robeColorChanged, callback),
+  onHatChanged: (callback) => subscribe(IPC.hatChanged, callback),
   onGaze: (callback) => subscribe(IPC.gaze, callback),
   onFamiliarSees: (callback) => subscribe(IPC.familiarSees, callback),
   onOcclude: (callback) => subscribe(IPC.occlude, callback),

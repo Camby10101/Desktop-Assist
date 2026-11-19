@@ -6,6 +6,10 @@ import { cloneStrip } from './layout'
 export const robeQuery = (color: string | null | undefined): Record<string, string> =>
   color ? { robe: color } : {}
 
+/** Her hat off (Settings → No hat), in a page's query string, for the windows that draw her. */
+export const hatQuery = (noHat: boolean | undefined): Record<string, string> =>
+  noHat ? { hat: 'off' } : {}
+
 /** A window of clones, as Clones uses it. index.ts makes them (see createOverlayWindow). */
 export interface CloneWindow {
   close(): void
@@ -21,6 +25,8 @@ export interface ClonesDeps {
   accentColor: string
   /** ...unless another is chosen for her robe in Settings (`#rrggbb`, or null). */
   robeColor?: () => string | null
+  /** Whether her hat's off (Settings → No hat), so her clones are drawn without it too. */
+  noHat?: () => boolean
   /** Wall-clock time (ms), shared with the page, which fades the clones out at the end. */
   now?: () => number
 }
@@ -51,6 +57,7 @@ export class Clones {
       accent: this.deps.accentColor,
       ends: String((this.deps.now ?? Date.now)() + CLONES.durationMs),
       ...robeQuery(this.deps.robeColor?.()),
+      ...hatQuery(this.deps.noHat?.()),
     })
     const timer = setTimeout(() => this.stop(), CLONES.durationMs)
     this.current = { window, timer }

@@ -18,6 +18,8 @@ const PreferencesSchema = z.object({
   /** She stays where she stands, and doesn't do her idle animations: both off unless turned on. */
   standStill: z.boolean().optional(),
   noIdles: z.boolean().optional(),
+  /** Her hat off (Settings → No hat); she wears it unless this is on. */
+  noHat: z.boolean().optional(),
   /** Her robe's colour, chosen in Settings; the company's colour unless one is. */
   robeColor: z
     .string()
@@ -81,6 +83,7 @@ export class SettingsService {
       theme: this.prefs.theme ?? 'dark',
       standStill: this.prefs.standStill ?? false,
       noIdles: this.prefs.noIdles ?? false,
+      noHat: this.prefs.noHat ?? false,
       robeColor: this.prefs.robeColor ?? null,
       canUninstall: available,
     }
@@ -111,7 +114,7 @@ export class SettingsService {
     return this.get()
   }
 
-  /** Whether she wanders about and does her idle animations on her own (either, or both). */
+  /** Whether she wanders about, does her idle animations, and wears her hat (any of them). */
   async setHabits(habits: Partial<Habits>): Promise<Settings> {
     await this.save(habits)
     return this.get()

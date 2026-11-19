@@ -149,7 +149,12 @@ async function start(): Promise<void> {
   const bubbleWindow = createOverlayWindow('bubble', { width: box, height: box + headroom })
   const panelWindow = createOverlayWindow('panel', panelWindowSize(actionCount))
   const windows = [bubbleWindow, panelWindow]
-  const stopKeepingOnTop = windows.map(keepOnTop)
+  // Both kept always on top; her own window, while she's standing about, also kept at the top of
+  // the always-on-top windows (Windows can push her below others without taking the style away).
+  const stopKeepingOnTop = [
+    keepOnTop(bubbleWindow, () => controller?.resting ?? false),
+    keepOnTop(panelWindow),
+  ]
   // Listen straight away, so a page that finishes loading quickly isn't missed.
   const windowsReady = Promise.all(windows.map((win) => once(win, 'ready-to-show')))
   const broadcast = (channel: string, payload?: unknown) => {
@@ -339,6 +344,7 @@ async function start(): Promise<void> {
   const clones = new Clones({
     accentColor: tenant.accentColor,
     robeColor: () => settings.get().robeColor,
+    noHat: () => settings.get().noHat,
     open: openOverlay('clones'),
   })
 
@@ -349,6 +355,7 @@ async function start(): Promise<void> {
   const screenSaver = new ScreenSaver({
     accentColor: tenant.accentColor,
     robeColor: () => settings.get().robeColor,
+    noHat: () => settings.get().noHat,
     displays: () => screen.getAllDisplays().map(({ id, bounds }) => ({ id, bounds })),
     herDisplay: () => screen.getDisplayMatching(bubbleWindow.getBounds()).id,
     open: (bounds, query, focus) => {

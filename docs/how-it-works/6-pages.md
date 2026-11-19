@@ -227,6 +227,17 @@ export function framePaths(rows: string[]): { className: string; d: string }[] {
 tests/sprite.test.ts`, which checks every habit's frames last exactly as long as `FIDGET_MS` says,
 > and see it catch the change.
 
+#### No hat
+
+Settings → **No hat** takes her hat off in everything she does. `setHat(false)` in `sprite.ts` tells
+the rig (`wearHat()`) and forgets every frame drawn so far, so they're drawn again without it. From
+the front and side the rig simply leaves the hat out; her hair already covers the top of her head.
+Three-quarter on, she's a hand-drawn picture with the hat in it, so there's a second picture,
+`DIAGONAL_HATLESS`, with the top of her head drawn instead: her silver hair rounding over her crown,
+lit from the upper left, and her fringe without the brim's shadow across it. `Character` calls
+`setHat()` before asking for any frame. Her page learns of the setting from `assist:hat-changed`,
+her clones' and the screen saver's from `hat=off` in their address.
+
 #### `cat.ts`
 
 Her familiar, drawn the same way on a 32-pixel grid: a black cat with gold eyes, in six poses (sit,

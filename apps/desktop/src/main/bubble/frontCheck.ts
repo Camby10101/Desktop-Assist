@@ -10,6 +10,28 @@ import { join } from 'node:path'
 /** When the bubble is checked, counted from when it first appears. */
 export const FRONT_CHECKS_MS = [5_000, 20_000, 60_000, 180_000, 600_000]
 
+/** A window as the on-top check needs it (an Electron BrowserWindow, or a test's fake). */
+export interface OnTopWindow {
+  isDestroyed(): boolean
+  isAlwaysOnTop(): boolean
+  /** Always on top at the app's level (ON_TOP_LEVEL); also puts it at the top of those windows. */
+  putOnTop(): void
+}
+
+/**
+ * One check that a window is still on top (see keepOnTop in windows.ts). A window that lost its
+ * always-on-top is given it back. With `reassert`, it's put back at the top of the always-on-top
+ * windows whatever its style says: Windows can push a window below ordinary ones and leave its
+ * always-on-top style set. That happened to her behind a second screen's taskbar, which Windows
+ * had pushed down (as it does while it thinks a full-screen app is on that screen): she sat just
+ * behind it, went down with it, and Chrome covered her, while the style check saw nothing wrong.
+ * Putting a window that's already at the top there again moves nothing, and never takes the focus.
+ */
+export function checkOnTop(win: OnTopWindow, reassert: boolean): void {
+  if (win.isDestroyed()) return
+  if (reassert || !win.isAlwaysOnTop()) win.putOnTop()
+}
+
 /** What Windows says about the bubble's window. */
 export interface FrontCheck {
   /** Shown (IsWindowVisible). */

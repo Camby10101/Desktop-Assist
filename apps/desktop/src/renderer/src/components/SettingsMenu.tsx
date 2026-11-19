@@ -126,6 +126,12 @@ export function SettingsMenu(props: {
         on={settings.noIdles}
         onToggle={() => props.onSetHabits({ noIdles: !settings.noIdles })}
       />
+      <ToggleRow
+        label="No hat"
+        hint={settings.noHat ? 'Her hat’s off' : 'She wears her hat'}
+        on={settings.noHat}
+        onToggle={() => props.onSetHabits({ noHat: !settings.noHat })}
+      />
 
       <div className="my-1 border-t border-black/10 dark:border-white/10" />
 
