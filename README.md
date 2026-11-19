@@ -5,7 +5,7 @@ corner of the screen and opens a panel when clicked. Built for Morse Micro first
 [`tenants/`](tenants/README.md), so another business can use it later.
 
 **Download:** the newest installer is in [`installer/`](installer/)
-([Desktop Wizard-Setup-2.5.0.exe](installer/Desktop%20Wizard-Setup-2.5.0.exe), with its signature
+([Desktop Wizard-Setup-2.5.1.exe](installer/Desktop%20Wizard-Setup-2.5.1.exe), with its signature
 beside it). Run it to install Desktop Wizard for yourself (no admin needed); an installed copy
 updates itself from Settings → Check for updates.
 
@@ -31,7 +31,7 @@ sign-in) and 4 (logos, favourites, service desk, light/dark mode, bubble-click f
 3.1 (questions open in Claude Desktop) and 3.2 (Apps list, Uninstall) are complete, as are
 Milestone 5 (the app-opening spinner; Jira and the service desk) and its fixes 5.1 and 5.2 (the
 bubble kept in front, and Check for updates). Version **1.0.0** was the first release (see
-[PLAN.md](docs/PLAN.md) §7h and [RELEASING.md](docs/RELEASING.md)); this is version **2.5.0**, with
+[PLAN.md](docs/PLAN.md) §7h and [RELEASING.md](docs/RELEASING.md)); this is version **2.5.1**, with
 the animated character (thirty-seven habits, ten of them magic and five with toys she summons; throw her and she tumbles; tricks
 with the taskbar's icons and the windows on the screen; her familiar, a black cat), her spells,
 the screen saver, and Robe colour, Stand still and No idle animations in Settings
@@ -163,8 +163,8 @@ name are sent on to it.
       goes off in the middle of the screen.
   - **Screen saver** (a sunset): every screen fades to white as she vanishes, then a pixel-art
     scene fades in. On her screen, the sun sets over rolling hills, with clouds drifting, birds
-    gliding by and fireflies over the grass, and she stands on the nearest hill, her back to you,
-    watching it; on any other screens, shooting stars fall through the night sky. Move the mouse,
+    gliding by, fireflies over the grass, and every couple of minutes a dragon flying across the far
+    sky; she stands on the nearest hill, her back to you, her long hair over her arms, watching it; on any other screens, shooting stars fall through the night sky. Move the mouse,
     click or press a key and it fades away, and she forms again on the taskbar.
   - **Close**: she dissolves into white motes, and the app quits.
 - **Attach screenshot** adds the newest screenshot to your next question; click it again to add

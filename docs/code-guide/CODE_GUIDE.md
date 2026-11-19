@@ -375,8 +375,10 @@ clipboard and pasted into Claude).
 3. Each page, `ScreenSaverView`, fades its screen to white over 1.5 seconds, then the scene in out
    of the white over 3.5 (`SCREEN_SAVER` in `src/shared/screenSaver.ts`), drawn as pixel art on a
    canvas by `lib/screensaver/`. On her screen: a banded evening sky with the sun setting behind
-   rolling hills, clouds drifting, birds and fireflies, and her on the crest of the nearest hill,
-   her back to us (her sprite's `back` pose, `gazeFrames()`), backlit, swaying in the breeze, her
+   rolling hills, clouds drifting, birds and fireflies, a dragon flying across the far sky every
+   couple of minutes (`lib/screensaver/dragon.ts`: behind the hills, the other way and a different
+   height each time), and her on the crest of the nearest hill, her back to us (her sprite's `back`
+   pose, `gazeFrames()`, her arms drawn under her long hair), backlit, swaying in the breeze, her
    long shadow falling toward us. On the others: a night sky with stars falling without end.
 4. Moving the mouse more than a few pixels, a click, a scroll, a key, or the window losing the
    focus → `window.assist.screensaver.wake()` → IPC `assist:screensaver-wake` →

@@ -2275,7 +2275,7 @@ themselves are drawn by `lib/screensaver/` (`scene.ts`, `sunset.ts`, `stars.ts` 
 
 <!-- code: apps/desktop/src/renderer/src/views/ScreenSaverView.tsx#SCENE_HEIGHT,DRAW_EVERY_MS -->
 
-[`src/renderer/src/views/ScreenSaverView.tsx`, lines 22–25](../../apps/desktop/src/renderer/src/views/ScreenSaverView.tsx#L22-L25)
+[`src/renderer/src/views/ScreenSaverView.tsx`, lines 23–26](../../apps/desktop/src/renderer/src/views/ScreenSaverView.tsx#L23-L26)
 
 ```tsx
 /** About how many pixels high the scenes are, whatever the screen: chunky pixel art. */
@@ -2299,7 +2299,7 @@ const DRAW_EVERY_MS = 50
 
 <!-- code: apps/desktop/src/renderer/src/views/ScreenSaverView.tsx#ScreenSaverView -->
 
-[`src/renderer/src/views/ScreenSaverView.tsx`, lines 27–147](../../apps/desktop/src/renderer/src/views/ScreenSaverView.tsx#L27-L147)
+[`src/renderer/src/views/ScreenSaverView.tsx`, lines 28–148](../../apps/desktop/src/renderer/src/views/ScreenSaverView.tsx#L28-L148)
 
 ```tsx
 /**
@@ -2508,7 +2508,7 @@ The JSX:
 
 <!-- code: apps/desktop/src/renderer/src/views/ScreenSaverView.tsx#layer,herColours,frameAt -->
 
-[`src/renderer/src/views/ScreenSaverView.tsx`, lines 149–192](../../apps/desktop/src/renderer/src/views/ScreenSaverView.tsx#L149-L192)
+[`src/renderer/src/views/ScreenSaverView.tsx`, lines 150–193](../../apps/desktop/src/renderer/src/views/ScreenSaverView.tsx#L150-L193)
 
 ```tsx
 /** A canvas the size of the scene's, painted once by `paint` (for what never changes). */
@@ -2581,7 +2581,7 @@ function frameAt(frames: readonly Frame[], t: number): Frame {
 
 <!-- code: apps/desktop/src/renderer/src/views/ScreenSaverView.tsx#sunsetPainter,starfallPainter -->
 
-[`src/renderer/src/views/ScreenSaverView.tsx`, lines 194–227](../../apps/desktop/src/renderer/src/views/ScreenSaverView.tsx#L194-L227)
+[`src/renderer/src/views/ScreenSaverView.tsx`, lines 195–230](../../apps/desktop/src/renderer/src/views/ScreenSaverView.tsx#L195-L230)
 
 ```tsx
 /** Draws the sunset at `t`: the sky and hills painted once, the rest each time. */
@@ -2599,6 +2599,8 @@ function sunsetPainter(g: CanvasRenderingContext2D, w: number, h: number): (t: n
     paintEveningStars(p, frame)
     paintSun(p, frame)
     paintClouds(p, frame)
+    // Now and then a dragon flying by, far off: behind the hills and her.
+    paintDragon(p, frame)
     g.globalAlpha = 1
     g.drawImage(hills, 0, 0)
     paintLife(p, frame)

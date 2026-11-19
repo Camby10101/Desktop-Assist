@@ -639,6 +639,11 @@ export function draw(pose: Pose): string[] {
           ? { x: side === 1 ? -4.5 : 4.5, y: 2.5 }
           : { x: 0.5, y: 2.5 },
     )
+  /**
+   * Her arms when she's seen from behind: drawn before her head and hair (see below), so her long
+   * hair falls over them while they're still in front of her robe. Null otherwise.
+   */
+  let armsFromBehind: { hand: Point; farHand: Point } | null = null
   const drawArm = (arm: Arm, side: 1 | -1) => {
     const layer = new Layer(GRID, HEADROOM)
     // From the front, positive angles swing each arm outward; otherwise forward.
@@ -1025,6 +1030,10 @@ export function draw(pose: Pose): string[] {
     }
     if (!fromBehind) motif(onBody({ x: off, y: 18.5 }), ['YYY', 'YkY'], 'Aqav')
 
+    // From behind, her arms go here: in front of her robe, and behind her hair, which falls down
+    // her back over them (drawn after them). Drawn last, as from the front, they floated over it.
+    if (fromBehind) armsFromBehind = { farHand: drawArm(farArm, -1), hand: drawArm(nearArm, 1) }
+
     // Her head: neck, face and chin.
     const face = new Layer(GRID, HEADROOM)
     face.capsule(
@@ -1369,7 +1378,12 @@ export function draw(pose: Pose): string[] {
   let hand: Point
   // The far hand too, from the front (where she can use both, to juggle).
   let farHand: Point | null = null
-  if (frontView) {
+  const behind = armsFromBehind as { hand: Point; farHand: Point } | null
+  if (behind) {
+    // From behind they're drawn already, under her hair.
+    hand = behind.hand
+    farHand = behind.farHand
+  } else if (frontView) {
     farHand = drawArm(farArm, -1)
     hand = drawArm(nearArm, 1)
   } else {

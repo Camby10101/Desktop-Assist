@@ -3,6 +3,12 @@ import { draw, GRID, HEADROOM } from '../src/renderer/src/character/rig'
 import { gazeFrames } from '../src/renderer/src/character/sprite'
 import type { Painter } from '../src/renderer/src/lib/pixels'
 import { backlit, DUSK, paintHer, parseColour, RIM } from '../src/renderer/src/lib/screensaver/her'
+import {
+  DRAGON,
+  DRAGON_FRAMES,
+  dragonAt,
+  paintDragon,
+} from '../src/renderer/src/lib/screensaver/dragon'
 import { dither, type SaverFrame } from '../src/renderer/src/lib/screensaver/scene'
 import {
   FALL,
@@ -186,6 +192,24 @@ describe('her, watching the sunset', () => {
     expect(back.some((row) => /[sSz]/.test(row.slice(middle + 10)))).toBe(true)
   })
 
+  it('has her hair over her arms from the back, and her arms in front of her robe', () => {
+    const back = draw({ view: 'front', back: true })
+    // Her hair is as wide as her shoulders, covering her upper arms; lower down, by her elbows,
+    // her sleeves (the robe's colour) show either side of it, and nothing of them crosses it.
+    const middle = GRID / 2
+    const elbows = HEADROOM + 54
+    const row = back[elbows]!
+    const hair = [...row].map((c, x) => ('OhlDL'.includes(c) ? x : -1)).filter((x) => x >= 0)
+    const [from, to] = [Math.min(...hair), Math.max(...hair)]
+    expect(from).toBeLessThan(middle)
+    expect(to).toBeGreaterThan(middle)
+    // Her hair is one unbroken band across her back there: no sleeve drawn over it.
+    expect(row.slice(from, to + 1)).toMatch(/^[OhlDL]+$/)
+    // And her sleeves are there, either side of it.
+    expect(row.slice(0, from)).toMatch(/[qAav]/)
+    expect(row.slice(to + 1)).toMatch(/[qAav]/)
+  })
+
   it('sways very slightly, round and round, from the back', () => {
     const frames = gazeFrames()
     expect(frames).toBe(gazeFrames()) // drawn once
@@ -221,5 +245,57 @@ describe('her, watching the sunset', () => {
     const rim = drawn.rects.filter((r) => r.colour === RIM)
     // Every pixel of a shape this small is on an edge.
     expect(rim).toHaveLength(4)
+  })
+})
+
+describe('a dragon flying by in the sunset', () => {
+  it('comes every couple of minutes, crossing the whole sky, and not in between', () => {
+    expect(dragonAt(DRAGON.firstMs - 1, W, H)).toBeNull()
+    expect(dragonAt(DRAGON.firstMs + DRAGON.crossMs + 1, W, H)).toBeNull()
+    expect(dragonAt(DRAGON.firstMs + DRAGON.everyMs - 1, W, H)).toBeNull()
+    expect(DRAGON.everyMs).toBeGreaterThanOrEqual(90_000)
+    expect(DRAGON.everyMs).toBeLessThanOrEqual(180_000)
+    const width = DRAGON_FRAMES[0]![0]!.length
+    const start = dragonAt(DRAGON.firstMs, W, H)!
+    const end = dragonAt(DRAGON.firstMs + DRAGON.crossMs - 1, W, H)!
+    expect(start.x + width).toBeLessThanOrEqual(0) // off the left edge
+    expect(end.x).toBeGreaterThanOrEqual(W - 4) // to the right edge
+    expect(start.facing).toBe('right')
+    // The next pass the other way.
+    const next = dragonAt(DRAGON.firstMs + DRAGON.everyMs + 1_000, W, H)!
+    expect(next.facing).toBe('left')
+  })
+
+  it('flies high in the sky, well above the hills, a different height each pass', () => {
+    const heights = new Set<number>()
+    for (let pass = 0; pass < 6; pass++) {
+      for (let t = 0; t < DRAGON.crossMs; t += 500) {
+        const at = dragonAt(DRAGON.firstMs + pass * DRAGON.everyMs + t, W, H)!
+        expect(at.y).toBeGreaterThanOrEqual(0)
+        expect(at.y + DRAGON_FRAMES[0]!.length).toBeLessThan(horizon(H))
+        if (t === 0) heights.add(at.y)
+      }
+    }
+    expect(heights.size).toBeGreaterThan(3)
+  })
+
+  it('beats its wings, gliding now and then, and every frame is the same size', () => {
+    for (const rows of DRAGON_FRAMES) {
+      expect(rows).toHaveLength(DRAGON_FRAMES[0]!.length)
+      for (const row of rows) expect(row).toHaveLength(DRAGON_FRAMES[0]![0]!.length)
+    }
+    const frames = new Set<number>()
+    for (let t = 0; t < DRAGON.crossMs; t += 40)
+      frames.add(dragonAt(DRAGON.firstMs + t, W, H)!.frame)
+    expect(frames.size).toBe(DRAGON_FRAMES.length)
+  })
+
+  it('paints itself when it’s by, and nothing otherwise', () => {
+    const by = counter()
+    paintDragon(by.painter, frame(DRAGON.firstMs + DRAGON.crossMs / 2))
+    expect(by.rects.length).toBeGreaterThan(80)
+    const gone = counter()
+    paintDragon(gone.painter, frame(DRAGON.firstMs + DRAGON.crossMs + 5_000))
+    expect(gone.rects).toHaveLength(0)
   })
 })
