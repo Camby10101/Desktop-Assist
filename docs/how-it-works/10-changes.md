@@ -74,7 +74,7 @@ own `tenant.json`, `logo.png` and `icon.png`, built with `TENANT=<folder> npm ru
 | DIP                          | Device-independent pixel: a screen pixel at 100% scaling; most of the app's numbers are DIPs.               |
 | DPAPI                        | Windows' encryption tied to the signed-in user, used through Electron's `safeStorage`.                      |
 | Ed25519                      | The kind of signature the release key makes.                                                                |
-| Fidget, habit                | One of her 32 short animations (`FIDGETS`).                                                                 |
+| Fidget, habit                | One of her 37 short animations (`FIDGETS`).                                                                 |
 | Frame                        | One picture of her, a grid of palette letters, shown for its time.                                          |
 | Fuse                         | A switch set inside the `.exe` when it's built, which can't be changed afterwards.                          |
 | Hash                         | A fingerprint of some data (SHA-256 here): easy to make, impossible to reverse, changed by any change.      |

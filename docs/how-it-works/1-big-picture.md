@@ -49,7 +49,8 @@ of the screen. Click her and a panel of icons opens beside her. For Morse Micro 
 
 Left alone, she has a life of her own:
 
-- she strolls near her corner and does **habits**: 32 of them, ten magic, two only at certain times
+- she strolls near her corner and does **habits**: 37 of them, ten magic, five where she summons a
+  toy and plays with it (a yo-yo, a spinning top, cards, a paper plane, a bouncy ball), two only at certain times
   (yawning late at night, confetti on Friday evenings);
 - now and then she **performs**: peeks round a window, waves through a portal on top of one, gets a visit from her black
   cat, and, rarely, plays **tricks with the taskbar's icons** (all pretend: nothing really moves);
