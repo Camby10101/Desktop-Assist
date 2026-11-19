@@ -71,6 +71,24 @@ describe('nextActivity', () => {
 
 describe('nextActivity, as Settings allow', () => {
   const alone = WANDER.fidgetAfter
+  it('leaves her hat trick out while her hat’s off (No hat), and only that', () => {
+    const picked = (hat: boolean) => {
+      const poses = new Set<string>()
+      for (let i = 0; i < 400; i++) {
+        const next = nextActivity(alone, 0, 240, rolls(0.1, (i + 0.5) / 400), undefined, {
+          walk: true,
+          fidget: true,
+          hat,
+        })
+        if (next.kind === 'fidget') poses.add(next.pose)
+      }
+      return poses
+    }
+    expect(picked(true)).toContain('hat')
+    expect(picked(false)).not.toContain('hat')
+    expect(picked(false).size).toBe(picked(true).size - 1)
+  })
+
   it('rests instead of walking when she’s to stand still, still fidgeting once left alone', () => {
     const still = { walk: false, fidget: true }
     expect(nextActivity(alone - 1, 0, 240, rolls(0.1, 0.5), undefined, still)).toEqual({

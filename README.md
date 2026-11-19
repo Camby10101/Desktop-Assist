@@ -5,7 +5,7 @@ corner of the screen and opens a panel when clicked. Built for Morse Micro first
 [`tenants/`](tenants/README.md), so another business can use it later.
 
 **Download:** the newest installer is in [`installer/`](installer/)
-([Desktop Wizard-Setup-2.4.2.exe](installer/Desktop%20Wizard-Setup-2.4.2.exe), with its signature
+([Desktop Wizard-Setup-2.4.3.exe](installer/Desktop%20Wizard-Setup-2.4.3.exe), with its signature
 beside it). Run it to install Desktop Wizard for yourself (no admin needed); an installed copy
 updates itself from Settings → Check for updates.
 
@@ -31,7 +31,7 @@ sign-in) and 4 (logos, favourites, service desk, light/dark mode, bubble-click f
 3.1 (questions open in Claude Desktop) and 3.2 (Apps list, Uninstall) are complete, as are
 Milestone 5 (the app-opening spinner; Jira and the service desk) and its fixes 5.1 and 5.2 (the
 bubble kept in front, and Check for updates). Version **1.0.0** was the first release (see
-[PLAN.md](docs/PLAN.md) §7h and [RELEASING.md](docs/RELEASING.md)); this is version **2.4.2**, with
+[PLAN.md](docs/PLAN.md) §7h and [RELEASING.md](docs/RELEASING.md)); this is version **2.4.3**, with
 the animated character (thirty-two habits, ten of them magic; throw her and she tumbles; tricks
 with the taskbar's icons and the windows on the screen; her familiar, a black cat), her spells,
 the screen saver, and Robe colour, Stand still and No idle animations in Settings
@@ -83,13 +83,13 @@ name are sent on to it.
 - **Pet her**: double-click her for hearts and a happy wiggle (the first click opens or closes the
   panel as usual; the second only pets her).
 - **Left to herself**, besides her habits she now and then: peeks round the edge of a window that
-  comes down to the taskbar near her (hidden behind it), or vanishes and opens a swirling portal on
-  top of a window, waving through it for a few seconds (it goes along with the window if it's
+  comes down to the taskbar near her (hidden behind it); or has a visit from her familiar, a little
+  black cat that wanders, follows her and joins in. Rarely, she vanishes and opens a swirling portal
+  on top of a window, waving through it for a few seconds (it goes along with the window if it's
   dragged, and drops her if it's minimised or closed; click her in it and she goes straight back
-  home); has a visit from her
-  familiar, a little black cat that wanders, follows her and joins in; and, rarely, does tricks with
-  the taskbar's icons (carrying one about, juggling three, swapping two and swapping them back,
-  sitting on one, sneezing one flying, a wand tap) or watches the pointer for ten seconds. The
+  home), does tricks with the taskbar's icons (carrying one about, juggling three, swapping two and
+  swapping them back, sitting on one, sneezing one flying, a wand tap), or watches the pointer for
+  ten seconds. The
   tricks are pretend: copies of the icons, cut from a screenshot that never leaves the PC, are drawn
   over the taskbar; nothing on it really moves. She yawns late at night (10pm to 6am), and throws
   confetti on Friday evenings (4pm to 8pm). With nobody at the PC for five minutes (no mouse or
@@ -136,8 +136,8 @@ name are sent on to it.
     fits your screen; it's remembered), **Robe colour** (her robe and hat, the hat a darker shade
     of it, in the company's colour, one of the swatches, or any hue from the slider; her trim and
     patterns stay as they are), **Stand still** (she stays where she is instead of
-    wandering about), **No idle animations** (she stops doing her habits on her own; both are off
-    to start with), Start with Windows, Send in Claude automatically, Open screenshots folder,
+    wandering about), **No idle animations** (she stops doing her habits on her own), **No hat**
+    (she takes her hat off, in everything she does; all three are off to start with), Start with Windows, Send in Claude automatically, Open screenshots folder,
     Clear text box, **Check for updates** (downloads a newer release from GitHub, checks it's
     signed with the release key, and installs it; Desktop Wizard closes and starts again on the
     new version) and **Uninstall Desktop Wizard**. (With the

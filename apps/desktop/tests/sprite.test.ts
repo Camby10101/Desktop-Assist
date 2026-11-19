@@ -20,7 +20,9 @@ import {
   animationLength,
   framePaths,
   framesOf,
+  gazeFrames,
   mirror,
+  setHat,
 } from '../src/renderer/src/character/sprite'
 
 const POSES: PoseName[] = ['idle', 'walk-left', 'walk-right', 'dragged', ...FIDGETS, ...SPELL_POSES]
@@ -61,6 +63,30 @@ describe('the animations', { timeout: 30_000 }, () => {
         expect(ms).toBeGreaterThan(0)
       }
     }
+  })
+
+  it('takes her hat off in everything she does (Settings → No hat), and puts it back on', () => {
+    // Her hat's colours (the hat's ramp; her spellbook shares it, so no reading here).
+    const hatty = (frames: { rows: string[] }[]) =>
+      frames.some((f) => /[nNg]/.test(f.rows.join('')))
+    const poses = ['idle', 'walk-right', 'wave', 'hop', 'splat', 'flung', 'sit', 'portal'] as const
+    expect(hatty(framesOf('idle', 'right'))).toBe(true)
+    setHat(false)
+    try {
+      for (const pose of poses) {
+        expect(hatty(framesOf(pose, 'right')), pose).toBe(false)
+        expect(hatty(framesOf(pose, 'left')), pose).toBe(false)
+      }
+      expect(hatty(gazeFrames())).toBe(false) // the screen saver's view of her, from behind
+      // Her hair still covers the top of her head, seen from the front and three-quarter on.
+      for (const pose of ['idle', 'wave'] as const) {
+        expect(framesOf(pose, 'right')[0]!.rows.join('')).toMatch(/[hlL]/)
+      }
+    } finally {
+      setHat(true)
+    }
+    expect(hatty(framesOf('idle', 'right'))).toBe(true)
+    expect(hatty(framesOf('wave', 'right'))).toBe(true)
   })
 
   it('stand her on the bottom rows, except in the air or while she is carried', () => {

@@ -1417,7 +1417,7 @@ survives a restart.
 
 <!-- code: apps/desktop/src/shared/types.ts#Effort,Settings,Habits,Theme -->
 
-[`src/shared/types.ts`, lines 30–58](../../apps/desktop/src/shared/types.ts#L30-L58)
+[`src/shared/types.ts`, lines 30–63](../../apps/desktop/src/shared/types.ts#L30-L63)
 
 ```ts
 /** How hard Claude thinks before answering (the API's `effort`), shown as Fast/Balanced/Thorough. */
@@ -1441,12 +1441,17 @@ export interface Settings {
   standStill: boolean
   /** She doesn't do her idle animations, her habits, on her own (off until turned on). */
   noIdles: boolean
+  /** Her hat's off, in everything she does (off until turned on: she wears it). */
+  noHat: boolean
   /** Her robe's colour (`#rrggbb`; her hat is a darker shade of it), or null for the company's. */
   robeColor: string | null
 }
 
-/** What she does on her own, from Settings: whether she wanders, and her idle animations. */
-export type Habits = Pick<Settings, 'standStill' | 'noIdles'>
+/**
+ * How she is, from Settings: whether she wanders, whether she does her idle animations, and
+ * whether she wears her hat.
+ */
+export type Habits = Pick<Settings, 'standStill' | 'noIdles' | 'noHat'>
 
 export type Theme = 'dark' | 'light'
 ```
@@ -1489,7 +1494,7 @@ Thorough. `Settings` is what the settings menu shows; `SettingsService.get()` in
 
 <!-- code: apps/desktop/src/shared/types.ts#ChatApp -->
 
-[`src/shared/types.ts`, lines 60–64](../../apps/desktop/src/shared/types.ts#L60-L64)
+[`src/shared/types.ts`, lines 65–69](../../apps/desktop/src/shared/types.ts#L65-L69)
 
 ```ts
 /**
@@ -1515,7 +1520,7 @@ Where questions are answered, set per tenant (`chatApp` in `tenant.json`, checke
 
 <!-- code: apps/desktop/src/shared/types.ts#Branding,RequestType,StartPage -->
 
-[`src/shared/types.ts`, lines 66–94](../../apps/desktop/src/shared/types.ts#L66-L94)
+[`src/shared/types.ts`, lines 71–99](../../apps/desktop/src/shared/types.ts#L71-L99)
 
 ```ts
 export interface Branding {
@@ -1574,7 +1579,7 @@ also be the Jira page or the service desk page (`View` in `PanelView.tsx`).
 
 <!-- code: apps/desktop/src/shared/types.ts#SignedInUser,AuthStatus -->
 
-[`src/shared/types.ts`, lines 96–115](../../apps/desktop/src/shared/types.ts#L96-L115)
+[`src/shared/types.ts`, lines 101–120](../../apps/desktop/src/shared/types.ts#L101-L120)
 
 ```ts
 export interface SignedInUser {
@@ -1623,7 +1628,7 @@ token ever reaches them. With Claude Desktop there is no `AuthManager` and no st
 
 <!-- code: apps/desktop/src/shared/types.ts#ChatMessage,SendResult -->
 
-[`src/shared/types.ts`, lines 117–133](../../apps/desktop/src/shared/types.ts#L117-L133)
+[`src/shared/types.ts`, lines 122–138](../../apps/desktop/src/shared/types.ts#L122-L138)
 
 ```ts
 /** One message as the chat shows it. */
@@ -1670,7 +1675,7 @@ draft, which the panel shows. The reply itself arrives later, through `onChatMes
 
 <!-- code: apps/desktop/src/shared/types.ts#AskResult -->
 
-[`src/shared/types.ts`, lines 135–141](../../apps/desktop/src/shared/types.ts#L135-L141)
+[`src/shared/types.ts`, lines 140–146](../../apps/desktop/src/shared/types.ts#L140-L146)
 
 ```ts
 /**
@@ -1705,7 +1710,7 @@ Claude Desktop has opened with the question filled in. The failures come from
 
 <!-- code: apps/desktop/src/shared/types.ts#AppState -->
 
-[`src/shared/types.ts`, lines 143–158](../../apps/desktop/src/shared/types.ts#L143-L158)
+[`src/shared/types.ts`, lines 148–163](../../apps/desktop/src/shared/types.ts#L148-L163)
 
 ```ts
 export interface AppState {
@@ -1755,7 +1760,7 @@ asks with `atlassian.get()` and `atlassian.feed()`, and keeps up through `onAtla
 
 <!-- code: apps/desktop/src/shared/types.ts#PortalApp,AppsState -->
 
-[`src/shared/types.ts`, lines 160–179](../../apps/desktop/src/shared/types.ts#L160-L179)
+[`src/shared/types.ts`, lines 165–184](../../apps/desktop/src/shared/types.ts#L165-L184)
 
 ```ts
 /** One app from the user's JumpCloud User Portal, as the Apps list shows it. */
@@ -1802,7 +1807,7 @@ sets the state and broadcasts every change on `assist:apps-state`.
 
 <!-- code: apps/desktop/src/shared/types.ts#UninstallResult -->
 
-[`src/shared/types.ts`, lines 181–183](../../apps/desktop/src/shared/types.ts#L181-L183)
+[`src/shared/types.ts`, lines 186–188](../../apps/desktop/src/shared/types.ts#L186-L188)
 
 ```ts
 /** Settings → Uninstall. On success the app is already quitting. */
@@ -1824,7 +1829,7 @@ quitting, so the page has nothing more to do.
 
 <!-- code: apps/desktop/src/shared/types.ts#AtlassianState -->
 
-[`src/shared/types.ts`, lines 185–195](../../apps/desktop/src/shared/types.ts#L185-L195)
+[`src/shared/types.ts`, lines 190–200](../../apps/desktop/src/shared/types.ts#L190-L200)
 
 ```ts
 /**
@@ -1857,7 +1862,7 @@ The connection to Atlassian, as the comment says, which `Atlassian` in
 
 <!-- code: apps/desktop/src/shared/types.ts#StatusCategory,IssueStatus,JiraNotification,ServiceRequest -->
 
-[`src/shared/types.ts`, lines 197–231](../../apps/desktop/src/shared/types.ts#L197-L231)
+[`src/shared/types.ts`, lines 202–236](../../apps/desktop/src/shared/types.ts#L202-L236)
 
 ```ts
 /** How far along an issue is, by its status's category in Jira (which sets its colour). */
@@ -1911,7 +1916,7 @@ export interface ServiceRequest {
 
 <!-- code: apps/desktop/src/shared/types.ts#FeedList,JiraFeed -->
 
-[`src/shared/types.ts`, lines 233–244](../../apps/desktop/src/shared/types.ts#L233-L244)
+[`src/shared/types.ts`, lines 238–249](../../apps/desktop/src/shared/types.ts#L238-L249)
 
 ```ts
 /** A list the main process keeps up to date in the background. */
@@ -1940,7 +1945,7 @@ export interface JiraFeed {
 
 <!-- code: apps/desktop/src/shared/types.ts#IssueSummary,ConfluencePage,SearchResult -->
 
-[`src/shared/types.ts`, lines 246–266](../../apps/desktop/src/shared/types.ts#L246-L266)
+[`src/shared/types.ts`, lines 251–271](../../apps/desktop/src/shared/types.ts#L251-L271)
 
 ```ts
 /** An issue in a list of search results. */
@@ -1976,7 +1981,7 @@ What the Search tab shows: Jira issues (`IssueSummary`, with the issue's address
 
 <!-- code: apps/desktop/src/shared/types.ts#IssueComment,IssueTransition,IssueDetail,IssueResult -->
 
-[`src/shared/types.ts`, lines 268–299](../../apps/desktop/src/shared/types.ts#L268-L299)
+[`src/shared/types.ts`, lines 273–304](../../apps/desktop/src/shared/types.ts#L273-L304)
 
 ```ts
 export interface IssueComment {
@@ -2031,7 +2036,7 @@ What the issue view shows.
 
 <!-- code: apps/desktop/src/shared/types.ts#IssuePrompt,AskAboutIssueResult -->
 
-[`src/shared/types.ts`, lines 301–305](../../apps/desktop/src/shared/types.ts#L301-L305)
+[`src/shared/types.ts`, lines 306–310](../../apps/desktop/src/shared/types.ts#L306-L310)
 
 ```ts
 /** What to ask Claude about an issue. */
@@ -2051,7 +2056,7 @@ export type AskAboutIssueResult = { ok: true; inChat: boolean } | { ok: false; m
 
 <!-- code: apps/desktop/src/shared/types.ts#NewRequest,RaiseResult -->
 
-[`src/shared/types.ts`, lines 307–321](../../apps/desktop/src/shared/types.ts#L307-L321)
+[`src/shared/types.ts`, lines 312–326](../../apps/desktop/src/shared/types.ts#L312-L326)
 
 ```ts
 /**
@@ -2087,7 +2092,7 @@ The service desk page's form, and the answer to sending it (see `ServiceDesk.rai
 
 <!-- code: apps/desktop/src/shared/types.ts#UpdateState -->
 
-[`src/shared/types.ts`, lines 323–335](../../apps/desktop/src/shared/types.ts#L323-L335)
+[`src/shared/types.ts`, lines 328–340](../../apps/desktop/src/shared/types.ts#L328-L340)
 
 ```ts
 /**
@@ -2125,7 +2130,7 @@ it.
 
 <!-- code: apps/desktop/src/shared/types.ts#ActionResult,AttachResult -->
 
-[`src/shared/types.ts`, lines 337–344](../../apps/desktop/src/shared/types.ts#L337-L344)
+[`src/shared/types.ts`, lines 342–349](../../apps/desktop/src/shared/types.ts#L342-L349)
 
 ```ts
 export type ActionResult = { ok: true; message?: string } | { ok: false; message: string }
@@ -2173,7 +2178,7 @@ Messages come in three styles:
 
 <!-- code: apps/desktop/src/shared/ipc.ts#IPC -->
 
-[`src/shared/ipc.ts`, lines 33–123](../../apps/desktop/src/shared/ipc.ts#L33-L123)
+[`src/shared/ipc.ts`, lines 33–124](../../apps/desktop/src/shared/ipc.ts#L33-L124)
 
 ```ts
 /** IPC channel names. The preload maps them onto `window.assist`; src/main/ipc.ts handles them. */
@@ -2252,6 +2257,7 @@ export const IPC = {
   bubbleArrive: 'assist:bubble-arrive',
   screensaverEnd: 'assist:screensaver-end',
   robeColorChanged: 'assist:robe-color-changed',
+  hatChanged: 'assist:hat-changed',
   gaze: 'assist:gaze',
   familiarSees: 'assist:familiar-sees',
   occlude: 'assist:occlude',
@@ -2316,7 +2322,7 @@ name: a typo is a compile error instead of a message nobody hears.
 
 <!-- code: apps/desktop/src/shared/ipc.ts#AssistApi -->
 
-[`src/shared/ipc.ts`, lines 125–322](../../apps/desktop/src/shared/ipc.ts#L125-L322)
+[`src/shared/ipc.ts`, lines 126–325](../../apps/desktop/src/shared/ipc.ts#L126-L325)
 
 ```ts
 /** The API the preload exposes to renderers as `window.assist`. */
@@ -2482,6 +2488,8 @@ export interface AssistApi {
   onScreensaverEnd(callback: () => void): () => void
   /** Her robe's colour was changed in Settings (null: the company's again). */
   onRobeColorChanged(callback: (color: string | null) => void): () => void
+  /** Settings → No hat was flipped (true: her hat's off): her windows. */
+  onHatChanged(callback: (noHat: boolean) => void): () => void
   /** Which way she's to look at the pointer while she watches it (null: done watching). */
   onGaze(callback: (gaze: { x: number; y: number } | null) => void): () => void
   /**
@@ -2863,7 +2871,7 @@ listening. Every `on...` method in `api` uses it.
 
 <!-- code: apps/desktop/src/preload/index.ts#api -->
 
-[`src/preload/index.ts`, lines 12–126](../../apps/desktop/src/preload/index.ts#L12-L126)
+[`src/preload/index.ts`, lines 12–127](../../apps/desktop/src/preload/index.ts#L12-L127)
 
 ```ts
 const api: AssistApi = {
@@ -2963,6 +2971,7 @@ const api: AssistApi = {
   },
   onScreensaverEnd: (callback) => subscribe(IPC.screensaverEnd, () => callback()),
   onRobeColorChanged: (callback) => subscribe(IPC.robeColorChanged, callback),
+  onHatChanged: (callback) => subscribe(IPC.hatChanged, callback),
   onGaze: (callback) => subscribe(IPC.gaze, callback),
   onFamiliarSees: (callback) => subscribe(IPC.familiarSees, callback),
   onOcclude: (callback) => subscribe(IPC.occlude, callback),

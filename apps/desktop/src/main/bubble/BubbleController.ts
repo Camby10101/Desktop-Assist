@@ -151,9 +151,9 @@ const MOVING: readonly Pose[] = ['idle', 'walk-left', 'walk-right', 'dragged', '
 
 const isReaction = (pose: Pose): pose is Reaction => (REACTIONS as readonly string[]).includes(pose)
 
-/** What she may do on her own, from the Settings (both, unless they say otherwise). */
+/** What she may do on her own, from the Settings (all of it, unless they say otherwise). */
 function pastimesOf(habits?: Habits): Pastimes {
-  return { walk: !habits?.standStill, fidget: !habits?.noIdles }
+  return { walk: !habits?.standStill, fidget: !habits?.noIdles, hat: !habits?.noHat }
 }
 
 const FRAME_MS = 16
@@ -894,6 +894,16 @@ export class BubbleController {
   /** Whether she's snoozing (nobody's been at the PC a while). */
   get isSnoozing(): boolean {
     return this.snoozing
+  }
+
+  /**
+   * Whether she's standing about on the taskbar, showing, with the panel closed: not carried,
+   * falling, asleep (the screen saver), leaving, or in a performance (whose own windows can be
+   * meant to go in front of her). Her window is kept at the top of the always-on-top windows
+   * meanwhile (keepOnTop in windows.ts).
+   */
+  get resting(): boolean {
+    return this.mode === 'collapsed' && !this.asleep && !this.leaving && !this.performance
   }
 
   /** Gets a performance ready (see Performer), then plays it, if nothing's happened meanwhile. */

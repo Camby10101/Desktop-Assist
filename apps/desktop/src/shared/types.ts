@@ -48,12 +48,17 @@ export interface Settings {
   standStill: boolean
   /** She doesn't do her idle animations, her habits, on her own (off until turned on). */
   noIdles: boolean
+  /** Her hat's off, in everything she does (off until turned on: she wears it). */
+  noHat: boolean
   /** Her robe's colour (`#rrggbb`; her hat is a darker shade of it), or null for the company's. */
   robeColor: string | null
 }
 
-/** What she does on her own, from Settings: whether she wanders, and her idle animations. */
-export type Habits = Pick<Settings, 'standStill' | 'noIdles'>
+/**
+ * How she is, from Settings: whether she wanders, whether she does her idle animations, and
+ * whether she wears her hat.
+ */
+export type Habits = Pick<Settings, 'standStill' | 'noIdles' | 'noHat'>
 
 export type Theme = 'dark' | 'light'
 

@@ -208,6 +208,7 @@ export function BubbleView() {
           box={box}
           expanded={mode === 'expanded'}
           gaze={gaze}
+          hat={!state?.settings.noHat}
         />
       )}
     </button>

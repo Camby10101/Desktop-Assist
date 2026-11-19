@@ -866,7 +866,7 @@ copy of the state.
 
 <!-- code: apps/desktop/src/renderer/src/hooks/useAssistState.ts#useAssistState -->
 
-[`src/renderer/src/hooks/useAssistState.ts`, lines 4–43](../../apps/desktop/src/renderer/src/hooks/useAssistState.ts#L4-L43)
+[`src/renderer/src/hooks/useAssistState.ts`, lines 4–46](../../apps/desktop/src/renderer/src/hooks/useAssistState.ts#L4-L46)
 
 ```ts
 /**
@@ -891,6 +891,9 @@ export function useAssistState(): AppState | null {
       window.assist.onSizeChanged((size) => update((s) => ({ ...s, size }))),
       window.assist.onRobeColorChanged((robeColor) =>
         update((s) => ({ ...s, settings: { ...s.settings, robeColor } })),
+      ),
+      window.assist.onHatChanged((noHat) =>
+        update((s) => ({ ...s, settings: { ...s.settings, noHat } })),
       ),
       window.assist.onAuthStatus((auth) => update((s) => ({ ...s, auth }))),
       window.assist.onChatMessage((message) =>
@@ -963,7 +966,7 @@ them, so `Panel` tracks their results itself.
 
 <!-- code: apps/desktop/src/renderer/src/hooks/useAssistState.ts#upsert -->
 
-[`src/renderer/src/hooks/useAssistState.ts`, lines 45–51](../../apps/desktop/src/renderer/src/hooks/useAssistState.ts#L45-L51)
+[`src/renderer/src/hooks/useAssistState.ts`, lines 48–54](../../apps/desktop/src/renderer/src/hooks/useAssistState.ts#L48-L54)
 
 ```ts
 function upsert(messages: ChatMessage[], message: ChatMessage): ChatMessage[] {
@@ -984,7 +987,7 @@ copies the array first, so the old array React is holding is left unchanged.
 
 <!-- code: apps/desktop/src/renderer/src/hooks/useAssistState.ts#useAccentColor -->
 
-[`src/renderer/src/hooks/useAssistState.ts`, lines 65–70](../../apps/desktop/src/renderer/src/hooks/useAssistState.ts#L65-L70)
+[`src/renderer/src/hooks/useAssistState.ts`, lines 68–73](../../apps/desktop/src/renderer/src/hooks/useAssistState.ts#L68-L73)
 
 ```ts
 /** Applies the tenant's accent colour to the `accent` Tailwind colour. */
@@ -1344,7 +1347,7 @@ const DRAG_THRESHOLD = 5
 
 <!-- code: apps/desktop/src/renderer/src/views/BubbleView.tsx#BubbleView -->
 
-[`src/renderer/src/views/BubbleView.tsx`, lines 24–215](../../apps/desktop/src/renderer/src/views/BubbleView.tsx#L24-L215)
+[`src/renderer/src/views/BubbleView.tsx`, lines 24–216](../../apps/desktop/src/renderer/src/views/BubbleView.tsx#L24-L216)
 
 ```tsx
 /**
@@ -1534,6 +1537,7 @@ export function BubbleView() {
           box={box}
           expanded={mode === 'expanded'}
           gaze={gaze}
+          hat={!state?.settings.noHat}
         />
       )}
     </button>
@@ -1664,7 +1668,7 @@ string, and once the window closes it's gone.
 
 <!-- code: apps/desktop/src/renderer/src/views/ClonesView.tsx#ClonesView -->
 
-[`src/renderer/src/views/ClonesView.tsx`, lines 8–101](../../apps/desktop/src/renderer/src/views/ClonesView.tsx#L8-L101)
+[`src/renderer/src/views/ClonesView.tsx`, lines 8–103](../../apps/desktop/src/renderer/src/views/ClonesView.tsx#L8-L103)
 
 ```tsx
 /**
@@ -1680,6 +1684,8 @@ export function ClonesView() {
   const { box } = bubbleMetrics(scale)
   useAccentColor(params.get('accent') ?? undefined)
   useRobeColor(params.get('robe'))
+  // Her hat off (Settings → No hat), theirs too.
+  const hat = params.get('hat') !== 'off'
 
   // With Windows' reduced-motion setting they stand still, spread along the taskbar.
   const [still] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches)
@@ -1755,7 +1761,7 @@ export function ClonesView() {
           className="absolute bottom-0 left-0"
           style={{ transform: `translateX(${Math.round(clone.x)}px)` }}
         >
-          <Character pose={clonePose(clone)} facing={clone.facing} box={box} />
+          <Character pose={clonePose(clone)} facing={clone.facing} box={box} hat={hat} />
         </div>
       ))}
     </div>
@@ -2293,7 +2299,7 @@ const DRAW_EVERY_MS = 50
 
 <!-- code: apps/desktop/src/renderer/src/views/ScreenSaverView.tsx#ScreenSaverView -->
 
-[`src/renderer/src/views/ScreenSaverView.tsx`, lines 27–145](../../apps/desktop/src/renderer/src/views/ScreenSaverView.tsx#L27-L145)
+[`src/renderer/src/views/ScreenSaverView.tsx`, lines 27–147](../../apps/desktop/src/renderer/src/views/ScreenSaverView.tsx#L27-L147)
 
 ```tsx
 /**
@@ -2315,6 +2321,8 @@ export function ScreenSaverView() {
   useAccentColor(accent)
   // Her robe's colour, if one's chosen in Settings (before her colours are read, below).
   useRobeColor(params.get('robe'))
+  // Her hat off (Settings → No hat), before her frames are drawn.
+  setHat(params.get('hat') !== 'off')
   // With Windows' reduced-motion setting, the scene stays still (the fades still happen).
   const [still] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches)
   /** When the main process said it's ending (wall-clock ms), or null: it fades away from then. */
@@ -2500,7 +2508,7 @@ The JSX:
 
 <!-- code: apps/desktop/src/renderer/src/views/ScreenSaverView.tsx#layer,herColours,frameAt -->
 
-[`src/renderer/src/views/ScreenSaverView.tsx`, lines 147–190](../../apps/desktop/src/renderer/src/views/ScreenSaverView.tsx#L147-L190)
+[`src/renderer/src/views/ScreenSaverView.tsx`, lines 149–192](../../apps/desktop/src/renderer/src/views/ScreenSaverView.tsx#L149-L192)
 
 ```tsx
 /** A canvas the size of the scene's, painted once by `paint` (for what never changes). */
@@ -2573,7 +2581,7 @@ function frameAt(frames: readonly Frame[], t: number): Frame {
 
 <!-- code: apps/desktop/src/renderer/src/views/ScreenSaverView.tsx#sunsetPainter,starfallPainter -->
 
-[`src/renderer/src/views/ScreenSaverView.tsx`, lines 192–225](../../apps/desktop/src/renderer/src/views/ScreenSaverView.tsx#L192-L225)
+[`src/renderer/src/views/ScreenSaverView.tsx`, lines 194–227](../../apps/desktop/src/renderer/src/views/ScreenSaverView.tsx#L194-L227)
 
 ```tsx
 /** Draws the sunset at `t`: the sky and hills painted once, the rest each time. */

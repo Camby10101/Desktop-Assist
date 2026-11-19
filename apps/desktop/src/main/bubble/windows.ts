@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import type { Size } from '@shared/geometry'
 import { IPC } from '@shared/ipc'
 import type { PanelSurface, Surface } from './BubbleController'
+import { checkOnTop, type OnTopWindow } from './frontCheck'
 
 export type View =
   'bubble' | 'panel' | 'clones' | 'vision' | 'spell' | 'screensaver' | 'familiar' | 'trick'
@@ -99,14 +100,19 @@ export function createOverlayWindow(
 
 /**
  * Puts the window back on top if something took that away. Windows can still demote an
- * always-on-top window (another app reordering windows, Explorer restarting), and nothing tells
- * the app when it happens, so the windows check every few seconds; it costs one look at the
- * window's style, and only a window that lost it is moved. Returns a function that stops it.
+ * always-on-top window (another app reordering windows, Explorer restarting, a full-screen app),
+ * and nothing tells the app when it happens, so the windows check every few seconds (checkOnTop).
+ * A window that lost its always-on-top gets it back; while `reassert()` says so (her window, while
+ * she's standing about), it's also put back at the top of the always-on-top windows each time, as
+ * Windows can push her down without taking the style away. Returns a function that stops it.
  */
-export function keepOnTop(win: BrowserWindow): () => void {
-  const timer = setInterval(() => {
-    if (!win.isDestroyed() && !win.isAlwaysOnTop()) win.setAlwaysOnTop(true, ON_TOP_LEVEL)
-  }, ON_TOP_CHECK_MS)
+export function keepOnTop(win: BrowserWindow, reassert: () => boolean = () => false): () => void {
+  const onTop: OnTopWindow = {
+    isDestroyed: () => win.isDestroyed(),
+    isAlwaysOnTop: () => win.isAlwaysOnTop(),
+    putOnTop: () => win.setAlwaysOnTop(true, ON_TOP_LEVEL),
+  }
+  const timer = setInterval(() => checkOnTop(onTop, reassert()), ON_TOP_CHECK_MS)
   return () => clearInterval(timer)
 }
 

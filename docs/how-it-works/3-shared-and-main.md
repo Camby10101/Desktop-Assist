@@ -101,13 +101,13 @@ between runs, without ever leaving a half-written file. **Used by:** `index.ts`,
 
 Everything lives in `%APPDATA%\Desktop Wizard` (screenshots go to `Pictures\Desktop Wizard`):
 
-| File                                  | What's in it                                                                                                              | Written by        |
-| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ----------------- |
-| `preferences.json`                    | light or dark, her size, robe colour, where she stands, Stand still, No idle animations, starred apps, Send automatically | `SettingsService` |
-| `notes.json`                          | the unsent question and its attached screenshots                                                                          | `NotesStore`      |
-| `atlassian.json`                      | which Jira notifications and request replies have been seen                                                               | `Atlassian`       |
-| `jumpcloud-apps.bin`, `atlassian.bin` | the Apps list's and Jira's sign-ins, encrypted                                                                            | `McpAccount`      |
-| `logs\desktop-wizard.log`             | problems worth knowing about, for diagnosing an installed copy                                                            | `log.ts`          |
+| File                                  | What's in it                                                                                                                      | Written by        |
+| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
+| `preferences.json`                    | light or dark, her size, robe colour, where she stands, Stand still, No idle animations, No hat, starred apps, Send automatically | `SettingsService` |
+| `notes.json`                          | the unsent question and its attached screenshots                                                                                  | `NotesStore`      |
+| `atlassian.json`                      | which Jira notifications and request replies have been seen                                                                       | `Atlassian`       |
+| `jumpcloud-apps.bin`, `atlassian.bin` | the Apps list's and Jira's sign-ins, encrypted                                                                                    | `McpAccount`      |
+| `logs\desktop-wizard.log`             | problems worth knowing about, for diagnosing an installed copy                                                                    | `log.ts`          |
 
 #### `writeFileAtomic(path, data, shouldCommit)` (in `storage/jsonFile.ts`)
 

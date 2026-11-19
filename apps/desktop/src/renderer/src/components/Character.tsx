@@ -5,6 +5,7 @@ import {
   framesOf,
   gazeFrame,
   LOOPS,
+  setHat,
   SPRITE_HEADROOM,
   SPRITE_SIZE,
   type Facing,
@@ -52,8 +53,13 @@ export function Character(props: {
   expanded?: boolean
   /** Watching the pointer (the `watch` pose): which way her eyes are on it. */
   gaze?: { x: number; y: number } | null
+  /** Whether she wears her hat (Settings → No hat takes it off); she does unless told. */
+  hat?: boolean
 }) {
   const { facing } = props
+  const hat = props.hat ?? true
+  // Before any frame is asked for: her frames are drawn with her hat on or off.
+  setHat(hat)
 
   // Draws every pose's frames in the background, one pose at a time, so starting one never
   // stutters.
@@ -66,7 +72,7 @@ export function Character(props: {
       timer = setTimeout(next, 50)
     }, 500)
     return () => clearTimeout(timer)
-  }, [facing])
+  }, [facing, hat])
 
   return (
     <svg
@@ -86,7 +92,7 @@ export function Character(props: {
           <path key={className} className={className} d={d} />
         ))
       ) : (
-        <Frames key={`${props.pose}:${facing}`} pose={props.pose} facing={facing} />
+        <Frames key={`${props.pose}:${facing}:${hat}`} pose={props.pose} facing={facing} />
       )}
     </svg>
   )

@@ -193,6 +193,8 @@ export type Activity =
 export interface Pastimes {
   walk: boolean
   fidget: boolean
+  /** Wearing her hat: without it (Settings → No hat), her hat trick is left out. */
+  hat?: boolean
 }
 
 /**
@@ -223,8 +225,8 @@ export const PERFORMANCES = [
 export type PerformanceName = (typeof PERFORMANCES)[number]
 
 /**
- * How likely each performance is when it can be done, against 1 for a habit: the taskbar tricks
- * and watching the pointer are rare (a tenth as likely), the rest as likely as a habit.
+ * How likely each performance is when it can be done, against 1 for a habit: the taskbar tricks,
+ * her portal and watching the pointer are rare (a tenth as likely), the rest as likely as a habit.
  */
 export const PERFORMANCE_WEIGHT: Record<PerformanceName, number> = {
   watch: 0.1,
@@ -235,7 +237,7 @@ export const PERFORMANCE_WEIGHT: Record<PerformanceName, number> = {
   knock: 0.1,
   tap: 0.1,
   peek: 1,
-  portal: 1,
+  portal: 0.1,
   familiar: 1,
 }
 
@@ -279,7 +281,9 @@ export function nextActivity(
   if (allowed.fidget && idleMs >= WANDER.fidgetAfter && random() < 0.6) {
     const { when } = choices
     const options: { activity: Activity; weight: number }[] = [
-      ...FIDGETS.filter((fidget) => fidget !== last).flatMap((fidget) => {
+      ...FIDGETS.filter(
+        (fidget) => fidget !== last && (fidget !== 'hat' || allowed.hat !== false),
+      ).flatMap((fidget) => {
         if (!(fidget in TIMED)) {
           return [
             {

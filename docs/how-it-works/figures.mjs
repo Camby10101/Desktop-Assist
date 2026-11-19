@@ -248,8 +248,8 @@ const weights = (() => {
   }
   const weekday = [
     { w: 29.2, theme: 'blue', text: 'her habits' },
-    { w: 3, theme: 'purple' },
-    { w: 0.7, theme: 'amber' },
+    { w: 2, theme: 'purple' },
+    { w: 0.8, theme: 'amber' },
   ]
   const friday = [weekday[0], { w: 5, theme: 'green', text: 'confetti' }, weekday[1], weekday[2]]
   let body = bar(26, weekday, 'Wednesday, noon')
@@ -262,8 +262,8 @@ const weights = (() => {
   const legend = [
     ['blue', 'habits: 1 each (the vision 0.2)'],
     ['green', 'confetti: 5, Fridays 4–8pm'],
-    ['purple', 'peek, portal, familiar: 1 each'],
-    ['amber', 'six tricks, watching: 0.1 each'],
+    ['purple', 'peek, familiar: 1 each'],
+    ['amber', 'tricks, portal, watch: 0.1 each'],
   ]
   legend.forEach(([theme, text], i) => {
     const x = x0 + i * 167

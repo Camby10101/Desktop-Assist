@@ -403,16 +403,21 @@ Settings (the gear) → **Light mode**, at the top of the settings menu →
 at once, and saves the choice. Desktop Wizard is dark until the user switches, whatever Windows
 uses; `SettingsService.init()` applies the saved mode before any window shows.
 
-**Stand still and No idle animations**
+**Stand still, No idle animations and No hat**
 
-Settings → **Stand still** or **No idle animations**, under Size (both off to start with) →
+Settings → **Stand still**, **No idle animations** or **No hat**, under Size (all off to start with) →
 `window.assist.settings.setHabits()` with the one that was flipped → IPC
 `assist:settings-set-habits` → `SettingsService.setHabits()` saves it (`standStill` and `noIdles`
 in `preferences.json`), then `BubbleController.setHabits()` applies it at once. With Stand still
 on she never walks on her own, not even back to her corner after being dropped far from it
 (`wander.nextActivity()` gives a rest instead of a walk); with No idle animations on she never
 fidgets, and only strolls; with both, she just stands, breathing and blinking, and no timer runs at
-all. Spells still work either way.
+all. Spells still work either way. With No hat on (`noHat`), her hat comes off in everything she
+does: her windows are told (`assist:hat-changed`; her clones' and the screen saver's in their
+address, `hat=off`), and `Character` redraws her frames without it (`setHat()` in `sprite.ts`:
+from the front and side the rig leaves the hat out, and three-quarter on it uses
+`DIAGONAL_HATLESS`, the picture with the top of her head drawn instead). Her hat trick is left out
+of her habits meanwhile.
 
 **Clicking the bubble**
 

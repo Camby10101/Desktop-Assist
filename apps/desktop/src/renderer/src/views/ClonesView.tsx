@@ -18,6 +18,8 @@ export function ClonesView() {
   const { box } = bubbleMetrics(scale)
   useAccentColor(params.get('accent') ?? undefined)
   useRobeColor(params.get('robe'))
+  // Her hat off (Settings → No hat), theirs too.
+  const hat = params.get('hat') !== 'off'
 
   // With Windows' reduced-motion setting they stand still, spread along the taskbar.
   const [still] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches)
@@ -93,7 +95,7 @@ export function ClonesView() {
           className="absolute bottom-0 left-0"
           style={{ transform: `translateX(${Math.round(clone.x)}px)` }}
         >
-          <Character pose={clonePose(clone)} facing={clone.facing} box={box} />
+          <Character pose={clonePose(clone)} facing={clone.facing} box={box} hat={hat} />
         </div>
       ))}
     </div>

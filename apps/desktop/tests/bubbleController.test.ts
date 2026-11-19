@@ -318,7 +318,7 @@ describe('as Settings say', () => {
   }
 
   it('stands still: never walks, but still does her idle animations once left alone', () => {
-    startWith({ standStill: true, noIdles: false })
+    startWith({ standStill: true, noIdles: false, noHat: false })
     vi.advanceTimersByTime(46_000)
     // Resting at 8.5 s and 22.5 s; alone for 30 s at 36.5 s.
     expect(poses).toEqual(['sit', 'idle'])
@@ -326,14 +326,14 @@ describe('as Settings say', () => {
   })
 
   it('without idle animations: only ever strolls about', () => {
-    startWith({ standStill: false, noIdles: true })
+    startWith({ standStill: false, noIdles: true, noHat: false })
     vi.advanceTimersByTime(120_000)
     expect(poses.length).toBeGreaterThan(4)
     for (const pose of poses) expect(pose).toMatch(/^(walk-left|walk-right|idle)$/)
   })
 
   it('with both: does nothing on her own at all', () => {
-    startWith({ standStill: true, noIdles: true })
+    startWith({ standStill: true, noIdles: true, noHat: false })
     vi.advanceTimersByTime(120_000)
     expect(poses).toEqual([])
     expect(bubble.bounds).toEqual(home())
@@ -342,19 +342,19 @@ describe('as Settings say', () => {
   it('turned on mid-walk, stops where she is; turned off again, gets on with her day', () => {
     advanceUntil(() => controller.currentPose === 'walk-left')
     vi.advanceTimersByTime(500)
-    controller.setHabits({ standStill: true, noIdles: true })
+    controller.setHabits({ standStill: true, noIdles: true, noHat: false })
     expect(controller.currentPose).toBe('idle')
     const where = bubble.bounds
     vi.advanceTimersByTime(120_000)
     expect(bubble.bounds).toEqual(where)
     const before = poses.length
-    controller.setHabits({ standStill: false, noIdles: false })
+    controller.setHabits({ standStill: false, noIdles: false, noHat: false })
     vi.advanceTimersByTime(WANDER.delay[1] + 100)
     expect(poses.slice(before).some((pose) => pose !== 'idle')).toBe(true)
   })
 
   it('stays where she was dropped, however far from her corner, when she’s to stand still', () => {
-    startWith({ standStill: true, noIdles: false })
+    startWith({ standStill: true, noIdles: false, noHat: false })
     drag({ x: 900, y: 850 })
     vi.advanceTimersByTime(1000)
     expect(controller.currentMode).toBe('collapsed')
@@ -822,6 +822,17 @@ describe('her performances', () => {
     expect(bubble.bounds!.y).toBe(home().y)
   })
 
+  it('isn’t resting (kept at the top of the on-top windows) while it plays', async () => {
+    const { performance } = walkLeft()
+    const { queue } = withPerformer(performance)
+    expect(controller.resting).toBe(true)
+    await untilPerformance(queue)
+    expect(controller.currentPose).toBe('peek-left')
+    expect(controller.resting).toBe(false) // a trick's icons are meant to pass in front of her
+    await vi.advanceTimersByTimeAsync(1_100)
+    expect(controller.resting).toBe(true)
+  })
+
   it('leaves a click to a performance that answers clicks itself (her portal), panel shut', async () => {
     const { performance, ended } = walkLeft()
     const clicks: number[] = []
@@ -1147,5 +1158,26 @@ describe('her size', () => {
       bounds: bubbleWindowBounds(restPosition(workArea(), 'bottom-right', 0, 2), 2),
       scale: 2,
     })
+  })
+})
+
+describe('resting (her window kept at the top of the always-on-top windows meanwhile)', () => {
+  it('is standing about with the panel closed: not open, carried, asleep or leaving', () => {
+    expect(controller.resting).toBe(true)
+    controller.clickBubble()
+    expect(controller.resting).toBe(false)
+    controller.collapse()
+    expect(controller.resting).toBe(true)
+    controller.startDrag()
+    expect(controller.resting).toBe(false)
+    controller.endDrag()
+    vi.advanceTimersByTime(5000)
+    expect(controller.resting).toBe(true)
+    controller.sleep()
+    expect(controller.resting).toBe(false)
+    controller.wake()
+    expect(controller.resting).toBe(true)
+    controller.farewell(() => {})
+    expect(controller.resting).toBe(false)
   })
 })

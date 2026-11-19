@@ -148,7 +148,8 @@ private doActivity(): void {
 
 Anything the user does (a click, a drag, a screenshot) calls `stopIdling()`, which stops whatever she
 was doing where she is, and starts the "left alone" clock again. The settings **Stand still** and
-**No idle animations** become `pastimes` (`walk` and `fidget`), which `nextActivity` respects.
+**No idle animations** become `pastimes` (`walk` and `fidget`), which `nextActivity` respects;
+**No hat** becomes `hat`, which leaves her hat trick out of the draw.
 
 #### `prepare(name)` and `perform(performance)`
 
@@ -219,8 +220,8 @@ differently.
 Until she's been alone 30 seconds she only strolls. After that, 60% of the time she does a habit or a
 performance instead, chosen by **weight**: every option is given a stretch as long as its weight, the
 stretches are laid end to end, and a random point along them picks one. An ordinary habit weighs 1,
-the vision 0.2, confetti 5 (on Friday evenings only), and the taskbar tricks and watching the pointer
-0.1 each, a tenth as likely as a habit. Whatever she did last is left out, so she never does the
+the vision 0.2, confetti 5 (on Friday evenings only), and the taskbar tricks, her portal and watching
+the pointer 0.1 each, a tenth as likely as a habit. Whatever she did last is left out, so she never does the
 same thing twice running.
 
 ```ts
@@ -339,6 +340,20 @@ minutes (checks at 5 and 20 seconds, then 1, 3 and 10 minutes) a small PowerShel
 window is at the centre of hers. If it's another app's, she's brought back to the front, and the log
 says which app it was.
 
+After that, `keepOnTop()` (in `windows.ts`) checks every five seconds. Any window that lost its
+always-on-top gets it back, and her own window, while she's standing about
+(`BubbleController.resting`), is put back at the top of the always-on-top windows each time,
+whatever its style says (`checkOnTop()` in `frontCheck.ts`).
+
+> **Good to know**
+> A window's always-on-top style can't be trusted on its own. Windows sometimes pushes the taskbar
+> of a screen down below ordinary windows, as it does while it thinks a full-screen app is on that
+> screen, and a window just behind the taskbar goes with it, its style still set. It happened to
+> her: Chrome covered her while a check of the style saw nothing wrong. Putting her window at the
+> top again every few seconds costs one Windows call, never takes the focus, and doesn't move a
+> window that's already there. It's skipped during her performances, whose own windows (a trick's
+> icons) are meant to go in front of her.
+
 #### Windows for a moment: clones, vision, spells
 
 `Clones`, `Vision` and `SpellEffects` work the same way: each opens one passive window through
@@ -379,7 +394,7 @@ saying whether it moves her. With Stand still on, only the ones that keep her in
 | `watch`     | 0.1    | her eyes follow the pointer for ten seconds                                     | `performances.ts`  |
 | six tricks  | 0.1    | carry, juggle, swap, perch, knock, tap: with copies of the taskbar's icons      | `taskbarTricks.ts` |
 | `peek`      | 1      | slips behind the edge of a window near her, and peeks out                       | `windowTricks.ts`  |
-| `portal`    | 1      | opens a portal on top of a window and waves through it; it goes with the window | `windowTricks.ts`  |
+| `portal`    | 0.1    | opens a portal on top of a window and waves through it; it goes with the window | `windowTricks.ts`  |
 | `familiar`  | 1      | her black cat appears beside her, and she sits down with it a while             | `familiarVisit.ts` |
 
 ### shell/probe.ts — looking at Windows' own shell
