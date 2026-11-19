@@ -65,6 +65,50 @@ describe('the animations', { timeout: 30_000 }, () => {
     }
   })
 
+  it('summon a toy for each of her toy habits, and send it away again by the end', () => {
+    const toys = {
+      yoyo: 'yoyo',
+      top: 'spinTop',
+      cards: 'deck',
+      plane: 'plane',
+      ball: 'ball',
+    } as const
+    const plain = draw({ view: 'front' }).join('')
+    for (const [habit, field] of Object.entries(toys)) {
+      // Somewhere through it, the toy shows (the plane can be behind her, out of sight, for a while).
+      const shown = [0.3, 0.4, 0.5].some(
+        (t) => draw({ view: 'front', [field]: t } as Pose).join('') !== plain,
+      )
+      expect(shown, habit).toBe(true)
+      expect(draw({ view: 'front', [field]: 0 } as Pose).join(''), habit).toBe(plain)
+      expect(draw({ view: 'front', [field]: 1 } as Pose).join(''), habit).toBe(plain)
+      expect(LOOPS[habit as keyof typeof toys], habit).toBe(false)
+    }
+    // The ball bounces right down to the taskbar (teal on the bottom rows, where nothing else is).
+    expect(framesOf('ball', 'right').some((f) => /G/.test(lowRows(f.rows)))).toBe(true)
+  })
+
+  it('never show her legs above her robe’s hem, sitting, crouching or sprawled after a fall', () => {
+    // Her stockings: below the hem when she stands, but never beside her robe above it.
+    const above = (rows: string[], hemRow: number) => /[oQ]/.test(rows.slice(0, hemRow).join(''))
+    // Sitting, the hem is on the ground (only the bottom rows can show anything of her legs).
+    for (const pose of ['sit', 'splat', 'settle', 'snooze', 'rouse'] as const) {
+      for (const { rows } of framesOf(pose, 'right'))
+        expect(above(rows, rows.length - 14), pose).toBe(false)
+    }
+    // Crouching down to sit: her knees go out to the sides, under the robe.
+    const crouched: Pose = {
+      view: 'front',
+      y: 5,
+      legs: [
+        { hip: 0.56, knee: 1.12 },
+        { hip: 0.56, knee: 1.12 },
+      ],
+    }
+    const rows = draw(crouched)
+    expect(above(rows, 59 + 5 + 22 + HEADROOM - 1)).toBe(false)
+  })
+
   it('takes her hat off in everything she does (Settings → No hat), and puts it back on', () => {
     // Her hat's colours (the hat's ramp; her spellbook shares it, so no reading here).
     const hatty = (frames: { rows: string[] }[]) =>

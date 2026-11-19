@@ -5,7 +5,7 @@ corner of the screen and opens a panel when clicked. Built for Morse Micro first
 [`tenants/`](tenants/README.md), so another business can use it later.
 
 **Download:** the newest installer is in [`installer/`](installer/)
-([Desktop Wizard-Setup-2.4.3.exe](installer/Desktop%20Wizard-Setup-2.4.3.exe), with its signature
+([Desktop Wizard-Setup-2.5.0.exe](installer/Desktop%20Wizard-Setup-2.5.0.exe), with its signature
 beside it). Run it to install Desktop Wizard for yourself (no admin needed); an installed copy
 updates itself from Settings → Check for updates.
 
@@ -31,8 +31,8 @@ sign-in) and 4 (logos, favourites, service desk, light/dark mode, bubble-click f
 3.1 (questions open in Claude Desktop) and 3.2 (Apps list, Uninstall) are complete, as are
 Milestone 5 (the app-opening spinner; Jira and the service desk) and its fixes 5.1 and 5.2 (the
 bubble kept in front, and Check for updates). Version **1.0.0** was the first release (see
-[PLAN.md](docs/PLAN.md) §7h and [RELEASING.md](docs/RELEASING.md)); this is version **2.4.3**, with
-the animated character (thirty-two habits, ten of them magic; throw her and she tumbles; tricks
+[PLAN.md](docs/PLAN.md) §7h and [RELEASING.md](docs/RELEASING.md)); this is version **2.5.0**, with
+the animated character (thirty-seven habits, ten of them magic and five with toys she summons; throw her and she tumbles; tricks
 with the taskbar's icons and the windows on the screen; her familiar, a black cat), her spells,
 the screen saver, and Robe colour, Stand still and No idle animations in Settings
 (PLAN.md §7i).
@@ -67,7 +67,10 @@ name are sent on to it.
   magic circle, sits on the taskbar, twirls, has a little magic butterfly land on her finger, dozes
   off and wakes with a start, glances about, juggles three glowing orbs, blows magic bubbles
   through a wand ring, watches a will-o'-wisp go round her and waves it goodbye, sneezes a burst of
-  sparkles, or dances a little jig. When the app starts she forms out of white motes, and when it's
+  sparkles, or dances a little jig. Now and then she summons a toy in a sparkle and plays with it
+  for a few seconds: spins a glowing yo-yo down and up and round in a loop, sets a top spinning on
+  her palm, springs a deck of cards from hand to hand, throws a paper plane that loops round her
+  and back, or bounces a ball on the taskbar and tosses it up high. When the app starts she forms out of white motes, and when it's
   closed (Close, or Quit in the tray) she dissolves into them before it quits. If her wandering or
   her habits are a distraction, **Stand still** and **No idle animations** in Settings turn them
   off.

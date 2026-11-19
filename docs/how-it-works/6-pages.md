@@ -158,6 +158,25 @@ skin, robe, hat, boots …), and `ink()`s them on in order, back to front. Each 
 of palette letters (outline, shade, base, light), and `ink()` shades the side away from the light
 (which comes from the upper left) and outlines each shape in a darker shade of its own colour.
 
+> **Good to know**
+> Her legs are drawn first and her robe over them, so anything of a leg outside the robe shows.
+> Crouching, her knees go out to the sides, and sitting, they're raised above her hips: both showed
+> her stockings beside her robe, as she sat down and after a hard landing. So each leg is clipped
+> to below the robe's hem before it's inked (`drawLeg()` is handed the hem's line): under a long
+> robe, nothing of her legs ever shows above it.
+
+#### Her toys
+
+Five of her habits summon a toy into her hand in a sparkle and send it away in a twinkle: a yo-yo
+(`yoyo`), a spinning top (`spinTop`), a deck of cards (`deck`), a paper plane (`plane`) and a bouncy
+ball (`ball`), each a `Pose` field from 0 to 1 through the habit. Each has its timetable in `rig.ts`
+(`YOYO`, `SPIN_TOP`, `DECK`, `PLANE`, `BALL`: when it appears, what it does, when it goes), which
+the habit in `sprite.ts` reads too, so her hand moves with the toy: a flick as each yo-yo drop
+starts, a push as the ball leaves her hand. Most are held out to her side, against the background
+rather than her purple robe, where small toys are easy to miss. The paper plane flies a loop round
+her, and on the far side it's drawn only where nothing of her is (`set(…, '.')`), so it passes
+behind her.
+
 #### Animations (in `sprite.ts`)
 
 A pose's animation is a list of keys, each a `Pose` and how long it shows. Two helpers make most of

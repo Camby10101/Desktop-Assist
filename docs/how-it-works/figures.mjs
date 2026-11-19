@@ -247,7 +247,7 @@ const weights = (() => {
     return out
   }
   const weekday = [
-    { w: 29.2, theme: 'blue', text: 'her habits' },
+    { w: 34.2, theme: 'blue', text: 'her habits' },
     { w: 2, theme: 'purple' },
     { w: 0.8, theme: 'amber' },
   ]

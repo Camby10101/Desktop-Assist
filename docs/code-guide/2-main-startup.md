@@ -784,7 +784,7 @@ const updater = updates
 - `new Updater({`: Settings → Check for updates (see
   [`updates.ts`](#srcmainupdatests-checking-for-updates)).
 - `currentVersion: app.getVersion()`: this copy's version, from `apps/desktop/package.json`
-  (`2.4.3` at the moment; `1.0.0` was the first release).
+  (`2.5.0` at the moment; `1.0.0` was the first release).
 - `` releasesUrl: `${updates.api}/repos/${updates.repo}/releases?per_page=30` ``: GitHub's API
   address for the repository's releases (the newest 30), such as
   `https://api.github.com/repos/Camby10101/Desktop-Wizard/releases?per_page=30`.

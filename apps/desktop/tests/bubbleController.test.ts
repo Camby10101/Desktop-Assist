@@ -247,7 +247,7 @@ describe('on its own', () => {
       'idle',
       'walk-right', // at 24 s, back to 50
       'idle',
-      'sit', // at 39 s: alone for 30 s now (for six seconds)
+      'butterfly', // at 39 s: alone for 30 s now (the one the dice pick)
       'idle',
     ])
   })
@@ -259,18 +259,18 @@ describe('on its own', () => {
       'idle',
       'walk-right',
       'idle',
-      'sit',
+      'butterfly',
       'idle',
-      'levitate',
+      'doze', // anything but the butterfly again
       'idle',
     ])
   })
 
   it('plays a fidget for as long as its animation lasts, standing still', () => {
-    advanceUntil(() => controller.currentPose === 'sit')
+    advanceUntil(() => controller.currentPose === 'butterfly')
     const where = bubble.bounds
-    vi.advanceTimersByTime(FIDGET_MS.sit - 100)
-    expect(controller.currentPose).toBe('sit')
+    vi.advanceTimersByTime(FIDGET_MS.butterfly - 100)
+    expect(controller.currentPose).toBe('butterfly')
     expect(bubble.bounds).toEqual(where)
     vi.advanceTimersByTime(200)
     expect(controller.currentPose).toBe('idle')
@@ -300,10 +300,10 @@ describe('on its own', () => {
   })
 
   it('stops a fidget when dragged, and dangles instead', () => {
-    advanceUntil(() => controller.currentPose === 'sit')
+    advanceUntil(() => controller.currentPose === 'butterfly')
     controller.startDrag()
     expect(controller.currentPose).toBe('dragged')
-    holdFor(FIDGET_MS.sit + 100)
+    holdFor(FIDGET_MS.butterfly + 100)
     expect(controller.currentPose).toBe('dragged') // the fidget's end doesn't interrupt
     controller.endDrag()
   })
@@ -321,7 +321,7 @@ describe('as Settings say', () => {
     startWith({ standStill: true, noIdles: false, noHat: false })
     vi.advanceTimersByTime(46_000)
     // Resting at 8.5 s and 22.5 s; alone for 30 s at 36.5 s.
-    expect(poses).toEqual(['sit', 'idle'])
+    expect(poses).toEqual(['butterfly', 'idle'])
     expect(bubble.bounds).toEqual(home())
   })
 
@@ -1061,7 +1061,7 @@ describe('display changes', () => {
   })
 
   it('stops a fidget too, standing idle again', () => {
-    advanceUntil(() => controller.currentPose === 'sit')
+    advanceUntil(() => controller.currentPose === 'butterfly')
     controller.displayChanged()
     expect(controller.currentPose).toBe('idle')
   })

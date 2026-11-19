@@ -537,7 +537,7 @@ timetable of one of her habits, and `CLONES` the numbers for her clones, which b
 
 <!-- code: apps/desktop/src/shared/character.ts#FIDGETS,Fidget,Pose,FIDGET_MS,isFidget -->
 
-[`src/shared/character.ts`, lines 6–271](../../apps/desktop/src/shared/character.ts#L6-L271)
+[`src/shared/character.ts`, lines 6–291](../../apps/desktop/src/shared/character.ts#L6-L291)
 
 ```ts
 /**
@@ -579,6 +579,16 @@ timetable of one of her habits, and `CLONES` the numbers for her clones, which b
  *   puffs out.
  * - `tome`: her spellbook floats open in front of her, its pages turning by themselves and glowing
  *   letters rising out of it, then closes and vanishes.
+ * - `yoyo`: a glowing yo-yo appears in her hand in a sparkle; she spins it down and up on its
+ *   silver string, swings it round in a loop, and it vanishes in a twinkle.
+ * - `top`: a little spinning top appears on her palm, spins there, wobbling, and she flicks it up
+ *   and catches it.
+ * - `cards`: a deck of cards appears in her hand; she springs them in an arc to her other hand and
+ *   back, then they vanish.
+ * - `plane`: a paper plane appears in her hand; she throws it, it flies a loop round her (behind
+ *   her and back in front), and she catches it.
+ * - `ball`: a bouncy ball appears in her hand; she bounces it on the taskbar, tosses it up high and
+ *   catches it.
  * - `dance`: a little jig, stepping side to side, an arm up and a hand on her hip, then the other.
  * - `yawn`: a big yawn behind her hand, then a sleepy sway (late at night only: see TIMED).
  * - `confetti`: a cheer and a burst of confetti (Friday evenings only, and often then: see TIMED).
@@ -613,6 +623,11 @@ export const FIDGETS = [
   'rain',
   'potion',
   'tome',
+  'yoyo',
+  'top',
+  'cards',
+  'plane',
+  'ball',
   'yawn',
   'confetti',
   'dance',
@@ -673,6 +688,11 @@ export const FIDGET_MS: Record<Fidget, number> = {
   rain: 4400,
   potion: 4000,
   tome: 4800,
+  yoyo: 3600,
+  top: 3600,
+  cards: 4000,
+  plane: 4400,
+  ball: 4000,
   yawn: 3600,
   confetti: 3200,
   dance: 3200,
@@ -728,7 +748,7 @@ export const isFidget = (pose: Pose): pose is Fidget =>
 
 <!-- code: apps/desktop/src/shared/character.ts#SPELL_POSES,SpellPose,SPELL_POSE_MS,isSpellPose -->
 
-[`src/shared/character.ts`, lines 85–105](../../apps/desktop/src/shared/character.ts#L85-L105)
+[`src/shared/character.ts`, lines 100–120](../../apps/desktop/src/shared/character.ts#L100-L120)
 
 ```ts
 /**
@@ -782,7 +802,7 @@ the main process plays them on purpose (`BubbleController.act()` and `teleport()
 
 <!-- code: apps/desktop/src/shared/character.ts#VISION -->
 
-[`src/shared/character.ts`, lines 273–284](../../apps/desktop/src/shared/character.ts#L273-L284)
+[`src/shared/character.ts`, lines 293–304](../../apps/desktop/src/shared/character.ts#L293-L304)
 
 ```ts
 /**
@@ -821,7 +841,7 @@ pages. Each entry is a `[from, to]` pair:
 
 <!-- code: apps/desktop/src/shared/character.ts#CLONES -->
 
-[`src/shared/character.ts`, lines 299–303](../../apps/desktop/src/shared/character.ts#L299-L303)
+[`src/shared/character.ts`, lines 319–323](../../apps/desktop/src/shared/character.ts#L319-L323)
 
 ```ts
 /**
