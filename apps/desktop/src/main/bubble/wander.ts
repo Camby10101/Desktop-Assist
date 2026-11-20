@@ -1,4 +1,4 @@
-import { FIDGETS, inSeason, TIMED, type Fidget } from '@shared/character'
+import { FIDGETS, HABITS, inSeason, TIMED, type Fidget } from '@shared/character'
 import type { Point } from '@shared/geometry'
 
 // What the character does on its own while nobody is using it, and how it falls when dropped.
@@ -198,56 +198,67 @@ export interface Pastimes {
 }
 
 /**
- * How often a fidget comes up compared with the others, which count 1 each: the vision (the
- * company's logo coming down to her) is a rare treat, about a fifth as likely as any other.
+ * How often a habit comes up compared with the others, which count 1 each: its HABITS `weight` (the
+ * vision, the company's logo coming down to her, is a rare treat, about a fifth as likely).
  */
-export const FIDGET_WEIGHT: Partial<Record<Fidget, number>> = { vision: 0.2 }
-
-/**
- * Her performances: longer things she does that move her about and draw outside her own window
- * (see Performer in BubbleController.ts): watching the pointer; tricks with the taskbar's icons
- * (carrying one about, juggling three, swapping two as a prank, perching on one, sneezing one
- * flying, a wand tap); peeking round a window; waving through a portal on top of a window; a visit
- * from her familiar; and a battle with monsters.
- */
-export const PERFORMANCES = [
-  'watch',
-  'carry',
-  'juggle-icons',
-  'swap',
-  'perch',
-  'knock',
-  'tap',
-  'peek',
-  'portal',
-  'familiar',
-  'battle',
-] as const
-export type PerformanceName = (typeof PERFORMANCES)[number]
+export const FIDGET_WEIGHT = Object.fromEntries(
+  FIDGETS.map((fidget) => [fidget, HABITS[fidget].weight ?? 1]),
+) as Record<Fidget, number>
 
 /** How likely a rare performance is, against 1 for a habit: a fifth as likely. */
 export const RARE = 0.2
 
-/**
- * How likely each performance is when it can be done, against 1 for a habit: the taskbar tricks,
- * her portal, her battle and watching the pointer are rare (RARE), the rest as likely as a habit.
- */
-export const PERFORMANCE_WEIGHT: Record<PerformanceName, number> = {
-  watch: RARE,
-  carry: RARE,
-  'juggle-icons': RARE,
-  swap: RARE,
-  perch: RARE,
-  knock: RARE,
-  tap: RARE,
-  peek: 1,
-  portal: RARE,
-  battle: RARE,
-  familiar: 1,
+/** One of her performances (see PERFORMANCE_LIST). */
+export interface PerformanceInfo {
+  /** How likely it is when it can be done, against 1 for a habit. */
+  weight: number
+  /** Whether it moves her from where she stands (so it's not done when she's to stand still). */
+  moves: boolean
 }
 
-/** Performances that don't move her from where she stands (so they're fine when she's to stand still). */
-export const STAYING_PUT: readonly PerformanceName[] = ['watch', 'familiar', 'battle']
+/**
+ * Her performances: longer things she does that move her about and draw outside her own window
+ * (see Performer in BubbleController.ts). Each is got ready by the part of the main process that
+ * does it (src/main/performances/, plugged in by index.ts), and plays poses of its own (HELD_POSES
+ * in shared/character.ts). The rare ones are RARE.
+ */
+const PERFORMANCE_LIST = {
+  /** Watching the pointer for ten seconds, her eyes following it (performances.ts). */
+  watch: { weight: RARE, moves: false },
+  /** A trick with copies of the taskbar's icons (taskbarTricks.ts): carrying one about. */
+  carry: { weight: RARE, moves: true },
+  /** Juggling three of the taskbar's icons. */
+  'juggle-icons': { weight: RARE, moves: true },
+  /** Swapping two of the taskbar's icons as a prank, and back. */
+  swap: { weight: RARE, moves: true },
+  /** Sitting on one of the taskbar's icons. */
+  perch: { weight: RARE, moves: true },
+  /** Sneezing one of the taskbar's icons flying, and fetching it. */
+  knock: { weight: RARE, moves: true },
+  /** A wand tap on one of the taskbar's icons. */
+  tap: { weight: RARE, moves: true },
+  /** Peeking round the edge of a window near her (windowTricks.ts). */
+  peek: { weight: 1, moves: true },
+  /** Waving through a portal on top of a window (windowTricks.ts). */
+  portal: { weight: RARE, moves: true },
+  /** A visit from her familiar, the black cat (familiarVisit.ts). */
+  familiar: { weight: 1, moves: false },
+  /** A battle with monsters (battle.ts, shared/battle.ts). */
+  battle: { weight: RARE, moves: false },
+} satisfies Record<string, PerformanceInfo>
+
+export type PerformanceName = keyof typeof PERFORMANCE_LIST
+
+/** Her performances, by name (see PERFORMANCE_LIST above for what each one is). */
+export const PERFORMANCE_INFO: Readonly<Record<PerformanceName, PerformanceInfo>> = PERFORMANCE_LIST
+
+/** Her performances' names, in the order above. */
+export const PERFORMANCES = Object.keys(PERFORMANCE_LIST) as readonly PerformanceName[]
+
+/** How likely each performance is when it can be done, against 1 for a habit. */
+export const PERFORMANCE_WEIGHT = Object.fromEntries(
+  PERFORMANCES.map((name) => [name, PERFORMANCE_INFO[name].weight]),
+) as Record<PerformanceName, number>
 
 /**
  * What she might do besides her habits: the time (`when`, local), for the timed habits (TIMED;
