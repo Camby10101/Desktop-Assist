@@ -132,7 +132,9 @@ headroom), one letter per pixel, and each letter is a colour. It works in three 
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | `raster.ts` | A tiny pixel-art drawing kit: shapes onto a grid, then shaded and outlined the way pixel artists do by hand (`Layer`, `Canvas.ink`). |
 | `rig.ts`    | Her skeleton and everything that hangs on it. `draw(pose)` turns one `Pose` into one frame.                                          |
-| `sprite.ts` | Her animations: each pose's list of frames, made by blending `Pose`s over time.                                                      |
+| `props/`    | The things drawn round her (toys, spells' effects, visitors, sparkles): a painter each, run by `draw()` in order (`PROPS`).          |
+| `moves/`    | Her animations: each pose's move, its frames made by blending `Pose`s over time, a file for each kind, all listed in `MOVES`.        |
+| `sprite.ts` | Puts them together: `framesOf(pose, facing)`, `shownFrames()` for her page, `framePaths()`; and `palette.ts`, her colours.           |
 
 #### `Pose` and `draw(pose)` (in `rig.ts`)
 
@@ -170,9 +172,9 @@ of palette letters (outline, shade, base, light), and `ink()` shades the side aw
 
 Five of her habits summon a toy into her hand in a sparkle and send it away in a twinkle: a yo-yo
 (`yoyo`), a spinning top (`spinTop`), a deck of cards (`deck`), a paper plane (`plane`) and a bouncy
-ball (`ball`), each a `Pose` field from 0 to 1 through the habit. Each has its timetable in `rig.ts`
-(`YOYO`, `SPIN_TOP`, `DECK`, `PLANE`, `BALL`: when it appears, what it does, when it goes), which
-the habit in `sprite.ts` reads too, so her hand moves with the toy: a flick as each yo-yo drop
+ball (`ball`), each a `Pose` field from 0 to 1 through the habit. Each is drawn by a painter in
+`props/toys.ts`, beside its picture and its timetable (`YOYO`, `SPIN_TOP`, `DECK`, `PLANE`, `BALL`:
+when it appears, what it does, when it goes), which the habit's move in `moves/toys.ts` reads too, so her hand moves with the toy: a flick as each yo-yo drop
 starts, a push as the ball leaves her hand. Most are held out to her side, against the background
 rather than her purple robe, where small toys are easy to miss. The paper plane flies a loop round
 her, and on the far side it's drawn only where nothing of her is (`set(…, '.')`), so it passes
@@ -181,10 +183,14 @@ behind her.
 The `spirit` habit works the same way with a visitor instead of a toy: a little spirit (a round
 mint body, dark dot eyes, pale leaf wings beating in two frames) appears beside her, flies to her
 and lands on her palm (hearts), loops round her head (behind her on the far side), hovers while
-they wave to each other, and fades. Its timetable is `SPIRIT`. In her battle, `charge` is a glow in
-her hand: a glint, a ball, and a sparkle as each bolt leaves it.
+they wave to each other, and fades (`props/visitors.ts`, its timetable `SPIRIT`). In her battle,
+`charge` is a glow in her hand: a glint, a ball, and a sparkle as each bolt leaves it.
 
-#### Animations (in `sprite.ts`)
+Every painter is handed a `Scene` once she's drawn: where her hands, head and hips are, and how to
+put pixels down (`set`, `canvas.stamp`). `PROPS` in `props/index.ts` lists them in the order they're
+drawn, each over the ones before.
+
+#### Animations (in `moves/`)
 
 A pose's animation is a list of keys, each a `Pose` and how long it shows. Two helpers make most of
 them: `hold(pose, ms)`, one key, and `tween(a, b, ms)`, which blends from `a` to `b` in 40 ms frames
@@ -207,38 +213,31 @@ return [
 ]
 ```
 
-`MAKERS` maps every pose to its maker, `LOOPS` says which go round and round (walking, idling) and
-which play once (a habit), and `framesOf(pose, facing)` draws a pose's frames the first time they're
-asked for and keeps them. She's always drawn facing right; facing left is the same frames mirrored,
+Each file in `moves/` has the moves of one kind (`everyday.ts`, `charms.ts`, `magic.ts`, `toys.ts`,
+`visitors.ts`, `reactions.ts`, `performances.ts` …, the helpers in `kit.ts`) and lists them at its
+bottom: each pose's `Move`, `once(hop)` for one that plays once, `repeating(idle)` for one that goes
+round. `MOVES` (`moves/index.ts`) gathers them, and TypeScript won't build it without a move for every
+pose. `framesOf(pose, facing)` draws a pose's frames the first time they're asked for and keeps
+them. She's always drawn facing right; facing left is the same frames mirrored,
 and a pose whose name ends in `-left` or `-right` faces that way whatever she's facing.
 
 #### `framePaths(rows)` and `Character`
 
 A frame is about 10,000 pixels (96 × 104), far too many elements to draw one by one. `framePaths()` turns each
-run of same-coloured pixels along a row into one little rectangle, and all of one colour into one SVG
-`path`: a frame becomes a few dozen elements. `Character` shows them, a frame at a time, each for its
-own time; with Windows' reduced-motion setting on, just the first frame. It draws every pose's frames
-in the background, one pose every 50 ms after start-up, so starting a pose never stutters.
+run of same-coloured pixels along a row into a rectangle, carried on down the rows below for as long
+as they have the same run, and all of one colour into one SVG `path`: a frame becomes a few dozen
+elements. `Character` shows them, a frame at a time, each for its own time; with Windows'
+reduced-motion setting on, just the first frame. It draws every pose's frames in the background, one
+pose every 50 ms after start-up, so starting a pose never stutters, and it keeps only their paths
+(`shownFrames()`), not the frames' letters: all her poses come to over 4,000 frames.
 
 ```ts
-export function framePaths(rows: string[]): { className: string; d: string }[] {
-  const byColour = new Map<string, string[]>()
-  rows.forEach((row, y) => {
-    let x = 0
-    while (x < row.length) {
-      const pixel = row[x]!
-      let end = x + 1
-      while (end < row.length && row[end] === pixel) end++ // the run of this colour
-      if (pixel !== '.') {
-        const runs = byColour.get(pixel) ?? []
-        runs.push(`M${x} ${y}h${end - x}v1h-${end - x}z`) // one rectangle, a pixel tall
-        byColour.set(pixel, runs)
-      }
-      x = end
-    }
-  })
-  return [...byColour].map(([pixel, runs]) => ({ className: PALETTE[pixel] ?? 'px-hair-line', d: runs.join('') }))
-}
+rows.forEach((row, y) => {
+  const runs = new Map<string, number>() // this row's runs: colour|start|end → the row it began on
+  // … each run of one colour along the row, carried on from the row above if it had the same run
+  for (const [run, top] of open) if (!runs.has(run)) close(run, top, y) // ended: one rectangle
+  open = runs
+})
 ```
 
 > **Why it's built this way**
@@ -248,7 +247,7 @@ export function framePaths(rows: string[]): { className: string; d: string }[] {
 > colour redraws nothing; the browser simply repaints.
 
 > **Try it yourself**
-> In `sprite.ts`, change one number in the hop (say `tween(apex, float, 100)` to `600`) and run
+> In `moves/everyday.ts`, change one number in the hop (say `tween(apex, float, 100)` to `600`) and run
 > `npm run dev`. Wait for a hop: she now hangs in the air at the top. Then run `npx vitest run
 tests/sprite.test.ts`, which checks every habit's frames last exactly as long as `FIDGET_MS` says,
 > and see it catch the change.

@@ -2,19 +2,22 @@
 
 ## 40. Recipes
 
+[CUSTOMIZING.md](../CUSTOMIZING.md) has these at length, and a map of where every part of her is.
+
 ### Add a habit
 
 Say you want her to blow a dandelion:
 
-1. `shared/character.ts`: add `'dandelion'` to `FIDGETS` and its length to `FIDGET_MS`
-   (`dandelion: 3000`). TypeScript now points at every place that needs to know about it.
-2. `character/sprite.ts`: write `function dandelion(): Key[]` out of `hold()` and `tween()` (copy a
-   similar habit, such as `butterfly`), add it to `MAKERS` (`dandelion: () => drawn(dandelion())`) and
-   to `LOOPS` as `false`. Anything new to draw (the seeds) is a new field on `Pose`, drawn in `rig.ts`.
-3. Run `npx vitest run tests/sprite.test.ts`: it checks the frames are the right size and last exactly
-   `FIDGET_MS.dandelion`.
-4. `npm run dev`, and wait. To see it sooner, make it heavy for a moment
-   (`FIDGET_WEIGHT.dandelion = 50` in `wander.ts`), then take that out again.
+1. `shared/character.ts`: add `dandelion: { ms: 4000, kind: 'charm' }` to `HABIT_LIST`, with a
+   comment saying what she does. TypeScript now refuses to build until it has a move.
+2. `character/moves/charms.ts` (the file for its kind): write `function dandelion(): Key[]` out of
+   `through()`, `hold()` and `tween()` (copy a similar habit, such as `butterfly`), and add
+   `dandelion: once(dandelion)` to `CHARM_MOVES` at the bottom.
+3. Anything new to draw (the seeds) is a new field on `Pose` (`rig.ts`), drawn by a painter in
+   `character/props/charms.ts`, listed in `PROPS` (`props/index.ts`).
+4. Run `npx vitest run tests/sprite.test.ts tests/catalogue.test.ts`: they check the frames are the
+   right size and last exactly its `ms`, that it's filed under its kind, and that its painter is drawn.
+5. `npm run dev`, and wait. To see it sooner, give it `weight: 50` for a moment, then take that out.
 
 ### Add a channel between a page and the main process
 
@@ -34,12 +37,14 @@ Say you want her to blow a dandelion:
 
 ### Add a performance
 
-1. `bubble/wander.ts`: add the name to `PERFORMANCES` and its weight to `PERFORMANCE_WEIGHT` (and to
-   `STAYING_PUT` if she doesn't move).
+1. `bubble/wander.ts`: add it to `PERFORMANCE_LIST`, with its weight (`RARE` for a rare one) and
+   whether it moves her.
 2. Write something that returns a `Performance`: an `at(t)` that says, for each moment, where her box
    is and her pose (or `null` when it's over), and an `end(finished)` that tidies up.
-3. `index.ts`: plug it into `Performances` as `more[name] = { moves, prepare }`.
-4. Test the timeline on its own, the way `tests/tricks.test.ts` tests `trickFrame`.
+3. `index.ts`: plug it into `Performances` as `more[name] = (standing) => …`, how it's got ready.
+4. If it draws over the screen, name its window in `shared/views.ts` and give it a page (`PAGES` in
+   `main.tsx`).
+5. Test the timeline on its own, the way `tests/battle.test.ts` tests `battleFrame`.
 
 ### Change her robe's colours, or the company's
 

@@ -21,6 +21,7 @@ import { readFile, rm } from 'node:fs/promises'
 import { hostname, release, version as osVersion } from 'node:os'
 import { join } from 'node:path'
 import { bubbleMetrics, isInside, panelWindowSize, type Rect } from '@shared/geometry'
+import type { PassiveView } from '@shared/views'
 import { IPC } from '@shared/ipc'
 import { FAMILIAR } from '@shared/character'
 import { CAST_POSE, type Spell } from '@shared/spells'
@@ -170,7 +171,7 @@ async function start(): Promise<void> {
   // `above`: over her too (her taskbar tricks' icons pass in front of her); otherwise she's put
   // back in front of it.
   const openOverlay =
-    (view: 'clones' | 'vision' | 'spell' | 'familiar' | 'trick' | 'battle', above = false) =>
+    (view: PassiveView, above = false) =>
     (bounds: Rect, query: Record<string, string>) => {
       const win = createOverlayWindow(view, { width: bounds.width, height: bounds.height }, query)
       win.setBounds(bounds)
@@ -276,33 +277,30 @@ async function start(): Promise<void> {
       })
     : null
   const trick = (name: TrickName) =>
-    taskbarTricks
-      ? { moves: true, prepare: (standing: Standing) => taskbarTricks.prepare(name, standing) }
-      : undefined
+    taskbarTricks ? (standing: Standing) => taskbarTricks.prepare(name, standing) : undefined
   // Her battle with monsters: drawn in a window along the bottom of her screen, behind her.
   const battle = new Battle({ open: openOverlay('battle'), random: Math.random })
   const performances = new Performances({
     displays: electronDisplays,
     onGaze: (gaze) => bubbleWindow.webContents.send(IPC.gaze, gaze),
+    // How each performance is got ready (what each is, and whether it moves her:
+    // PERFORMANCE_LIST in wander.ts).
     more: {
       // Peeking round a window, and waving through a portal on top of one (Windows only).
       ...(windowTricks
         ? {
-            peek: { moves: true, prepare: (standing: Standing) => windowTricks.peek(standing) },
-            portal: { moves: true, prepare: (standing: Standing) => windowTricks.portal(standing) },
+            peek: (standing: Standing) => windowTricks.peek(standing),
+            portal: (standing: Standing) => windowTricks.portal(standing),
           }
         : {}),
       // Her tricks with the taskbar's icons (Windows only).
       ...Object.fromEntries(TRICKS.flatMap((name) => (trick(name) ? [[name, trick(name)!]] : []))),
-      // A battle with monsters: she stays where she stands.
-      battle: { moves: false, prepare: async (standing) => battle.prepare(standing) },
+      // A battle with monsters.
+      battle: async (standing) => battle.prepare(standing),
       // A visit from her familiar: it appears beside her, and she sits down with it a while.
-      familiar: {
-        moves: false,
-        prepare: async (standing) => {
-          familiar.start(standing, FAMILIAR.visitMs)
-          return familiarVisit(standing)
-        },
+      familiar: async (standing) => {
+        familiar.start(standing, FAMILIAR.visitMs)
+        return familiarVisit(standing)
       },
     },
   })

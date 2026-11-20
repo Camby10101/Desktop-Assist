@@ -2,28 +2,11 @@ import { app, BrowserWindow, Menu, screen, type MenuItemConstructorOptions } fro
 import { join } from 'node:path'
 import type { Size } from '@shared/geometry'
 import { IPC } from '@shared/ipc'
+import { isPassive, type View } from '@shared/views'
 import type { PanelSurface, Surface } from './BubbleController'
 import { checkOnTop, type OnTopWindow } from './frontCheck'
 
-export type View =
-  | 'bubble'
-  | 'panel'
-  | 'clones'
-  | 'vision'
-  | 'spell'
-  | 'screensaver'
-  | 'familiar'
-  | 'trick'
-  | 'battle'
-
-/** Windows that only show something: they never take the mouse or the focus. */
-const passive = (view: View) =>
-  view === 'clones' ||
-  view === 'vision' ||
-  view === 'spell' ||
-  view === 'familiar' ||
-  view === 'trick' ||
-  view === 'battle'
+export type { View } from '@shared/views'
 
 /**
  * How the overlay windows stay on top. Electron's default level for always-on-top, "floating",
@@ -79,7 +62,7 @@ export function createOverlayWindow(
     // Clicking the bubble now takes the focus from an open panel; BubbleController.clickBubble
     // knows that press closed it. The clones', the vision's and the spells' windows never need
     // it.
-    focusable: !passive(view),
+    focusable: !isPassive(view),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: true,
@@ -95,7 +78,7 @@ export function createOverlayWindow(
     win.setIgnoreMouseEvents(true, { forward: true })
     addEditContextMenu(win)
   }
-  if (passive(view)) win.setIgnoreMouseEvents(true)
+  if (isPassive(view)) win.setIgnoreMouseEvents(true)
 
   const search = { ...query, view }
   const devServer = process.env['ELECTRON_RENDERER_URL']

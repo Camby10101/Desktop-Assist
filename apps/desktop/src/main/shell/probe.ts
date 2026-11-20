@@ -4,19 +4,39 @@ import { z } from 'zod'
 
 // Looking at Windows' own shell from the outside, through UI Automation (the accessibility
 // interface screen readers use), in a PowerShell kept running while it's needed: where the
-// taskbar's buttons are, and the windows on the screen and where they are. It only reads; it never
-// clicks, moves or changes anything. Coordinates come back in physical pixels (the script is
-// per-monitor DPI aware); the main process turns them into DIPs.
+// taskbar's buttons are, and the windows on the screen and where they are (their frames as drawn,
+// without Windows' invisible borders), which is in front of which, and which are cloaked (there
+// but not shown: on another virtual desktop, or a suspended app). It only reads; it never clicks,
+// moves or changes anything. Coordinates come back in physical pixels (the script is per-monitor
+// DPI aware); the main process turns them into DIPs.
 
 /** The PowerShell script: answers one request a line on stdin with one line of JSON on stdout. */
 export const PROBE_SCRIPT = String.raw`
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
 Add-Type -TypeDefinition @'
-using System; using System.Runtime.InteropServices;
-public static class ProbeDpi { [DllImport("user32.dll")] public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr c); }
+using System; using System.Collections.Generic; using System.Runtime.InteropServices;
+public static class Probe {
+  [DllImport("user32.dll")] public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr c);
+  public delegate bool EnumProc(IntPtr h, IntPtr l);
+  [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc f, IntPtr l);
+  [StructLayout(LayoutKind.Sequential)] public struct RECT { public int L, T, R, B; }
+  [DllImport("dwmapi.dll")] static extern int DwmGetWindowAttribute(IntPtr h, int a, out int v, int s);
+  [DllImport("dwmapi.dll")] static extern int DwmGetWindowAttribute(IntPtr h, int a, out RECT v, int s);
+  public static Dictionary<long, int> Order() {
+    var order = new Dictionary<long, int>(); int i = 0;
+    EnumWindows((h, l) => { order[h.ToInt64()] = i++; return true; }, IntPtr.Zero);
+    return order;
+  }
+  public static bool Cloaked(long h) { int v; return DwmGetWindowAttribute(new IntPtr(h), 14, out v, 4) == 0 && v != 0; }
+  public static int[] Frame(long h) {
+    RECT r;
+    if (DwmGetWindowAttribute(new IntPtr(h), 9, out r, 16) != 0 || r.R <= r.L || r.B <= r.T) return null;
+    return new int[] { r.L, r.T, r.R - r.L, r.B - r.T };
+  }
+}
 '@
-[void][ProbeDpi]::SetThreadDpiAwarenessContext([IntPtr]::new(-4))
+[void][Probe]::SetThreadDpiAwarenessContext([IntPtr]::new(-4))
 Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
 $A = [Windows.Automation.AutomationElement]
 $Children = [Windows.Automation.TreeScope]::Children
@@ -25,6 +45,13 @@ function Box($e) {
   $r = $e.Current.BoundingRectangle
   if ($r.IsEmpty -or [double]::IsInfinity($r.Width)) { return $null }
   @{ x = [int]$r.X; y = [int]$r.Y; width = [int]$r.Width; height = [int]$r.Height }
+}
+# A window's frame as it's drawn (DWM's extended frame bounds, without the invisible borders round
+# it for resizing), or its UI Automation box if Windows won't say.
+function Frame([long]$h, $e) {
+  $f = [Probe]::Frame($h)
+  if ($f) { return @{ x = $f[0]; y = $f[1]; width = $f[2]; height = $f[3] } }
+  Box $e
 }
 function State($w) {
   $p = $null
@@ -45,16 +72,20 @@ function Taskbar {
   }
 }
 function Windows {
+  $order = [Probe]::Order()
   $wins = $A::RootElement.FindAll($Children, (New-Object Windows.Automation.PropertyCondition ($A::ControlTypeProperty, [Windows.Automation.ControlType]::Window)))
   foreach ($w in $wins) {
     try {
-      $box = Box $w
-      if ($box) { @{ handle = $w.Current.NativeWindowHandle; name = $w.Current.Name; className = $w.Current.ClassName; pid = $w.Current.ProcessId; state = (State $w); rect = $box } }
+      $h = [long]$w.Current.NativeWindowHandle
+      $box = Frame $h $w
+      $z = -1
+      if ($order.ContainsKey($h)) { $z = $order[$h] }
+      if ($box) { @{ handle = $h; name = $w.Current.Name; className = $w.Current.ClassName; pid = $w.Current.ProcessId; state = (State $w); rect = $box; z = $z; cloaked = [Probe]::Cloaked($h) } }
     } catch {}
   }
 }
 function OneWindow([long]$h) {
-  try { $w = $A::FromHandle([IntPtr]::new($h)); @{ handle = $h; state = (State $w); rect = (Box $w) } }
+  try { $w = $A::FromHandle([IntPtr]::new($h)); @{ handle = $h; state = (State $w); rect = (Frame $h $w) } }
   catch { @{ handle = $h; state = 'gone'; rect = $null } }
 }
 while ($true) {
@@ -90,6 +121,10 @@ export const ShellWindow = z.object({
   pid: z.number(),
   state: z.string(),
   rect: Box,
+  /** Its place front to back (0 is in front of all the others); -1 or missing: not known. */
+  z: z.number().optional(),
+  /** There but not shown (on another virtual desktop, a suspended app). */
+  cloaked: z.boolean().optional(),
 })
 export type ShellWindow = z.infer<typeof ShellWindow>
 

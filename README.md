@@ -5,13 +5,15 @@ corner of the screen and opens a panel when clicked. Built for Morse Micro first
 [`tenants/`](tenants/README.md), so another business can use it later.
 
 **Download:** the newest installer is in [`installer/`](installer/)
-([Desktop Wizard-Setup-2.5.2.exe](installer/Desktop%20Wizard-Setup-2.5.2.exe), with its signature
+([Desktop Wizard-Setup-2.6.0.exe](installer/Desktop%20Wizard-Setup-2.6.0.exe), with its signature
 beside it). Run it to install Desktop Wizard for yourself (no admin needed); an installed copy
 updates itself from Settings → Check for updates.
 
 - [docs/PLAN.md](docs/PLAN.md): the plan, architecture, milestones and decisions.
 - [docs/how-it-works.pdf](docs/how-it-works.pdf): new to the code? A guided tour of every part, with
   code examples, diagrams, walkthroughs of real moments, security, the tests and releasing.
+- [docs/CUSTOMIZING.md](docs/CUSTOMIZING.md): adding to the character (a habit, a toy, a
+  performance, a colour), and where every part of her is.
 - [docs/code-guide/CODE_GUIDE.md](docs/code-guide/CODE_GUIDE.md): how the code fits together, with the code of every
   function shown and explained.
 - [docs/CLAUDE_DESKTOP_SETUP.md](docs/CLAUDE_DESKTOP_SETUP.md): for IT, what each PC needs so
@@ -31,7 +33,7 @@ sign-in) and 4 (logos, favourites, service desk, light/dark mode, bubble-click f
 3.1 (questions open in Claude Desktop) and 3.2 (Apps list, Uninstall) are complete, as are
 Milestone 5 (the app-opening spinner; Jira and the service desk) and its fixes 5.1 and 5.2 (the
 bubble kept in front, and Check for updates). Version **1.0.0** was the first release (see
-[PLAN.md](docs/PLAN.md) §7h and [RELEASING.md](docs/RELEASING.md)); this is version **2.5.2**, with
+[PLAN.md](docs/PLAN.md) §7h and [RELEASING.md](docs/RELEASING.md)); this is version **2.6.0**, with
 the animated character (thirty-eight habits, ten of them magic, five with toys she summons and one a
 visit from a little spirit; throw her and she tumbles; tricks with the taskbar's icons and the
 windows on the screen; battles with little monsters; her familiar, a black cat), her spells,

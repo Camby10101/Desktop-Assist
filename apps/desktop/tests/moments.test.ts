@@ -13,6 +13,7 @@ import { hasNews } from '../src/main/atlassian/news'
 import {
   nextActivity,
   PERFORMANCE_WEIGHT,
+  RARE,
   pointerReaction,
   POINTER,
   WANDER,
@@ -76,12 +77,12 @@ describe('her timed habits', () => {
     expect(tally(undefined).get('yawn')).toBeUndefined()
   })
 
-  it('draws the performances that can be done, the taskbar, pointer and battle ones a tenth as often', () => {
+  it('draws the performances that can be done, the taskbar, pointer and battle ones a fifth as often', () => {
     const counts = tally({ performances: ['watch', 'carry', 'peek', 'familiar', 'battle'] }, 20_000)
     const hop = counts.get('hop')!
     expect(counts.get('watch')! / hop).toBeCloseTo(PERFORMANCE_WEIGHT.watch, 1)
-    expect(counts.get('carry')! / hop).toBeCloseTo(0.1, 1)
-    expect(counts.get('battle')! / hop).toBeCloseTo(0.1, 1)
+    expect(counts.get('carry')! / hop).toBeCloseTo(RARE, 1)
+    expect(counts.get('battle')! / hop).toBeCloseTo(RARE, 1)
     expect(counts.get('peek')! / hop).toBeCloseTo(1, 0)
     expect(counts.get('familiar')! / hop).toBeCloseTo(1, 0)
     expect(counts.get('swap')).toBeUndefined() // not offered

@@ -1,6 +1,6 @@
 import { bubbleMetrics, type Point, type Rect } from '@shared/geometry'
 import type { Displays, Performance, Performer } from '../bubble/BubbleController'
-import type { PerformanceName } from '../bubble/wander'
+import { PERFORMANCE_INFO, type PerformanceName } from '../bubble/wander'
 
 /** Where she stands as a performance begins (BubbleController.standingBox). */
 export interface Standing {
@@ -40,8 +40,11 @@ export interface PerformancesDeps {
   displays: Pick<Displays, 'cursor'>
   /** Tells her page which way to look while she watches the pointer (null: done watching). */
   onGaze(gaze: Gaze | null): void
-  /** The other performances there are (the familiar, the taskbar tricks, windows), by name. */
-  more?: Partial<Record<PerformanceName, { prepare: Prepare; moves: boolean }>>
+  /**
+   * How to get the other performances ready (the familiar, the taskbar tricks, windows), by name;
+   * whether each moves her is in PERFORMANCE_INFO.
+   */
+  more?: Partial<Record<PerformanceName, Prepare>>
 }
 
 /**
@@ -52,17 +55,14 @@ export class Performances implements Performer {
   constructor(private readonly deps: PerformancesDeps) {}
 
   available(canMove: boolean): readonly PerformanceName[] {
-    const more = Object.entries(this.deps.more ?? {}) as [
-      PerformanceName,
-      { prepare: Prepare; moves: boolean },
-    ][]
-    return ['watch', ...more.filter(([, p]) => canMove || !p.moves).map(([name]) => name)]
+    const more = Object.keys(this.deps.more ?? {}) as PerformanceName[]
+    return ['watch', ...more.filter((name) => canMove || !PERFORMANCE_INFO[name].moves)]
   }
 
   async prepare(name: PerformanceName, standing: Standing): Promise<Performance | null> {
     if (name === 'watch') return this.watch(standing)
-    const more = this.deps.more?.[name]
-    return more ? more.prepare(standing) : null
+    const prepare = this.deps.more?.[name]
+    return prepare ? prepare(standing) : null
   }
 
   /**

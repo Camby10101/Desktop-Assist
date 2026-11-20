@@ -64,55 +64,52 @@ the security policy.
   `main.tsx` and everything it imports into plain JavaScript and, in the build, rewrites this tag to
   point at the bundled file.
 
-## `src/renderer/src/main.tsx`: choosing bubble, clones, vision, spell, screen saver or panel
+## `src/renderer/src/main.tsx`: choosing the page for each window
 
 The first code that runs in each window. It works out which window it's in and renders the
-matching view. `BubbleView`, `ClonesView`, `VisionView`, `SpellView`, `ScreenSaverView` and `PanelView` are React components: functions whose
-names start with a capital letter and return JSX. In JSX, `<BubbleView />` means "render the
+matching view. `BubbleView`, `PanelView`, `ClonesView` and the rest are React components: functions
+whose names start with a capital letter and return JSX. In JSX, `<BubbleView />` means "render the
 `BubbleView` component here".
 
 <!-- code: apps/desktop/src/renderer/src/main.tsx -->
 
-[`src/renderer/src/main.tsx`, lines 1–39](../../apps/desktop/src/renderer/src/main.tsx#L1-L39)
+[`src/renderer/src/main.tsx`, lines 1–36](../../apps/desktop/src/renderer/src/main.tsx#L1-L36)
 
 ```tsx
-import { StrictMode } from 'react'
+import { StrictMode, type ComponentType } from 'react'
 import { createRoot } from 'react-dom/client'
+import type { View } from '@shared/views'
 import './styles.css'
+import { BattleView } from './views/BattleView'
 import { BubbleView } from './views/BubbleView'
 import { ClonesView } from './views/ClonesView'
 import { FamiliarView } from './views/FamiliarView'
-import { BattleView } from './views/BattleView'
-import { TrickView } from './views/TrickView'
 import { PanelView } from './views/PanelView'
 import { ScreenSaverView } from './views/ScreenSaverView'
 import { SpellView } from './views/SpellView'
+import { TrickView } from './views/TrickView'
 import { VisionView } from './views/VisionView'
 
-// Every overlay window loads this page; the query string says which one this is.
+/** Each kind of window's page (shared/views.ts): every overlay window loads this page. */
+const PAGES: Record<View, ComponentType> = {
+  bubble: BubbleView,
+  panel: PanelView,
+  clones: ClonesView,
+  vision: VisionView,
+  spell: SpellView,
+  screensaver: ScreenSaverView,
+  familiar: FamiliarView,
+  trick: TrickView,
+  battle: BattleView,
+}
+
+// The query string says which window this is; the panel if it doesn't say (or says something else).
 const view = new URLSearchParams(window.location.search).get('view')
+const Page = (view && PAGES[view as View]) || PanelView
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {view === 'bubble' ? (
-      <BubbleView />
-    ) : view === 'clones' ? (
-      <ClonesView />
-    ) : view === 'vision' ? (
-      <VisionView />
-    ) : view === 'spell' ? (
-      <SpellView />
-    ) : view === 'screensaver' ? (
-      <ScreenSaverView />
-    ) : view === 'familiar' ? (
-      <FamiliarView />
-    ) : view === 'trick' ? (
-      <TrickView />
-    ) : view === 'battle' ? (
-      <BattleView />
-    ) : (
-      <PanelView />
-    )}
+    <Page />
   </StrictMode>,
 )
 ```
@@ -123,10 +120,12 @@ createRoot(document.getElementById('root')!).render(
   (after Tailwind has processed it) to the page.
 - `// Every overlay window loads this page`: as the comment says, the query string says which one
   this is.
-- `new URLSearchParams(window.location.search).get('view')`: reads the `view` (`bubble`, `panel`,
-  `clones`, `vision`, `spell` or `screensaver`) that `createOverlayWindow`
-  (src/main/bubble/windows.ts) adds to the query string when it loads the page. Anything other than
-  `bubble`, `clones`, `vision`, `spell` or `screensaver` gets the panel.
+- `PAGES`: as its comment says, each kind of window's page. `Record<View, ComponentType>` makes
+  TypeScript insist on a page for every kind of window named in `src/shared/views.ts`, so a new kind
+  can't be left without one. `ComponentType` is "any React component".
+- `new URLSearchParams(window.location.search).get('view')`: reads the `view` that
+  `createOverlayWindow` (src/main/bubble/windows.ts) adds to the query string when it loads the
+  page. `Page` is that view's page, or the panel's if it says nothing or something unknown.
 - `document.getElementById('root')!`: the `!` tells TypeScript "this is not null"; the div is in
   `index.html`.
 - `createRoot(`: hands that div to React, which from now on owns everything inside it. `render`
@@ -134,10 +133,8 @@ createRoot(document.getElementById('root')!).render(
 - `<StrictMode>`: a development-only checker. In `npm run dev` it calls each component twice and
   runs each effect, cleans it up, then runs it again, to expose code that doesn't clean up after
   itself. That's why every hook below has a careful cleanup. It does nothing in the installed app.
-- `{view === 'bubble' ? (`: curly braces switch from JSX back to ordinary TypeScript, here a
-  choice between the six views. Each `? :` after the first only runs when the test before it
-  fails, so it reads "the bubble, otherwise the clones, otherwise the vision, otherwise a spell's
-  effects, otherwise the screen saver, otherwise the panel". The round brackets only let each view sit on a line of its own.
+- `<Page />`: renders the chosen page. A variable holding a component can be used as a JSX tag
+  like any component, as long as its name starts with a capital letter.
 
 ## `src/renderer/src/env.d.ts`: telling TypeScript about `window.assist`
 

@@ -53,15 +53,27 @@ The code often lists names once, in an array, and gets a type from it, so the li
 can never disagree:
 
 ```ts
-export const FIDGETS = ['hop', 'wave', 'stretch', /* … 32 in all … */ 'dance'] as const
-export type Fidget = (typeof FIDGETS)[number] // 'hop' | 'wave' | 'stretch' | … | 'dance'
+export const REACTIONS = ['pet', 'scroll', 'startle', /* … 11 in all … */ 'rouse'] as const
+export type Reaction = (typeof REACTIONS)[number] // 'pet' | 'scroll' | 'startle' | … | 'rouse'
 ```
 
 `as const` tells TypeScript the array will never change, so it remembers each exact string rather
-than just "strings". `(typeof FIDGETS)[number]` then means "any item of that array". Add a habit to
-the array and the type grows with it; every `Record<Fidget, number>` (an object with a value for
-each habit, like `FIDGET_MS`, their lengths) then fails to compile until the new one is given a
+than just "strings". `(typeof REACTIONS)[number]` then means "any item of that array". Add a reaction
+to the array and the type grows with it; every `Record<Reaction, number>` (an object with a value for
+each reaction, like `REACTION_MS`, their lengths) then fails to compile until the new one is given a
 value too. That's the compiler reminding you of everything that needs to know about it.
+
+Her habits go one step further: each is an entry in one table, its name the key and its details
+(how long, what kind) the value, and the type is the table's keys, so a new habit is one entry:
+
+```ts
+const HABIT_LIST = {
+  /** A little jump. */
+  hop: { ms: 1200, kind: 'everyday' },
+  // … 38 in all
+} satisfies Record<string, Habit>
+export type Fidget = keyof typeof HABIT_LIST // 'hop' | 'wave' | … | 'dance'
+```
 
 ### Unions that say what kind
 

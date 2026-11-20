@@ -32,8 +32,9 @@ export function bubbleMetrics(scale: number = DEFAULT_SIZE) {
 
 #### `character.ts`
 
-Everything she can do, by name, and for how long. `FIDGETS` lists her 38 habits and `FIDGET_MS`
-their lengths; `SPELL_POSES` the three poses of her own for spells (`chant`, `vanish`, `appear`);
+Everything she can do, by name, and for how long. `HABITS` has her 38 habits, each one's length,
+kind (which says where its move and props are) and how likely it is (`FIDGETS` are their names,
+`FIDGET_MS` their lengths); `SPELL_POSES` the three poses of her own for spells (`chant`, `vanish`, `appear`);
 `REACTIONS` the things she does in answer to something (`pet`, `scroll`, `startle`, the pounces,
 `guilty`, `settle`, `rouse` …) and `HELD_POSES` the ones held for as long as something lasts
 (`watch`, the peeks, `portal`, `snooze`, and her battle's `ready` and `cast`). The `Pose` type is the union of all of them plus `idle`,

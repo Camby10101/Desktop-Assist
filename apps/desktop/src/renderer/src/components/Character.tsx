@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
-import { FIDGETS, HELD_POSES, REACTIONS, SPELL_POSES, type Pose } from '@shared/character'
+import type { Pose } from '@shared/character'
 import {
   framePaths,
-  framesOf,
   gazeFrame,
   LOOPS,
   setHat,
+  shownFrames,
   SPRITE_HEADROOM,
   SPRITE_SIZE,
   type Facing,
@@ -13,7 +13,7 @@ import {
 } from '../character/sprite'
 import './character.css'
 
-/** Each frame's SVG paths, worked out the first time it shows. */
+/** Each gaze frame's SVG paths, worked out the first time it shows. */
 const paths = new WeakMap<Frame, ReturnType<typeof framePaths>>()
 function pathsOf(frame: Frame): ReturnType<typeof framePaths> {
   let found = paths.get(frame)
@@ -24,19 +24,8 @@ function pathsOf(frame: Frame): ReturnType<typeof framePaths> {
   return found
 }
 
-/** Every pose, for drawing ahead of time. */
-const ALL_POSES: Pose[] = [
-  'idle',
-  'walk-left',
-  'walk-right',
-  'dragged',
-  'flung',
-  'splat',
-  ...FIDGETS,
-  ...SPELL_POSES,
-  ...REACTIONS,
-  ...HELD_POSES,
-]
+/** Every pose (each has a move: character/moves/), for drawing ahead of time, the basics first. */
+const ALL_POSES = Object.keys(LOOPS) as Pose[]
 
 /**
  * The character: pixel art (character/sprite.ts) drawn `box` DIPs wide and a little taller, for
@@ -68,7 +57,7 @@ export function Character(props: {
     let timer = setTimeout(function next() {
       const pose = waiting.shift()
       if (!pose) return
-      framesOf(pose, facing).forEach(pathsOf)
+      shownFrames(pose, facing)
       timer = setTimeout(next, 50)
     }, 500)
     return () => clearTimeout(timer)
@@ -106,7 +95,7 @@ export function Character(props: {
 function Frames({ pose, facing }: { pose: Pose; facing: Facing }) {
   const [index, setIndex] = useState(0)
   const [still] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches)
-  const frames = framesOf(pose, facing)
+  const frames = shownFrames(pose, facing)
 
   useEffect(() => {
     if (still || (!LOOPS[pose] && index === frames.length - 1)) return
@@ -114,7 +103,7 @@ function Frames({ pose, facing }: { pose: Pose; facing: Facing }) {
     return () => clearTimeout(timer)
   }, [pose, index, frames, still])
 
-  return pathsOf(frames[index]!).map(({ className, d }) => (
+  return frames[index]!.paths.map(({ className, d }) => (
     <path key={className} className={className} d={d} />
   ))
 }

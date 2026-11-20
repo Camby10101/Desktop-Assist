@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { battleFrame, MONSTER_SIZE, type BattlePlan, type MonsterKind } from '@shared/battle'
+import { fitToWindow } from '../lib/overlayCanvas'
 
 // The monsters of her battle (shared/battle.ts), my own designs, as pixel art: rows of letters,
 // each a colour (MONSTER_COLOURS), `.` see-through, two frames each (walking, or wings beating),
@@ -166,12 +167,7 @@ export function BattleView() {
       return
     }
     const starts = Number(params.get('starts')) || Date.now()
-    const origin = { x: window.screenX, y: window.screenY }
-    const ratio = window.devicePixelRatio || 1
-    element.width = Math.round(window.innerWidth * ratio)
-    element.height = Math.round(window.innerHeight * ratio)
-    const g = element.getContext('2d')!
-    g.scale(ratio, ratio)
+    const { g, origin } = fitToWindow(element)
     const px = plan.scale
     const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     const tick = () => {
