@@ -60,6 +60,7 @@ export function setHat(on: boolean): void {
   if (wearsHat() === on) return
   wearHat(on)
   made.clear()
+  shown.clear()
   gazes.clear()
   gazing = null
 }
@@ -79,25 +80,54 @@ export type Facing = 'left' | 'right'
 
 const made = new Map<string, Frame[]>()
 
+/** Which way a pose faces: poses with a way in their name (walking, pouncing, peeking) face that way. */
+const wayOf = (pose: Name, facing: Facing): Facing =>
+  pose.endsWith('-left') ? 'left' : pose.endsWith('-right') ? 'right' : facing
+
+/** A pose's frames drawn facing `way` (from `right`, its frames facing right, if they're drawn). */
+function drawFacing(pose: Name, way: Facing, right?: Frame[]): Frame[] {
+  const move = MOVES[pose]
+  if (way === 'right') return right ?? move.frames()
+  return (move.left?.() ?? right ?? move.frames()).map((f) => ({ rows: mirror(f.rows), ms: f.ms }))
+}
+
 /**
  * A pose's frames, facing `facing` (walking faces the way she walks, whatever `facing` says).
  * Drawn the first time they're asked for, then kept.
  */
 export function framesOf(pose: Name, facing: Facing): Frame[] {
-  // Poses with a way in their name (walking, pouncing, peeking) face that way, whatever `facing`
-  // says.
-  const way = pose.endsWith('-left') ? 'left' : pose.endsWith('-right') ? 'right' : facing
+  const way = wayOf(pose, facing)
   const key = `${pose}:${way}`
   let frames = made.get(key)
   if (!frames) {
-    const move = MOVES[pose]
-    const right = made.get(`${pose}:right`) ?? move.frames()
+    const right = made.get(`${pose}:right`) ?? MOVES[pose].frames()
     made.set(`${pose}:right`, right)
-    frames =
-      way === 'right'
-        ? right
-        : (move.left?.() ?? right).map((f) => ({ rows: mirror(f.rows), ms: f.ms }))
+    frames = drawFacing(pose, way, right)
     made.set(key, frames)
+  }
+  return frames
+}
+
+/** A frame ready to show: its SVG paths (see framePaths), and how long it shows. */
+export interface ShownFrame {
+  paths: { className: string; d: string }[]
+  ms: number
+}
+
+const shown = new Map<string, ShownFrame[]>()
+
+/**
+ * A pose's frames as framesOf has them, ready to show as SVG paths: what Character plays. Only
+ * the paths are kept, not the frames' letters (nor her frames facing the other way), so her page
+ * holds much less: all her poses' frames come to some thousands.
+ */
+export function shownFrames(pose: Name, facing: Facing): ShownFrame[] {
+  const way = wayOf(pose, facing)
+  const key = `${pose}:${way}`
+  let frames = shown.get(key)
+  if (!frames) {
+    frames = drawFacing(pose, way).map((f) => ({ paths: framePaths(f.rows), ms: f.ms }))
+    shown.set(key, frames)
   }
   return frames
 }
@@ -107,27 +137,40 @@ export const animationLength = (pose: Name): number =>
   framesOf(pose, 'right').reduce((total, f) => total + f.ms, 0)
 
 /**
- * A frame as one SVG path per colour: each run of same-coloured pixels along a row is one
- * rectangle, so a frame is a few dozen elements rather than thousands.
+ * A frame as one SVG path per colour, each a set of rectangles: a run of same-coloured pixels
+ * along a row, carried on down the rows below for as long as they have the same run. So a frame
+ * is a few dozen elements rather than thousands, and its paths are short.
  */
 export function framePaths(rows: string[]): { className: string; d: string }[] {
   const byColour = new Map<string, string[]>()
+  // Runs still going down the rows (colour, start and end along the row): the row each began on.
+  let open = new Map<string, number>()
+  const close = (run: string, top: number, bottom: number) => {
+    const [pixel, x, end] = run.split('|') as [string, string, string]
+    const width = Number(end) - Number(x)
+    const rects = byColour.get(pixel) ?? []
+    rects.push(`M${x} ${top}h${width}v${bottom - top}h-${width}z`)
+    byColour.set(pixel, rects)
+  }
   rows.forEach((row, y) => {
+    const runs = new Map<string, number>()
     let x = 0
     while (x < row.length) {
       const pixel = row[x]!
       let end = x + 1
       while (end < row.length && row[end] === pixel) end++
       if (pixel !== '.') {
-        const runs = byColour.get(pixel) ?? []
-        runs.push(`M${x} ${y}h${end - x}v1h-${end - x}z`)
-        byColour.set(pixel, runs)
+        const run = `${pixel}|${x}|${end}`
+        runs.set(run, open.get(run) ?? y)
       }
       x = end
     }
+    for (const [run, top] of open) if (!runs.has(run)) close(run, top, y)
+    open = runs
   })
-  return [...byColour].map(([pixel, runs]) => ({
+  for (const [run, top] of open) close(run, top, rows.length)
+  return [...byColour].map(([pixel, rects]) => ({
     className: PALETTE[pixel] ?? 'px-hair-line',
-    d: runs.join(''),
+    d: rects.join(''),
   }))
 }

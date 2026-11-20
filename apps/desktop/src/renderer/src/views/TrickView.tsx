@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { iconOf, trickFrame, type TrickPlan } from '@shared/tricks'
+import { fitToWindow } from '../lib/overlayCanvas'
 
 /** What the main process sends a trick's page (in its query string). */
 interface Trick {
@@ -88,12 +89,7 @@ export function TrickView() {
     const element = canvas.current
     if (!element || !trick) return
     const starts = Number(params.get('starts')) || Date.now()
-    const origin = { x: window.screenX, y: window.screenY }
-    const ratio = window.devicePixelRatio || 1
-    element.width = Math.round(window.innerWidth * ratio)
-    element.height = Math.round(window.innerHeight * ratio)
-    const g = element.getContext('2d')!
-    g.scale(ratio, ratio)
+    const { g, origin } = fitToWindow(element)
     g.imageSmoothingEnabled = false
     let frame = 0
     let alive = true

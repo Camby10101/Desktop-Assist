@@ -23,6 +23,7 @@ import {
   gazeFrames,
   mirror,
   setHat,
+  shownFrames,
 } from '../src/renderer/src/character/sprite'
 
 const POSES: PoseName[] = ['idle', 'walk-left', 'walk-right', 'dragged', ...FIDGETS, ...SPELL_POSES]
@@ -40,8 +41,12 @@ function decode(paths: { className: string; d: string }[]): string[] {
   )
   const letterOf = Object.fromEntries(Object.entries(PALETTE).map(([k, v]) => [v, k]))
   for (const { className, d } of paths) {
-    for (const [, x, y, n] of d.matchAll(/M(\d+) (\d+)h(\d+)v1h-\d+z/g)) {
-      for (let i = 0; i < Number(n); i++) grid[Number(y)]![Number(x) + i] = letterOf[className]!
+    for (const [, x, y, w, h] of d.matchAll(/M(\d+) (\d+)h(\d+)v(\d+)h-\d+z/g)) {
+      for (let j = 0; j < Number(h); j++) {
+        for (let i = 0; i < Number(w); i++) {
+          grid[Number(y) + j]![Number(x) + i] = letterOf[className]!
+        }
+      }
     }
   }
   return grid.map((row) => row.join(''))
@@ -692,12 +697,31 @@ describe('the rasteriser', () => {
 })
 
 describe('framePaths', () => {
-  it('draws exactly the frame, one path per colour', () => {
-    for (const pose of ['idle', 'walk-right', 'sip'] as const) {
-      for (const { rows } of framesOf(pose, 'right').slice(0, 3)) {
+  it('draws exactly the frame, one path per colour, for every frame of every pose', () => {
+    for (const pose of POSES) {
+      for (const { rows } of framesOf(pose, 'right')) {
         const paths = framePaths(rows)
         expect(decode(paths)).toEqual(rows)
         expect(new Set(paths.map((p) => p.className)).size).toBe(paths.length)
+      }
+    }
+  })
+
+  it('carries runs on down the rows, so paths are short', () => {
+    const rows = ['.aa.', '.aa.', '.ab.', '....']
+    expect(framePaths(rows)).toEqual([
+      { className: PALETTE['a'], d: 'M1 0h2v2h-2zM1 2h1v1h-1z' },
+      { className: PALETTE['b'], d: 'M2 2h1v1h-1z' },
+    ])
+  })
+
+  it('plays the same frames on her page as framesOf, as paths only, facing either way', () => {
+    for (const pose of ['idle', 'doze', 'walk-left'] as const) {
+      for (const facing of ['left', 'right'] as const) {
+        const frames = framesOf(pose, facing)
+        const shown = shownFrames(pose, facing)
+        expect(shown.map((f) => f.ms)).toEqual(frames.map((f) => f.ms))
+        shown.forEach((f, i) => expect(decode(f.paths)).toEqual(frames[i]!.rows))
       }
     }
   })
