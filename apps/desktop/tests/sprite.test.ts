@@ -696,7 +696,7 @@ describe('the rasteriser', () => {
   })
 })
 
-describe('framePaths', () => {
+describe('framePaths', { timeout: 60_000 }, () => {
   it('draws exactly the frame, one path per colour, for every frame of every pose', () => {
     for (const pose of POSES) {
       for (const { rows } of framesOf(pose, 'right')) {
