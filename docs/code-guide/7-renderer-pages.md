@@ -73,7 +73,7 @@ names start with a capital letter and return JSX. In JSX, `<BubbleView />` means
 
 <!-- code: apps/desktop/src/renderer/src/main.tsx -->
 
-[`src/renderer/src/main.tsx`, lines 1–36](../../apps/desktop/src/renderer/src/main.tsx#L1-L36)
+[`src/renderer/src/main.tsx`, lines 1–39](../../apps/desktop/src/renderer/src/main.tsx#L1-L39)
 
 ```tsx
 import { StrictMode } from 'react'
@@ -82,6 +82,7 @@ import './styles.css'
 import { BubbleView } from './views/BubbleView'
 import { ClonesView } from './views/ClonesView'
 import { FamiliarView } from './views/FamiliarView'
+import { BattleView } from './views/BattleView'
 import { TrickView } from './views/TrickView'
 import { PanelView } from './views/PanelView'
 import { ScreenSaverView } from './views/ScreenSaverView'
@@ -107,6 +108,8 @@ createRoot(document.getElementById('root')!).render(
       <FamiliarView />
     ) : view === 'trick' ? (
       <TrickView />
+    ) : view === 'battle' ? (
+      <BattleView />
     ) : (
       <PanelView />
     )}

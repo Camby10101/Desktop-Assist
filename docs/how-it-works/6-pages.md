@@ -50,6 +50,7 @@ requests. **Used by:** the windows (each loads `index.html?view=…`).
 | `screensaver`     | `ScreenSaverView` | the fade to white, then the sunset or the falling stars (`lib/screensaver/`)                 |
 | `familiar`        | `FamiliarView`    | her black cat (`character/cat.ts`, moved by `lib/familiar.ts`)                               |
 | `trick`           | `TrickView`       | the taskbar's icons out of their buttons, and covers over the buttons                        |
+| `battle`          | `BattleView`      | the monsters of her battle, her bolts and their bursts (`shared/battle.ts`)                  |
 
 The passive pages are told everything in their address (where she is, her size, when it began) and
 then draw on their own, usually on a `<canvas>`, a frame at a time with `requestAnimationFrame`.
@@ -176,6 +177,12 @@ starts, a push as the ball leaves her hand. Most are held out to her side, again
 rather than her purple robe, where small toys are easy to miss. The paper plane flies a loop round
 her, and on the far side it's drawn only where nothing of her is (`set(…, '.')`), so it passes
 behind her.
+
+The `spirit` habit works the same way with a visitor instead of a toy: a little spirit (a round
+mint body, dark dot eyes, pale leaf wings beating in two frames) appears beside her, flies to her
+and lands on her palm (hearts), loops round her head (behind her on the far side), hovers while
+they wave to each other, and fades. Its timetable is `SPIRIT`. In her battle, `charge` is a glow in
+her hand: a glint, a ball, and a sparkle as each bolt leaves it.
 
 #### Animations (in `sprite.ts`)
 

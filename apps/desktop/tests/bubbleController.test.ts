@@ -247,7 +247,7 @@ describe('on its own', () => {
       'idle',
       'walk-right', // at 24 s, back to 50
       'idle',
-      'butterfly', // at 39 s: alone for 30 s now (the one the dice pick)
+      'doze', // at 39 s: alone for 30 s now (the one the dice pick)
       'idle',
     ])
   })
@@ -259,9 +259,9 @@ describe('on its own', () => {
       'idle',
       'walk-right',
       'idle',
-      'butterfly',
+      'doze',
       'idle',
-      'doze', // anything but the butterfly again
+      'butterfly', // anything but the doze again
       'idle',
     ])
   })
@@ -321,7 +321,7 @@ describe('as Settings say', () => {
     startWith({ standStill: true, noIdles: false, noHat: false })
     vi.advanceTimersByTime(46_000)
     // Resting at 8.5 s and 22.5 s; alone for 30 s at 36.5 s.
-    expect(poses).toEqual(['butterfly', 'idle'])
+    expect(poses).toEqual(['doze', 'idle'])
     expect(bubble.bounds).toEqual(home())
   })
 

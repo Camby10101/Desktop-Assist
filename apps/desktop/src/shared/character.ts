@@ -52,6 +52,8 @@ import { EXPLOSION, TELEPORT } from './spells'
  *   her and back in front), and she catches it.
  * - `ball`: a bouncy ball appears in her hand; she bounces it on the taskbar, tosses it up high and
  *   catches it.
+ * - `spirit`: a little spirit with leaf wings appears beside her in a swirl of sparkles; it flies to
+ *   her, lands on her palm (hearts), loops round her head, they wave to each other, and it fades.
  * - `dance`: a little jig, stepping side to side, an arm up and a hand on her hip, then the other.
  * - `yawn`: a big yawn behind her hand, then a sleepy sway (late at night only: see TIMED).
  * - `confetti`: a cheer and a burst of confetti (Friday evenings only, and often then: see TIMED).
@@ -91,6 +93,7 @@ export const FIDGETS = [
   'cards',
   'plane',
   'ball',
+  'spirit',
   'yawn',
   'confetti',
   'dance',
@@ -180,6 +183,7 @@ export const FIDGET_MS: Record<Fidget, number> = {
   cards: 4000,
   plane: 4400,
   ball: 4000,
+  spirit: 6400,
   yawn: 3600,
   confetti: 3200,
   dance: 3200,
@@ -264,6 +268,9 @@ export const SNOOZE = { afterMs: 5 * 60_000, wakeMs: 1500 } as const
  * - `portal`: waving through a portal open on top of a window (it opens, she rises into it, waves,
  *   sinks away and it closes: played once, for PORTAL_MS).
  * - `portal-back`: clicked in her portal: she sinks away at once and it closes (PORTAL_BACK_MS).
+ * - `ready-left`, `ready-right`: facing monsters that way (her battle: shared/battle.ts), seen
+ *   diagonally, her hand out toward them with a glow charging in it.
+ * - `cast-left`, `cast-right`: casting a bolt at them: a thrust of her hand, the glow flaring.
  * - `snooze`: sitting asleep, head nodding, z's floating up (nobody's been at the PC a while).
  */
 export const HELD_POSES = [
@@ -273,6 +280,10 @@ export const HELD_POSES = [
   'portal',
   'portal-back',
   'snooze',
+  'ready-left',
+  'ready-right',
+  'cast-left',
+  'cast-right',
 ] as const
 export type HeldPose = (typeof HELD_POSES)[number]
 

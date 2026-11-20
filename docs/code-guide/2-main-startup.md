@@ -40,7 +40,7 @@ tests can drive them with fakes. `index.ts` is the only file that knows about al
 
 <!-- code: apps/desktop/src/main/index.ts#SHUTDOWN_TIMEOUT_MS,controller,tray,refusedSwitches -->
 
-[`src/main/index.ts`, lines 88–111](../../apps/desktop/src/main/index.ts#L88-L111)
+[`src/main/index.ts`, lines 89–112](../../apps/desktop/src/main/index.ts#L89-L112)
 
 ```ts
 const SHUTDOWN_TIMEOUT_MS = 2000
@@ -124,7 +124,7 @@ backend, the conversation and the JumpCloud sign-in) are in a separate function,
 
 <!-- code: apps/desktop/src/main/index.ts#start.tenant -->
 
-[`src/main/index.ts`, line 128](../../apps/desktop/src/main/index.ts#L128)
+[`src/main/index.ts`, line 129](../../apps/desktop/src/main/index.ts#L129)
 
 ```ts
 const tenant = await withDevOverrides(TenantSchema.parse(tenantConfig))
@@ -153,7 +153,7 @@ const tenant = await withDevOverrides(TenantSchema.parse(tenantConfig))
 
 <!-- code: apps/desktop/src/main/index.ts#start.userData,screenshotsDir,actionCount,log,notes,settings -->
 
-[`src/main/index.ts`, lines 132–143](../../apps/desktop/src/main/index.ts#L132-L143)
+[`src/main/index.ts`, lines 133–144](../../apps/desktop/src/main/index.ts#L133-L144)
 
 ```ts
 const userData = app.getPath('userData')
@@ -193,7 +193,7 @@ const settings = new SettingsService(join(userData, 'preferences.json'), screens
 
 <!-- code: apps/desktop/src/main/index.ts#start.bubbleWindow,panelWindow,windows,stopKeepingOnTop,windowsReady,broadcast -->
 
-[`src/main/index.ts`, lines 149–162](../../apps/desktop/src/main/index.ts#L149-L162)
+[`src/main/index.ts`, lines 150–163](../../apps/desktop/src/main/index.ts#L150-L163)
 
 ```ts
 const bubbleWindow = createOverlayWindow('bubble', { width: box, height: box + headroom })
@@ -259,7 +259,7 @@ included. By the time a page's request is handled, its handler has been register
 
 <!-- code: apps/desktop/src/main/index.ts#start.openOverlay,vision,effects -->
 
-[`src/main/index.ts`, lines 164–193](../../apps/desktop/src/main/index.ts#L164-L193)
+[`src/main/index.ts`, lines 165–194](../../apps/desktop/src/main/index.ts#L165-L194)
 
 ```ts
 /**
@@ -270,7 +270,7 @@ included. By the time a page's request is handled, its handler has been register
 // `above`: over her too (her taskbar tricks' icons pass in front of her); otherwise she's put
 // back in front of it.
 const openOverlay =
-  (view: 'clones' | 'vision' | 'spell' | 'familiar' | 'trick', above = false) =>
+  (view: 'clones' | 'vision' | 'spell' | 'familiar' | 'trick' | 'battle', above = false) =>
   (bounds: Rect, query: Record<string, string>) => {
     const win = createOverlayWindow(view, { width: bounds.width, height: bounds.height }, query)
     win.setBounds(bounds)
@@ -348,7 +348,7 @@ below).
 
 <!-- code: apps/desktop/src/main/index.ts#start.bubble -->
 
-[`src/main/index.ts`, lines 305–339](../../apps/desktop/src/main/index.ts#L305-L339)
+[`src/main/index.ts`, lines 310–344](../../apps/desktop/src/main/index.ts#L310-L344)
 
 ```ts
 const bubble = new BubbleController({
@@ -444,7 +444,7 @@ here.
 
 <!-- code: apps/desktop/src/main/index.ts#start.clones,castSpell -->
 
-[`src/main/index.ts`, lines 343–399](../../apps/desktop/src/main/index.ts#L343-L399)
+[`src/main/index.ts`, lines 348–404](../../apps/desktop/src/main/index.ts#L348-L404)
 
 ```ts
 // Her clones: a window along the taskbar.
@@ -519,7 +519,7 @@ the Spells menu.
 
 <!-- code: apps/desktop/src/main/index.ts#start.screenSaver -->
 
-[`src/main/index.ts`, lines 351–379](../../apps/desktop/src/main/index.ts#L351-L379)
+[`src/main/index.ts`, lines 356–384](../../apps/desktop/src/main/index.ts#L356-L384)
 
 ```ts
 // The screen saver: a window over the whole of every display, in front of the taskbar too (from
@@ -599,7 +599,7 @@ check; their pages call in only to say the user is back, which `registerIpc()` a
 
 <!-- code: apps/desktop/src/main/index.ts#start.screenshots,notify,copyScreenshots -->
 
-[`src/main/index.ts`, lines 401–422](../../apps/desktop/src/main/index.ts#L401-L422)
+[`src/main/index.ts`, lines 406–427](../../apps/desktop/src/main/index.ts#L406-L427)
 
 ```ts
 const screenshots = new ScreenshotService(screenshotsDir, () =>
@@ -657,7 +657,7 @@ const copyScreenshots = async (paths: string[]) => {
 
 <!-- code: apps/desktop/src/main/index.ts#start.builtIn,claudeDesktop -->
 
-[`src/main/index.ts`, lines 425–454](../../apps/desktop/src/main/index.ts#L425-L454)
+[`src/main/index.ts`, lines 430–459](../../apps/desktop/src/main/index.ts#L430-L459)
 
 ```ts
 const builtIn =
@@ -736,7 +736,7 @@ exists.
 
 <!-- code: apps/desktop/src/main/index.ts#start.netFetch,updater -->
 
-[`src/main/index.ts`, lines 455–485](../../apps/desktop/src/main/index.ts#L455-L485)
+[`src/main/index.ts`, lines 460–490](../../apps/desktop/src/main/index.ts#L460-L490)
 
 ```ts
 // Electron's fetch, so a proxy set in Windows is used.
@@ -784,7 +784,7 @@ const updater = updates
 - `new Updater({`: Settings → Check for updates (see
   [`updates.ts`](#srcmainupdatests-checking-for-updates)).
 - `currentVersion: app.getVersion()`: this copy's version, from `apps/desktop/package.json`
-  (`2.5.1` at the moment; `1.0.0` was the first release).
+  (`2.5.2` at the moment; `1.0.0` was the first release).
 - `` releasesUrl: `${updates.api}/repos/${updates.repo}/releases?per_page=30` ``: GitHub's API
   address for the repository's releases (the newest 30), such as
   `https://api.github.com/repos/Camby10101/Desktop-Wizard/releases?per_page=30`.
@@ -816,7 +816,7 @@ const updater = updates
 
 <!-- code: apps/desktop/src/main/index.ts#start.appsStatus,portalApps -->
 
-[`src/main/index.ts`, lines 487–509](../../apps/desktop/src/main/index.ts#L487-L509)
+[`src/main/index.ts`, lines 492–514](../../apps/desktop/src/main/index.ts#L492-L514)
 
 ```ts
 let appsStatus: AppsState['status'] = 'loading'
@@ -881,7 +881,7 @@ icon (see [Your apps](10-apps.md)). It's only set up when the tenant has a `port
 
 <!-- code: apps/desktop/src/main/index.ts#start.requests,memoryPath,atlassianStatus,atlassian,desk -->
 
-[`src/main/index.ts`, lines 514–583](../../apps/desktop/src/main/index.ts#L514-L583)
+[`src/main/index.ts`, lines 519–588](../../apps/desktop/src/main/index.ts#L519-L588)
 
 ```ts
 const requests = serviceDesk?.requests
@@ -1010,7 +1010,7 @@ Two statements follow:
 
 <!-- code: apps/desktop/src/main/index.ts#start.onDisplayChange -->
 
-[`src/main/index.ts`, lines 651–655](../../apps/desktop/src/main/index.ts#L651-L655)
+[`src/main/index.ts`, lines 656–660](../../apps/desktop/src/main/index.ts#L656-L660)
 
 ```ts
 const onDisplayChange = () => {
@@ -1081,7 +1081,7 @@ Everything else in this part of `start()` is plain statements:
 
 <!-- code: apps/desktop/src/main/index.ts#start.shuttingDown -->
 
-[`src/main/index.ts`, lines 660–661](../../apps/desktop/src/main/index.ts#L660-L661)
+[`src/main/index.ts`, lines 665–666](../../apps/desktop/src/main/index.ts#L665-L666)
 
 ```ts
 // Save the text box before quitting. before-quit fires again after the second app.quit().
@@ -1126,7 +1126,7 @@ there, and none of it is lost before the window shows.
 
 <!-- code: apps/desktop/src/main/index.ts#start.stopWatchingFront -->
 
-[`src/main/index.ts`, lines 688–698](../../apps/desktop/src/main/index.ts#L688-L698)
+[`src/main/index.ts`, lines 693–703](../../apps/desktop/src/main/index.ts#L693-L703)
 
 ```ts
 // For its first ten minutes, make sure the bubble isn't stuck behind other apps' windows.
@@ -1178,7 +1178,7 @@ was part of `start()`. It returns a [`BuiltInChat`](#builtinchat): the `AuthMana
 
 <!-- code: apps/desktop/src/main/index.ts#startBuiltInChat.devBaseUrl,lastIdToken,backend,chat -->
 
-[`src/main/index.ts`, lines 718–742](../../apps/desktop/src/main/index.ts#L718-L742)
+[`src/main/index.ts`, lines 723–747](../../apps/desktop/src/main/index.ts#L723-L747)
 
 ```ts
 // Dev runs may point at a local test server; an installed app always talks to Anthropic.
@@ -1251,7 +1251,7 @@ const chat = new ChatSession({
 
 <!-- code: apps/desktop/src/main/index.ts#startBuiltInChat.missing,localIssuer,authState,auth -->
 
-[`src/main/index.ts`, lines 744–768](../../apps/desktop/src/main/index.ts#L744-L768)
+[`src/main/index.ts`, lines 749–773](../../apps/desktop/src/main/index.ts#L749-L773)
 
 ```ts
 const missing = missingSettings(signIn, claudeAccess)
@@ -1328,7 +1328,7 @@ Two statements end the function:
 
 <!-- code: apps/desktop/src/main/index.ts#safeStorageEncryptor -->
 
-[`src/main/index.ts`, lines 774–779](../../apps/desktop/src/main/index.ts#L774-L779)
+[`src/main/index.ts`, lines 779–784](../../apps/desktop/src/main/index.ts#L779-L784)
 
 ```ts
 /** Windows DPAPI through Electron: only this Windows user can decrypt what it encrypts. */
@@ -1356,7 +1356,7 @@ The encryption `SecretStore` uses for the saved sign-in. `SecretStore` only know
 
 <!-- code: apps/desktop/src/main/index.ts#withDevOverrides -->
 
-[`src/main/index.ts`, lines 781–804](../../apps/desktop/src/main/index.ts#L781-L804)
+[`src/main/index.ts`, lines 786–809](../../apps/desktop/src/main/index.ts#L786-L809)
 
 ```ts
 /**
@@ -1412,7 +1412,7 @@ example to try the built-in chat against a test identity provider, without editi
 
 <!-- code: apps/desktop/src/main/index.ts#isLoopback -->
 
-[`src/main/index.ts`, lines 806–808](../../apps/desktop/src/main/index.ts#L806-L808)
+[`src/main/index.ts`, lines 811–813](../../apps/desktop/src/main/index.ts#L811-L813)
 
 ```ts
 function isLoopback(url: URL): boolean {
@@ -1430,7 +1430,7 @@ in `hostname`. Used only to decide whether plain `http` is allowed for a dev ide
 
 <!-- code: apps/desktop/src/main/index.ts#toArea,electronDisplays -->
 
-[`src/main/index.ts`, lines 810–825](../../apps/desktop/src/main/index.ts#L810-L825)
+[`src/main/index.ts`, lines 815–830](../../apps/desktop/src/main/index.ts#L815-L830)
 
 ```ts
 /** Electron's `screen`, in the shape the bubble controller uses. All coordinates are DIPs. */
@@ -1477,7 +1477,7 @@ method is called, which happens after `start()` has begun.
 
 <!-- code: apps/desktop/src/main/index.ts#fail -->
 
-[`src/main/index.ts`, lines 827–831](../../apps/desktop/src/main/index.ts#L827-L831)
+[`src/main/index.ts`, lines 832–836](../../apps/desktop/src/main/index.ts#L832-L836)
 
 ```ts
 function fail(error: unknown): void {

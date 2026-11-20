@@ -207,8 +207,8 @@ export const FIDGET_WEIGHT: Partial<Record<Fidget, number>> = { vision: 0.2 }
  * Her performances: longer things she does that move her about and draw outside her own window
  * (see Performer in BubbleController.ts): watching the pointer; tricks with the taskbar's icons
  * (carrying one about, juggling three, swapping two as a prank, perching on one, sneezing one
- * flying, a wand tap); peeking round a window; waving through a portal on top of a window; and a visit from her
- * familiar.
+ * flying, a wand tap); peeking round a window; waving through a portal on top of a window; a visit
+ * from her familiar; and a battle with monsters.
  */
 export const PERFORMANCES = [
   'watch',
@@ -221,12 +221,14 @@ export const PERFORMANCES = [
   'peek',
   'portal',
   'familiar',
+  'battle',
 ] as const
 export type PerformanceName = (typeof PERFORMANCES)[number]
 
 /**
  * How likely each performance is when it can be done, against 1 for a habit: the taskbar tricks,
- * her portal and watching the pointer are rare (a tenth as likely), the rest as likely as a habit.
+ * her portal, her battle and watching the pointer are rare (a tenth as likely), the rest as likely
+ * as a habit.
  */
 export const PERFORMANCE_WEIGHT: Record<PerformanceName, number> = {
   watch: 0.1,
@@ -238,11 +240,12 @@ export const PERFORMANCE_WEIGHT: Record<PerformanceName, number> = {
   tap: 0.1,
   peek: 1,
   portal: 0.1,
+  battle: 0.1,
   familiar: 1,
 }
 
 /** Performances that don't move her from where she stands (so they're fine when she's to stand still). */
-export const STAYING_PUT: readonly PerformanceName[] = ['watch', 'familiar']
+export const STAYING_PUT: readonly PerformanceName[] = ['watch', 'familiar', 'battle']
 
 /**
  * What she might do besides her habits: the time (`when`, local), for the timed habits (TIMED;

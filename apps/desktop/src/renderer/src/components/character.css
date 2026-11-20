@@ -150,6 +150,20 @@
   fill: #dcfbff;
 }
 
+/* The little spirit that visits her: a mint glow, a teal body, pale leaf wings, dark eyes. */
+.px-spirit-glow {
+  fill: #c8fff0;
+}
+.px-spirit {
+  fill: #5fe3c1;
+}
+.px-spirit-wing {
+  fill: #e9dcff;
+}
+.px-spirit-eye {
+  fill: #1f2d3d;
+}
+
 /* Her shadow on the taskbar, in the accent colour while the panel is open. */
 .px-shadow {
   fill: rgb(0 0 0 / 0.22);

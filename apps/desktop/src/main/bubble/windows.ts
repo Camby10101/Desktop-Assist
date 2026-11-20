@@ -6,7 +6,15 @@ import type { PanelSurface, Surface } from './BubbleController'
 import { checkOnTop, type OnTopWindow } from './frontCheck'
 
 export type View =
-  'bubble' | 'panel' | 'clones' | 'vision' | 'spell' | 'screensaver' | 'familiar' | 'trick'
+  | 'bubble'
+  | 'panel'
+  | 'clones'
+  | 'vision'
+  | 'spell'
+  | 'screensaver'
+  | 'familiar'
+  | 'trick'
+  | 'battle'
 
 /** Windows that only show something: they never take the mouse or the focus. */
 const passive = (view: View) =>
@@ -14,7 +22,8 @@ const passive = (view: View) =>
   view === 'vision' ||
   view === 'spell' ||
   view === 'familiar' ||
-  view === 'trick'
+  view === 'trick' ||
+  view === 'battle'
 
 /**
  * How the overlay windows stay on top. Electron's default level for always-on-top, "floating",

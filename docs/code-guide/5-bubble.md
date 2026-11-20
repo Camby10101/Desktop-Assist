@@ -2532,7 +2532,7 @@ export const FIDGET_WEIGHT: Partial<Record<Fidget, number>> = { vision: 0.2 }
 
 <!-- code: apps/desktop/src/main/bubble/wander.ts#activityDelay -->
 
-[`src/main/bubble/wander.ts`, lines 256–260](../../apps/desktop/src/main/bubble/wander.ts#L256-L260)
+[`src/main/bubble/wander.ts`, lines 259–263](../../apps/desktop/src/main/bubble/wander.ts#L259-L263)
 
 ```ts
 /** How long until the next thing the character does on its own (ms). */
@@ -2556,7 +2556,7 @@ How long the character waits before doing something on its own, in milliseconds.
 
 <!-- code: apps/desktop/src/main/bubble/wander.ts#nextActivity -->
 
-[`src/main/bubble/wander.ts`, lines 262–316](../../apps/desktop/src/main/bubble/wander.ts#L262-L316)
+[`src/main/bubble/wander.ts`, lines 265–319](../../apps/desktop/src/main/bubble/wander.ts#L265-L319)
 
 ```ts
 /**
@@ -2655,7 +2655,7 @@ they wait for a quiet spell rather than starting up while someone has just been 
 
 <!-- code: apps/desktop/src/main/bubble/wander.ts#walkTarget -->
 
-[`src/main/bubble/wander.ts`, lines 318–330](../../apps/desktop/src/main/bubble/wander.ts#L318-L330)
+[`src/main/bubble/wander.ts`, lines 321–333](../../apps/desktop/src/main/bubble/wander.ts#L321-L333)
 
 ```ts
 /**
@@ -2697,7 +2697,7 @@ toward its corner or away from it, with `roll` choosing the spot.
 
 <!-- code: apps/desktop/src/main/bubble/wander.ts#walkStep -->
 
-[`src/main/bubble/wander.ts`, lines 332–344](../../apps/desktop/src/main/bubble/wander.ts#L332-L344)
+[`src/main/bubble/wander.ts`, lines 335–347](../../apps/desktop/src/main/bubble/wander.ts#L335-L347)
 
 ```ts
 /**
@@ -2732,7 +2732,7 @@ One frame of a walk: the new inset, `dtMs` milliseconds of walking closer to `to
 
 <!-- code: apps/desktop/src/main/bubble/wander.ts#fallDuration -->
 
-[`src/main/bubble/wander.ts`, lines 346–354](../../apps/desktop/src/main/bubble/wander.ts#L346-L354)
+[`src/main/bubble/wander.ts`, lines 349–357](../../apps/desktop/src/main/bubble/wander.ts#L349-L357)
 
 ```ts
 /**
@@ -2761,7 +2761,7 @@ How long the fall after a drop takes, in milliseconds.
 
 <!-- code: apps/desktop/src/main/bubble/wander.ts#fallPosition -->
 
-[`src/main/bubble/wander.ts`, lines 356–362](../../apps/desktop/src/main/bubble/wander.ts#L356-L362)
+[`src/main/bubble/wander.ts`, lines 359–365](../../apps/desktop/src/main/bubble/wander.ts#L359-L365)
 
 ```ts
 /** Position at progress `t` (0–1) of the fall: speeding up as it falls, like a dropped thing. */
@@ -3714,11 +3714,19 @@ Key ideas:
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#View,passive -->
 
-[`src/main/bubble/windows.ts`, lines 8–17](../../apps/desktop/src/main/bubble/windows.ts#L8-L17)
+[`src/main/bubble/windows.ts`, lines 8–26](../../apps/desktop/src/main/bubble/windows.ts#L8-L26)
 
 ```ts
 export type View =
-  'bubble' | 'panel' | 'clones' | 'vision' | 'spell' | 'screensaver' | 'familiar' | 'trick'
+  | 'bubble'
+  | 'panel'
+  | 'clones'
+  | 'vision'
+  | 'spell'
+  | 'screensaver'
+  | 'familiar'
+  | 'trick'
+  | 'battle'
 
 /** Windows that only show something: they never take the mouse or the focus. */
 const passive = (view: View) =>
@@ -3726,7 +3734,8 @@ const passive = (view: View) =>
   view === 'vision' ||
   view === 'spell' ||
   view === 'familiar' ||
-  view === 'trick'
+  view === 'trick' ||
+  view === 'battle'
 ```
 
 <!-- /code -->
@@ -3742,7 +3751,7 @@ const passive = (view: View) =>
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#ON_TOP_LEVEL,ON_TOP_CHECK_MS -->
 
-[`src/main/bubble/windows.ts`, lines 19–30](../../apps/desktop/src/main/bubble/windows.ts#L19-L30)
+[`src/main/bubble/windows.ts`, lines 28–39](../../apps/desktop/src/main/bubble/windows.ts#L28-L39)
 
 ```ts
 /**
@@ -3782,7 +3791,7 @@ the windows' style: before, neither was on top; now both are.
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#createOverlayWindow -->
 
-[`src/main/bubble/windows.ts`, lines 32–99](../../apps/desktop/src/main/bubble/windows.ts#L32-L99)
+[`src/main/bubble/windows.ts`, lines 41–108](../../apps/desktop/src/main/bubble/windows.ts#L41-L108)
 
 ```ts
 /**
@@ -3941,7 +3950,7 @@ spells' windows, which the comment doesn't mention (`passive()` covers all three
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#keepOnTop -->
 
-[`src/main/bubble/windows.ts`, lines 101–117](../../apps/desktop/src/main/bubble/windows.ts#L101-L117)
+[`src/main/bubble/windows.ts`, lines 110–126](../../apps/desktop/src/main/bubble/windows.ts#L110-L126)
 
 ```ts
 /**
@@ -3985,7 +3994,7 @@ ON_TOP_LEVEL)`, which also puts the window at the top of the always-on-top windo
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#bringToFront -->
 
-[`src/main/bubble/windows.ts`, lines 119–131](../../apps/desktop/src/main/bubble/windows.ts#L119-L131)
+[`src/main/bubble/windows.ts`, lines 128–140](../../apps/desktop/src/main/bubble/windows.ts#L128-L140)
 
 ```ts
 /**
@@ -4018,7 +4027,7 @@ calls it for the bubble when Windows says something else is at the bubble's cent
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#bubbleSurface,panelSurface -->
 
-[`src/main/bubble/windows.ts`, lines 133–156](../../apps/desktop/src/main/bubble/windows.ts#L133-L156)
+[`src/main/bubble/windows.ts`, lines 142–165](../../apps/desktop/src/main/bubble/windows.ts#L142-L165)
 
 ```ts
 export function bubbleSurface(win: BrowserWindow): Surface {
@@ -4064,7 +4073,7 @@ forwards each call to the matching Electron method.
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#resetClickThrough -->
 
-[`src/main/bubble/windows.ts`, lines 158–170](../../apps/desktop/src/main/bubble/windows.ts#L158-L170)
+[`src/main/bubble/windows.ts`, lines 167–179](../../apps/desktop/src/main/bubble/windows.ts#L167-L179)
 
 ```ts
 /**
@@ -4102,7 +4111,7 @@ been hidden, for example for a screenshot.
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#lockDown -->
 
-[`src/main/bubble/windows.ts`, lines 172–181](../../apps/desktop/src/main/bubble/windows.ts#L172-L181)
+[`src/main/bubble/windows.ts`, lines 181–190](../../apps/desktop/src/main/bubble/windows.ts#L181-L190)
 
 ```ts
 function lockDown(win: BrowserWindow, view: View): void {
@@ -4137,7 +4146,7 @@ Basic safety and crash recovery for every overlay page.
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#addEditContextMenu -->
 
-[`src/main/bubble/windows.ts`, lines 183–204](../../apps/desktop/src/main/bubble/windows.ts#L183-L204)
+[`src/main/bubble/windows.ts`, lines 192–213](../../apps/desktop/src/main/bubble/windows.ts#L192-L213)
 
 ```ts
 /** Right-click menu for the text box: spelling suggestions plus the usual edit commands. */

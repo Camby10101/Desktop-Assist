@@ -1,3 +1,4 @@
+import { BATTLE } from '@shared/battle'
 import {
   FIDGET_MS,
   LANDING,
@@ -21,6 +22,7 @@ import {
   LEG_LENGTH,
   PLANE,
   SPIN_TOP,
+  SPIRIT,
   YOYO,
   POTION,
   RAIN,
@@ -104,6 +106,11 @@ export const PALETTE: Record<string, string> = {
   p: 'px-portal',
   r: 'px-portal-light',
   R: 'px-portal-rim',
+  // The little spirit: its glow, its body, its leaf wings, its eyes.
+  T: 'px-spirit-glow',
+  U: 'px-spirit',
+  V: 'px-spirit-wing',
+  W: 'px-spirit-eye',
 }
 
 /**
@@ -948,6 +955,91 @@ function ball(): Key[] {
             ? 'happy'
             : 'neutral'
     return { view: 'front', ball: t, face, arms: [arm, ARM_DOWN] }
+  })
+}
+
+/**
+ * Facing monsters (her battle), seen diagonally: her near hand held out toward them, a glow
+ * charging in it, her other hand back; breathing, watching them, steady.
+ */
+function ready(): Key[] {
+  return Array.from({ length: 16 }, (_, i) => {
+    const phase = (i / 16) * Math.PI * 2
+    return {
+      pose: {
+        view: 'diagonal',
+        face: 'neutral',
+        lean: 0.04,
+        charge: 0.5 + 0.3 * Math.sin(phase),
+        arms: [
+          { shoulder: 1.15 + 0.03 * Math.sin(phase), elbow: 0.35 },
+          { shoulder: 0.35, elbow: 0.5 },
+        ],
+      },
+      ms: 80,
+    }
+  })
+}
+
+/**
+ * Casting at a monster (her battle), seen diagonally: she thrusts her hand out at it, the glow
+ * flaring into a sparkle as the bolt leaves her hand (BATTLE.launchMs in), then draws it back.
+ */
+function cast(): Key[] {
+  return through(BATTLE.castMs, (t) => {
+    const thrust = Math.sin(Math.min(1, t / 0.37) * (Math.PI / 2)) * (1 - between(t, 0.6, 1))
+    return {
+      view: 'diagonal',
+      face: t < 0.5 ? 'chant' : 'neutral',
+      lean: 0.04 + 0.05 * thrust,
+      charge: t < 0.37 ? 0.6 + t : t < 0.5 ? 0.9 : 0.3,
+      arms: [
+        { shoulder: 1.15 + 0.4 * thrust, elbow: 0.35 - 0.35 * thrust },
+        { shoulder: 0.35, elbow: 0.5 },
+      ],
+    }
+  })
+}
+
+/**
+ * A little spirit visiting, from the front: it appears beside her and she looks round, surprised,
+ * then smiles; she holds her hand out and it lands on her palm (hearts), her head tilting to it;
+ * it loops round her head and she follows it; it hovers beside her and they wave to each other;
+ * and it fades away.
+ */
+function spirit(): Key[] {
+  return through(FIDGET_MS.spirit, (t) => {
+    const holding =
+      between(t, SPIRIT.toHer[1] - 0.04, SPIRIT.land[0]) *
+      (1 - between(t, SPIRIT.land[1], SPIRIT.loop[0] + 0.04))
+    const waving =
+      between(t, SPIRIT.wave[0] - 0.03, SPIRIT.wave[0]) *
+      (1 - between(t, SPIRIT.wave[1], SPIRIT.gone[0] + 0.02))
+    const swing = Math.sin(t * 90) * waving
+    const hold = toward(OUT_SIDE, holding)
+    const arm: Arm =
+      waving > 0
+        ? {
+            shoulder: lerp(hold.shoulder, 2.5 + 0.15 * swing, waving),
+            elbow: lerp(hold.elbow, 0.3 + 0.35 * swing, waving),
+          }
+        : hold
+    const landed = t >= SPIRIT.land[0] + 0.06 && t < SPIRIT.land[1]
+    const hearts = t >= 0.4 && t < 0.56 ? (t - 0.4) / 0.16 : 0
+    const face: Face =
+      t < SPIRIT.appear[1]
+        ? 'neutral'
+        : t < SPIRIT.toHer[0] + 0.06
+          ? 'surprised'
+          : blinking(t, 0.66, 'happy')
+    return {
+      view: 'front',
+      spirit: t,
+      face,
+      tilt: landed ? 0.07 : 0,
+      hearts,
+      arms: [arm, ARM_DOWN],
+    }
   })
 }
 
@@ -2064,6 +2156,11 @@ const MAKERS: Record<Name, () => Frame[]> = {
   'peek-right': () => drawn(peek()),
   portal: () => portal(),
   'portal-back': () => portal(true),
+  'ready-left': () => drawn(ready()),
+  'ready-right': () => drawn(ready()),
+  'cast-left': () => drawn(cast()),
+  'cast-right': () => drawn(cast()),
+  spirit: () => drawn(spirit()),
   settle: () => drawn(settle()),
   rouse: () => drawn(rouse()),
   snooze: () => drawn(snooze()),
@@ -2122,6 +2219,11 @@ export const LOOPS: Record<Name, boolean> = {
   'peek-right': true,
   portal: false,
   'portal-back': false,
+  'ready-left': true,
+  'ready-right': true,
+  'cast-left': false,
+  'cast-right': false,
+  spirit: false,
   settle: false,
   rouse: false,
   snooze: true,
