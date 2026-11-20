@@ -225,22 +225,24 @@ export const PERFORMANCES = [
 ] as const
 export type PerformanceName = (typeof PERFORMANCES)[number]
 
+/** How likely a rare performance is, against 1 for a habit: a fifth as likely. */
+export const RARE = 0.2
+
 /**
  * How likely each performance is when it can be done, against 1 for a habit: the taskbar tricks,
- * her portal, her battle and watching the pointer are rare (a tenth as likely), the rest as likely
- * as a habit.
+ * her portal, her battle and watching the pointer are rare (RARE), the rest as likely as a habit.
  */
 export const PERFORMANCE_WEIGHT: Record<PerformanceName, number> = {
-  watch: 0.1,
-  carry: 0.1,
-  'juggle-icons': 0.1,
-  swap: 0.1,
-  perch: 0.1,
-  knock: 0.1,
-  tap: 0.1,
+  watch: RARE,
+  carry: RARE,
+  'juggle-icons': RARE,
+  swap: RARE,
+  perch: RARE,
+  knock: RARE,
+  tap: RARE,
   peek: 1,
-  portal: 0.1,
-  battle: 0.1,
+  portal: RARE,
+  battle: RARE,
   familiar: 1,
 }
 

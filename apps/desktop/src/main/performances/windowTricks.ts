@@ -18,18 +18,27 @@ import type { TrickDisplay } from './taskbarTricks'
 // is), and waving through a portal she opens on top of one, which goes along with it if it's
 // dragged, and drops her if it goes.
 
-/** A window she can use: where it is (DIPs) and how to ask after it. */
+/** A window she can use: where it is (DIPs), how to ask after it, and its place front to back. */
 export interface UsableWindow {
   handle: number
   rect: Rect
+  /** 0 is in front of all the others; missing: not known. */
+  z?: number
+}
+
+/** A window shown on the screen, which might be in front of one she uses: where, and its place. */
+export interface ShownWindow {
+  rect: Rect
+  z: number
 }
 
 /** Classes of windows that aren't apps' (the desktop, the taskbars). */
 const NOT_APPS = new Set(['Shell_TrayWnd', 'Shell_SecondaryTrayWnd', 'Progman', 'WorkerW'])
 
 /**
- * The windows she might use on her display: apps' (not hers, the desktop or the taskbars), in
- * their normal state (not maximised, minimised or filling the screen), and big enough.
+ * The windows she might use on her display: apps' (not hers, the desktop or the taskbars), shown
+ * (not cloaked), in their normal state (not maximised, minimised or filling the screen), and big
+ * enough.
  */
 export function usableWindows(
   windows: readonly ShellWindow[],
@@ -42,11 +51,16 @@ export function usableWindows(
     .filter(
       (w) =>
         w.state === 'normal' &&
+        !w.cloaked &&
         w.pid !== ownPid &&
         !NOT_APPS.has(w.className) &&
         w.name.trim() !== '',
     )
-    .map((w) => ({ handle: w.handle, rect: toDip(w.rect) }))
+    .map((w) => ({
+      handle: w.handle,
+      rect: toDip(w.rect),
+      ...(w.z !== undefined && w.z >= 0 ? { z: w.z } : {}),
+    }))
     .filter(({ rect: r }) => {
       const middle = { x: r.x + r.width / 2, y: r.y + r.height / 2 }
       const onDisplay =
@@ -57,6 +71,48 @@ export function usableWindows(
       const fills = r.width >= area.width - 10 && r.height >= area.height - 10
       return onDisplay && !fills && r.width >= 200 && r.height >= 150
     })
+}
+
+/**
+ * Every window shown on the screen that might be in front of one she uses, maximised ones too
+ * (not hers, the desktop or the taskbars; not minimised or cloaked; only those whose place front to
+ * back is known).
+ */
+export function shownWindows(
+  windows: readonly ShellWindow[],
+  ownPid: number,
+  toDip: (rect: PhysicalRect) => Rect,
+): ShownWindow[] {
+  return windows
+    .filter(
+      (w) =>
+        w.state !== 'minimized' &&
+        !w.cloaked &&
+        w.pid !== ownPid &&
+        !NOT_APPS.has(w.className) &&
+        w.z !== undefined &&
+        w.z >= 0,
+    )
+    .map((w) => ({ rect: toDip(w.rect), z: w.z! }))
+}
+
+const overlaps = (a: Rect, b: Rect) =>
+  a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+
+/**
+ * Whether the window is in front over `region` (nothing shown covers it there), so what she goes
+ * behind, or stands on, is really what's seen. A window whose place isn't known is taken to be.
+ * Without this she could peek round a window hidden behind another, and the part of her "behind"
+ * it would be cut away in front of whatever was really there (a white page, say).
+ */
+export function inFront(
+  window: UsableWindow,
+  region: Rect,
+  shown: readonly ShownWindow[],
+): boolean {
+  const z = window.z
+  if (z === undefined) return true
+  return !shown.some((other) => other.z < z && overlaps(other.rect, region))
 }
 
 /** A peek: the window, its edge she peeks round (its x), and which side of it she's outside on. */
@@ -70,12 +126,14 @@ export interface PeekPlan {
 /**
  * The window edge she can peek round, if there's one: a window that comes down over the taskbar
  * height she stands at (covering at least her top half), with room for her beside its edge on the
- * outside; the edge nearest her, within `reach` DIPs of her.
+ * outside, and in front where she'll be behind it (`shown`: see inFront); the edge nearest her,
+ * within `reach` DIPs of her.
  */
 export function peekEdge(
   windows: readonly UsableWindow[],
   standing: Standing,
   reach: number,
+  shown: readonly ShownWindow[] = [],
 ): PeekPlan | null {
   const size = bubbleMetrics(standing.scale).size
   const area = standing.workArea
@@ -94,6 +152,9 @@ export function peekEdge(
       if (!outside) continue
       const distance = Math.abs(edge - (standing.box.x + size / 2))
       if (distance > reach) continue
+      // Where she'll be behind it: just inside the edge, as tall as she is.
+      const behind = { x: side === 1 ? edge - size : edge, y: ground, width: size, height: size }
+      if (!inFront(window, behind, shown)) continue
       if (!best || distance < best.distance) best = { window, edge, side, distance }
     }
   }
@@ -165,30 +226,41 @@ export interface PortalPlan {
 
 /**
  * A window she can open a portal on, if there's one: its top edge well above the taskbar (with room
- * above it on the screen for the portal), wide enough; the one whose top is nearest above her, the
- * portal at the point along it nearest her.
+ * above it on the screen for the portal), wide enough, and in front where the portal opens
+ * (`shown`: see inFront); the one whose top is nearest above her, the portal at the point along it
+ * nearest her.
  */
 export function portalSpot(
   windows: readonly UsableWindow[],
   standing: Standing,
+  shown: readonly ShownWindow[] = [],
 ): PortalPlan | null {
   const size = bubbleMetrics(standing.scale).size
   const area = standing.workArea
   const ground = standing.box.y
-  const candidates = windows.filter(
-    ({ rect: r }) =>
-      r.y >= area.y + size * 1.1 && r.y <= ground - size * 0.6 && r.width >= size * 2.6,
-  )
-  if (candidates.length === 0) return null
   const her = standing.box.x
-  const nearest = candidates.reduce((a, b) => {
-    const distance = (w: UsableWindow) =>
-      Math.abs(Math.min(Math.max(her, w.rect.x), w.rect.x + w.rect.width - size) - her)
-    return distance(b) < distance(a) ? b : a
-  })
-  const r = nearest.rect
-  const along = Math.min(Math.max(her, r.x + 10), r.x + r.width - size - 10) - r.x
-  return { window: nearest, along }
+  const spots = windows
+    .filter(
+      ({ rect: r }) =>
+        r.y >= area.y + size * 1.1 && r.y <= ground - size * 0.6 && r.width >= size * 2.6,
+    )
+    .map((window) => {
+      const r = window.rect
+      const along = Math.min(Math.max(her, r.x + 10), r.x + r.width - size - 10) - r.x
+      return { window, along }
+    })
+    // The top edge where the portal opens, seen: nothing in front of the window there.
+    .filter(({ window, along }) =>
+      inFront(
+        window,
+        { x: window.rect.x + along, y: window.rect.y, width: size, height: size * 0.3 },
+        shown,
+      ),
+    )
+  if (spots.length === 0) return null
+  const distance = (w: UsableWindow) =>
+    Math.abs(Math.min(Math.max(her, w.rect.x), w.rect.x + w.rect.width - size) - her)
+  return spots.reduce((a, b) => (distance(b.window) < distance(a.window) ? b : a))
 }
 
 /** How often the window under her portal is asked after, so the portal goes along with it (ms). */
@@ -214,12 +286,19 @@ export interface WindowTricksDeps {
 export class WindowTricks {
   constructor(private readonly deps: WindowTricksDeps) {}
 
-  private async usable(standing: Standing): Promise<UsableWindow[]> {
+  /** The windows she might use where she stands, and all those shown (which might be in front). */
+  private async usable(
+    standing: Standing,
+  ): Promise<{ usable: UsableWindow[]; shown: ShownWindow[] }> {
     const display = this.deps.displayAt({
       x: standing.bounds.x + standing.bounds.width / 2,
       y: standing.bounds.y + standing.bounds.height / 2,
     })
-    return usableWindows(await this.deps.windows(), display, this.deps.ownPid, this.deps.toDip)
+    const windows = await this.deps.windows()
+    return {
+      usable: usableWindows(windows, display, this.deps.ownPid, this.deps.toDip),
+      shown: shownWindows(windows, this.deps.ownPid, this.deps.toDip),
+    }
   }
 
   /** Watches a window every `ms`: where it is now, or null once it's gone (closed, minimised or maximised). */
@@ -247,7 +326,8 @@ export class WindowTricks {
   }
 
   async peek(standing: Standing): Promise<Performance | null> {
-    const plan = peekEdge(await this.usable(standing), standing, 700 * standing.scale)
+    const windows = await this.usable(standing)
+    const plan = peekEdge(windows.usable, standing, 700 * standing.scale, windows.shown)
     if (!plan) return null
     const steps = peekSteps(plan, standing)
     const watching = this.watch(plan.window.handle, 250)
@@ -290,7 +370,8 @@ export class WindowTricks {
    * taskbar, hard from up there.
    */
   async portal(standing: Standing): Promise<Performance | null> {
-    const plan = portalSpot(await this.usable(standing), standing)
+    const { usable, shown } = await this.usable(standing)
+    const plan = portalSpot(usable, standing, shown)
     if (!plan) return null
     const size = bubbleMetrics(standing.scale).size
     const watching = this.watch(plan.window.handle, PORTAL_WATCH_MS)

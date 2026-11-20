@@ -18,6 +18,8 @@ import {
 } from '../src/main/performances/taskbarTricks'
 import {
   peekEdge,
+  shownWindows,
+  type ShownWindow,
   peekSteps,
   portalSpot,
   stepAt,
@@ -335,6 +337,62 @@ describe('the window tricks', () => {
     )!
     expect(peeking.x).toBeLessThan(1600) // behind it...
     expect(peeking.x + SIZE).toBeGreaterThan(1600) // ...with a little of her out past its edge
+  })
+
+  it('never uses a cloaked window (on another desktop, or a suspended app)', () => {
+    const windows = [
+      win(1, { x: 800, y: 300, width: 900, height: 800 }, { z: 3 }),
+      win(2, { x: 800, y: 300, width: 900, height: 800 }, { z: 1, cloaked: true }),
+    ]
+    expect(usableWindows(windows, DISPLAY, 99, identity)).toEqual([
+      { handle: 1, rect: windows[0]!.rect, z: 3 },
+    ])
+  })
+
+  it('counts every window shown as maybe in front, maximised ones too, but not minimised, cloaked or hers', () => {
+    const windows = [
+      win(1, { x: 800, y: 300, width: 900, height: 800 }, { z: 2 }),
+      win(2, { x: 0, y: 0, width: 1920, height: 1020 }, { z: 0, state: 'maximized' }),
+      win(3, { x: 800, y: 300, width: 900, height: 800 }, { z: 1, state: 'minimized' }),
+      win(4, { x: 800, y: 300, width: 900, height: 800 }, { z: 4, cloaked: true }),
+      win(5, { x: 800, y: 300, width: 900, height: 800 }, { z: 5, pid: 99 }),
+      win(6, { x: 800, y: 300, width: 900, height: 800 }), // its place isn't known
+    ]
+    expect(shownWindows(windows, 99, identity).map((w) => w.z)).toEqual([2, 0])
+  })
+
+  it('doesn’t peek round a window hidden behind another where she’d be (she’d look cut off by it)', () => {
+    // The window she'd peek round, its right edge at 1600, behind a big one that covers it there.
+    const behind: UsableWindow = {
+      handle: 1,
+      rect: { x: 600, y: 300, width: 1000, height: 760 },
+      z: 5,
+    }
+    const big: ShownWindow = { rect: { x: 0, y: 0, width: 1700, height: 1020 }, z: 1 }
+    expect(peekEdge([behind], standing(1808), 700, [big])).toBeNull()
+    // In front of it, or somewhere else, it's no matter.
+    expect(peekEdge([behind], standing(1808), 700, [{ ...big, z: 9 }])).not.toBeNull()
+    const aside: ShownWindow = { rect: { x: 0, y: 0, width: 500, height: 1020 }, z: 1 }
+    expect(peekEdge([behind], standing(1808), 700, [aside])).toEqual({
+      window: behind,
+      edge: 1600,
+      side: 1,
+    })
+  })
+
+  it('doesn’t open a portal on a window whose top is hidden behind another there', () => {
+    const high: UsableWindow = {
+      handle: 2,
+      rect: { x: 1000, y: 300, width: 600, height: 400 },
+      z: 4,
+    }
+    const over: ShownWindow = { rect: { x: 1300, y: 200, width: 500, height: 300 }, z: 2 }
+    expect(portalSpot([high], standing(1808), [over])).toBeNull()
+    const below: ShownWindow = { rect: { x: 1300, y: 500, width: 500, height: 300 }, z: 2 }
+    expect(portalSpot([high], standing(1808), [below])).toEqual({
+      window: high,
+      along: 600 - SIZE - 10,
+    })
   })
 
   it('opens a portal on a window high enough above the taskbar, along it near her', () => {
