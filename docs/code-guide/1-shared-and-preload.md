@@ -533,110 +533,151 @@ does on her own, she has three poses for her spells, whose lengths come from the
 in `spells.ts` (below), the file's only import. At the end of the file, `VISION` holds the
 timetable of one of her habits, and `CLONES` the numbers for her clones, which both sides need too.
 
-### `FIDGETS`, `Fidget`, `Pose`, `FIDGET_MS` and `isFidget`
+### `HABIT_LIST`, `HABITS`, `FIDGETS`, `Pose`, `FIDGET_MS` and `isFidget`
 
-<!-- code: apps/desktop/src/shared/character.ts#FIDGETS,Fidget,Pose,FIDGET_MS,isFidget -->
+<!-- code: apps/desktop/src/shared/character.ts#HabitKind,Habit,HABIT_LIST,Fidget,HABITS,FIDGETS,Pose,FIDGET_MS,isFidget -->
 
-[`src/shared/character.ts`, lines 6–302](../../apps/desktop/src/shared/character.ts#L6-L302)
+[`src/shared/character.ts`, lines 6–307](../../apps/desktop/src/shared/character.ts#L6-L307)
 
 ```ts
 /**
- * Things she does now and then, once she's been left alone for a while (each plays once):
- * - `hop`: a little jump.
- * - `wave`: waves at you.
- * - `stretch`: stretches her arms up and side to side, yawning.
- * - `sip`: a sip of tea.
- * - `vision`: a light shines down from above and brings the company's logo down to her; she looks
- *   up at it in wonder for a moment, then it rises away again (see VISION).
- * - `curtsy`: holds her robe out at the sides and dips in a little curtsy, smiling.
- * - `orb`: gazes into a crystal ball, which swirls and sparkles, then smiles at what she sees.
- * - `flame`: a flame kindles in her palm, flickers and grows; she blows it out in a curl of smoke.
- * - `frost`: a snowflake grows over her cupped hands, glinting, then bursts into glitter.
- * - `bloom`: she points at the ground; sparkles drip down and a flower sprouts, blooms and
- *   scatters into sparkles.
- * - `sigil`: she traces a star in the air in gold light; it flares, glows and fades away.
- * - `rainbow`: her hands sweep apart overhead, painting a rainbow over her, which shimmers and
- *   fades.
- * - `read`: reads her spellbook (and smiles at something in it).
- * - `spell`: a little spell, sparkles circling her hand.
- * - `levitate`: floats up over a glowing magic circle, hovers with her eyes shut, and settles.
- * - `sit`: sits on the taskbar, her robe spread round her, swaying, then gets up.
- * - `twirl`: spins round three times, her robe flaring out, and lands smiling.
- * - `butterfly`: holds up a finger; a little magic butterfly flutters down to it, rests, and flies
- *   off.
- * - `doze`: nods off where she stands (floating z's), wakes with a start and looks about.
- * - `look`: glances one way and the other.
- * - `juggle`: juggles three little glowing orbs, then catches them and smiles.
- * - `bubbles`: blows magic bubbles through a little wand ring; they drift up, wobble and pop.
- * - `wisp`: a will-o'-wisp goes round her twice, behind her and in front, her eyes following it,
- *   then flies off; she waves it goodbye.
- * - `sneeze`: "ah... ah... choo!", and the sneeze bursts into sparkles; a sheepish smile.
- * - `hat`: her hat floats up off her head and spins, showering sparkles, then settles back.
- * - `star`: a falling star drops into her cupped hands, glows there, and she tosses it back up.
- * - `rain`: a little cloud gathers over her and rains on her; she shoos it and it bursts into
- *   sparkles.
- * - `potion`: a flask in her hand bubbles and changes colour; the cork pops and coloured smoke
- *   puffs out.
- * - `tome`: her spellbook floats open in front of her, its pages turning by themselves and glowing
- *   letters rising out of it, then closes and vanishes.
- * - `yoyo`: a glowing yo-yo appears in her hand in a sparkle; she spins it down and up on its
- *   silver string, swings it round in a loop, and it vanishes in a twinkle.
- * - `top`: a little spinning top appears on her palm, spins there, wobbling, and she flicks it up
- *   and catches it.
- * - `cards`: a deck of cards appears in her hand; she springs them in an arc to her other hand and
- *   back, then they vanish.
- * - `plane`: a paper plane appears in her hand; she throws it, it flies a loop round her (behind
- *   her and back in front), and she catches it.
- * - `ball`: a bouncy ball appears in her hand; she bounces it on the taskbar, tosses it up high and
- *   catches it.
- * - `spirit`: a little spirit with leaf wings appears beside her in a swirl of sparkles; it flies to
- *   her, lands on her palm (hearts), loops round her head, they wave to each other, and it fades.
- * - `dance`: a little jig, stepping side to side, an arm up and a hand on her hip, then the other.
- * - `yawn`: a big yawn behind her hand, then a sleepy sway (late at night only: see TIMED).
- * - `confetti`: a cheer and a burst of confetti (Friday evenings only, and often then: see TIMED).
+ * What kind of habit it is, which says where it's made: its move in character/moves/ (everyday.ts,
+ * charms.ts, magic.ts, toys.ts or visitors.ts) and anything it draws round her in the same-named
+ * file in character/props/.
  */
-export const FIDGETS = [
-  'hop',
-  'wave',
-  'stretch',
-  'sip',
-  'vision',
-  'curtsy',
-  'orb',
-  'flame',
-  'frost',
-  'bloom',
-  'sigil',
-  'rainbow',
-  'read',
-  'spell',
-  'levitate',
-  'sit',
-  'twirl',
-  'butterfly',
-  'doze',
-  'look',
-  'juggle',
-  'bubbles',
-  'wisp',
-  'sneeze',
-  'hat',
-  'star',
-  'rain',
-  'potion',
-  'tome',
-  'yoyo',
-  'top',
-  'cards',
-  'plane',
-  'ball',
-  'spirit',
-  'yawn',
-  'confetti',
-  'dance',
-] as const
+export type HabitKind = 'everyday' | 'charm' | 'magic' | 'toy' | 'visitor'
 
-export type Fidget = (typeof FIDGETS)[number]
+/** One of her habits (see HABITS). */
+export interface Habit {
+  /** How long it plays (ms): its move's frames add up to exactly this (the tests check). */
+  ms: number
+  kind: HabitKind
+  /** How likely it is to come up, against 1 for most (the vision is a rare treat); 1 if not given. */
+  weight?: number
+}
+
+/**
+ * Her habits: things she does now and then once she's been left alone a while, each played once,
+ * for its `ms` (the main process goes back to idle after it). To add one: an entry here, its move
+ * in the file for its kind (character/moves/), and anything it draws round her (character/props/);
+ * see docs/CUSTOMIZING.md. Two only come up at certain times (yawn and confetti: see TIMED).
+ */
+const HABIT_LIST = {
+  /** A little jump. */
+  hop: { ms: 1200, kind: 'everyday' },
+  /** Waves at you. */
+  wave: { ms: 2000, kind: 'everyday' },
+  /** Stretches her arms up and side to side, yawning. */
+  stretch: { ms: 2400, kind: 'everyday' },
+  /** A sip of tea. */
+  sip: { ms: 3200, kind: 'everyday' },
+  /**
+   * A light shines down from above and brings the company's logo down to her; she looks up at it
+   * in wonder for a moment, then it rises away again (see VISION).
+   */
+  vision: { ms: 8600, kind: 'charm', weight: 0.2 },
+  /** Holds her robe out at the sides and dips in a little curtsy, smiling. */
+  curtsy: { ms: 2200, kind: 'everyday' },
+  /** Gazes into a crystal ball, which swirls and sparkles, then smiles at what she sees. */
+  orb: { ms: 4400, kind: 'charm' },
+  /** A flame kindles in her palm, flickers and grows; she blows it out in a curl of smoke. */
+  flame: { ms: 3600, kind: 'magic' },
+  /** A snowflake grows over her cupped hands, glinting, then bursts into glitter. */
+  frost: { ms: 4000, kind: 'magic' },
+  /**
+   * She points at the ground; sparkles drip down and a flower sprouts, blooms and scatters into
+   * sparkles.
+   */
+  bloom: { ms: 4400, kind: 'magic' },
+  /** She traces a star in the air in gold light; it flares, glows and fades away. */
+  sigil: { ms: 3600, kind: 'magic' },
+  /** Her hands sweep apart overhead, painting a rainbow over her, which shimmers and fades. */
+  rainbow: { ms: 4000, kind: 'magic' },
+  /** Reads her spellbook (and smiles at something in it). */
+  read: { ms: 4000, kind: 'everyday' },
+  /** A little spell, sparkles circling her hand. */
+  spell: { ms: 2400, kind: 'charm' },
+  /** Floats up over a glowing magic circle, hovers with her eyes shut, and settles. */
+  levitate: { ms: 3600, kind: 'charm' },
+  /** Sits on the taskbar, her robe spread round her, swaying, then gets up. */
+  sit: { ms: 6000, kind: 'everyday' },
+  /** Spins round three times, her robe flaring out, and lands smiling. */
+  twirl: { ms: 2200, kind: 'everyday' },
+  /** Holds up a finger; a little magic butterfly flutters down to it, rests, and flies off. */
+  butterfly: { ms: 4800, kind: 'charm' },
+  /** Nods off where she stands (floating z's), wakes with a start and looks about. */
+  doze: { ms: 5600, kind: 'everyday' },
+  /** Glances one way and the other. */
+  look: { ms: 2400, kind: 'everyday' },
+  /** Juggles three little glowing orbs, then catches them and smiles. */
+  juggle: { ms: 4400, kind: 'charm' },
+  /** Blows magic bubbles through a little wand ring; they drift up, wobble and pop. */
+  bubbles: { ms: 4400, kind: 'charm' },
+  /**
+   * A will-o'-wisp goes round her twice, behind her and in front, her eyes following it, then
+   * flies off; she waves it goodbye.
+   */
+  wisp: { ms: 4800, kind: 'charm' },
+  /** "ah... ah... choo!", and the sneeze bursts into sparkles; a sheepish smile. */
+  sneeze: { ms: 3000, kind: 'everyday' },
+  /** Her hat floats up off her head and spins, showering sparkles, then settles back. */
+  hat: { ms: 3600, kind: 'magic' },
+  /** A falling star drops into her cupped hands, glows there, and she tosses it back up. */
+  star: { ms: 4400, kind: 'magic' },
+  /** A little cloud gathers over her and rains on her; she shoos it and it bursts into sparkles. */
+  rain: { ms: 4400, kind: 'magic' },
+  /** A flask in her hand bubbles and changes colour; the cork pops and coloured smoke puffs out. */
+  potion: { ms: 4000, kind: 'magic' },
+  /**
+   * Her spellbook floats open in front of her, its pages turning by themselves and glowing letters
+   * rising out of it, then closes and vanishes.
+   */
+  tome: { ms: 4800, kind: 'magic' },
+  /**
+   * A glowing yo-yo appears in her hand in a sparkle; she spins it down and up on its silver
+   * string, swings it round in a loop, and it vanishes in a twinkle.
+   */
+  yoyo: { ms: 3600, kind: 'toy' },
+  /**
+   * A little spinning top appears on her palm, spins there, wobbling, and she flicks it up and
+   * catches it.
+   */
+  top: { ms: 3600, kind: 'toy' },
+  /**
+   * A deck of cards appears in her hand; she springs them in an arc to her other hand and back,
+   * then they vanish.
+   */
+  cards: { ms: 4000, kind: 'toy' },
+  /**
+   * A paper plane appears in her hand; she throws it, it flies a loop round her (behind her and
+   * back in front), and she catches it.
+   */
+  plane: { ms: 4400, kind: 'toy' },
+  /**
+   * A bouncy ball appears in her hand; she bounces it on the taskbar, tosses it up high and
+   * catches it.
+   */
+  ball: { ms: 4000, kind: 'toy' },
+  /**
+   * A little spirit with leaf wings appears beside her in a swirl of sparkles; it flies to her,
+   * lands on her palm (hearts), loops round her head, they wave to each other, and it fades.
+   */
+  spirit: { ms: 6400, kind: 'visitor' },
+  /** A big yawn behind her hand, then a sleepy sway (late at night only: see TIMED). */
+  yawn: { ms: 3600, kind: 'everyday' },
+  /** A cheer and a burst of confetti (Friday evenings only, and often then: see TIMED). */
+  confetti: { ms: 3200, kind: 'everyday' },
+  /** A little jig, stepping side to side, an arm up and a hand on her hip, then the other. */
+  dance: { ms: 3200, kind: 'everyday' },
+} satisfies Record<string, Habit>
+
+export type Fidget = keyof typeof HABIT_LIST
+
+/** Her habits, by name (see HABIT_LIST above for what each one is). */
+export const HABITS: Readonly<Record<Fidget, Habit>> = HABIT_LIST
+
+/** Her habits' names, in the order above. */
+export const FIDGETS = Object.keys(HABIT_LIST) as readonly Fidget[]
 
 /**
  * - `idle`: standing, breathing, blinking now and then.
@@ -660,47 +701,10 @@ export type Pose =
   | Reaction
   | HeldPose
 
-/** How long each fidget plays (ms): the main process goes back to idle after it. */
-export const FIDGET_MS: Record<Fidget, number> = {
-  hop: 1200,
-  wave: 2000,
-  stretch: 2400,
-  sip: 3200,
-  vision: 8600,
-  curtsy: 2200,
-  orb: 4400,
-  flame: 3600,
-  frost: 4000,
-  bloom: 4400,
-  sigil: 3600,
-  rainbow: 4000,
-  read: 4000,
-  spell: 2400,
-  levitate: 3600,
-  sit: 6000,
-  twirl: 2200,
-  butterfly: 4800,
-  doze: 5600,
-  look: 2400,
-  juggle: 4400,
-  bubbles: 4400,
-  wisp: 4800,
-  sneeze: 3000,
-  hat: 3600,
-  star: 4400,
-  rain: 4400,
-  potion: 4000,
-  tome: 4800,
-  yoyo: 3600,
-  top: 3600,
-  cards: 4000,
-  plane: 4400,
-  ball: 4000,
-  spirit: 6400,
-  yawn: 3600,
-  confetti: 3200,
-  dance: 3200,
-}
+/** How long each habit plays (ms): see HABITS. */
+export const FIDGET_MS = Object.fromEntries(
+  FIDGETS.map((fidget) => [fidget, HABITS[fidget].ms]),
+) as Record<Fidget, number>
 
 export const isFidget = (pose: Pose): pose is Fidget =>
   (FIDGETS as readonly string[]).includes(pose)
@@ -708,40 +712,37 @@ export const isFidget = (pose: Pose): pose is Fidget =>
 
 <!-- /code -->
 
-- `FIDGETS`: the thirty things she does now and then once she's been left alone a while, each
-  described in the comment above it. Ten are magic tricks added in 2.3.0: `flame` (a flame in her
-  palm, blown out), `frost` (a snowflake over her hands), `bloom` (a flower she grows),
-  `sigil` (a star traced in light), `rainbow`, `hat` (her hat floating off and spinning), `star` (a
-  falling star caught and tossed back), `rain` (a little rain cloud), `potion` and `tome` (her
-  spellbook floating open). They sit in two groups, five before `sit` and five before `dance`, so
-  `sit` stays in the middle of the list (the controller's tests pick from the middle). Before them
-  came `juggle` (three glowing orbs), `bubbles` (blown through a little wand ring), `wisp` (a
-  will-o'-wisp that goes round her, behind her and in front), `sneeze` (a sneeze that bursts into
-  sparkles) and `dance` (a little jig). One,
-  `vision`, needs more than her own window: the light and the company's logo are drawn in a window
-  of their own above her (see `VISION` below). The others, the butterfly, the dozer's z's, the
-  orbs, the bubbles, the wisp and the sneeze's sparkles included, are drawn in her own window, so
-  they stay close to her. `as const` makes it a fixed list of those exact strings, rather than any
-  list of strings, which is what lets the next line make a type from it. It's a real list, not only
-  a type, because code goes through it: `nextActivity()` in `src/main/bubble/wander.ts` picks one
-  at random, and `Character` draws each one's frames ahead of time.
-- `Fidget`: `(typeof FIDGETS)[number]` means "the type of any item of `FIDGETS`", so it's
-  `'hop' | 'wave' | ... | 'dance'`, and adding a fidget to the list adds it to the type too. It's
-  the narrower type for code that only deals with fidgets (`FIDGET_MS` here, and `Activity` and
-  `nextActivity()` in `wander.ts`).
+- `HabitKind` and `Habit`: what one habit is: how long it plays (`ms`), what kind it is, and how
+  likely (`weight`, 1 if left out). The kind says where it's made: its move in
+  `character/moves/` (`everyday.ts`, `charms.ts`, `magic.ts`, `toys.ts` or `visitors.ts`) and
+  anything it draws round her in the same-named file in `character/props/`.
+- `HABIT_LIST`: the 38 things she does now and then once she's been left alone a while, one entry
+  each, its name the key, each described in the comment above it. Ten are magic (`flame`, `frost`,
+  `bloom`, `sigil`, `rainbow`, `hat`, `star`, `rain`, `potion`, `tome`), five are toys she summons
+  (`yoyo`, `top`, `cards`, `plane`, `ball`), and one a visitor (`spirit`). `vision` is rarer than the
+  rest (`weight: 0.2`), and needs more than her own window: the light and the company's logo are
+  drawn in a window of their own above her (see `VISION` below); everything else is drawn in her own
+  window. `satisfies Record<string, Habit>` checks every entry is a `Habit` while keeping the
+  table's exact names, which a type annotation would forget. Its order only matters to the
+  controller's tests, whose fixed dice pick by position.
+- `Fidget`: `keyof typeof HABIT_LIST`, the table's names: `'hop' | 'wave' | ... | 'dance'`. Adding a
+  habit to the table adds it to the type, and every `Record<Fidget, …>` and `Record<Pose, …>` (her
+  moves among them) then fails to compile until it's given a value too.
+- `HABITS`: the same table, typed as one `Habit` for each `Fidget`, so code can ask any habit for
+  its `weight` (which most leave out).
+- `FIDGETS`: their names, in the table's order. It's a real list, not only a type, because code goes
+  through it: `nextActivity()` in `src/main/bubble/wander.ts` picks one at random, and the tests go
+  through every habit.
 - `Pose`: the four poses that aren't fidgets, with what each looks like in the comment above it,
   or any `Fidget`, or any `SpellPose` (see the next section). The mode (`Mode` in `types.ts`) says
   what the app is doing; the pose only says how the figure looks. `idle`, the fidgets and the
   spells' poses happen while she stands; `walk-left` and `walk-right` while the main process moves
   her window along the taskbar; `dragged` whenever she's being moved about (dragged, or falling
   after a drop).
-- `FIDGET_MS`: as the comment says, how long each fidget plays, from 1.2 seconds for the hop to
-  8.6 for the vision; the newest five take 4.4 seconds (the juggling and the bubbles), 4.8 (the
-  wisp), 3 (the sneeze) and 3.2 (the dance). Both sides use it. The main process waits this long
-  before setting the pose back to `idle`, and the frames of each fidget's animation
-  (`character/sprite.ts` in the renderer) add up to exactly the same time, which a test checks, so
-  the pose changes back just as the last frame ends. `Record<Fidget, number>` makes TypeScript
-  insist on a length for each fidget.
+- `FIDGET_MS`: how long each habit plays, from 1.2 seconds for the hop to 8.6 for the vision, taken
+  from `HABITS`. Both sides use it. The main process waits this long before setting the pose back to
+  `idle`, and the frames of each habit's move (`character/moves/` in the renderer) add up to exactly
+  the same time, which a test checks, so the pose changes back just as the last frame ends.
 - `isFidget`: whether a pose is one of the fidgets, that is, whether `FIDGETS` includes it.
   `FIDGETS as readonly string[]` lets `includes()` take any pose (on the list's own type it would
   only take a `Fidget`, which is the very thing being checked). The return type, `pose is Fidget`,
@@ -752,7 +753,7 @@ export const isFidget = (pose: Pose): pose is Fidget =>
 
 <!-- code: apps/desktop/src/shared/character.ts#SPELL_POSES,SpellPose,SPELL_POSE_MS,isSpellPose -->
 
-[`src/shared/character.ts`, lines 103–123](../../apps/desktop/src/shared/character.ts#L103-L123)
+[`src/shared/character.ts`, lines 145–165](../../apps/desktop/src/shared/character.ts#L145-L165)
 
 ```ts
 /**
@@ -806,7 +807,7 @@ the main process plays them on purpose (`BubbleController.act()` and `teleport()
 
 <!-- code: apps/desktop/src/shared/character.ts#VISION -->
 
-[`src/shared/character.ts`, lines 304–315](../../apps/desktop/src/shared/character.ts#L304-L315)
+[`src/shared/character.ts`, lines 309–320](../../apps/desktop/src/shared/character.ts#L309-L320)
 
 ```ts
 /**
@@ -845,7 +846,7 @@ pages. Each entry is a `[from, to]` pair:
 
 <!-- code: apps/desktop/src/shared/character.ts#CLONES -->
 
-[`src/shared/character.ts`, lines 330–334](../../apps/desktop/src/shared/character.ts#L330-L334)
+[`src/shared/character.ts`, lines 335–339](../../apps/desktop/src/shared/character.ts#L335-L339)
 
 ```ts
 /**

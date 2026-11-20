@@ -1,3 +1,8 @@
+// Her colours: each palette letter (a pixel of a frame) and the CSS class that colours it, in
+// components/character.css (a test checks every class has a colour there). `.` is see-through.
+// Letters free for a new colour: C, H, J, M, Z and t (X is taken: the potion's flask picture marks
+// its liquid with it, swapped for the potion's colour as it's drawn).
+
 /** Each letter's colour, as a CSS class (character.css): robe and hat follow the accent colour. */
 export const PALETTE: Record<string, string> = {
   // Hair, silver-white: outline, shadow, base, light, shine.

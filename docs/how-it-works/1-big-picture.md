@@ -114,11 +114,11 @@ Desktop-Assist/
 │   ├── src/renderer/src/          the pages (React)
 │   │   ├── views/                 one page per kind of window
 │   │   ├── components/            the panel's pieces
-│   │   ├── character/             her pixel art (rig.ts, sprite.ts) and the cat (cat.ts)
+│   │   ├── character/             her pixel art: rig.ts, moves/, props/ (sprite.ts), the cat
 │   │   ├── lib/                   drawing and motion: spells, screen saver, clones, the cat
 │   │   └── hooks/                 small reusable bits of page logic
 │   ├── src/shared/                types and constants all three parts agree on
-│   ├── tests/                     39 test files (Vitest)
+│   ├── tests/                     41 test files (Vitest)
 │   └── electron-builder.cjs …     installer, build, TypeScript, lint and test settings
 ├── tenants/morse-micro/           tenant.json, logo.png, icon.png
 ├── scripts/                       Code Guide, PDFs, release signing, publishing the installer

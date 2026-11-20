@@ -52,7 +52,7 @@ bottom-right corner, and her last habit was a wave.
    or a performance rather than a stroll.
 3. The options: 35 habits (all but the two timed ones out of their hours, and the wave, done last),
    each weighing 1, with the vision at 0.2; and what `Performances.available(true)` offers: `watch`,
-   `peek`, `portal`, the six tricks, `familiar` and `battle`. The weights add up to about 37.
+   `peek`, `portal`, the six tricks, `familiar` and `battle`. The weights add up to about 38.
 4. The second roll lands in `peek`'s stretch. `doActivity()` calls `prepare('peek')`.
 5. `WindowTricks.peek()` asks the shell probe for the windows, keeps the usable ones on her screen,
    and `peekEdge()` finds a browser window whose right edge is 150 DIPs to her left, coming down over
@@ -83,7 +83,7 @@ performance, and she'd simply have waited for the next turn.
 
 ## 30. A taskbar trick: the swap
 
-1. `nextActivity()` picks `swap` (a tenth as likely as a habit, so this is a rare moment).
+1. `nextActivity()` picks `swap` (a fifth as likely as a habit, so this is a rare moment).
    `prepare('swap')` calls `TaskbarTricks.prepare()`.
 2. The shell probe answers `taskbar` with 35 buttons across two screens. `appButtons()` keeps the 9
    app buttons on her screen's taskbar; the trick takes two neighbours near her.

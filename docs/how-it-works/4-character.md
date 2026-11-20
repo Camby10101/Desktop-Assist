@@ -220,8 +220,8 @@ differently.
 Until she's been alone 30 seconds she only strolls. After that, 60% of the time she does a habit or a
 performance instead, chosen by **weight**: every option is given a stretch as long as its weight, the
 stretches are laid end to end, and a random point along them picks one. An ordinary habit weighs 1,
-the vision 0.2, confetti 5 (on Friday evenings only), and the taskbar tricks, her portal and watching
-the pointer 0.1 each, a tenth as likely as a habit. Whatever she did last is left out, so she never does the
+the vision 0.2, confetti 5 (on Friday evenings only), and the taskbar tricks, her portal, her battle
+and watching the pointer `RARE` (0.2), a fifth as likely as a habit. Whatever she did last is left out, so she never does the
 same thing twice running.
 
 ```ts
@@ -241,7 +241,7 @@ weights
 > **Try it yourself**
 > In `tests/wander.test.ts`, the helper `rolls(…)` feeds `nextActivity` the dice you choose. Change
 > `PERFORMANCE_WEIGHT.carry` to 5 and run `npx vitest run tests/moments.test.ts`: the test that
-> counts 20,000 draws and expects a trick about a tenth as often as a habit fails, and tells you by
+> counts 20,000 draws and expects a trick about a fifth as often as a habit fails, and tells you by
 > how much.
 
 #### `walkTarget(inset, zone, roll)`
@@ -318,7 +318,7 @@ ignore the mouse entirely.
 const win = new BrowserWindow({
   ...size, show: false, frame: false, transparent: true, backgroundColor: '#00000000',
   hasShadow: false, resizable: false, skipTaskbar: true, type: 'toolbar',
-  focusable: !passive(view),
+  focusable: !isPassive(view),
   webPreferences: {
     preload: join(__dirname, '../preload/index.js'),
     sandbox: true, contextIsolation: true, nodeIntegration: false,
@@ -396,17 +396,18 @@ export interface Performer {
 
 `Performances` (in `performances.ts`) is the app's `Performer`. It does one performance itself,
 **watch** (for ten seconds her eyes follow the pointer: `gazeAt()` works out which of nine ways to
-look, and her page is told whenever it changes), and `index.ts` plugs in the rest by name, each
-saying whether it moves her. With Stand still on, only the ones that keep her in place are offered.
+look, and her page is told whenever it changes), and `index.ts` plugs in the rest by name, saying
+how each is got ready. What each is, how likely, and whether it moves her is `PERFORMANCE_LIST` in
+`wander.ts`. With Stand still on, only the ones that keep her in place are offered.
 
 | Performance | Weight | What she does                                                                   | Made by            |
 | ----------- | ------ | ------------------------------------------------------------------------------- | ------------------ |
-| `watch`     | 0.1    | her eyes follow the pointer for ten seconds                                     | `performances.ts`  |
-| six tricks  | 0.1    | carry, juggle, swap, perch, knock, tap: with copies of the taskbar's icons      | `taskbarTricks.ts` |
+| `watch`     | 0.2    | her eyes follow the pointer for ten seconds                                     | `performances.ts`  |
+| six tricks  | 0.2    | carry, juggle, swap, perch, knock, tap: with copies of the taskbar's icons      | `taskbarTricks.ts` |
 | `peek`      | 1      | slips behind the edge of a window near her, and peeks out                       | `windowTricks.ts`  |
-| `portal`    | 0.1    | opens a portal on top of a window and waves through it; it goes with the window | `windowTricks.ts`  |
+| `portal`    | 0.2    | opens a portal on top of a window and waves through it; it goes with the window | `windowTricks.ts`  |
 | `familiar`  | 1      | her black cat appears beside her, and she sits down with it a while             | `familiarVisit.ts` |
-| `battle`    | 0.1    | three little monsters come along the taskbar; she knocks each off with a bolt   | `battle.ts`        |
+| `battle`    | 0.2    | three little monsters come along the taskbar; she knocks each off with a bolt   | `battle.ts`        |
 
 ### shell/probe.ts — looking at Windows' own shell
 
@@ -496,8 +497,16 @@ them back; walk home. Far from her icons (over 360 DIPs) she goes by magic inste
 ### windowTricks.ts — peeking, and the portal
 
 `usableWindows()` keeps the windows worth using: other apps' (not hers, not the desktop or a
-taskbar), with a title, in their normal state (not minimised, maximised or filling the screen), at
-least 200 × 150 DIPs, and on her screen.
+taskbar), with a title, shown (not cloaked: on another virtual desktop, or a suspended app), in their
+normal state (not minimised, maximised or filling the screen), at least 200 × 150 DIPs, and on her
+screen. The probe gives each window's frame as it's drawn (DWM's extended frame bounds), without the
+invisible borders Windows puts round it for resizing, and its place front to back.
+
+UI Automation lists windows in no particular order, so a window can be one she could use and yet be
+hidden behind another. `inFront()` checks nothing shown (`shownWindows()`, maximised ones too) is in
+front of it where she'd be: behind its edge for a peek, on its top edge for a portal. Without that,
+she once peeked round a window hidden behind a big browser window, and the part of her "behind" it was
+cut away in front of the browser's white page, as if a white box had cut her off.
 
 **Peek.** `peekEdge()` looks for a window that comes down over the taskbar height she stands at, with
 room for her beside one of its edges, near her. `peekSteps()` makes the timetable: walk (or teleport)
@@ -523,7 +532,7 @@ Click her while she's in it and she goes straight back: she sinks away, the port
 `clicked(t)` answers `true`, and `BubbleController.clickBubble()` leaves it at that (a performance
 without `clicked`, or answering `false`, is ended by a click as usual).
 
-The portal is drawn by `portalFrame()` in `sprite.ts`: her ordinary frame, then every pixel outside
+The portal is drawn by `portalFrame()` in `moves/performances.ts`: her ordinary frame, then every pixel outside
 the ring cleared (so whatever of her is outside it is cut away), the swirl filled in behind her, and
 the glowing rim drawn over her edges.
 

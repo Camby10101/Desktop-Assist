@@ -3066,8 +3066,9 @@ As the comment at the top says, the _rig_ is her skeleton and the shapes that ha
 `draw()` turns one pose into one frame of pixel art. A pose (`Pose` below, not the same thing as
 the `Pose` in `src/shared/character.ts`, which names a whole animation) is a handful of numbers:
 which way she's seen from, where her hips are, how she leans, the angles of her arms and legs, her
-face, what she's holding, and how the wind pushes her hair and robe. `sprite.ts` makes her
-animations by giving `draw()` a pose for every frame.
+face, what she's holding, and how the wind pushes her hair and robe. Her moves (`moves/`, with
+`sprite.ts`) make her animations by giving `draw()` a pose for every frame, and the things drawn
+round her are painted by `props/` once she's drawn.
 
 As the comment also says, she's an original design: an elf mage with long pointed ears, long
 silver-white hair down her back (with a fringe and locks beside her face), amber eyes, a
@@ -3098,7 +3099,7 @@ How she's drawn follows common practice in anime-style pixel art:
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#GRID,HEADROOM,RIPPLE -->
 
-[`src/renderer/src/character/rig.ts`, lines 5–43](../../apps/desktop/src/renderer/src/character/rig.ts#L5-L43)
+[`src/renderer/src/character/rig.ts`, lines 8–46](../../apps/desktop/src/renderer/src/character/rig.ts#L8-L46)
 
 ```ts
 // The character's rig: her skeleton and the shapes that hang on it, drawn as pixel art for one
@@ -3161,7 +3162,7 @@ two pixels. `step` is the most distance between the points of a rippling shape (
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#RAMPS,LIGHT -->
 
-[`src/renderer/src/character/rig.ts`, lines 45–62](../../apps/desktop/src/renderer/src/character/rig.ts#L45-L62)
+[`src/renderer/src/character/rig.ts`, lines 48–65](../../apps/desktop/src/renderer/src/character/rig.ts#L48-L65)
 
 ```ts
 /** Each material's shades, as palette letters (see PALETTE in sprite.ts). */
@@ -3209,7 +3210,7 @@ const LIGHT: Point = { x: -1, y: -1 }
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#View,Face,Arm,Leg,Pose,DOWN,STAND,LEG_LENGTH -->
 
-[`src/renderer/src/character/rig.ts`, lines 64–200](../../apps/desktop/src/renderer/src/character/rig.ts#L64-L200)
+[`src/renderer/src/character/rig.ts`, lines 67–203](../../apps/desktop/src/renderer/src/character/rig.ts#L67-L203)
 
 ```ts
 export type View = 'front' | 'diagonal' | 'side'
@@ -3401,8 +3402,8 @@ What a pose is made of.
     raised hand, resting on it, and flying off. Left out (or 0), there's none.
   - `zzz`: as its comment says, z's floating up from her as she dozes, from 0 to 1 (none at 0).
   - `flipText`: as its comment says, letters (the z's) drawn back to front, for a frame that will
-    be mirrored to face left, so they read the right way round once it is (see `LEFT_MAKERS` in
-    `sprite.ts`).
+    be mirrored to face left, so they read the right way round once it is (see `Move`'s `left`, in
+    `moves/kit.ts`).
   - `juggle`: as its comment says, three little orbs juggled between her hands, from the front: how
     far through the juggling she is, from 0 to 1. At 0 or 1, or left out, there are none, and seen
     any other way than from the front there are none either, since they need both her hands.
@@ -3432,9 +3433,12 @@ What a pose is made of.
 
 ### `EYES`, `MOUTHS`, `SPARKLE`, `TWINKLE` and the other small pictures
 
-<!-- code: apps/desktop/src/renderer/src/character/rig.ts#EYES,MOUTHS,SPARKLE,TWINKLE,BUTTERFLY_OPEN,BUTTERFLY_SHUT,Z_BIG,Z_SMALL,ORBS,BUBBLE_SMALL,BUBBLE_BIG,WAND_RING,WISP -->
+Her eyes and mouths are the rig's own; the small pictures of things round her live beside the
+painters that draw them (`props/`, below), and are shown here together.
 
-[`src/renderer/src/character/rig.ts`, lines 202–345](../../apps/desktop/src/renderer/src/character/rig.ts#L202-L345)
+<!-- code: apps/desktop/src/renderer/src/character/rig.ts#EYES,MOUTHS -->
+
+[`src/renderer/src/character/rig.ts`, lines 205–277](../../apps/desktop/src/renderer/src/character/rig.ts#L205-L277)
 
 ```ts
 // Face pictures, facing right; `.` is see-through. Eyes have a thick upper lid, a dark-to-light
@@ -3510,39 +3514,63 @@ const MOUTHS: Record<Face, readonly string[]> = {
   up: ['m..m', '.mm.'],
   chant: ['mm', 'mm'],
 }
+```
 
+<!-- /code -->
+
+<!-- code: apps/desktop/src/renderer/src/character/props/kit.ts#SPARKLE,TWINKLE -->
+
+[`src/renderer/src/character/props/kit.ts`, lines 41–44](../../apps/desktop/src/renderer/src/character/props/kit.ts#L41-L44)
+
+```ts
 /** A four-pointed sparkle, and a smaller one. */
-const SPARKLE = ['..j..', '..l..', 'jlwlj', '..l..', '..j..']
+export const SPARKLE = ['..j..', '..l..', 'jlwlj', '..l..', '..j..']
 
-const TWINKLE = ['.l.', 'lwl', '.l.']
+export const TWINKLE = ['.l.', 'lwl', '.l.']
+```
 
+<!-- /code -->
+
+<!-- code: apps/desktop/src/renderer/src/character/props/charms.ts#BUTTERFLY_OPEN,BUTTERFLY_SHUT,ORBS,BUBBLE_SMALL,BUBBLE_BIG,WAND_RING,WISP -->
+
+[`src/renderer/src/character/props/charms.ts`, lines 8–29](../../apps/desktop/src/renderer/src/character/props/charms.ts#L8-L29)
+
+```ts
 /** A little magic butterfly, wings open and shut: teal wings, a white spot on each, a gold body. */
-const BUTTERFLY_OPEN = ['GG.GG', 'GwkwG', '.G.G.']
+export const BUTTERFLY_OPEN = ['GG.GG', 'GwkwG', '.G.G.']
 
-const BUTTERFLY_SHUT = ['.GkG.', '..k..']
-
-/** A dozer's z's: a big one and a small one, each with a darker shadow to the lower right. */
-const Z_BIG = ['ffff.', '..fFF', '.fF..', 'ffffF', '.FFFF']
-
-const Z_SMALL = ['fff.', '.fF.', 'fffF', '.FFF']
+export const BUTTERFLY_SHUT = ['.GkG.', '..k..']
 
 /** Juggling orbs: a teal one, a gold one and a pink one, each with a glint. */
-const ORBS = [
+export const ORBS = [
   ['.G.', 'GwG', '.G.'],
   ['.Y.', 'YwY', '.Y.'],
   ['.c.', 'cwc', '.c.'],
 ]
 
 /** A soap bubble, small and grown: a teal ring (see-through inside) with a white glint. */
-const BUBBLE_SMALL = ['.G.', 'G.G', '.G.']
+export const BUBBLE_SMALL = ['.G.', 'G.G', '.G.']
 
-const BUBBLE_BIG = ['.GG.', 'Gw.G', 'G..G', '.GG.']
+export const BUBBLE_BIG = ['.GG.', 'Gw.G', 'G..G', '.GG.']
 
 /** The little silver wand ring she blows bubbles through. */
-const WAND_RING = ['.f.', 'f.f', '.f.']
+export const WAND_RING = ['.f.', 'f.f', '.f.']
 
 /** A will-o'-wisp: a round teal light with a white heart. */
-const WISP = ['.GG.', 'GwwG', 'GwwG', '.GG.']
+export const WISP = ['.GG.', 'GwwG', 'GwwG', '.GG.']
+```
+
+<!-- /code -->
+
+<!-- code: apps/desktop/src/renderer/src/character/props/everyday.ts#Z_BIG,Z_SMALL -->
+
+[`src/renderer/src/character/props/everyday.ts`, lines 6–9](../../apps/desktop/src/renderer/src/character/props/everyday.ts#L6-L9)
+
+```ts
+/** A dozer's z's: a big one and a small one, each with a darker shadow to the lower right. */
+export const Z_BIG = ['ffff.', '..fFF', '.fF..', 'ffffF', '.FFFF']
+
+export const Z_SMALL = ['fff.', '.fF.', 'fffF', '.FFF']
 ```
 
 <!-- /code -->
@@ -3605,9 +3633,11 @@ As the comment says, they face right; frames facing left are mirrored with every
 
 ### `TRAIL`, `JUGGLE`, `BUBBLES` and `wispAt()`
 
-<!-- code: apps/desktop/src/renderer/src/character/rig.ts#TRAIL,JUGGLE,BUBBLES,wispAt -->
+Timetables of things drawn round her, beside their painters in `props/basics.ts` and `props/charms.ts`.
 
-[`src/renderer/src/character/rig.ts`, lines 468–587](../../apps/desktop/src/renderer/src/character/rig.ts#L468-L587)
+<!-- code: apps/desktop/src/renderer/src/character/props/basics.ts#TRAIL -->
+
+[`src/renderer/src/character/props/basics.ts`, lines 7–14](../../apps/desktop/src/renderer/src/character/props/basics.ts#L7-L14)
 
 ```ts
 /**
@@ -3618,13 +3648,24 @@ As the comment says, they face right; frames facing left are mirrored with every
  * a stride).
  */
 export const TRAIL = { perStride: 4, drift: 53, life: 0.45 }
+```
 
+<!-- /code -->
+
+<!-- code: apps/desktop/src/renderer/src/character/props/charms.ts#JUGGLE,BUBBLES,wispAt -->
+
+[`src/renderer/src/character/props/charms.ts`, lines 31–65](../../apps/desktop/src/renderer/src/character/props/charms.ts#L31-L65)
+
+```ts
 /**
  * Juggling (Pose.juggle): how many times each orb goes round, hand to hand and back, while she
  * juggles; how far up its high arc goes above her hands, and its low pass back (pixels); and the
  * share of the way round spent on the high arc.
  */
 export const JUGGLE = { rounds: 4, high: 28, low: 5, arc: 0.62 }
+
+// Her toys, each summoned into her hand in a sparkle (`appear`) and gone in a twinkle (`gone`),
+// with what she does with it between: shares of the habit (0 to 1), and sizes in pixels.
 
 /**
  * Bubbles (Pose.bubbles): how many she blows, when the first comes and how far apart they come
@@ -3696,9 +3737,9 @@ puff before each bubble, her eyes following the wisp).
 
 ### `FADE`, `hash()` and `dissolveAt()`
 
-<!-- code: apps/desktop/src/renderer/src/character/rig.ts#FADE,hash,dissolveAt -->
+<!-- code: apps/desktop/src/renderer/src/character/rig.ts#FADE -->
 
-[`src/renderer/src/character/rig.ts`, lines 536–552](../../apps/desktop/src/renderer/src/character/rig.ts#L536-L552)
+[`src/renderer/src/character/rig.ts`, lines 279–285](../../apps/desktop/src/renderer/src/character/rig.ts#L279-L285)
 
 ```ts
 /**
@@ -3708,14 +3749,30 @@ puff before each bubble, her eyes following the wisp).
  * it's a sprinkling, not a copy of her.
  */
 export const FADE = { glow: 0.12, life: 0.45, rise: 12, share: 0.45, end: 1.45 }
+```
 
+<!-- /code -->
+
+<!-- code: apps/desktop/src/renderer/src/character/props/kit.ts#hash -->
+
+[`src/renderer/src/character/props/kit.ts`, lines 55–60](../../apps/desktop/src/renderer/src/character/props/kit.ts#L55-L60)
+
+```ts
 /** A pixel's own random number, 0 to 1, the same every frame (`salt` for a second, different one). */
-function hash(x: number, y: number, salt = 0): number {
+export function hash(x: number, y: number, salt = 0): number {
   let h = Math.imul(x + 1013 * salt, 374761393) ^ Math.imul(y + 7919, 668265263)
   h = Math.imul(h ^ (h >>> 13), 1274126177)
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296
 }
+```
 
+<!-- /code -->
+
+<!-- code: apps/desktop/src/renderer/src/character/rig.ts#dissolveAt -->
+
+[`src/renderer/src/character/rig.ts`, lines 287–288](../../apps/desktop/src/renderer/src/character/rig.ts#L287-L288)
+
+```ts
 /** When a pixel dissolves (0 to 1): in a random order, the top of her a little sooner. */
 const dissolveAt = (x: number, y: number) => 0.8 * hash(x, y) + 0.2 * Math.max(0, y / GRID)
 ```
@@ -3748,7 +3805,7 @@ vanishes or appears. `draw()` uses them at its very end (below).
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#eyesFor -->
 
-[`src/renderer/src/character/rig.ts`, lines 589–596](../../apps/desktop/src/renderer/src/character/rig.ts#L589-L596)
+[`src/renderer/src/character/rig.ts`, lines 290–297](../../apps/desktop/src/renderer/src/character/rig.ts#L290-L297)
 
 ```ts
 /** Which eyes a face uses. */
@@ -3770,7 +3827,7 @@ and `awe` and `up` both look up (their mouths are what differ).
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#draw -->
 
-[`src/renderer/src/character/rig.ts`, lines 598–2468](../../apps/desktop/src/renderer/src/character/rig.ts#L598-L2468)
+[`src/renderer/src/character/rig.ts`, lines 299–1251](../../apps/desktop/src/renderer/src/character/rig.ts#L299-L1251)
 
 ```ts
 /** Draws one pose as rows of palette letters. */
@@ -4678,940 +4735,22 @@ export function draw(pose: Pose): string[] {
     }
   }
 
-  // A little butterfly: it flutters down to just above her raised hand, rests there opening and
-  // shutting its wings, then flies off up and away (out of the frame).
-  const flight = pose.butterfly ?? 0
-  if (flight > 0.06 && flight < 0.92) {
-    const perch = add(hand, { x: 0, y: -3 })
-    const between = (from: Point, to: Point, t: number) => ({
-      x: from.x + (to.x - from.x) * t,
-      y: from.y + (to.y - from.y) * t,
-    })
-    let at: Point
-    let open: boolean
-    if (flight < 0.3) {
-      const t = (flight - 0.06) / 0.24
-      const eased = t * t * (3 - 2 * t)
-      at = between(add(hand, { x: 16, y: -24 }), perch, eased)
-      at = { x: at.x + Math.sin(t * 9) * 2 * (1 - t), y: at.y }
-      open = Math.floor(flight * 80) % 2 === 0
-    } else if (flight < 0.72) {
-      at = perch
-      open = Math.floor((flight - 0.3) / 0.07) % 2 === 0
-    } else {
-      at = between(perch, add(hand, { x: 22, y: -36 }), ((flight - 0.72) / 0.2) ** 1.4)
-      open = Math.floor(flight * 80) % 2 === 0
-    }
-    if (open) canvas.stamp(BUTTERFLY_OPEN, at.x - 2, at.y - 1)
-    else canvas.stamp(BUTTERFLY_SHUT, at.x - 2, at.y)
+  // Everything she holds and the effects round her (props/), each over the ones before.
+  const scene: Scene = {
+    pose,
+    canvas,
+    set,
+    motif,
+    hand,
+    farHand,
+    hips,
+    head,
+    onHead,
+    onBody,
+    blown,
+    lift,
   }
-
-  // Dozing: z's float up from above her hat, one after another, growing as they rise.
-  const zzz = pose.zzz ?? 0
-  if (zzz > 0) {
-    for (let k = 0; k < 3; k++) {
-      const life = zzz * 1.6 - k * 0.3
-      if (life <= 0 || life >= 1) continue
-      const at = onHead({ x: 7 + life * 6 + k * 1.5, y: -13 - life * 12 })
-      canvas.stamp(life > 0.45 ? Z_BIG : Z_SMALL, at.x, at.y, pose.flipText)
-    }
-  }
-
-  // Juggling: three orbs, a third of the way round apart, each thrown up in a high arc from her far
-  // hand to her near one and passed quickly back underneath (a "shower"), just above her hands.
-  const juggle = pose.juggle ?? 0
-  if (juggle > 0 && juggle < 1 && farHand) {
-    const left = farHand
-    ORBS.forEach((orb, k) => {
-      const round = (juggle * JUGGLE.rounds + k / ORBS.length) % 1
-      const high = round < JUGGLE.arc
-      const t = high ? round / JUGGLE.arc : (round - JUGGLE.arc) / (1 - JUGGLE.arc)
-      const [from, to] = high ? [left, hand] : [hand, left]
-      const up = (high ? JUGGLE.high : JUGGLE.low) * 4 * t * (1 - t)
-      const at = { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t - 3 - up }
-      canvas.stamp(orb, at.x - 1, at.y - 1)
-    })
-  }
-
-  // A puff of sparkle where one of her toys appears (`k`, 0 to 1 through it) or goes: a sparkle,
-  // then a twinkle.
-  const poof = (at: Point, k: number) => {
-    if (k <= 0 || k >= 1) return
-    if (k < 0.55) canvas.stamp(SPARKLE, at.x - 2, at.y - 2)
-    else canvas.stamp(TWINKLE, at.x - 1, at.y - 1)
-  }
-  /** Whether a toy shows: from half way through its sparkle to half way through its twinkle. */
-  const shows = (appear: number, gone: number) => appear >= 0.5 && gone < 0.5
-
-  // Her yo-yo: in her near hand; spun down on its silver string and back up, a few times; then
-  // swung out round her hand in a loop; then gone.
-  const yoyo = pose.yoyo ?? 0
-  if (yoyo > 0 && yoyo < 1) {
-    const grip = { x: hand.x, y: hand.y + 1 }
-    const drops = stage(yoyo, ...YOYO.drops)
-    const loop = stage(yoyo, ...YOYO.loop)
-    let at = grip
-    if (drops > 0 && drops < 1) {
-      at = { x: grip.x, y: grip.y + YOYO.length * Math.sin(Math.PI * ((drops * YOYO.count) % 1)) }
-    } else if (loop > 0 && loop < 1) {
-      // Out, round over her hand and back in: down, out to the side, up, across, down again.
-      const angle = Math.PI / 2 - loop * Math.PI * 2
-      const r = YOYO.radius * Math.sin(Math.PI * loop)
-      at = { x: grip.x + r * Math.cos(angle), y: grip.y + r * Math.sin(angle) }
-    }
-    const appear = stage(yoyo, ...YOYO.appear)
-    const gone = stage(yoyo, ...YOYO.gone)
-    if (shows(appear, gone)) {
-      const length = Math.hypot(at.x - grip.x, at.y - grip.y)
-      for (let s = 1; s < length; s++) {
-        set(
-          {
-            x: grip.x + ((at.x - grip.x) * s) / length,
-            y: grip.y + ((at.y - grip.y) * s) / length,
-          },
-          'f',
-        )
-      }
-      canvas.stamp(YOYO_SPIN[Math.floor(yoyo * 50) % 2]!, at.x - 1.5, at.y - 1.5)
-    }
-    poof(grip, appear)
-    poof(at, gone)
-  }
-
-  // Her spinning top: spinning on her palm, wobbling more as it slows; flicked up and caught.
-  const spinTop = pose.spinTop ?? 0
-  if (spinTop > 0 && spinTop < 1) {
-    // Standing on her palm, clear of her cuff.
-    const palm = { x: hand.x + 1, y: hand.y - 3 }
-    const spin = stage(spinTop, ...SPIN_TOP.spin)
-    const flick = stage(spinTop, ...SPIN_TOP.flick)
-    const wobble = spin > 0 && spin < 1 ? Math.sin(spinTop * 70) * (0.3 + spin * 0.9) : 0
-    const lift = flick > 0 && flick < 1 ? SPIN_TOP.height * 4 * flick * (1 - flick) : 0
-    const at = { x: palm.x + wobble, y: palm.y - lift }
-    const appear = stage(spinTop, ...SPIN_TOP.appear)
-    const gone = stage(spinTop, ...SPIN_TOP.gone)
-    if (shows(appear, gone)) {
-      const turning = spinTop < SPIN_TOP.flick[1] ? Math.floor(spinTop * 60) % 2 : 0
-      canvas.stamp(TOP_SPIN[turning]!, at.x - 2, at.y - 5)
-    }
-    poof({ x: palm.x, y: palm.y - 3 }, appear)
-    poof({ x: palm.x, y: palm.y - 3 }, gone)
-  }
-
-  // Her cards: a deck in her far hand, sprung across to her near hand one after another in an arc,
-  // then back again; then gone.
-  const deck = pose.deck ?? 0
-  if (deck > 0 && deck < 1 && farHand) {
-    const far = { x: farHand.x, y: farHand.y - 2 }
-    const near = { x: hand.x, y: hand.y - 2 }
-    // How many cards are still to go, in the air, or there, for a spring from `a` to `b`.
-    const spring = (span: readonly [number, number], a: Point, b: Point) => {
-      const stagger = (span[1] - span[0] - DECK.flight) / (DECK.cards - 1)
-      let waiting = 0
-      let landed = 0
-      for (let k = 0; k < DECK.cards; k++) {
-        const u = (deck - span[0] - k * stagger) / DECK.flight
-        if (u <= 0) waiting++
-        else if (u >= 1) landed++
-        else {
-          const at = {
-            x: a.x + (b.x - a.x) * u,
-            y: a.y + (b.y - a.y) * u - DECK.arc * 4 * u * (1 - u),
-          }
-          canvas.stamp(CARD, at.x - 1, at.y - 2)
-        }
-      }
-      return { waiting, landed }
-    }
-    const appear = stage(deck, ...DECK.appear)
-    const gone = stage(deck, ...DECK.gone)
-    let inFar: number = DECK.cards
-    let inNear = 0
-    if (deck >= DECK.across[0] && deck < DECK.back[0]) {
-      const across = spring(DECK.across, far, near)
-      inFar = across.waiting
-      inNear = across.landed
-    } else if (deck >= DECK.back[0] && deck < DECK.back[1] + DECK.flight) {
-      const back = spring(DECK.back, near, far)
-      inNear = back.waiting
-      inFar = back.landed
-    }
-    if (shows(appear, gone)) {
-      if (inFar > 0) canvas.stamp(DECK_STACK, far.x - 1.5, far.y - 2)
-      if (inNear > 0) canvas.stamp(DECK_STACK, near.x - 1.5, near.y - 2)
-    }
-    poof(far, appear)
-    poof(far, gone)
-  }
-
-  // Her paper plane: in her near hand; thrown, it flies one loop round her, out to the side, behind
-  // her (where only what isn't her shows it) and back across in front, to her hand; then gone.
-  const plane = pose.plane ?? 0
-  if (plane > 0 && plane < 1) {
-    const held = { x: hand.x, y: hand.y - 2 }
-    const fly = stage(plane, ...PLANE.fly)
-    let at = held
-    let behind = false
-    let right = true
-    if (fly > 0 && fly < 1) {
-      const chest = onBody({ x: 0, y: 2 })
-      const angle = Math.PI / 4 - fly * Math.PI * 2
-      const loop = {
-        x: chest.x + PLANE.rx * Math.cos(angle),
-        y: chest.y + PLANE.ry * Math.sin(angle) + Math.sin(fly * Math.PI * 4) * 1.5,
-      }
-      // Leaving her hand and coming back to it, it eases between her hand and the loop.
-      const ease = Math.min(1, fly / 0.12, (1 - fly) / 0.12)
-      at = { x: held.x + (loop.x - held.x) * ease, y: held.y + (loop.y - held.y) * ease }
-      behind = Math.sin(angle) < 0
-      right = Math.sin(angle) >= 0
-    }
-    const appear = stage(plane, ...PLANE.appear)
-    const gone = stage(plane, ...PLANE.gone)
-    if (shows(appear, gone)) {
-      PAPER_PLANE.forEach((row, dy) =>
-        [...(right ? row : [...row].reverse().join(''))].forEach((letter, dx) => {
-          if (letter === '.') return
-          set({ x: at.x - 3 + dx, y: at.y - 2 + dy }, letter, behind ? '.' : undefined)
-        }),
-      )
-    }
-    poof(held, appear)
-    poof(held, gone)
-  }
-
-  // Her bouncy ball: in her near hand; bounced on the taskbar a few times (squashing as it hits),
-  // then tossed up high and caught; then gone.
-  const ball = pose.ball ?? 0
-  if (ball > 0 && ball < 1) {
-    const top = { x: hand.x, y: hand.y + 2 }
-    const ground = 93
-    const bounces = stage(ball, ...BALL.bounces)
-    const toss = stage(ball, ...BALL.toss)
-    let at = top
-    let flat = false
-    if (bounces > 0 && bounces < 1) {
-      // 1 in her hand, 0 on the taskbar: down fast, a sharp bounce, up again.
-      const u = Math.abs(((bounces * BALL.count) % 1) * 2 - 1)
-      at = { x: top.x, y: ground - (ground - top.y) * u }
-      flat = u < 0.08
-    } else if (toss > 0 && toss < 1) {
-      at = { x: top.x, y: top.y - BALL.height * 4 * toss * (1 - toss) }
-    }
-    const appear = stage(ball, ...BALL.appear)
-    const gone = stage(ball, ...BALL.gone)
-    if (shows(appear, gone)) {
-      if (flat) canvas.stamp(BOUNCY_BALL_FLAT, at.x - 2.5, ground)
-      else canvas.stamp(BOUNCY_BALL, at.x - 1.5, at.y - 1.5)
-    }
-    poof(top, appear)
-    poof(top, gone)
-  }
-
-  // A glow of magic charging in her near hand (her battle): a glint, then a ball, then a sparkle.
-  const charge = pose.charge ?? 0
-  if (charge > 0) {
-    const at = add(hand, { x: 1.5, y: -1 })
-    if (charge > 0.85) canvas.stamp(SPARKLE, at.x - 2, at.y - 2)
-    else if (charge > 0.4) canvas.stamp(['.G.', 'GwG', '.G.'], at.x - 1, at.y - 1)
-    else set(at, 'w')
-  }
-
-  // The little spirit: appears beside her in a sparkle, flies to her, lands on her palm, loops
-  // round her head (behind her on the far side), hovers beside her waving, and fades away.
-  const spirit = pose.spirit ?? 0
-  if (spirit > 0 && spirit < 1) {
-    const head = onHead({ x: 0, y: -4 })
-    const beside = { x: head.x + 27, y: head.y + 6 }
-    const before = { x: head.x + 10, y: head.y + 10 }
-    const palm = { x: hand.x, y: hand.y - 6 }
-    const toHer = stage(spirit, ...SPIRIT.toHer)
-    const land = stage(spirit, ...SPIRIT.land)
-    const loop = stage(spirit, ...SPIRIT.loop)
-    const bob = Math.sin(spirit * 60) * 1
-    let at = beside
-    let behind = false
-    if (spirit >= SPIRIT.toHer[0] && spirit < SPIRIT.land[0]) {
-      at = {
-        x: beside.x + (before.x - beside.x) * toHer,
-        y: beside.y + (before.y - beside.y) * toHer + bob,
-      }
-    } else if (spirit >= SPIRIT.land[0] && spirit < SPIRIT.loop[0]) {
-      const settle = Math.min(1, land * 4)
-      at = {
-        x: before.x + (palm.x - before.x) * settle,
-        y: before.y + (palm.y - before.y) * settle + bob * 0.5,
-      }
-    } else if (spirit >= SPIRIT.loop[0] && spirit < SPIRIT.wave[0]) {
-      const angle = Math.PI / 2 - loop * Math.PI * 2
-      const ring = { x: head.x + 20 * Math.cos(angle), y: head.y + 4 + 6 * Math.sin(angle) }
-      // Eases off her palm into the loop, and out of it to beside her.
-      const into = Math.min(1, loop / 0.15)
-      const outOf = Math.max(0, (loop - 0.85) / 0.15)
-      const from = into < 1 ? palm : ring
-      const to = outOf > 0 ? beside : ring
-      const mix = into < 1 ? into : outOf
-      at = { x: from.x + (to.x - from.x) * mix, y: from.y + (to.y - from.y) * mix }
-      behind = Math.sin(angle) < 0 && into >= 1 && outOf === 0
-    } else if (spirit >= SPIRIT.wave[0]) {
-      const rise = stage(spirit, ...SPIRIT.gone)
-      at = { x: beside.x + Math.sin(spirit * 90) * 1.5, y: beside.y - rise * 8 + bob }
-    }
-    const appear = stage(spirit, ...SPIRIT.appear)
-    const gone = stage(spirit, ...SPIRIT.gone)
-    if (appear >= 0.5 && gone < 0.5) {
-      const rows = SPIRIT_FLAP[Math.floor(spirit * 70) % 2]!
-      rows.forEach((row, dy) =>
-        [...row].forEach((letter, dx) => {
-          if (letter === '.') return
-          set({ x: at.x - 6 + dx, y: at.y - 5 + dy }, letter, behind ? '.' : undefined)
-        }),
-      )
-    }
-    if (appear > 0 && appear < 1) {
-      if (appear < 0.55) canvas.stamp(SPARKLE, beside.x - 2, beside.y - 2)
-      else canvas.stamp(TWINKLE, beside.x - 1, beside.y - 1)
-    }
-    if (gone > 0 && gone < 1) {
-      if (gone < 0.55) canvas.stamp(SPARKLE, at.x - 2, at.y - 2)
-      else canvas.stamp(TWINKLE, at.x - 1, at.y - 1)
-    }
-  }
-
-  // Bubbles: the wand ring held up at her near hand, and bubbles drifting up and forward from in
-  // front of her mouth, wobbling and growing, each popping in a twinkle.
-  const bubbles = pose.bubbles ?? 0
-  if (bubbles > 0) {
-    if (bubbles < BUBBLES.wandAway) {
-      set(add(hand, { x: 0.5, y: -1.5 }), 'F')
-      canvas.stamp(WAND_RING, hand.x, hand.y - 4)
-    }
-    const dy = Math.round(pose.y ?? 0)
-    const from = { x: DIAGONAL_MOUTH.x + 6, y: DIAGONAL_MOUTH.y - 2 + dy }
-    for (let k = 0; k < BUBBLES.count; k++) {
-      const life = (bubbles - BUBBLES.first - k * BUBBLES.gap) / BUBBLES.life
-      if (life <= 0 || life > 1.12) continue
-      const at = {
-        x: from.x + life * 15 + Math.sin(life * 9 + k * 2) * 1.5,
-        y: from.y - life * 21,
-      }
-      if (life > 1) canvas.stamp(TWINKLE, at.x - 1, at.y - 1)
-      else if (life < 0.3) canvas.stamp(BUBBLE_SMALL, at.x - 1, at.y - 1)
-      else canvas.stamp(BUBBLE_BIG, at.x - 1.5, at.y - 1.5)
-    }
-  }
-
-  // A will-o'-wisp going round her, with a fading tail: on the far side of her it's behind her,
-  // drawn only where nothing of her is.
-  const wisp = pose.wisp ?? 0
-  if (wisp > 0) {
-    const chest = onBody({ x: 0, y: 2 })
-    const trail = [wispAt(wisp - 0.012), wispAt(wisp - 0.006)]
-    trail.forEach((p, k) => {
-      if (p)
-        set({ x: chest.x + p.x, y: chest.y + p.y }, k === 0 ? 'f' : 'G', p.behind ? '.' : undefined)
-    })
-    const at = wispAt(wisp)
-    if (at) {
-      WISP.forEach((row, dy) =>
-        [...row].forEach((letter, dx) => {
-          if (letter === '.') return
-          const p = { x: chest.x + at.x - 1.5 + dx, y: chest.y + at.y - 1.5 + dy }
-          set(p, letter, at.behind ? '.' : undefined)
-        }),
-      )
-    }
-  }
-
-  // A sneeze's sparkles: flying out from her nose in a wide fan above it, out past her face and
-  // hair, big at first, then twinkles, then single glints, and gone.
-  const burst = pose.burst ?? 0
-  if (burst > 0 && burst < 1) {
-    const nose = onHead({ x: 0.5, y: 5 })
-    for (let k = 0; k < 7; k++) {
-      const angle = -Math.PI * (-0.1 + k * 0.2)
-      const reach = 6 + burst * 22
-      const at = {
-        x: nose.x + Math.cos(angle) * reach,
-        y: nose.y + Math.sin(angle) * reach * 0.5 - burst * 4,
-      }
-      if (burst < 0.5 && k % 2 === 0) canvas.stamp(SPARKLE, at.x - 2, at.y - 2)
-      else if (burst < 0.8) canvas.stamp(TWINKLE, at.x - 1, at.y - 1)
-      else set(at, 'w')
-    }
-  }
-
-  // Her sparkle trail: little sparkles on the ground behind her heel, left behind as she walks
-  // and fading as they drift back: a twinkle, then a glint, then a fainter one, and gone; every
-  // other one gold. Only on empty ground or her shadow, never over her.
-  if (pose.trail !== undefined) {
-    for (let k = 0; k < TRAIL.perStride; k++) {
-      const age = (((pose.trail - k / TRAIL.perStride) % 1) + 1) % 1
-      if (age >= TRAIL.life) continue
-      const at = { x: hips.x - 5 - age * TRAIL.drift - (k % 2) * 2, y: 93 - (k % 2) - age * 4 }
-      const gold = k % 2 === 1
-      if (age < 0.1) motif(at, gold ? ['.Y.', 'YwY', '.Y.'] : TWINKLE, '.x')
-      else set(at, age < 0.25 ? (gold ? 'Y' : 'w') : gold ? 'k' : 'f', '.x')
-    }
-  }
-
-  // A little spell: sparkles round her raised hand.
-  const sparkle = pose.sparkle ?? 0
-  if (sparkle > 0) {
-    const spin = sparkle * Math.PI * 2
-    canvas.stamp(SPARKLE, hand.x - 2 + Math.cos(spin) * 6, hand.y - 2 - 4 + Math.sin(spin) * 4)
-    canvas.stamp(
-      TWINKLE,
-      hand.x - 1 + Math.cos(spin + 2.1) * 7,
-      hand.y - 1 - 5 + Math.sin(spin + 2.1) * 5,
-    )
-    canvas.stamp(
-      TWINKLE,
-      hand.x - 1 + Math.cos(spin + 4.2) * 5,
-      hand.y - 1 - 3 + Math.sin(spin + 4.2) * 3,
-    )
-  }
-
-  // A flame in her palm: a spark, growing and flickering (its tip leaning one way, then the
-  // other), then blown out, leaning away from her as it shrinks, into a curl of smoke rising with a
-  // few sparks.
-  const flame = pose.flame ?? 0
-  if (flame > 0 && flame < 1) {
-    const palm = add(hand, { x: 0.5, y: -1 })
-    const blown = stage(flame, ...FLAME.blow)
-    if (flame >= FLAME.kindle && blown < 1) {
-      const grown = stage(flame, FLAME.kindle, FLAME.full)
-      const size =
-        blown > 0 ? (blown < 0.5 ? 2 : 1) : grown < 0.25 ? 0 : grown < 0.6 ? 1 : grown < 1 ? 2 : 3
-      const picture = FLAMES[size]!
-      const flicker = blown === 0 && hash(Math.floor(flame * 60), 3) < 0.5
-      const x = palm.x - (picture[0]!.length - 1) / 2 + (blown > 0 ? 1 + blown * 2 : 0)
-      canvas.stamp(picture, x, palm.y - picture.length + 1, flicker)
-    }
-    const smoke = stage(flame, FLAME.blow[1], 0.95)
-    if (smoke > 0 && smoke < 1) {
-      for (let k = 0; k < 5; k++) {
-        const life = smoke * 1.6 - k * 0.15
-        if (life <= 0 || life >= 1) continue
-        const at = { x: palm.x + 1 + Math.sin(life * 6 + k) * 2, y: palm.y - 2 - life * 18 }
-        if (life < 0.4) canvas.stamp(['ff', 'ff'], at.x, at.y)
-        else set(at, life < 0.75 ? 'f' : 'F')
-      }
-      for (let k = 0; k < 3; k++) {
-        const life = smoke * 2 - k * 0.2
-        if (life <= 0 || life >= 1) continue
-        set(
-          { x: palm.x + (k - 1) * (2 + life * 4), y: palm.y - 3 - life * 10 },
-          life < 0.5 ? 'Y' : 'k',
-        )
-      }
-    }
-  }
-
-  // A snowflake over her cupped hands: six arms growing out from its heart, branching, a glint
-  // going round its tips; then it bursts into glitter that flies out and drifts down, twinkling.
-  const frost = pose.frost ?? 0
-  if (frost > 0 && frost < 1 && farHand) {
-    const c = {
-      x: (hand.x + farHand.x) / 2,
-      y: Math.min(hand.y, farHand.y) - 9 + Math.sin(frost * 25) * 0.6,
-    }
-    const burst = stage(frost, ...FROST.burst)
-    const grown = stage(frost, ...FROST.grow)
-    if (burst === 0 && grown > 0) {
-      const reach = 1 + grown * 5
-      for (let k = 0; k < 6; k++) {
-        const a = Math.PI / 2 + (k * Math.PI) / 3
-        const out = { x: Math.cos(a), y: Math.sin(a) }
-        for (let r = 1; r <= reach; r += 0.5) {
-          set({ x: c.x + out.x * r, y: c.y + out.y * r }, r > reach - 1 ? 'G' : 'w')
-        }
-        if (reach < 3.5) continue
-        for (const side of [-1, 1]) {
-          const b = a + (side * Math.PI) / 3
-          const from = { x: c.x + out.x * reach * 0.55, y: c.y + out.y * reach * 0.55 }
-          for (let r = 0.5; r <= reach * 0.35; r += 0.5) {
-            set({ x: from.x + Math.cos(b) * r, y: from.y + Math.sin(b) * r }, 'f')
-          }
-        }
-      }
-      set(c, 'w')
-      if (grown >= 1) {
-        const a = Math.PI / 2 + ((Math.floor(frost * 24) % 6) * Math.PI) / 3
-        canvas.stamp(TWINKLE, c.x - 1 + Math.cos(a) * reach, c.y - 1 + Math.sin(a) * reach)
-      }
-    } else if (burst > 0 && burst < 1) {
-      for (let k = 0; k < 14; k++) {
-        const a = (k / 14) * Math.PI * 2 + 0.2
-        const out = 3 + (1 - (1 - burst) ** 2) * 14
-        const at = {
-          x: c.x + Math.cos(a) * out,
-          y: c.y + Math.sin(a) * out * 0.6 + burst * burst * 12,
-        }
-        if (burst < 0.3 && k % 3 === 0) canvas.stamp(TWINKLE, at.x - 1, at.y - 1)
-        else set(at, (k + Math.floor(burst * 10)) % 3 === 0 ? 'w' : k % 2 ? 'G' : 'f')
-      }
-    }
-  }
-
-  // A flower: sparkles drip from her pointing finger to the ground in front of her, where a sprout
-  // comes up, grows leaves and a bud, and opens into a pink flower that sways and twinkles; at the
-  // end it glows and scatters into sparkles.
-  const bloom = pose.bloom ?? 0
-  if (bloom > 0 && bloom < 1) {
-    const ground = { x: hips.x + BLOOM.ahead, y: 94 }
-    const drip = stage(bloom, ...BLOOM.drip)
-    if (drip > 0 && drip < 1) {
-      const tip = add(hand, { x: 1, y: 1 })
-      for (let k = 0; k < 3; k++) {
-        const fall = (drip * 3 + k / 3) % 1
-        const at = {
-          x: tip.x + (ground.x - tip.x) * fall,
-          y: tip.y + (ground.y - 2 - tip.y) * fall,
-        }
-        set(at, k === 1 ? 'Y' : 'w')
-      }
-    }
-    const grown = stage(bloom, ...BLOOM.grow)
-    const open = stage(bloom, ...BLOOM.open)
-    const scatter = stage(bloom, ...BLOOM.scatter)
-    if (grown > 0 && scatter === 0) {
-      const tall = Math.round(1 + grown * 12)
-      const sway = Math.sin(bloom * 16) * 0.8 * stage(bloom, 0.6, 0.66)
-      for (let k = 0; k < tall; k++) set({ x: ground.x + (sway * k) / tall, y: ground.y - k }, 'E')
-      // Leaves either side as it grows: a pair low down, then one higher up.
-      for (const [height, side] of [
-        [3, -1],
-        [5, 1],
-        [8, -1],
-      ] as const) {
-        if (tall < height + 2) continue
-        set({ x: ground.x + side, y: ground.y - height }, 'E')
-        set({ x: ground.x + side * 2, y: ground.y - height - 1 }, 'E')
-        set({ x: ground.x + side * 3, y: ground.y - height - 1 }, 'P')
-      }
-      const top = { x: ground.x + sway, y: ground.y - tall }
-      if (open > 0) {
-        const flower = open < 0.5 ? FLOWER_HALF : FLOWER
-        canvas.stamp(flower, top.x - (flower[0]!.length - 1) / 2, top.y - (flower.length - 1) / 2)
-        if (open >= 1 && Math.floor(bloom * 30) % 4 === 0) {
-          canvas.stamp(TWINKLE, top.x + 3, top.y - 6)
-        }
-      } else if (grown >= 1) {
-        canvas.stamp(BUD, top.x - 1, top.y - 1)
-      }
-    } else if (scatter > 0 && scatter < 1) {
-      const top = { x: ground.x, y: ground.y - 13 }
-      for (let k = 0; k < 8; k++) {
-        const a = (k / 8) * Math.PI * 2
-        const at = {
-          x: top.x + Math.cos(a) * scatter * 9,
-          y: top.y + Math.sin(a) * scatter * 4 - scatter * 10,
-        }
-        if (scatter < 0.35 && k % 2 === 0) canvas.stamp(TWINKLE, at.x - 1, at.y - 1)
-        else set(at, scatter < 0.6 ? (k % 2 ? 'c' : 'Y') : 'w')
-      }
-    }
-  }
-
-  // A star traced in the air beside her: a point of light draws its outline, five points round,
-  // in gold; it flashes white as it closes, glows with a sparkle at its heart, and fades away a
-  // pixel at a time, motes rising from its points.
-  const sigil = pose.sigil ?? 0
-  if (sigil > 0 && sigil < 1) {
-    const c = { x: hips.x + 20, y: head.y - 7 }
-    const corners = Array.from({ length: 10 }, (_, i) => {
-      const a = -Math.PI / 2 + (i * Math.PI) / 5
-      const r = i % 2 === 0 ? SIGIL.outer : SIGIL.inner
-      return { x: c.x + Math.cos(a) * r, y: c.y + Math.sin(a) * r }
-    })
-    const along = (s: number) => {
-      const i = Math.floor(s) % 10
-      const [from, to] = [corners[i]!, corners[(i + 1) % 10]!]
-      return { x: from.x + (to.x - from.x) * (s % 1), y: from.y + (to.y - from.y) * (s % 1) }
-    }
-    const traced = stage(sigil, ...SIGIL.trace) * 10
-    const flash = sigil >= SIGIL.trace[1] && sigil < SIGIL.trace[1] + 0.06
-    const fading = stage(sigil, ...SIGIL.fade)
-    if (fading < 1) {
-      for (let s = 0; s < Math.min(10, traced); s += 0.08) {
-        const p = along(s)
-        if (fading > 0 && hash(Math.round(p.x), Math.round(p.y), 5) < fading) continue
-        set(p, flash ? 'w' : 'Y')
-      }
-    }
-    if (traced > 0 && traced < 10) {
-      const tip = along(traced)
-      canvas.stamp(TWINKLE, tip.x - 1, tip.y - 1)
-    } else if (traced >= 10 && fading === 0) {
-      const glint = Math.floor(sigil * 20) % 2 === 0 ? SPARKLE : TWINKLE
-      canvas.stamp(glint, c.x - (glint.length - 1) / 2, c.y - (glint.length - 1) / 2)
-    } else if (fading > 0 && fading < 1) {
-      for (let k = 0; k < 5; k++) {
-        const point = corners[k * 2]!
-        set({ x: point.x, y: point.y - 1 - fading * 8 }, fading < 0.5 ? 'w' : 'f')
-      }
-    }
-  }
-
-  // A rainbow over her, behind her: painted from its top outward either side as her hands sweep
-  // apart, five bands of colour; glints run along it; then it fades away a pixel at a time.
-  const rainbow = pose.rainbow ?? 0
-  if (rainbow > 0 && rainbow < 1) {
-    const centre = { x: hips.x, y: hips.y - 4 }
-    const reach = stage(rainbow, ...RAINBOW.paint) * RAINBOW.span
-    const fading = stage(rainbow, ...RAINBOW.fade)
-    RAINBOW_BANDS.forEach((letter, b) => {
-      for (let a = -reach; a <= reach; a += 0.012) {
-        const p = {
-          x: centre.x + Math.sin(a) * (RAINBOW.rx - b),
-          y: centre.y - Math.cos(a) * (RAINBOW.ry - b),
-        }
-        if (fading > 0 && hash(Math.round(p.x), Math.round(p.y), 7) < fading) continue
-        set(p, letter, '.')
-      }
-    })
-    if (reach >= RAINBOW.span && fading === 0) {
-      for (let k = 0; k < 3; k++) {
-        const a = ((((rainbow * 3 + k / 3) % 1) * 2 - 1) * RAINBOW.span) / 1.05
-        const p = {
-          x: centre.x + Math.sin(a) * (RAINBOW.rx - 2),
-          y: centre.y - Math.cos(a) * (RAINBOW.ry - 2),
-        }
-        motif(p, TWINKLE, '.' + RAINBOW_BANDS.join(''))
-      }
-    }
-  }
-
-  // Her hat trick: sparkles showering down from under her lifted hat as it spins, over her.
-  const shower = pose.shower ?? 0
-  if (shower > 0 && shower < 1) {
-    const brim = onHead({ x: 0, y: -9 - (pose.hatLift ?? 0) })
-    for (let k = 0; k < 7; k++) {
-      const round = shower * 3 + k / 7
-      const life = round % 1
-      const at = {
-        x: brim.x + (hash(k, Math.floor(round), 9) - 0.5) * 22,
-        y: brim.y + 2 + life * 26,
-      }
-      if (life < 0.25) canvas.stamp(k % 2 ? GOLD_TWINKLE : TWINKLE, at.x - 1, at.y - 1)
-      else set(at, life < 0.6 ? (k % 2 ? 'Y' : 'w') : 'f')
-    }
-  }
-
-  // A falling star: it streaks down from high to one side into her cupped hands, its tail behind
-  // it; glows there, glinting; then she tosses it back up and away, leaving twinkles in the air.
-  const star = pose.star ?? 0
-  if (star > 0 && star < 1 && farHand) {
-    const cupped = { x: (hand.x + farHand.x) / 2, y: Math.min(hand.y, farHand.y) - 3 }
-    const [fallFrom, fallTo] = STAR_CATCH.fall
-    const [tossFrom, tossTo] = STAR_CATCH.toss
-    if (star >= fallFrom && star < fallTo) {
-      const from = { x: hips.x + 34, y: -6 }
-      const path = (t: number) => ({
-        x: from.x + (cupped.x - from.x) * t,
-        y: from.y + (cupped.y - from.y) * t * t,
-      })
-      const t = stage(star, fallFrom, fallTo)
-      for (let k = 8; k >= 1; k--) {
-        if (t - k * 0.03 < 0) continue
-        set(path(t - k * 0.03), k < 3 ? 'w' : k < 6 ? 'j' : 'Y')
-      }
-      const at = path(t)
-      canvas.stamp(STAR, at.x - 2, at.y - 2)
-    } else if (star >= fallTo && star < tossFrom) {
-      canvas.stamp(STAR, cupped.x - 2, cupped.y - 2)
-      const glint = Math.floor(star * 30) % 3
-      if (glint === 0) set({ x: cupped.x - 4, y: cupped.y - 3 }, 'w')
-      if (glint === 1) set({ x: cupped.x + 4, y: cupped.y - 4 }, 'w')
-      if (glint === 2) set({ x: cupped.x + 1, y: cupped.y - 6 }, 'j')
-    } else if (star >= tossFrom && star < tossTo) {
-      const t = stage(star, tossFrom, tossTo)
-      const at = { x: cupped.x + t * 6, y: cupped.y - t * 62 }
-      for (let k = 1; k <= 6; k++) set({ x: at.x - k * 0.5, y: at.y + k * 2 }, k < 3 ? 'w' : 'j')
-      canvas.stamp(STAR, at.x - 2, at.y - 2)
-    }
-    const after = stage(star, tossFrom + 0.04, 0.98)
-    if (after > 0 && after < 1) {
-      for (let k = 0; k < 4; k++) {
-        const life = after * 1.6 - k * 0.15
-        if (life <= 0 || life >= 1) continue
-        const at = { x: cupped.x + 1 + k * 1.5, y: cupped.y - 14 - k * 11 }
-        if (life < 0.4) canvas.stamp(GOLD_TWINKLE, at.x - 1, at.y - 1)
-        else set(at, life < 0.7 ? 'Y' : 'k')
-      }
-    }
-  }
-
-  // A little rain cloud: it gathers over her hat, light on top and grey beneath, and rains on her
-  // (and round her, splashing on the ground); shooed, it shakes and bursts into sparkles.
-  const rain = pose.rain ?? 0
-  if (rain > 0 && rain < 1) {
-    const gather = stage(rain, ...RAIN.gather)
-    const burst = stage(rain, ...RAIN.burst)
-    const shake = rain > 0.6 && rain < RAIN.burst[0] ? Math.round(Math.sin(rain * 200)) : 0
-    const c = { x: head.x + 1 + shake, y: Math.max(-5, head.y - 28) }
-    if (gather > 0 && burst === 0) {
-      const humps = [
-        { dx: -6, r: 4 },
-        { dx: 0, r: 5.5 },
-        { dx: 6, r: 4.5 },
-      ]
-      const cloud = new Set<string>()
-      for (let y = Math.floor(c.y - 7); y <= c.y + 2; y++) {
-        for (let x = Math.floor(c.x - 13); x <= c.x + 13; x++) {
-          const inside = humps.some(({ dx, r }) => {
-            const rx = r * 1.3 * gather
-            const ry = r * gather
-            return ((x + 0.5 - c.x - dx * gather) / rx) ** 2 + ((y + 0.5 - c.y) / ry) ** 2 <= 1
-          })
-          if (inside) cloud.add(`${x},${y}`)
-        }
-      }
-      for (const key of cloud) {
-        const [x, y] = key.split(',').map(Number) as [number, number]
-        const edge = [
-          [1, 0],
-          [-1, 0],
-          [0, 1],
-          [0, -1],
-        ].some(([dx, dy]) => !cloud.has(`${x + dx!},${y + dy!}`))
-        set({ x, y }, edge ? 'O' : y >= c.y + 1 ? 'F' : y <= c.y - 2 ? 'l' : 'f')
-      }
-    }
-    const pour = stage(rain, ...RAIN.pour)
-    if (pour > 0 && pour < 1) {
-      const top = c.y + 3
-      for (let k = 0; k < 8; k++) {
-        const x = c.x - 9 + k * 2.6
-        const fall = (pour * 9 + hash(k, 1, 11)) % 1
-        const y = top + fall * (93 - top)
-        set({ x, y: y - 1 }, 'w')
-        set({ x, y }, 'G')
-        if (fall > 0.9) {
-          set({ x: x - 1, y: 93 }, 'f', '.x')
-          set({ x: x + 1, y: 93 }, 'f', '.x')
-        }
-      }
-    }
-    if (burst > 0 && burst < 1) {
-      for (let k = 0; k < 10; k++) {
-        const a = (k / 10) * Math.PI * 2
-        const at = { x: c.x + Math.cos(a) * burst * 14, y: c.y + Math.sin(a) * burst * 7 }
-        if (burst < 0.4 && k % 2 === 0)
-          canvas.stamp(k % 4 ? GOLD_TWINKLE : TWINKLE, at.x - 1, at.y - 1)
-        else set(at, burst < 0.7 ? (k % 2 ? 'G' : 'w') : 'f')
-      }
-    }
-  }
-
-  // A potion in a little flask in her hand, bubbling and changing colour; the cork pops off and
-  // flies away, and puffs of coloured smoke curl up out of it, fading.
-  const potion = pose.potion ?? 0
-  if (potion > 0 && potion < 1) {
-    const corner = { x: Math.round(hand.x) - 2, y: Math.round(hand.y) - 7 }
-    const corked = potion < POTION.pop
-    if (potion > 0.04 && potion < 0.92) {
-      const colour = POTION_COLOURS[Math.floor(potion * 12) % POTION_COLOURS.length]!
-      FLASK.forEach((row, dy) =>
-        [...row].forEach((letter, dx) => {
-          if (letter === '.' || (letter === 'o' && !corked)) return
-          const drawn = letter === 'X' ? colour : letter === 'o' ? 'i' : letter
-          canvas.set(corner.x + dx, corner.y + dy, drawn)
-        }),
-      )
-      const bubble = Math.floor(potion * 40) % 3
-      set({ x: corner.x + 1 + (bubble % 2) * 2, y: corner.y + 5 - bubble }, 'w', colour)
-      canvas.stamp(['ss'], hand.x - 1, hand.y)
-    }
-    const flying = stage(potion, POTION.pop, POTION.pop + 0.12)
-    if (flying > 0 && flying < 1) {
-      set({ x: corner.x + 2 + flying * 8, y: corner.y - flying * 14 + flying * flying * 10 }, 'i')
-    }
-    const puff = stage(potion, POTION.pop, POTION.puffed)
-    if (puff > 0 && puff < 1) {
-      for (let k = 0; k < 6; k++) {
-        const life = puff * 1.8 - k * 0.15
-        if (life <= 0 || life >= 1) continue
-        const letter = ['c', 'a', 'G'][k % 3]!
-        const at = {
-          x: corner.x + 2 + Math.sin(life * 7 + k * 2) * (2 + life * 4),
-          y: corner.y - 1 - life * 20,
-        }
-        if (life < 0.45) canvas.stamp([letter + letter, letter + letter], at.x, at.y)
-        else set(at, life < 0.8 ? letter : 'w')
-      }
-    }
-  }
-
-  // Her spellbook, floating open in front of her, bobbing: it rises into place opening, its pages
-  // turn by themselves, right to left, glowing letters rise out of it and fade; then it closes and
-  // vanishes in a twinkle.
-  const tome = pose.tome ?? 0
-  if (tome > 0 && tome < 1) {
-    const appear = stage(tome, ...TOME.appear)
-    const close = stage(tome, ...TOME.close)
-    const vanish = stage(tome, ...TOME.vanish)
-    const c = {
-      x: Math.round(hips.x),
-      y: Math.round(hips.y - 16 + (1 - appear) * 6 + Math.sin(tome * 18)),
-    }
-    if (appear > 0 && vanish === 0) {
-      const half = Math.round(1 + 6 * appear * (1 - close))
-      // Its outline, dark against her robe, then its covers with a gold edge.
-      for (let dx = -half - 2; dx <= half + 2; dx++) {
-        for (let dy = -3; dy <= 5; dy++) set({ x: c.x + dx, y: c.y + dy }, 'u')
-      }
-      for (let dx = -half - 1; dx <= half + 1; dx++) set({ x: c.x + dx, y: c.y + 3 }, 'n')
-      for (let dx = -half; dx <= half; dx++) set({ x: c.x + dx, y: c.y + 4 }, 'Y')
-      for (let dy = -1; dy <= 2; dy++) {
-        set({ x: c.x - half - 1, y: c.y + dy }, 'n')
-        set({ x: c.x + half + 1, y: c.y + dy }, 'n')
-      }
-      for (let dy = -2; dy <= 2; dy++) {
-        for (let dx = -half; dx <= half; dx++) {
-          if (dy === -2 && Math.abs(dx) === half && half > 1) continue
-          const text =
-            (dy === -1 || dy === 1) &&
-            Math.abs(dx) > 1 &&
-            Math.abs(dx) < half &&
-            (dx + dy) % 2 === 0
-          set({ x: c.x + dx, y: c.y + dy }, dx === 0 || text ? 'F' : 'f')
-        }
-      }
-      const turning = stage(tome, ...TOME.turn)
-      if (turning > 0 && turning < 1 && close === 0) {
-        const edge = Math.round(Math.cos(((turning * TOME.pages) % 1) * Math.PI) * half)
-        const [from, to] = edge > 0 ? [1, edge] : [edge, -1]
-        for (let dx = from; dx <= to; dx++) {
-          for (let dy = -3; dy <= 1; dy++)
-            set({ x: c.x + dx, y: c.y + dy }, dx === edge ? 'F' : 'w')
-        }
-      }
-      if (appear < 1) canvas.stamp(TWINKLE, c.x + half + 1, c.y - 4)
-    }
-    const letters = stage(tome, ...TOME.letters)
-    if (letters > 0 && letters < 1) {
-      for (let k = 0; k < 6; k++) {
-        const raw = letters * 3 - k / 6
-        if (raw < 0 || raw >= 2.6) continue
-        const life = raw % 1
-        if (life > 0.9) continue
-        const glyph = GLYPHS[k % GLYPHS.length]!.map((row) =>
-          life < 0.6 ? row : row.replace(/Y/g, 'k'),
-        )
-        // Up and out to one side of her or the other, clear of her face.
-        const side = k % 2 === 0 ? 1 : -1
-        const at = {
-          x: c.x + side * (5 + life * 16) + Math.sin(life * 6 + k) - 1,
-          y: c.y - 3 - life * 20,
-        }
-        canvas.stamp(glyph, at.x, at.y)
-      }
-    }
-    if (vanish > 0 && vanish < 1) {
-      for (let k = 0; k < 6; k++) {
-        const a = (k / 6) * Math.PI * 2
-        const at = { x: c.x + Math.cos(a) * vanish * 9, y: c.y + Math.sin(a) * vanish * 5 }
-        if (vanish < 0.5) canvas.stamp(k % 2 ? GOLD_TWINKLE : TWINKLE, at.x - 1, at.y - 1)
-        else set(at, 'w')
-      }
-    }
-  }
-
-  // Dust from a hard landing: puffs thrown out along the ground either side of her, rising a
-  // little and thinning out, only on empty ground or her shadow.
-  const dust = pose.dust ?? 0
-  if (dust > 0 && dust < 1) {
-    for (const side of [-1, 1]) {
-      for (let k = 0; k < 3; k++) {
-        const life = dust * 1.3 - k * 0.12
-        if (life <= 0 || life >= 1) continue
-        const at = { x: hips.x + side * (22 + life * 14 + k * 3), y: 93 - life * 5 - k }
-        if (life < 0.45) motif(at, ['ff', 'fF'], '.x')
-        else set(at, life < 0.75 ? 'f' : 'F', '.x')
-      }
-    }
-  }
-
-  // Dizzy stars going round above her head (a hard landing): in front of her on the near half of
-  // the circle, behind her on the far half.
-  if (pose.dizzy !== undefined) {
-    // Above her hat's tip, wherever it is (knocked down over her eyes, it's lower).
-    const middle = onHead({ x: 0, y: -25 - (pose.hatLift ?? 0) })
-    for (let k = 0; k < 3; k++) {
-      const a = pose.dizzy * Math.PI * 2 + (k * Math.PI * 2) / 3
-      const at = { x: middle.x + Math.cos(a) * 12, y: middle.y + Math.sin(a) * 3.5 }
-      const behind = Math.sin(a) < 0
-      const star = k === 1 ? GOLD_TWINKLE : STAR
-      const half = (star.length - 1) / 2
-      star.forEach((row, dy) =>
-        [...row].forEach((letter, dx) => {
-          if (letter === '.') return
-          set({ x: at.x - half + dx, y: at.y - half + dy }, letter, behind ? '.' : undefined)
-        }),
-      )
-    }
-  }
-
-  // A scroll held open in front of her, its rolled ends in her hands.
-  if (pose.scroll && farHand) {
-    const middle = { x: (hand.x + farHand.x) / 2, y: (hand.y + farHand.y) / 2 }
-    canvas.stamp(SCROLL, middle.x - (SCROLL[0]!.length - 1) / 2, middle.y - SCROLL.length + 2)
-  }
-
-  // A bead of sweat beside her forehead, on the side away from her hat's tip.
-  if (pose.sweat) {
-    const at = onHead({ x: -10, y: -4 })
-    canvas.stamp(SWEAT, at.x - 1, at.y - 1)
-  }
-
-  // Hearts floating up from her, swaying, one after another, big then small, and gone.
-  const hearts = pose.hearts ?? 0
-  if (hearts > 0 && hearts < 1) {
-    for (let k = 0; k < 4; k++) {
-      const life = hearts * 1.6 - k * 0.2
-      if (life <= 0 || life >= 1) continue
-      const side = k % 2 === 0 ? 1 : -1
-      const at = onHead({
-        x: side * (6 + life * 6) + Math.sin(life * 9 + k) * 1.5,
-        y: -8 - life * 24,
-      })
-      const heart = life < 0.55 ? HEART : HEART_SMALL
-      canvas.stamp(heart, at.x - (heart[0]!.length - 1) / 2, at.y - (heart.length - 1) / 2)
-    }
-  }
-
-  // Confetti: a burst from her raised hands, the pieces flying up and out, then fluttering down
-  // round her, side to side, each its own colour, until they're gone.
-  const confetti = pose.confetti ?? 0
-  if (confetti > 0.08 && confetti < 1) {
-    const from = farHand
-      ? { x: (hand.x + farHand.x) / 2, y: Math.min(hand.y, farHand.y) - 2 }
-      : hand
-    const t = (confetti - 0.08) / 0.92
-    for (let k = 0; k < 34; k++) {
-      const spread = (hash(k, 1, 13) - 0.5) * 2
-      const rise = 18 + hash(k, 2, 13) * 22
-      const up = Math.min(1, t / 0.25)
-      const down = Math.max(0, t - 0.25)
-      const at = {
-        x:
-          from.x +
-          spread * 30 * Math.min(1, t / 0.3) +
-          Math.sin(t * 14 + k) * 2 * Math.min(1, down * 4),
-        y: from.y - rise * (1 - (1 - up) ** 2) + down * down * 140 + down * 20,
-      }
-      if (at.y > 94 || t > 0.97) continue
-      const colour = CONFETTI[k % CONFETTI.length]!
-      set(at, colour)
-      // Every other piece a little strip, turning as it falls.
-      if (k % 2 === 0) {
-        const flat = Math.floor(t * 20 + k) % 2 === 0
-        set({ x: at.x + (flat ? 1 : 0), y: at.y + (flat ? 0 : 1) }, colour)
-      }
-    }
-  }
+  for (const paint of PROPS) paint(scene)
 
   castShadows(canvas)
 
@@ -5975,103 +5114,12 @@ Math.PI) % 2`), which turn with `spin`. Six white runes (`w`) go round the outer
   opposite sides of a small ellipse round its middle, turning a whole turn as `spin` goes from 0
   to 1, and a white glint (`w`) at its upper left, all only over its teal. Her fingers under it
   are two pairs of skin pixels with a gap between (`ss.ss`), at its bottom edge.
-- The butterfly, when `pose.butterfly` is between 0.06 and 0.92: as the comment says, it flutters
-  down to just above her raised hand (`perch`, 3 pixels above it), rests there opening and
-  shutting its wings, then flies off up and away, out of the frame. `between(from, to, t)` is the
-  point `t` of the way from one to the other.
-  - Until 0.3, it comes down from 16 pixels to the side of her hand and 24 above, eased
-    (`t * t * (3 - 2 * t)`, slow at either end), weaving a little from side to side (the `sin`)
-    less and less as it arrives, flapping every frame or so.
-  - From 0.3 to 0.72, it rests on the perch, opening and shutting its wings, each held for 0.07
-    of the visit.
-  - After that, it flies off toward 22 pixels to the side and 36 up, slowly at first then faster
-    (`** 1.4`), flapping again.
-  - `BUTTERFLY_OPEN` or `BUTTERFLY_SHUT` is stamped centred on where it is.
-- The z's, when `pose.zzz` is above 0: as the comment says, they float up from above her hat, one
-  after another, growing as they rise. There are three. `life` is how far along one is, from 0 as
-  it appears to 1 as it goes: `zzz * 1.6 - k * 0.3`, so each runs 1.6 times as fast as `zzz` and
-  starts a little after the one before. Placed in the head's frame (`onHead`), each starts 7 pixels
-  toward the way she faces and 13 above the middle of her head, the later ones a little further
-  over, and rises 12 pixels, drifting 6 further over. It starts as a `Z_SMALL` and becomes a
-  `Z_BIG` once it's nearly halfway. `pose.flipText` stamps it back to front (`stamp()`'s `flip`)
-  in frames that will be mirrored to face left, so it reads as a Z either way.
-- The juggling, when `pose.juggle` is between 0 and 1 and there's a far hand (so only from the
-  front): as the comment says, three orbs a third of the way round apart, each thrown up in a high
-  arc from her far hand to her near one and passed quickly back underneath (a "shower"), just
-  above her hands. `left` is the far hand, on the left of the picture.
-  - `round`: how far round its loop each orb is, from 0 to 1. `juggle * JUGGLE.rounds` goes round
-    4 times over the juggling, and `k / ORBS.length` puts each orb a third of the way round from
-    the one before. `% 1` keeps just the part past the last whole round.
-  - `high`: the first 62% of the loop (`JUGGLE.arc`) is the high arc, the rest the pass back. `t`
-    is how far along that arc or pass it is, from 0 to 1.
-  - `[from, to]`: the high arc goes from the far hand to the near one, the pass back the other way.
-  - `up`: how far above the line between her hands it is. `4 * t * (1 - t)` is 0 at each hand and
-    1 halfway, a parabola, the path anything thrown takes; it's times 28 pixels on the high arc and
-    5 on the pass back.
-  - `at`: the point `t` of the way from one hand to the other, 3 pixels above them and `up` higher.
-    Each orb is stamped centred on it (`- 1`, its picture being three pixels across).
-- The bubbles, when `pose.bubbles` is above 0: as the comment says, the wand ring held up at her
-  near hand, and bubbles drifting up and forward from in front of her mouth, wobbling and growing,
-  each popping in a twinkle. They're placed for the diagonal view, the one the habit uses.
-  - Until `BUBBLES.wandAway`, the wand: one pixel of the trim's shade (`F`) just above her hand,
-    its handle, and `WAND_RING` above that.
-  - `from`: where the bubbles start: 6 pixels in front of her mouth in the diagonal picture
-    (`DIAGONAL_MOUTH`) and 2 above it, moved with her by the pose's `y` (`dy`, rounded, as the
-    picture is).
-  - `life`: how far bubble `k` is through its float. It starts at `first + k * gap` and lasts
-    `BUBBLES.life`. Before it starts (`life <= 0`), and once it has popped and twinkled
-    (`life > 1.12`), it isn't drawn.
-  - `at`: it drifts 15 pixels forward and 21 up over its life, wobbling a pixel and a half to and
-    fro (`Math.sin(life * 9 + k * 2) * 1.5`; the `k * 2` keeps the bubbles' wobbles out of step).
-  - It's a `BUBBLE_SMALL` for the first 30% of its life, then a `BUBBLE_BIG`, and just past the
-    end of its life a `TWINKLE`: the pop.
-- The will-o'-wisp, when `pose.wisp` is above 0: as the comment says, going round her with a
-  fading tail; on the far side of her it's behind her, drawn only where nothing of her is.
-  - `chest`: 2 pixels below her neck, in the body's frame: the middle of her chest, which
-    `wispAt()` measures from.
-  - `trail`: where it was a moment ago, twice (`wispAt(wisp - 0.012)` and `wispAt(wisp - 0.006)`),
-    a pixel each: the older in the trim's silver (`f`), the newer in teal (`G`), a two-pixel tail
-    fading behind it. A point from before it came (`null`) is skipped.
-  - `p.behind ? '.' : undefined`: behind her, a pixel is only set where nothing is yet (`set()`'s
-    `only`), so her body hides it; in front of her, it's drawn over her.
-  - The wisp itself: each pixel of `WISP` that isn't see-through, centred on its place (`- 1.5`,
-    the picture being four pixels across), set the same way, so behind her only the part beside her
-    shows.
-- Her sparkle trail, when there's a `pose.trail` (walking): as the comment says, little sparkles
-  on the ground behind her heel, left behind as she walks and fading as they drift back.
-  - For each of the stride's `TRAIL.perStride` sparkles, `age`: how long ago it was dropped, in
-    strides. Sparkle `k` is dropped at `k / perStride` of the way through the stride; the two
-    `% 1`s (the second after adding 1) keep the age between 0 and 1 even when the stride has gone
-    round past it, so the trail joins up from the last frame back to the first. One older than
-    `TRAIL.life` is gone.
-  - `at`: on the ground just behind her heel (5 pixels behind her hips, at row 93, above her
-    shadow), then `age * TRAIL.drift` further back (see `TRAIL`), and a little higher as it fades.
-    Every other one is 2 pixels further back and a row higher, so they don't fall in a line.
-  - Its look by age: at first a twinkle (`TWINKLE`, or a gold one for every other sparkle), then a
-    single glint (white, `w`, or gold, `Y`), then a fainter one (silver, `f`, or dark gold, `k`).
-  - Every pixel is set only over `'.x'`: empty ground or her shadow. So a sparkle never covers her
-    boots or robe, wherever her feet are in the stride.
-- The sneeze's sparkles, when `pose.burst` is between 0 and 1: as the comment says, flying out
-  from her nose in a wide fan above it, out past her face and hair, big at first, then twinkles,
-  then single glints, and gone.
-  - `nose`: half a pixel right of the middle of her head and 5 pixels below it, in the head's frame
-    (the habit is seen from the front, where that's her nose).
-  - Seven sparkles, each at its own `angle`. `-Math.PI * (-0.1 + k * 0.2)` goes from a little below
-    level on one side (`k = 0`), through straight up (`k = 3`), to a little below level on the
-    other (`k = 6`), 36° apart: a fan above her nose.
-  - `reach = 6 + burst * 22`: they start 6 pixels from her nose and fly out to 28.
-  - `at`: the point `reach` out along its angle, but only half as far up and down
-    (`reach * 0.5`), so the fan is wide rather than tall, and rising 4 pixels more as it goes
-    (`- burst * 4`).
-  - Until halfway, every other one is a big `SPARKLE` and the rest `TWINKLE`s; until 80% they're
-    all `TWINKLE`s; after that each is a single white pixel (`w`), a last glint.
-- The sparkles: as the comment says, a little spell, sparkles round her raised hand, when
-  `pose.sparkle` is above 0. `spin` turns it into an angle, a whole turn from 0 to 1. The
-  `SPARKLE` goes round an ellipse 6 pixels either side and 4 up and down, centred a little above
-  her hand (`Math.cos(spin) * 6`, `Math.sin(spin) * 4`), and the two `TWINKLE`s go round on
-  slightly different paths a third and two-thirds of a turn behind (`spin + 2.1`, `spin + 4.2`;
-  a whole turn is about 6.28). The `- 2` and `- 1` centre each stamp on its point. As `sparkle`
-  goes from 0 to 1 over the spell's frames, they circle her hand once.
+- Then everything drawn round her (`props/`, below): `scene` gathers what the painters need (her
+  pose, the canvas and how to set pixels on it, where her hands, hips and head are), and each
+  painter in `PROPS` draws its thing if the pose asks for it, in order, each over the ones before:
+  the butterfly, the z's, juggled orbs, her toys, the glow of her battle, the spirit, bubbles, the
+  wisp, the sneeze's sparkles, her sparkle trail, the little spell, the magic habits' effects, dust
+  and dizzy stars, the scroll, sweat, hearts and confetti.
 - `castShadows(canvas)`: whichever way she's seen, the shadows things cast on what's below them
   (below).
 - Dissolving, when `pose.fade` is above 0, as she vanishes or appears: as the comment says, her
@@ -6101,7 +5149,7 @@ Math.PI) % 2`), which turn with `spin`. Six white runes (`w`) go round the outer
 
 <!-- code: apps/desktop/src/renderer/src/character/rig.ts#HAT,HAIR,ROBE,castShadows -->
 
-[`src/renderer/src/character/rig.ts`, lines 2470–2502](../../apps/desktop/src/renderer/src/character/rig.ts#L2470-L2502)
+[`src/renderer/src/character/rig.ts`, lines 1253–1285](../../apps/desktop/src/renderer/src/character/rig.ts#L1253-L1285)
 
 ```ts
 /** Letters by part, for castShadows. */
@@ -6175,6 +5223,1798 @@ each pixel and the ones just above it.
   - her boots' base or light (`'by'`) under it: the hem again, in the boots' shade (`B`).
 - As the comment says, it works on whatever is there, so the hand-drawn diagonal picture gets these
   shadows too.
+
+## `src/renderer/src/character/props/`: the things drawn round her
+
+Everything she holds or that floats round her, but for the crystal ball, teacup and book `draw()`
+puts in her hand itself: her toys, her spells' effects, visitors, sparkles, hearts. Each is drawn by
+a _painter_, a function given a `Scene` once she's drawn, which does nothing unless its field of
+the pose (`pose.yoyo`, `pose.flame` and so on, from 0 to 1 through the habit) says it's showing. A
+painter sits in the file for its kind, beside its pictures and its timetable (when it appears, what
+it does, when it goes), which the habit's move in `moves/` reads too. `PROPS` runs them in order.
+
+### `Scene`, `Paint` and the marks they share (`props/kit.ts`)
+
+<!-- code: apps/desktop/src/renderer/src/character/props/kit.ts -->
+
+[`src/renderer/src/character/props/kit.ts`, lines 1–60](../../apps/desktop/src/renderer/src/character/props/kit.ts#L1-L60)
+
+```ts
+// What the painters of the things round her (props/) draw with: the Scene, handed to each by the
+// rig's draw() once she's drawn, and the marks several of them use.
+
+import type { Pose } from '../rig'
+import type { Canvas, Point } from '../raster'
+
+/**
+ * Where she is in the frame being drawn, and how to draw on it: what each painter in PROPS is
+ * handed. Points are in the canvas's pixels.
+ */
+export interface Scene {
+  /** What she's doing (the fields that ask for props: Pose in rig.ts). */
+  pose: Pose
+  /** The frame being drawn. */
+  canvas: Canvas
+  /** Sets one pixel to a palette letter (only over the letters in `only`, if given: `.` is empty). */
+  set: (p: Point, letter: string, only?: string) => void
+  /** A small pattern (rows of letters, `.` see-through) centred on `p`, only over `only`. */
+  motif: (p: Point, rows: readonly string[], only: string) => void
+  /** Her near hand. */
+  hand: Point
+  /** Her far hand, when it can be seen to hold things (from the front). */
+  farHand: Point | null
+  /** Her hips: the middle of her, low down. */
+  hips: Point
+  /** The middle of her head. */
+  head: Point
+  /** A point in her head's own frame, on the canvas (turned with her head). */
+  onHead: (p: Point) => Point
+  /** A point in her body's own frame, from her neck, on the canvas. */
+  onBody: (p: Point) => Point
+  /** A point moved as her hair is, by the wind and a fall (Pose.wind, Pose.lift). */
+  blown: (p: Point) => Point
+  /** How far a fall lifts her hair and robe (Pose.lift, 0 if not falling). */
+  lift: number
+}
+
+/** Draws something round her, if the pose asks for it (most do nothing most of the time). */
+export type Paint = (scene: Scene) => void
+
+/** A four-pointed sparkle, and a smaller one. */
+export const SPARKLE = ['..j..', '..l..', 'jlwlj', '..l..', '..j..']
+
+export const TWINKLE = ['.l.', 'lwl', '.l.']
+
+/** A gold twinkle, and a little gold star with a white heart. */
+export const GOLD_TWINKLE = ['.Y.', 'YwY', '.Y.']
+
+export const STAR = ['..Y..', '.YjY.', 'YjwjY', '.YjY.', 'Y...Y']
+
+/** How far `t` is through the stretch from `from` to `to`: 0 before it, 1 after it. */
+export const stage = (t: number, from: number, to: number) =>
+  Math.min(1, Math.max(0, (t - from) / (to - from)))
+
+/** A pixel's own random number, 0 to 1, the same every frame (`salt` for a second, different one). */
+export function hash(x: number, y: number, salt = 0): number {
+  let h = Math.imul(x + 1013 * salt, 374761393) ^ Math.imul(y + 7919, 668265263)
+  h = Math.imul(h ^ (h >>> 13), 1274126177)
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296
+}
+```
+
+<!-- /code -->
+
+- `Scene`: what a painter is handed, each field described in its comment: the pose, the canvas,
+  `set()` and `motif()` to put pixels down, where her hands, hips and head are, and functions that
+  place a point on her head or body as it leans and tilts (`onHead`, `onBody`), or as the wind and a
+  fall move her hair (`blown`). Points are in the canvas's pixels.
+- `Paint`: a painter's type.
+- `SPARKLE`, `TWINKLE`, `GOLD_TWINKLE` and `STAR`: sparkles several painters use; `stage(t, from,
+to)`, how far `t` is through a stretch of a habit (0 before it, 1 after); `hash(x, y)`, a pixel's
+  own random number, the same every frame, which the rig's dissolving uses too.
+
+### `PROPS` (`props/index.ts`)
+
+<!-- code: apps/desktop/src/renderer/src/character/props/index.ts -->
+
+[`src/renderer/src/character/props/index.ts`, lines 1–59](../../apps/desktop/src/renderer/src/character/props/index.ts#L1-L59)
+
+```ts
+// Everything drawn round her (her toys, her spells' effects, visitors, sparkles and hearts), in
+// the order the rig draws them once she's drawn: each over the ones before. To add one: give Pose
+// a field for it (rig.ts), write its painter in the file here for its kind, and put it in this
+// list (later in the list is in front).
+
+import type { Paint } from './kit'
+import { paintDizzy, paintDust, paintTrail } from './basics'
+import { paintBubbles, paintButterfly, paintJuggle, paintSpell, paintWisp } from './charms'
+import { paintConfetti, paintSneeze, paintZzz } from './everyday'
+import {
+  paintBloom,
+  paintFallingStar,
+  paintFlame,
+  paintFrost,
+  paintHatTrick,
+  paintPotion,
+  paintRain,
+  paintRainbow,
+  paintSigil,
+  paintTome,
+} from './magic'
+import { paintCharge } from './performances'
+import { paintHearts, paintScroll, paintSweat } from './reactions'
+import { paintBall, paintDeck, paintPlane, paintSpinTop, paintYoyo } from './toys'
+import { paintSpirit } from './visitors'
+
+export const PROPS: readonly Paint[] = [
+  paintButterfly,
+  paintZzz,
+  paintJuggle,
+  paintYoyo,
+  paintSpinTop,
+  paintDeck,
+  paintPlane,
+  paintBall,
+  paintCharge,
+  paintSpirit,
+  paintBubbles,
+  paintWisp,
+  paintSneeze,
+  paintTrail,
+  paintSpell,
+  paintFlame,
+  paintFrost,
+  paintBloom,
+  paintSigil,
+  paintRainbow,
+  paintHatTrick,
+  paintFallingStar,
+  paintRain,
+  paintPotion,
+  paintTome,
+  paintDust,
+  paintDizzy,
+  paintScroll,
+  paintSweat,
+  paintHearts,
+  paintConfetti,
+]
+```
+
+<!-- /code -->
+
+As its comment says, every painter in the order they draw: later in the list is in front. A new
+prop is a field on `Pose` (`rig.ts`), a painter in the file for its kind, and a place in this list.
+A test checks every painter is in it, once.
+
+### `props/basics.ts`
+
+<!-- code: apps/desktop/src/renderer/src/character/props/basics.ts -->
+
+[`src/renderer/src/character/props/basics.ts`, lines 1–75](../../apps/desktop/src/renderer/src/character/props/basics.ts#L1-L75)
+
+```ts
+// What's drawn round her basic moves: the sparkle trail she leaves walking, and the dust and dizzy
+// stars of a hard landing.
+
+import type { Scene } from './kit'
+import { TWINKLE, GOLD_TWINKLE, STAR } from './kit'
+
+/**
+ * Her sparkle trail (Pose.trail): how many sparkles she leaves a stride; how far each drifts back
+ * from her heel over a whole stride (pixels: she walks WANDER.walkSpeed, 80 DIPs a second, and a
+ * stride takes 0.66 s, about 53 DIPs, which is 53 sprite pixels at any size, so a sparkle stays
+ * where she left it on the taskbar while her window moves on); and how long one lasts (shares of
+ * a stride).
+ */
+export const TRAIL = { perStride: 4, drift: 53, life: 0.45 }
+
+/**
+ * Her sparkle trail: little sparkles on the ground behind her heel, left behind as she walks
+ * and fading as they drift back: a twinkle, then a glint, then a fainter one, and gone; every
+ * other one gold. Only on empty ground or her shadow, never over her.
+ */
+export function paintTrail({ pose, set, motif, hips }: Scene): void {
+  if (pose.trail !== undefined) {
+    for (let k = 0; k < TRAIL.perStride; k++) {
+      const age = (((pose.trail - k / TRAIL.perStride) % 1) + 1) % 1
+      if (age >= TRAIL.life) continue
+      const at = { x: hips.x - 5 - age * TRAIL.drift - (k % 2) * 2, y: 93 - (k % 2) - age * 4 }
+      const gold = k % 2 === 1
+      if (age < 0.1) motif(at, gold ? ['.Y.', 'YwY', '.Y.'] : TWINKLE, '.x')
+      else set(at, age < 0.25 ? (gold ? 'Y' : 'w') : gold ? 'k' : 'f', '.x')
+    }
+  }
+}
+
+/**
+ * Dust from a hard landing: puffs thrown out along the ground either side of her, rising a
+ * little and thinning out, only on empty ground or her shadow.
+ */
+export function paintDust({ pose, set, motif, hips }: Scene): void {
+  const dust = pose.dust ?? 0
+  if (dust > 0 && dust < 1) {
+    for (const side of [-1, 1]) {
+      for (let k = 0; k < 3; k++) {
+        const life = dust * 1.3 - k * 0.12
+        if (life <= 0 || life >= 1) continue
+        const at = { x: hips.x + side * (22 + life * 14 + k * 3), y: 93 - life * 5 - k }
+        if (life < 0.45) motif(at, ['ff', 'fF'], '.x')
+        else set(at, life < 0.75 ? 'f' : 'F', '.x')
+      }
+    }
+  }
+}
+
+/**
+ * Dizzy stars going round above her head (a hard landing): in front of her on the near half of
+ * the circle, behind her on the far half.
+ */
+export function paintDizzy({ pose, set, onHead }: Scene): void {
+  if (pose.dizzy !== undefined) {
+    // Above her hat's tip, wherever it is (knocked down over her eyes, it's lower).
+    const middle = onHead({ x: 0, y: -25 - (pose.hatLift ?? 0) })
+    for (let k = 0; k < 3; k++) {
+      const a = pose.dizzy * Math.PI * 2 + (k * Math.PI * 2) / 3
+      const at = { x: middle.x + Math.cos(a) * 12, y: middle.y + Math.sin(a) * 3.5 }
+      const behind = Math.sin(a) < 0
+      const star = k === 1 ? GOLD_TWINKLE : STAR
+      const half = (star.length - 1) / 2
+      star.forEach((row, dy) =>
+        [...row].forEach((letter, dx) => {
+          if (letter === '.') return
+          set({ x: at.x - half + dx, y: at.y - half + dy }, letter, behind ? '.' : undefined)
+        }),
+      )
+    }
+  }
+}
+```
+
+<!-- /code -->
+
+The sparkle trail of her walk, and the dust and dizzy stars of a hard landing.
+
+- Her sparkle trail, when there's a `pose.trail` (walking): as the comment says, little sparkles
+  on the ground behind her heel, left behind as she walks and fading as they drift back.
+  - For each of the stride's `TRAIL.perStride` sparkles, `age`: how long ago it was dropped, in
+    strides. Sparkle `k` is dropped at `k / perStride` of the way through the stride; the two
+    `% 1`s (the second after adding 1) keep the age between 0 and 1 even when the stride has gone
+    round past it, so the trail joins up from the last frame back to the first. One older than
+    `TRAIL.life` is gone.
+  - `at`: on the ground just behind her heel (5 pixels behind her hips, at row 93, above her
+    shadow), then `age * TRAIL.drift` further back (see `TRAIL`), and a little higher as it fades.
+    Every other one is 2 pixels further back and a row higher, so they don't fall in a line.
+  - Its look by age: at first a twinkle (`TWINKLE`, or a gold one for every other sparkle), then a
+    single glint (white, `w`, or gold, `Y`), then a fainter one (silver, `f`, or dark gold, `k`).
+  - Every pixel is set only over `'.x'`: empty ground or her shadow. So a sparkle never covers her
+    boots or robe, wherever her feet are in the stride.
+
+### `props/everyday.ts`
+
+<!-- code: apps/desktop/src/renderer/src/character/props/everyday.ts -->
+
+[`src/renderer/src/character/props/everyday.ts`, lines 1–84](../../apps/desktop/src/renderer/src/character/props/everyday.ts#L1-L84)
+
+```ts
+// What's drawn round her everyday habits: a dozer's z's, a sneeze's sparkles, confetti.
+
+import type { Scene } from './kit'
+import { SPARKLE, TWINKLE, hash } from './kit'
+
+/** A dozer's z's: a big one and a small one, each with a darker shadow to the lower right. */
+export const Z_BIG = ['ffff.', '..fFF', '.fF..', 'ffffF', '.FFFF']
+
+export const Z_SMALL = ['fff.', '.fF.', 'fffF', '.FFF']
+
+/** Confetti's colours: pink, teal, gold, her colour, red, yellow and white. */
+export const CONFETTI = ['c', 'G', 'Y', 'a', 'm', 'j', 'w']
+
+/**
+ * Dozing: z's float up from above her hat, one after another, growing as they rise.
+ */
+export function paintZzz({ pose, canvas, onHead }: Scene): void {
+  const zzz = pose.zzz ?? 0
+  if (zzz > 0) {
+    for (let k = 0; k < 3; k++) {
+      const life = zzz * 1.6 - k * 0.3
+      if (life <= 0 || life >= 1) continue
+      const at = onHead({ x: 7 + life * 6 + k * 1.5, y: -13 - life * 12 })
+      canvas.stamp(life > 0.45 ? Z_BIG : Z_SMALL, at.x, at.y, pose.flipText)
+    }
+  }
+}
+
+/**
+ * A sneeze's sparkles: flying out from her nose in a wide fan above it, out past her face and
+ * hair, big at first, then twinkles, then single glints, and gone.
+ */
+export function paintSneeze({ pose, canvas, set, onHead }: Scene): void {
+  const burst = pose.burst ?? 0
+  if (burst > 0 && burst < 1) {
+    const nose = onHead({ x: 0.5, y: 5 })
+    for (let k = 0; k < 7; k++) {
+      const angle = -Math.PI * (-0.1 + k * 0.2)
+      const reach = 6 + burst * 22
+      const at = {
+        x: nose.x + Math.cos(angle) * reach,
+        y: nose.y + Math.sin(angle) * reach * 0.5 - burst * 4,
+      }
+      if (burst < 0.5 && k % 2 === 0) canvas.stamp(SPARKLE, at.x - 2, at.y - 2)
+      else if (burst < 0.8) canvas.stamp(TWINKLE, at.x - 1, at.y - 1)
+      else set(at, 'w')
+    }
+  }
+}
+
+/**
+ * Confetti: a burst from her raised hands, the pieces flying up and out, then fluttering down
+ * round her, side to side, each its own colour, until they're gone.
+ */
+export function paintConfetti({ pose, set, hand, farHand }: Scene): void {
+  const confetti = pose.confetti ?? 0
+  if (confetti > 0.08 && confetti < 1) {
+    const from = farHand
+      ? { x: (hand.x + farHand.x) / 2, y: Math.min(hand.y, farHand.y) - 2 }
+      : hand
+    const t = (confetti - 0.08) / 0.92
+    for (let k = 0; k < 34; k++) {
+      const spread = (hash(k, 1, 13) - 0.5) * 2
+      const rise = 18 + hash(k, 2, 13) * 22
+      const up = Math.min(1, t / 0.25)
+      const down = Math.max(0, t - 0.25)
+      const at = {
+        x:
+          from.x +
+          spread * 30 * Math.min(1, t / 0.3) +
+          Math.sin(t * 14 + k) * 2 * Math.min(1, down * 4),
+        y: from.y - rise * (1 - (1 - up) ** 2) + down * down * 140 + down * 20,
+      }
+      if (at.y > 94 || t > 0.97) continue
+      const colour = CONFETTI[k % CONFETTI.length]!
+      set(at, colour)
+      // Every other piece a little strip, turning as it falls.
+      if (k % 2 === 0) {
+        const flat = Math.floor(t * 20 + k) % 2 === 0
+        set({ x: at.x + (flat ? 1 : 0), y: at.y + (flat ? 0 : 1) }, colour)
+      }
+    }
+  }
+}
+```
+
+<!-- /code -->
+
+A dozer's z's, a sneeze's sparkles, and confetti on Friday evenings.
+
+- The z's, when `pose.zzz` is above 0: as the comment says, they float up from above her hat, one
+  after another, growing as they rise. There are three. `life` is how far along one is, from 0 as
+  it appears to 1 as it goes: `zzz * 1.6 - k * 0.3`, so each runs 1.6 times as fast as `zzz` and
+  starts a little after the one before. Placed in the head's frame (`onHead`), each starts 7 pixels
+  toward the way she faces and 13 above the middle of her head, the later ones a little further
+  over, and rises 12 pixels, drifting 6 further over. It starts as a `Z_SMALL` and becomes a
+  `Z_BIG` once it's nearly halfway. `pose.flipText` stamps it back to front (`stamp()`'s `flip`)
+  in frames that will be mirrored to face left, so it reads as a Z either way.
+- The sneeze's sparkles, when `pose.burst` is between 0 and 1: as the comment says, flying out
+  from her nose in a wide fan above it, out past her face and hair, big at first, then twinkles,
+  then single glints, and gone.
+  - `nose`: half a pixel right of the middle of her head and 5 pixels below it, in the head's frame
+    (the habit is seen from the front, where that's her nose).
+  - Seven sparkles, each at its own `angle`. `-Math.PI * (-0.1 + k * 0.2)` goes from a little below
+    level on one side (`k = 0`), through straight up (`k = 3`), to a little below level on the
+    other (`k = 6`), 36° apart: a fan above her nose.
+  - `reach = 6 + burst * 22`: they start 6 pixels from her nose and fly out to 28.
+  - `at`: the point `reach` out along its angle, but only half as far up and down
+    (`reach * 0.5`), so the fan is wide rather than tall, and rising 4 pixels more as it goes
+    (`- burst * 4`).
+  - Until halfway, every other one is a big `SPARKLE` and the rest `TWINKLE`s; until 80% they're
+    all `TWINKLE`s; after that each is a single white pixel (`w`), a last glint.
+
+### `props/charms.ts`
+
+<!-- code: apps/desktop/src/renderer/src/character/props/charms.ts -->
+
+[`src/renderer/src/character/props/charms.ts`, lines 1–191](../../apps/desktop/src/renderer/src/character/props/charms.ts#L1-L191)
+
+```ts
+// What's drawn round her charms: a butterfly, juggled orbs, bubbles, a will-o'-wisp, a little spell.
+
+import type { Scene } from './kit'
+import { SPARKLE, TWINKLE } from './kit'
+import { add, type Point } from '../raster'
+import { DIAGONAL_MOUTH } from '../pictures'
+
+/** A little magic butterfly, wings open and shut: teal wings, a white spot on each, a gold body. */
+export const BUTTERFLY_OPEN = ['GG.GG', 'GwkwG', '.G.G.']
+
+export const BUTTERFLY_SHUT = ['.GkG.', '..k..']
+
+/** Juggling orbs: a teal one, a gold one and a pink one, each with a glint. */
+export const ORBS = [
+  ['.G.', 'GwG', '.G.'],
+  ['.Y.', 'YwY', '.Y.'],
+  ['.c.', 'cwc', '.c.'],
+]
+
+/** A soap bubble, small and grown: a teal ring (see-through inside) with a white glint. */
+export const BUBBLE_SMALL = ['.G.', 'G.G', '.G.']
+
+export const BUBBLE_BIG = ['.GG.', 'Gw.G', 'G..G', '.GG.']
+
+/** The little silver wand ring she blows bubbles through. */
+export const WAND_RING = ['.f.', 'f.f', '.f.']
+
+/** A will-o'-wisp: a round teal light with a white heart. */
+export const WISP = ['.GG.', 'GwwG', 'GwwG', '.GG.']
+
+/**
+ * Juggling (Pose.juggle): how many times each orb goes round, hand to hand and back, while she
+ * juggles; how far up its high arc goes above her hands, and its low pass back (pixels); and the
+ * share of the way round spent on the high arc.
+ */
+export const JUGGLE = { rounds: 4, high: 28, low: 5, arc: 0.62 }
+
+// Her toys, each summoned into her hand in a sparkle (`appear`) and gone in a twinkle (`gone`),
+// with what she does with it between: shares of the habit (0 to 1), and sizes in pixels.
+
+/**
+ * Bubbles (Pose.bubbles): how many she blows, when the first comes and how far apart they come
+ * (shares of the habit), how long each floats before it pops, and when she puts the wand away.
+ */
+export const BUBBLES = { count: 5, first: 0.1, gap: 0.12, life: 0.36, wandAway: 0.86 }
+
+/**
+ * Where the will-o'-wisp is (Pose.wisp, 0 to 1), from the middle of her chest: it appears at her
+ * side, goes round her twice (a flat ellipse, bobbing; on the far half it's behind her), then
+ * flies off up and away. Null before it comes and once it's gone.
+ */
+export function wispAt(t: number): { x: number; y: number; behind: boolean } | null {
+  const [come, round, gone] = [0.06, 0.8, 0.96]
+  if (t < come || t >= gone) return null
+  if (t < round) {
+    const angle = ((t - come) / (round - come)) * Math.PI * 4
+    return {
+      x: Math.cos(angle) * 20,
+      y: Math.sin(angle) * 5 + Math.sin(angle * 3) * 1.5 - 4,
+      behind: Math.sin(angle) < 0,
+    }
+  }
+  const away = (t - round) / (gone - round)
+  return { x: 20 + away * 14, y: -4 - away * away * 46, behind: false }
+}
+
+/**
+ * A little butterfly: it flutters down to just above her raised hand, rests there opening and
+ * shutting its wings, then flies off up and away (out of the frame).
+ */
+export function paintButterfly({ pose, canvas, hand }: Scene): void {
+  const flight = pose.butterfly ?? 0
+  if (flight > 0.06 && flight < 0.92) {
+    const perch = add(hand, { x: 0, y: -3 })
+    const between = (from: Point, to: Point, t: number) => ({
+      x: from.x + (to.x - from.x) * t,
+      y: from.y + (to.y - from.y) * t,
+    })
+    let at: Point
+    let open: boolean
+    if (flight < 0.3) {
+      const t = (flight - 0.06) / 0.24
+      const eased = t * t * (3 - 2 * t)
+      at = between(add(hand, { x: 16, y: -24 }), perch, eased)
+      at = { x: at.x + Math.sin(t * 9) * 2 * (1 - t), y: at.y }
+      open = Math.floor(flight * 80) % 2 === 0
+    } else if (flight < 0.72) {
+      at = perch
+      open = Math.floor((flight - 0.3) / 0.07) % 2 === 0
+    } else {
+      at = between(perch, add(hand, { x: 22, y: -36 }), ((flight - 0.72) / 0.2) ** 1.4)
+      open = Math.floor(flight * 80) % 2 === 0
+    }
+    if (open) canvas.stamp(BUTTERFLY_OPEN, at.x - 2, at.y - 1)
+    else canvas.stamp(BUTTERFLY_SHUT, at.x - 2, at.y)
+  }
+}
+
+/**
+ * Juggling: three orbs, a third of the way round apart, each thrown up in a high arc from her far
+ * hand to her near one and passed quickly back underneath (a "shower"), just above her hands.
+ */
+export function paintJuggle({ pose, canvas, hand, farHand }: Scene): void {
+  const juggle = pose.juggle ?? 0
+  if (juggle > 0 && juggle < 1 && farHand) {
+    const left = farHand
+    ORBS.forEach((orb, k) => {
+      const round = (juggle * JUGGLE.rounds + k / ORBS.length) % 1
+      const high = round < JUGGLE.arc
+      const t = high ? round / JUGGLE.arc : (round - JUGGLE.arc) / (1 - JUGGLE.arc)
+      const [from, to] = high ? [left, hand] : [hand, left]
+      const up = (high ? JUGGLE.high : JUGGLE.low) * 4 * t * (1 - t)
+      const at = { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t - 3 - up }
+      canvas.stamp(orb, at.x - 1, at.y - 1)
+    })
+  }
+}
+
+/**
+ * Bubbles: the wand ring held up at her near hand, and bubbles drifting up and forward from in
+ * front of her mouth, wobbling and growing, each popping in a twinkle.
+ */
+export function paintBubbles({ pose, canvas, set, hand }: Scene): void {
+  const bubbles = pose.bubbles ?? 0
+  if (bubbles > 0) {
+    if (bubbles < BUBBLES.wandAway) {
+      set(add(hand, { x: 0.5, y: -1.5 }), 'F')
+      canvas.stamp(WAND_RING, hand.x, hand.y - 4)
+    }
+    const dy = Math.round(pose.y ?? 0)
+    const from = { x: DIAGONAL_MOUTH.x + 6, y: DIAGONAL_MOUTH.y - 2 + dy }
+    for (let k = 0; k < BUBBLES.count; k++) {
+      const life = (bubbles - BUBBLES.first - k * BUBBLES.gap) / BUBBLES.life
+      if (life <= 0 || life > 1.12) continue
+      const at = {
+        x: from.x + life * 15 + Math.sin(life * 9 + k * 2) * 1.5,
+        y: from.y - life * 21,
+      }
+      if (life > 1) canvas.stamp(TWINKLE, at.x - 1, at.y - 1)
+      else if (life < 0.3) canvas.stamp(BUBBLE_SMALL, at.x - 1, at.y - 1)
+      else canvas.stamp(BUBBLE_BIG, at.x - 1.5, at.y - 1.5)
+    }
+  }
+}
+
+/**
+ * A will-o'-wisp going round her, with a fading tail: on the far side of her it's behind her,
+ * drawn only where nothing of her is.
+ */
+export function paintWisp({ pose, set, onBody }: Scene): void {
+  const wisp = pose.wisp ?? 0
+  if (wisp > 0) {
+    const chest = onBody({ x: 0, y: 2 })
+    const trail = [wispAt(wisp - 0.012), wispAt(wisp - 0.006)]
+    trail.forEach((p, k) => {
+      if (p)
+        set({ x: chest.x + p.x, y: chest.y + p.y }, k === 0 ? 'f' : 'G', p.behind ? '.' : undefined)
+    })
+    const at = wispAt(wisp)
+    if (at) {
+      WISP.forEach((row, dy) =>
+        [...row].forEach((letter, dx) => {
+          if (letter === '.') return
+          const p = { x: chest.x + at.x - 1.5 + dx, y: chest.y + at.y - 1.5 + dy }
+          set(p, letter, at.behind ? '.' : undefined)
+        }),
+      )
+    }
+  }
+}
+
+/**
+ * A little spell: sparkles round her raised hand.
+ */
+export function paintSpell({ pose, canvas, hand }: Scene): void {
+  const sparkle = pose.sparkle ?? 0
+  if (sparkle > 0) {
+    const spin = sparkle * Math.PI * 2
+    canvas.stamp(SPARKLE, hand.x - 2 + Math.cos(spin) * 6, hand.y - 2 - 4 + Math.sin(spin) * 4)
+    canvas.stamp(
+      TWINKLE,
+      hand.x - 1 + Math.cos(spin + 2.1) * 7,
+      hand.y - 1 - 5 + Math.sin(spin + 2.1) * 5,
+    )
+    canvas.stamp(
+      TWINKLE,
+      hand.x - 1 + Math.cos(spin + 4.2) * 5,
+      hand.y - 1 - 3 + Math.sin(spin + 4.2) * 3,
+    )
+  }
+}
+```
+
+<!-- /code -->
+
+- The butterfly, when `pose.butterfly` is between 0.06 and 0.92: as the comment says, it flutters
+  down to just above her raised hand (`perch`, 3 pixels above it), rests there opening and
+  shutting its wings, then flies off up and away, out of the frame. `between(from, to, t)` is the
+  point `t` of the way from one to the other.
+  - Until 0.3, it comes down from 16 pixels to the side of her hand and 24 above, eased
+    (`t * t * (3 - 2 * t)`, slow at either end), weaving a little from side to side (the `sin`)
+    less and less as it arrives, flapping every frame or so.
+  - From 0.3 to 0.72, it rests on the perch, opening and shutting its wings, each held for 0.07
+    of the visit.
+  - After that, it flies off toward 22 pixels to the side and 36 up, slowly at first then faster
+    (`** 1.4`), flapping again.
+  - `BUTTERFLY_OPEN` or `BUTTERFLY_SHUT` is stamped centred on where it is.
+- The juggling, when `pose.juggle` is between 0 and 1 and there's a far hand (so only from the
+  front): as the comment says, three orbs a third of the way round apart, each thrown up in a high
+  arc from her far hand to her near one and passed quickly back underneath (a "shower"), just
+  above her hands. `left` is the far hand, on the left of the picture.
+  - `round`: how far round its loop each orb is, from 0 to 1. `juggle * JUGGLE.rounds` goes round
+    4 times over the juggling, and `k / ORBS.length` puts each orb a third of the way round from
+    the one before. `% 1` keeps just the part past the last whole round.
+  - `high`: the first 62% of the loop (`JUGGLE.arc`) is the high arc, the rest the pass back. `t`
+    is how far along that arc or pass it is, from 0 to 1.
+  - `[from, to]`: the high arc goes from the far hand to the near one, the pass back the other way.
+  - `up`: how far above the line between her hands it is. `4 * t * (1 - t)` is 0 at each hand and
+    1 halfway, a parabola, the path anything thrown takes; it's times 28 pixels on the high arc and
+    5 on the pass back.
+  - `at`: the point `t` of the way from one hand to the other, 3 pixels above them and `up` higher.
+    Each orb is stamped centred on it (`- 1`, its picture being three pixels across).
+- The bubbles, when `pose.bubbles` is above 0: as the comment says, the wand ring held up at her
+  near hand, and bubbles drifting up and forward from in front of her mouth, wobbling and growing,
+  each popping in a twinkle. They're placed for the diagonal view, the one the habit uses.
+  - Until `BUBBLES.wandAway`, the wand: one pixel of the trim's shade (`F`) just above her hand,
+    its handle, and `WAND_RING` above that.
+  - `from`: where the bubbles start: 6 pixels in front of her mouth in the diagonal picture
+    (`DIAGONAL_MOUTH`) and 2 above it, moved with her by the pose's `y` (`dy`, rounded, as the
+    picture is).
+  - `life`: how far bubble `k` is through its float. It starts at `first + k * gap` and lasts
+    `BUBBLES.life`. Before it starts (`life <= 0`), and once it has popped and twinkled
+    (`life > 1.12`), it isn't drawn.
+  - `at`: it drifts 15 pixels forward and 21 up over its life, wobbling a pixel and a half to and
+    fro (`Math.sin(life * 9 + k * 2) * 1.5`; the `k * 2` keeps the bubbles' wobbles out of step).
+  - It's a `BUBBLE_SMALL` for the first 30% of its life, then a `BUBBLE_BIG`, and just past the
+    end of its life a `TWINKLE`: the pop.
+- The will-o'-wisp, when `pose.wisp` is above 0: as the comment says, going round her with a
+  fading tail; on the far side of her it's behind her, drawn only where nothing of her is.
+  - `chest`: 2 pixels below her neck, in the body's frame: the middle of her chest, which
+    `wispAt()` measures from.
+  - `trail`: where it was a moment ago, twice (`wispAt(wisp - 0.012)` and `wispAt(wisp - 0.006)`),
+    a pixel each: the older in the trim's silver (`f`), the newer in teal (`G`), a two-pixel tail
+    fading behind it. A point from before it came (`null`) is skipped.
+  - `p.behind ? '.' : undefined`: behind her, a pixel is only set where nothing is yet (`set()`'s
+    `only`), so her body hides it; in front of her, it's drawn over her.
+  - The wisp itself: each pixel of `WISP` that isn't see-through, centred on its place (`- 1.5`,
+    the picture being four pixels across), set the same way, so behind her only the part beside her
+    shows.
+- The sparkles: as the comment says, a little spell, sparkles round her raised hand, when
+  `pose.sparkle` is above 0. `spin` turns it into an angle, a whole turn from 0 to 1. The
+  `SPARKLE` goes round an ellipse 6 pixels either side and 4 up and down, centred a little above
+  her hand (`Math.cos(spin) * 6`, `Math.sin(spin) * 4`), and the two `TWINKLE`s go round on
+  slightly different paths a third and two-thirds of a turn behind (`spin + 2.1`, `spin + 4.2`;
+  a whole turn is about 6.28). The `- 2` and `- 1` centre each stamp on its point. As `sparkle`
+  goes from 0 to 1 over the spell's frames, they circle her hand once.
+
+### `props/magic.ts`
+
+<!-- code: apps/desktop/src/renderer/src/character/props/magic.ts -->
+
+[`src/renderer/src/character/props/magic.ts`, lines 1–598](../../apps/desktop/src/renderer/src/character/props/magic.ts#L1-L598)
+
+```ts
+// What's drawn for her magic habits: a flame, a snowflake, a flower, a traced star, a rainbow,
+// her hat trick, a falling star, a rain cloud, a potion and her spellbook.
+
+import type { Scene } from './kit'
+import { SPARKLE, TWINKLE, GOLD_TWINKLE, STAR, stage, hash } from './kit'
+import { add } from '../raster'
+
+/**
+ * A flame, tip first, from a spark to its fullest: dark red round its edge, orange, a yellow
+ * heart and a white core, its tip leaning to one side (mirrored, it flickers to the other).
+ */
+export const FLAMES = [
+  ['j', 'w'],
+  ['.m.', '.I.', 'IjI', '.I.'],
+  ['..m..', '.mI..', '.IjI.', 'mIwjI', '.IjI.'],
+  ['..m....', '..mI...', '..IIm..', '.mIjIm.', '.IjwjI.', 'mIjwwIm', '.IjwjI.', '..III..'],
+]
+
+/** A little potion flask: a cork (`o`), glass, and the potion inside (`X`), with a glint. */
+export const FLASK = ['..o..', '.fof.', '.fXf.', 'fXXXf', 'fXwXf', 'fXXXf', '.fff.']
+
+/** The colours the potion goes through as it bubbles: teal, her colour, pink, gold. */
+export const POTION_COLOURS = ['G', 'a', 'c', 'Y']
+
+/** The glowing letters that rise out of her spellbook. */
+export const GLYPHS = [
+  ['Y.', 'YY', '.Y'],
+  ['.Y', 'Y.', 'YY'],
+  ['YY', 'Y.', 'YY'],
+  ['Y.Y', '.Y.'],
+]
+
+/** A flower, half open and open: pink petals, a gold heart. */
+export const BUD = ['.c.', 'cmc', '.P.']
+
+export const FLOWER_HALF = ['.c.c.', 'ccYcc', '.cmc.']
+
+export const FLOWER = ['.cc.cc.', 'cccmccc', '.cmYmc.', 'cccmccc', '.cc.cc.']
+
+/** The rainbow's bands, outside in: red, orange, yellow, teal, and her colour for its violet. */
+export const RAINBOW_BANDS = ['m', 'I', 'j', 'G', 'a']
+
+/**
+ * The flame (Pose.flame): when the spark comes, when it's burning fully, and when she blows it out
+ * (from and to); shares of the habit.
+ */
+export const FLAME = { kindle: 0.1, full: 0.3, blow: [0.62, 0.7] as const }
+
+/** The snowflake (Pose.frost): growing (from, to), then bursting into glitter (from, to). */
+export const FROST = { grow: [0.12, 0.45] as const, burst: [0.72, 0.97] as const }
+
+/**
+ * The flower (Pose.bloom): sparkles dripping from her finger, the stem growing, the flower opening
+ * and finally scattering (each from, to); and how far in front of her it grows (pixels).
+ */
+export const BLOOM = {
+  drip: [0.08, 0.34] as const,
+  grow: [0.26, 0.5] as const,
+  open: [0.5, 0.62] as const,
+  scatter: [0.86, 0.98] as const,
+  ahead: 18,
+}
+
+/**
+ * The star traced in the air (Pose.sigil): tracing it (from, to), then fading (from, to); and how
+ * far out its points and the corners between them are (pixels).
+ */
+export const SIGIL = {
+  trace: [0.1, 0.55] as const,
+  fade: [0.8, 0.96] as const,
+  outer: 8.5,
+  inner: 3.6,
+}
+
+/**
+ * The rainbow (Pose.rainbow): painted from its top outward (from, to) as her hands sweep apart,
+ * fading (from, to); how far round it goes either side of its top (radians), and how big it is.
+ */
+export const RAINBOW = {
+  paint: [0.12, 0.45] as const,
+  fade: [0.76, 0.96] as const,
+  span: 1.94,
+  rx: 44,
+  ry: 42,
+}
+
+/** The falling star (Pose.star): falling (from, to), in her hands, then tossed up (from, to). */
+export const STAR_CATCH = { fall: [0.08, 0.35] as const, toss: [0.72, 0.86] as const }
+
+/** The rain cloud (Pose.rain): gathering, raining and bursting (each from, to). */
+export const RAIN = {
+  gather: [0.05, 0.25] as const,
+  pour: [0.25, 0.72] as const,
+  burst: [0.72, 0.9] as const,
+}
+
+/** The potion (Pose.potion): when the cork pops, and the smoke puffing out (until). */
+export const POTION = { pop: 0.5, puffed: 0.95 }
+
+/**
+ * Her spellbook floating (Pose.tome): appearing (from, to), its pages turning (from, to, and how
+ * many), the glowing letters rising (from, to), and closing and vanishing (from, to each).
+ */
+export const TOME = {
+  appear: [0.04, 0.16] as const,
+  turn: [0.2, 0.76] as const,
+  pages: 4,
+  letters: [0.22, 0.84] as const,
+  close: [0.8, 0.9] as const,
+  vanish: [0.9, 0.98] as const,
+}
+
+/**
+ * A flame in her palm: a spark, growing and flickering (its tip leaning one way, then the
+ * other), then blown out, leaning away from her as it shrinks, into a curl of smoke rising with a
+ * few sparks.
+ */
+export function paintFlame({ pose, canvas, set, hand }: Scene): void {
+  const flame = pose.flame ?? 0
+  if (flame > 0 && flame < 1) {
+    const palm = add(hand, { x: 0.5, y: -1 })
+    const blown = stage(flame, ...FLAME.blow)
+    if (flame >= FLAME.kindle && blown < 1) {
+      const grown = stage(flame, FLAME.kindle, FLAME.full)
+      const size =
+        blown > 0 ? (blown < 0.5 ? 2 : 1) : grown < 0.25 ? 0 : grown < 0.6 ? 1 : grown < 1 ? 2 : 3
+      const picture = FLAMES[size]!
+      const flicker = blown === 0 && hash(Math.floor(flame * 60), 3) < 0.5
+      const x = palm.x - (picture[0]!.length - 1) / 2 + (blown > 0 ? 1 + blown * 2 : 0)
+      canvas.stamp(picture, x, palm.y - picture.length + 1, flicker)
+    }
+    const smoke = stage(flame, FLAME.blow[1], 0.95)
+    if (smoke > 0 && smoke < 1) {
+      for (let k = 0; k < 5; k++) {
+        const life = smoke * 1.6 - k * 0.15
+        if (life <= 0 || life >= 1) continue
+        const at = { x: palm.x + 1 + Math.sin(life * 6 + k) * 2, y: palm.y - 2 - life * 18 }
+        if (life < 0.4) canvas.stamp(['ff', 'ff'], at.x, at.y)
+        else set(at, life < 0.75 ? 'f' : 'F')
+      }
+      for (let k = 0; k < 3; k++) {
+        const life = smoke * 2 - k * 0.2
+        if (life <= 0 || life >= 1) continue
+        set(
+          { x: palm.x + (k - 1) * (2 + life * 4), y: palm.y - 3 - life * 10 },
+          life < 0.5 ? 'Y' : 'k',
+        )
+      }
+    }
+  }
+}
+
+/**
+ * A snowflake over her cupped hands: six arms growing out from its heart, branching, a glint
+ * going round its tips; then it bursts into glitter that flies out and drifts down, twinkling.
+ */
+export function paintFrost({ pose, canvas, set, hand, farHand }: Scene): void {
+  const frost = pose.frost ?? 0
+  if (frost > 0 && frost < 1 && farHand) {
+    const c = {
+      x: (hand.x + farHand.x) / 2,
+      y: Math.min(hand.y, farHand.y) - 9 + Math.sin(frost * 25) * 0.6,
+    }
+    const burst = stage(frost, ...FROST.burst)
+    const grown = stage(frost, ...FROST.grow)
+    if (burst === 0 && grown > 0) {
+      const reach = 1 + grown * 5
+      for (let k = 0; k < 6; k++) {
+        const a = Math.PI / 2 + (k * Math.PI) / 3
+        const out = { x: Math.cos(a), y: Math.sin(a) }
+        for (let r = 1; r <= reach; r += 0.5) {
+          set({ x: c.x + out.x * r, y: c.y + out.y * r }, r > reach - 1 ? 'G' : 'w')
+        }
+        if (reach < 3.5) continue
+        for (const side of [-1, 1]) {
+          const b = a + (side * Math.PI) / 3
+          const from = { x: c.x + out.x * reach * 0.55, y: c.y + out.y * reach * 0.55 }
+          for (let r = 0.5; r <= reach * 0.35; r += 0.5) {
+            set({ x: from.x + Math.cos(b) * r, y: from.y + Math.sin(b) * r }, 'f')
+          }
+        }
+      }
+      set(c, 'w')
+      if (grown >= 1) {
+        const a = Math.PI / 2 + ((Math.floor(frost * 24) % 6) * Math.PI) / 3
+        canvas.stamp(TWINKLE, c.x - 1 + Math.cos(a) * reach, c.y - 1 + Math.sin(a) * reach)
+      }
+    } else if (burst > 0 && burst < 1) {
+      for (let k = 0; k < 14; k++) {
+        const a = (k / 14) * Math.PI * 2 + 0.2
+        const out = 3 + (1 - (1 - burst) ** 2) * 14
+        const at = {
+          x: c.x + Math.cos(a) * out,
+          y: c.y + Math.sin(a) * out * 0.6 + burst * burst * 12,
+        }
+        if (burst < 0.3 && k % 3 === 0) canvas.stamp(TWINKLE, at.x - 1, at.y - 1)
+        else set(at, (k + Math.floor(burst * 10)) % 3 === 0 ? 'w' : k % 2 ? 'G' : 'f')
+      }
+    }
+  }
+}
+
+/**
+ * A flower: sparkles drip from her pointing finger to the ground in front of her, where a sprout
+ * comes up, grows leaves and a bud, and opens into a pink flower that sways and twinkles; at the
+ * end it glows and scatters into sparkles.
+ */
+export function paintBloom({ pose, canvas, set, hand, hips }: Scene): void {
+  const bloom = pose.bloom ?? 0
+  if (bloom > 0 && bloom < 1) {
+    const ground = { x: hips.x + BLOOM.ahead, y: 94 }
+    const drip = stage(bloom, ...BLOOM.drip)
+    if (drip > 0 && drip < 1) {
+      const tip = add(hand, { x: 1, y: 1 })
+      for (let k = 0; k < 3; k++) {
+        const fall = (drip * 3 + k / 3) % 1
+        const at = {
+          x: tip.x + (ground.x - tip.x) * fall,
+          y: tip.y + (ground.y - 2 - tip.y) * fall,
+        }
+        set(at, k === 1 ? 'Y' : 'w')
+      }
+    }
+    const grown = stage(bloom, ...BLOOM.grow)
+    const open = stage(bloom, ...BLOOM.open)
+    const scatter = stage(bloom, ...BLOOM.scatter)
+    if (grown > 0 && scatter === 0) {
+      const tall = Math.round(1 + grown * 12)
+      const sway = Math.sin(bloom * 16) * 0.8 * stage(bloom, 0.6, 0.66)
+      for (let k = 0; k < tall; k++) set({ x: ground.x + (sway * k) / tall, y: ground.y - k }, 'E')
+      // Leaves either side as it grows: a pair low down, then one higher up.
+      for (const [height, side] of [
+        [3, -1],
+        [5, 1],
+        [8, -1],
+      ] as const) {
+        if (tall < height + 2) continue
+        set({ x: ground.x + side, y: ground.y - height }, 'E')
+        set({ x: ground.x + side * 2, y: ground.y - height - 1 }, 'E')
+        set({ x: ground.x + side * 3, y: ground.y - height - 1 }, 'P')
+      }
+      const top = { x: ground.x + sway, y: ground.y - tall }
+      if (open > 0) {
+        const flower = open < 0.5 ? FLOWER_HALF : FLOWER
+        canvas.stamp(flower, top.x - (flower[0]!.length - 1) / 2, top.y - (flower.length - 1) / 2)
+        if (open >= 1 && Math.floor(bloom * 30) % 4 === 0) {
+          canvas.stamp(TWINKLE, top.x + 3, top.y - 6)
+        }
+      } else if (grown >= 1) {
+        canvas.stamp(BUD, top.x - 1, top.y - 1)
+      }
+    } else if (scatter > 0 && scatter < 1) {
+      const top = { x: ground.x, y: ground.y - 13 }
+      for (let k = 0; k < 8; k++) {
+        const a = (k / 8) * Math.PI * 2
+        const at = {
+          x: top.x + Math.cos(a) * scatter * 9,
+          y: top.y + Math.sin(a) * scatter * 4 - scatter * 10,
+        }
+        if (scatter < 0.35 && k % 2 === 0) canvas.stamp(TWINKLE, at.x - 1, at.y - 1)
+        else set(at, scatter < 0.6 ? (k % 2 ? 'c' : 'Y') : 'w')
+      }
+    }
+  }
+}
+
+/**
+ * A star traced in the air beside her: a point of light draws its outline, five points round,
+ * in gold; it flashes white as it closes, glows with a sparkle at its heart, and fades away a
+ * pixel at a time, motes rising from its points.
+ */
+export function paintSigil({ pose, canvas, set, hips, head }: Scene): void {
+  const sigil = pose.sigil ?? 0
+  if (sigil > 0 && sigil < 1) {
+    const c = { x: hips.x + 20, y: head.y - 7 }
+    const corners = Array.from({ length: 10 }, (_, i) => {
+      const a = -Math.PI / 2 + (i * Math.PI) / 5
+      const r = i % 2 === 0 ? SIGIL.outer : SIGIL.inner
+      return { x: c.x + Math.cos(a) * r, y: c.y + Math.sin(a) * r }
+    })
+    const along = (s: number) => {
+      const i = Math.floor(s) % 10
+      const [from, to] = [corners[i]!, corners[(i + 1) % 10]!]
+      return { x: from.x + (to.x - from.x) * (s % 1), y: from.y + (to.y - from.y) * (s % 1) }
+    }
+    const traced = stage(sigil, ...SIGIL.trace) * 10
+    const flash = sigil >= SIGIL.trace[1] && sigil < SIGIL.trace[1] + 0.06
+    const fading = stage(sigil, ...SIGIL.fade)
+    if (fading < 1) {
+      for (let s = 0; s < Math.min(10, traced); s += 0.08) {
+        const p = along(s)
+        if (fading > 0 && hash(Math.round(p.x), Math.round(p.y), 5) < fading) continue
+        set(p, flash ? 'w' : 'Y')
+      }
+    }
+    if (traced > 0 && traced < 10) {
+      const tip = along(traced)
+      canvas.stamp(TWINKLE, tip.x - 1, tip.y - 1)
+    } else if (traced >= 10 && fading === 0) {
+      const glint = Math.floor(sigil * 20) % 2 === 0 ? SPARKLE : TWINKLE
+      canvas.stamp(glint, c.x - (glint.length - 1) / 2, c.y - (glint.length - 1) / 2)
+    } else if (fading > 0 && fading < 1) {
+      for (let k = 0; k < 5; k++) {
+        const point = corners[k * 2]!
+        set({ x: point.x, y: point.y - 1 - fading * 8 }, fading < 0.5 ? 'w' : 'f')
+      }
+    }
+  }
+}
+
+/**
+ * A rainbow over her, behind her: painted from its top outward either side as her hands sweep
+ * apart, five bands of colour; glints run along it; then it fades away a pixel at a time.
+ */
+export function paintRainbow({ pose, set, motif, hips }: Scene): void {
+  const rainbow = pose.rainbow ?? 0
+  if (rainbow > 0 && rainbow < 1) {
+    const centre = { x: hips.x, y: hips.y - 4 }
+    const reach = stage(rainbow, ...RAINBOW.paint) * RAINBOW.span
+    const fading = stage(rainbow, ...RAINBOW.fade)
+    RAINBOW_BANDS.forEach((letter, b) => {
+      for (let a = -reach; a <= reach; a += 0.012) {
+        const p = {
+          x: centre.x + Math.sin(a) * (RAINBOW.rx - b),
+          y: centre.y - Math.cos(a) * (RAINBOW.ry - b),
+        }
+        if (fading > 0 && hash(Math.round(p.x), Math.round(p.y), 7) < fading) continue
+        set(p, letter, '.')
+      }
+    })
+    if (reach >= RAINBOW.span && fading === 0) {
+      for (let k = 0; k < 3; k++) {
+        const a = ((((rainbow * 3 + k / 3) % 1) * 2 - 1) * RAINBOW.span) / 1.05
+        const p = {
+          x: centre.x + Math.sin(a) * (RAINBOW.rx - 2),
+          y: centre.y - Math.cos(a) * (RAINBOW.ry - 2),
+        }
+        motif(p, TWINKLE, '.' + RAINBOW_BANDS.join(''))
+      }
+    }
+  }
+}
+
+/**
+ * Her hat trick: sparkles showering down from under her lifted hat as it spins, over her.
+ */
+export function paintHatTrick({ pose, canvas, set, onHead }: Scene): void {
+  const shower = pose.shower ?? 0
+  if (shower > 0 && shower < 1) {
+    const brim = onHead({ x: 0, y: -9 - (pose.hatLift ?? 0) })
+    for (let k = 0; k < 7; k++) {
+      const round = shower * 3 + k / 7
+      const life = round % 1
+      const at = {
+        x: brim.x + (hash(k, Math.floor(round), 9) - 0.5) * 22,
+        y: brim.y + 2 + life * 26,
+      }
+      if (life < 0.25) canvas.stamp(k % 2 ? GOLD_TWINKLE : TWINKLE, at.x - 1, at.y - 1)
+      else set(at, life < 0.6 ? (k % 2 ? 'Y' : 'w') : 'f')
+    }
+  }
+}
+
+/**
+ * A falling star: it streaks down from high to one side into her cupped hands, its tail behind
+ * it; glows there, glinting; then she tosses it back up and away, leaving twinkles in the air.
+ */
+export function paintFallingStar({ pose, canvas, set, hand, farHand, hips }: Scene): void {
+  const star = pose.star ?? 0
+  if (star > 0 && star < 1 && farHand) {
+    const cupped = { x: (hand.x + farHand.x) / 2, y: Math.min(hand.y, farHand.y) - 3 }
+    const [fallFrom, fallTo] = STAR_CATCH.fall
+    const [tossFrom, tossTo] = STAR_CATCH.toss
+    if (star >= fallFrom && star < fallTo) {
+      const from = { x: hips.x + 34, y: -6 }
+      const path = (t: number) => ({
+        x: from.x + (cupped.x - from.x) * t,
+        y: from.y + (cupped.y - from.y) * t * t,
+      })
+      const t = stage(star, fallFrom, fallTo)
+      for (let k = 8; k >= 1; k--) {
+        if (t - k * 0.03 < 0) continue
+        set(path(t - k * 0.03), k < 3 ? 'w' : k < 6 ? 'j' : 'Y')
+      }
+      const at = path(t)
+      canvas.stamp(STAR, at.x - 2, at.y - 2)
+    } else if (star >= fallTo && star < tossFrom) {
+      canvas.stamp(STAR, cupped.x - 2, cupped.y - 2)
+      const glint = Math.floor(star * 30) % 3
+      if (glint === 0) set({ x: cupped.x - 4, y: cupped.y - 3 }, 'w')
+      if (glint === 1) set({ x: cupped.x + 4, y: cupped.y - 4 }, 'w')
+      if (glint === 2) set({ x: cupped.x + 1, y: cupped.y - 6 }, 'j')
+    } else if (star >= tossFrom && star < tossTo) {
+      const t = stage(star, tossFrom, tossTo)
+      const at = { x: cupped.x + t * 6, y: cupped.y - t * 62 }
+      for (let k = 1; k <= 6; k++) set({ x: at.x - k * 0.5, y: at.y + k * 2 }, k < 3 ? 'w' : 'j')
+      canvas.stamp(STAR, at.x - 2, at.y - 2)
+    }
+    const after = stage(star, tossFrom + 0.04, 0.98)
+    if (after > 0 && after < 1) {
+      for (let k = 0; k < 4; k++) {
+        const life = after * 1.6 - k * 0.15
+        if (life <= 0 || life >= 1) continue
+        const at = { x: cupped.x + 1 + k * 1.5, y: cupped.y - 14 - k * 11 }
+        if (life < 0.4) canvas.stamp(GOLD_TWINKLE, at.x - 1, at.y - 1)
+        else set(at, life < 0.7 ? 'Y' : 'k')
+      }
+    }
+  }
+}
+
+/**
+ * A little rain cloud: it gathers over her hat, light on top and grey beneath, and rains on her
+ * (and round her, splashing on the ground); shooed, it shakes and bursts into sparkles.
+ */
+export function paintRain({ pose, canvas, set, head }: Scene): void {
+  const rain = pose.rain ?? 0
+  if (rain > 0 && rain < 1) {
+    const gather = stage(rain, ...RAIN.gather)
+    const burst = stage(rain, ...RAIN.burst)
+    const shake = rain > 0.6 && rain < RAIN.burst[0] ? Math.round(Math.sin(rain * 200)) : 0
+    const c = { x: head.x + 1 + shake, y: Math.max(-5, head.y - 28) }
+    if (gather > 0 && burst === 0) {
+      const humps = [
+        { dx: -6, r: 4 },
+        { dx: 0, r: 5.5 },
+        { dx: 6, r: 4.5 },
+      ]
+      const cloud = new Set<string>()
+      for (let y = Math.floor(c.y - 7); y <= c.y + 2; y++) {
+        for (let x = Math.floor(c.x - 13); x <= c.x + 13; x++) {
+          const inside = humps.some(({ dx, r }) => {
+            const rx = r * 1.3 * gather
+            const ry = r * gather
+            return ((x + 0.5 - c.x - dx * gather) / rx) ** 2 + ((y + 0.5 - c.y) / ry) ** 2 <= 1
+          })
+          if (inside) cloud.add(`${x},${y}`)
+        }
+      }
+      for (const key of cloud) {
+        const [x, y] = key.split(',').map(Number) as [number, number]
+        const edge = [
+          [1, 0],
+          [-1, 0],
+          [0, 1],
+          [0, -1],
+        ].some(([dx, dy]) => !cloud.has(`${x + dx!},${y + dy!}`))
+        set({ x, y }, edge ? 'O' : y >= c.y + 1 ? 'F' : y <= c.y - 2 ? 'l' : 'f')
+      }
+    }
+    const pour = stage(rain, ...RAIN.pour)
+    if (pour > 0 && pour < 1) {
+      const top = c.y + 3
+      for (let k = 0; k < 8; k++) {
+        const x = c.x - 9 + k * 2.6
+        const fall = (pour * 9 + hash(k, 1, 11)) % 1
+        const y = top + fall * (93 - top)
+        set({ x, y: y - 1 }, 'w')
+        set({ x, y }, 'G')
+        if (fall > 0.9) {
+          set({ x: x - 1, y: 93 }, 'f', '.x')
+          set({ x: x + 1, y: 93 }, 'f', '.x')
+        }
+      }
+    }
+    if (burst > 0 && burst < 1) {
+      for (let k = 0; k < 10; k++) {
+        const a = (k / 10) * Math.PI * 2
+        const at = { x: c.x + Math.cos(a) * burst * 14, y: c.y + Math.sin(a) * burst * 7 }
+        if (burst < 0.4 && k % 2 === 0)
+          canvas.stamp(k % 4 ? GOLD_TWINKLE : TWINKLE, at.x - 1, at.y - 1)
+        else set(at, burst < 0.7 ? (k % 2 ? 'G' : 'w') : 'f')
+      }
+    }
+  }
+}
+
+/**
+ * A potion in a little flask in her hand, bubbling and changing colour; the cork pops off and
+ * flies away, and puffs of coloured smoke curl up out of it, fading.
+ */
+export function paintPotion({ pose, canvas, set, hand }: Scene): void {
+  const potion = pose.potion ?? 0
+  if (potion > 0 && potion < 1) {
+    const corner = { x: Math.round(hand.x) - 2, y: Math.round(hand.y) - 7 }
+    const corked = potion < POTION.pop
+    if (potion > 0.04 && potion < 0.92) {
+      const colour = POTION_COLOURS[Math.floor(potion * 12) % POTION_COLOURS.length]!
+      FLASK.forEach((row, dy) =>
+        [...row].forEach((letter, dx) => {
+          if (letter === '.' || (letter === 'o' && !corked)) return
+          const drawn = letter === 'X' ? colour : letter === 'o' ? 'i' : letter
+          canvas.set(corner.x + dx, corner.y + dy, drawn)
+        }),
+      )
+      const bubble = Math.floor(potion * 40) % 3
+      set({ x: corner.x + 1 + (bubble % 2) * 2, y: corner.y + 5 - bubble }, 'w', colour)
+      canvas.stamp(['ss'], hand.x - 1, hand.y)
+    }
+    const flying = stage(potion, POTION.pop, POTION.pop + 0.12)
+    if (flying > 0 && flying < 1) {
+      set({ x: corner.x + 2 + flying * 8, y: corner.y - flying * 14 + flying * flying * 10 }, 'i')
+    }
+    const puff = stage(potion, POTION.pop, POTION.puffed)
+    if (puff > 0 && puff < 1) {
+      for (let k = 0; k < 6; k++) {
+        const life = puff * 1.8 - k * 0.15
+        if (life <= 0 || life >= 1) continue
+        const letter = ['c', 'a', 'G'][k % 3]!
+        const at = {
+          x: corner.x + 2 + Math.sin(life * 7 + k * 2) * (2 + life * 4),
+          y: corner.y - 1 - life * 20,
+        }
+        if (life < 0.45) canvas.stamp([letter + letter, letter + letter], at.x, at.y)
+        else set(at, life < 0.8 ? letter : 'w')
+      }
+    }
+  }
+}
+
+/**
+ * Her spellbook, floating open in front of her, bobbing: it rises into place opening, its pages
+ * turn by themselves, right to left, glowing letters rise out of it and fade; then it closes and
+ * vanishes in a twinkle.
+ */
+export function paintTome({ pose, canvas, set, hips }: Scene): void {
+  const tome = pose.tome ?? 0
+  if (tome > 0 && tome < 1) {
+    const appear = stage(tome, ...TOME.appear)
+    const close = stage(tome, ...TOME.close)
+    const vanish = stage(tome, ...TOME.vanish)
+    const c = {
+      x: Math.round(hips.x),
+      y: Math.round(hips.y - 16 + (1 - appear) * 6 + Math.sin(tome * 18)),
+    }
+    if (appear > 0 && vanish === 0) {
+      const half = Math.round(1 + 6 * appear * (1 - close))
+      // Its outline, dark against her robe, then its covers with a gold edge.
+      for (let dx = -half - 2; dx <= half + 2; dx++) {
+        for (let dy = -3; dy <= 5; dy++) set({ x: c.x + dx, y: c.y + dy }, 'u')
+      }
+      for (let dx = -half - 1; dx <= half + 1; dx++) set({ x: c.x + dx, y: c.y + 3 }, 'n')
+      for (let dx = -half; dx <= half; dx++) set({ x: c.x + dx, y: c.y + 4 }, 'Y')
+      for (let dy = -1; dy <= 2; dy++) {
+        set({ x: c.x - half - 1, y: c.y + dy }, 'n')
+        set({ x: c.x + half + 1, y: c.y + dy }, 'n')
+      }
+      for (let dy = -2; dy <= 2; dy++) {
+        for (let dx = -half; dx <= half; dx++) {
+          if (dy === -2 && Math.abs(dx) === half && half > 1) continue
+          const text =
+            (dy === -1 || dy === 1) &&
+            Math.abs(dx) > 1 &&
+            Math.abs(dx) < half &&
+            (dx + dy) % 2 === 0
+          set({ x: c.x + dx, y: c.y + dy }, dx === 0 || text ? 'F' : 'f')
+        }
+      }
+      const turning = stage(tome, ...TOME.turn)
+      if (turning > 0 && turning < 1 && close === 0) {
+        const edge = Math.round(Math.cos(((turning * TOME.pages) % 1) * Math.PI) * half)
+        const [from, to] = edge > 0 ? [1, edge] : [edge, -1]
+        for (let dx = from; dx <= to; dx++) {
+          for (let dy = -3; dy <= 1; dy++)
+            set({ x: c.x + dx, y: c.y + dy }, dx === edge ? 'F' : 'w')
+        }
+      }
+      if (appear < 1) canvas.stamp(TWINKLE, c.x + half + 1, c.y - 4)
+    }
+    const letters = stage(tome, ...TOME.letters)
+    if (letters > 0 && letters < 1) {
+      for (let k = 0; k < 6; k++) {
+        const raw = letters * 3 - k / 6
+        if (raw < 0 || raw >= 2.6) continue
+        const life = raw % 1
+        if (life > 0.9) continue
+        const glyph = GLYPHS[k % GLYPHS.length]!.map((row) =>
+          life < 0.6 ? row : row.replace(/Y/g, 'k'),
+        )
+        // Up and out to one side of her or the other, clear of her face.
+        const side = k % 2 === 0 ? 1 : -1
+        const at = {
+          x: c.x + side * (5 + life * 16) + Math.sin(life * 6 + k) - 1,
+          y: c.y - 3 - life * 20,
+        }
+        canvas.stamp(glyph, at.x, at.y)
+      }
+    }
+    if (vanish > 0 && vanish < 1) {
+      for (let k = 0; k < 6; k++) {
+        const a = (k / 6) * Math.PI * 2
+        const at = { x: c.x + Math.cos(a) * vanish * 9, y: c.y + Math.sin(a) * vanish * 5 }
+        if (vanish < 0.5) canvas.stamp(k % 2 ? GOLD_TWINKLE : TWINKLE, at.x - 1, at.y - 1)
+        else set(at, 'w')
+      }
+    }
+  }
+}
+```
+
+<!-- /code -->
+
+The effects of her ten magic habits, each timed by its own timetable (`FLAME`, `FROST`, `BLOOM`,
+`SIGIL`, `RAINBOW`, `STAR_CATCH`, `RAIN`, `POTION`, `TOME`), as its comment says: a flame kindled in
+her palm and blown out, a snowflake growing over her cupped hands, a flower sprouting where
+sparkles drip, a star traced in gold light, a rainbow painted over her (behind her: only where
+nothing of her is), sparkles from under her lifted hat, a falling star caught in her hands, a rain
+cloud over her hat, a bubbling potion, and her spellbook floating open with letters rising from it.
+
+### `props/toys.ts`
+
+<!-- code: apps/desktop/src/renderer/src/character/props/toys.ts -->
+
+[`src/renderer/src/character/props/toys.ts`, lines 1–285](../../apps/desktop/src/renderer/src/character/props/toys.ts#L1-L285)
+
+```ts
+// Her toys, summoned for a few seconds each: a yo-yo, a spinning top, cards, a paper plane and a
+// bouncy ball. Each appears in a sparkle and goes in a twinkle (poof, shows).
+
+import type { Scene } from './kit'
+import { SPARKLE, TWINKLE, stage } from './kit'
+import { type Point, type Canvas } from '../raster'
+
+/** Her yo-yo, spinning (two turns, a frame each): pink, a gold band, a white glint. */
+export const YOYO_SPIN = [
+  ['.cc.', 'cYwc', 'cwYc', '.cc.'],
+  ['.cc.', 'cwYc', 'cYwc', '.cc.'],
+]
+
+/** Her spinning top, a handle up top and a silver point below, its stripes turning as it spins. */
+export const TOP_SPIN = [
+  ['..k..', 'YGYGY', '.YGY.', '..Y..', '..f..'],
+  ['..k..', 'GYGYG', '.GYG.', '..G..', '..f..'],
+]
+
+/** A playing card in flight, and her deck in her hand: white with a silver edge and a pink pip. */
+export const CARD = ['fff', 'fcf', 'fwf', 'fff']
+
+export const DECK_STACK = ['ffff', 'fcwf', 'fwwf', 'Ffff', 'FFFF']
+
+/** A paper plane flying right (flying left, it's mirrored): white paper, a silver fold under it. */
+export const PAPER_PLANE = ['w......', 'wwww...', '.fwwwww', '..ff...']
+
+/** Her bouncy ball, round and squashed flat as it hits the taskbar: teal with a white glint. */
+export const BOUNCY_BALL = ['.GG.', 'GwGG', 'GGGG', '.GG.']
+
+export const BOUNCY_BALL_FLAT = ['.GGGG.', 'GGwGGG', '.GGGG.']
+
+/** Her yo-yo (Pose.yoyo): its drops (how many, how far down) and its loop round her hand. */
+export const YOYO = {
+  appear: [0.03, 0.13],
+  drops: [0.13, 0.7],
+  count: 4,
+  length: 24,
+  loop: [0.72, 0.86],
+  radius: 14,
+  gone: [0.88, 0.97],
+} as const
+
+/** Her spinning top (Pose.spinTop): spinning on her palm, then flicked up (this high) and caught. */
+export const SPIN_TOP = {
+  appear: [0.03, 0.13],
+  spin: [0.13, 0.72],
+  flick: [0.72, 0.84],
+  height: 16,
+  gone: [0.88, 0.97],
+} as const
+
+/** Her cards (Pose.deck): sprung across to her near hand, and back; how many; each card's flight. */
+export const DECK = {
+  appear: [0.03, 0.13],
+  across: [0.15, 0.47],
+  back: [0.5, 0.82],
+  cards: 9,
+  flight: 0.1,
+  arc: 13,
+  gone: [0.88, 0.97],
+} as const
+
+/** Her paper plane (Pose.plane): thrown, flying one loop round her (how wide, how deep), caught. */
+export const PLANE = {
+  appear: [0.03, 0.13],
+  fly: [0.18, 0.84],
+  rx: 28,
+  ry: 8,
+  gone: [0.88, 0.97],
+} as const
+
+/** Her bouncy ball (Pose.ball): bounced on the taskbar (how many times), then tossed up and caught. */
+export const BALL = {
+  appear: [0.03, 0.13],
+  bounces: [0.14, 0.62],
+  count: 4,
+  toss: [0.66, 0.84],
+  height: 30,
+  gone: [0.88, 0.97],
+} as const
+
+/** Her toys' sparkle and twinkle as they come and go (see poof and shows). */
+function toyKit(canvas: Canvas) {
+  // A puff of sparkle where one of her toys appears (`k`, 0 to 1 through it) or goes: a sparkle,
+  // then a twinkle.
+  const poof = (at: Point, k: number) => {
+    if (k <= 0 || k >= 1) return
+    if (k < 0.55) canvas.stamp(SPARKLE, at.x - 2, at.y - 2)
+    else canvas.stamp(TWINKLE, at.x - 1, at.y - 1)
+  }
+  /** Whether a toy shows: from half way through its sparkle to half way through its twinkle. */
+  const shows = (appear: number, gone: number) => appear >= 0.5 && gone < 0.5
+  return { poof, shows }
+}
+
+/**
+ * Her yo-yo: in her near hand; spun down on its silver string and back up, a few times; then
+ * swung out round her hand in a loop; then gone.
+ */
+export function paintYoyo({ pose, canvas, set, hand }: Scene): void {
+  const { poof, shows } = toyKit(canvas)
+  const yoyo = pose.yoyo ?? 0
+  if (yoyo > 0 && yoyo < 1) {
+    const grip = { x: hand.x, y: hand.y + 1 }
+    const drops = stage(yoyo, ...YOYO.drops)
+    const loop = stage(yoyo, ...YOYO.loop)
+    let at = grip
+    if (drops > 0 && drops < 1) {
+      at = { x: grip.x, y: grip.y + YOYO.length * Math.sin(Math.PI * ((drops * YOYO.count) % 1)) }
+    } else if (loop > 0 && loop < 1) {
+      // Out, round over her hand and back in: down, out to the side, up, across, down again.
+      const angle = Math.PI / 2 - loop * Math.PI * 2
+      const r = YOYO.radius * Math.sin(Math.PI * loop)
+      at = { x: grip.x + r * Math.cos(angle), y: grip.y + r * Math.sin(angle) }
+    }
+    const appear = stage(yoyo, ...YOYO.appear)
+    const gone = stage(yoyo, ...YOYO.gone)
+    if (shows(appear, gone)) {
+      const length = Math.hypot(at.x - grip.x, at.y - grip.y)
+      for (let s = 1; s < length; s++) {
+        set(
+          {
+            x: grip.x + ((at.x - grip.x) * s) / length,
+            y: grip.y + ((at.y - grip.y) * s) / length,
+          },
+          'f',
+        )
+      }
+      canvas.stamp(YOYO_SPIN[Math.floor(yoyo * 50) % 2]!, at.x - 1.5, at.y - 1.5)
+    }
+    poof(grip, appear)
+    poof(at, gone)
+  }
+}
+
+/**
+ * Her spinning top: spinning on her palm, wobbling more as it slows; flicked up and caught.
+ */
+export function paintSpinTop({ pose, canvas, hand }: Scene): void {
+  const { poof, shows } = toyKit(canvas)
+  const spinTop = pose.spinTop ?? 0
+  if (spinTop > 0 && spinTop < 1) {
+    // Standing on her palm, clear of her cuff.
+    const palm = { x: hand.x + 1, y: hand.y - 3 }
+    const spin = stage(spinTop, ...SPIN_TOP.spin)
+    const flick = stage(spinTop, ...SPIN_TOP.flick)
+    const wobble = spin > 0 && spin < 1 ? Math.sin(spinTop * 70) * (0.3 + spin * 0.9) : 0
+    const lift = flick > 0 && flick < 1 ? SPIN_TOP.height * 4 * flick * (1 - flick) : 0
+    const at = { x: palm.x + wobble, y: palm.y - lift }
+    const appear = stage(spinTop, ...SPIN_TOP.appear)
+    const gone = stage(spinTop, ...SPIN_TOP.gone)
+    if (shows(appear, gone)) {
+      const turning = spinTop < SPIN_TOP.flick[1] ? Math.floor(spinTop * 60) % 2 : 0
+      canvas.stamp(TOP_SPIN[turning]!, at.x - 2, at.y - 5)
+    }
+    poof({ x: palm.x, y: palm.y - 3 }, appear)
+    poof({ x: palm.x, y: palm.y - 3 }, gone)
+  }
+}
+
+/**
+ * Her cards: a deck in her far hand, sprung across to her near hand one after another in an arc,
+ * then back again; then gone.
+ */
+export function paintDeck({ pose, canvas, hand, farHand }: Scene): void {
+  const { poof, shows } = toyKit(canvas)
+  const deck = pose.deck ?? 0
+  if (deck > 0 && deck < 1 && farHand) {
+    const far = { x: farHand.x, y: farHand.y - 2 }
+    const near = { x: hand.x, y: hand.y - 2 }
+    // How many cards are still to go, in the air, or there, for a spring from `a` to `b`.
+    const spring = (span: readonly [number, number], a: Point, b: Point) => {
+      const stagger = (span[1] - span[0] - DECK.flight) / (DECK.cards - 1)
+      let waiting = 0
+      let landed = 0
+      for (let k = 0; k < DECK.cards; k++) {
+        const u = (deck - span[0] - k * stagger) / DECK.flight
+        if (u <= 0) waiting++
+        else if (u >= 1) landed++
+        else {
+          const at = {
+            x: a.x + (b.x - a.x) * u,
+            y: a.y + (b.y - a.y) * u - DECK.arc * 4 * u * (1 - u),
+          }
+          canvas.stamp(CARD, at.x - 1, at.y - 2)
+        }
+      }
+      return { waiting, landed }
+    }
+    const appear = stage(deck, ...DECK.appear)
+    const gone = stage(deck, ...DECK.gone)
+    let inFar: number = DECK.cards
+    let inNear = 0
+    if (deck >= DECK.across[0] && deck < DECK.back[0]) {
+      const across = spring(DECK.across, far, near)
+      inFar = across.waiting
+      inNear = across.landed
+    } else if (deck >= DECK.back[0] && deck < DECK.back[1] + DECK.flight) {
+      const back = spring(DECK.back, near, far)
+      inNear = back.waiting
+      inFar = back.landed
+    }
+    if (shows(appear, gone)) {
+      if (inFar > 0) canvas.stamp(DECK_STACK, far.x - 1.5, far.y - 2)
+      if (inNear > 0) canvas.stamp(DECK_STACK, near.x - 1.5, near.y - 2)
+    }
+    poof(far, appear)
+    poof(far, gone)
+  }
+}
+
+/**
+ * Her paper plane: in her near hand; thrown, it flies one loop round her, out to the side, behind
+ * her (where only what isn't her shows it) and back across in front, to her hand; then gone.
+ */
+export function paintPlane({ pose, set, hand, onBody, canvas }: Scene): void {
+  const { poof, shows } = toyKit(canvas)
+  const plane = pose.plane ?? 0
+  if (plane > 0 && plane < 1) {
+    const held = { x: hand.x, y: hand.y - 2 }
+    const fly = stage(plane, ...PLANE.fly)
+    let at = held
+    let behind = false
+    let right = true
+    if (fly > 0 && fly < 1) {
+      const chest = onBody({ x: 0, y: 2 })
+      const angle = Math.PI / 4 - fly * Math.PI * 2
+      const loop = {
+        x: chest.x + PLANE.rx * Math.cos(angle),
+        y: chest.y + PLANE.ry * Math.sin(angle) + Math.sin(fly * Math.PI * 4) * 1.5,
+      }
+      // Leaving her hand and coming back to it, it eases between her hand and the loop.
+      const ease = Math.min(1, fly / 0.12, (1 - fly) / 0.12)
+      at = { x: held.x + (loop.x - held.x) * ease, y: held.y + (loop.y - held.y) * ease }
+      behind = Math.sin(angle) < 0
+      right = Math.sin(angle) >= 0
+    }
+    const appear = stage(plane, ...PLANE.appear)
+    const gone = stage(plane, ...PLANE.gone)
+    if (shows(appear, gone)) {
+      PAPER_PLANE.forEach((row, dy) =>
+        [...(right ? row : [...row].reverse().join(''))].forEach((letter, dx) => {
+          if (letter === '.') return
+          set({ x: at.x - 3 + dx, y: at.y - 2 + dy }, letter, behind ? '.' : undefined)
+        }),
+      )
+    }
+    poof(held, appear)
+    poof(held, gone)
+  }
+}
+
+/**
+ * Her bouncy ball: in her near hand; bounced on the taskbar a few times (squashing as it hits),
+ * then tossed up high and caught; then gone.
+ */
+export function paintBall({ pose, canvas, hand }: Scene): void {
+  const { poof, shows } = toyKit(canvas)
+  const ball = pose.ball ?? 0
+  if (ball > 0 && ball < 1) {
+    const top = { x: hand.x, y: hand.y + 2 }
+    const ground = 93
+    const bounces = stage(ball, ...BALL.bounces)
+    const toss = stage(ball, ...BALL.toss)
+    let at = top
+    let flat = false
+    if (bounces > 0 && bounces < 1) {
+      // 1 in her hand, 0 on the taskbar: down fast, a sharp bounce, up again.
+      const u = Math.abs(((bounces * BALL.count) % 1) * 2 - 1)
+      at = { x: top.x, y: ground - (ground - top.y) * u }
+      flat = u < 0.08
+    } else if (toss > 0 && toss < 1) {
+      at = { x: top.x, y: top.y - BALL.height * 4 * toss * (1 - toss) }
+    }
+    const appear = stage(ball, ...BALL.appear)
+    const gone = stage(ball, ...BALL.gone)
+    if (shows(appear, gone)) {
+      if (flat) canvas.stamp(BOUNCY_BALL_FLAT, at.x - 2.5, ground)
+      else canvas.stamp(BOUNCY_BALL, at.x - 1.5, at.y - 1.5)
+    }
+    poof(top, appear)
+    poof(top, gone)
+  }
+}
+```
+
+<!-- /code -->
+
+Her five toys, each with its picture, its timetable and its painter. `toyKit(canvas)` gives each
+painter `poof` (the sparkle as a toy comes, the twinkle as it goes) and `shows` (whether it's in
+sight yet). The paper plane's loop takes it behind her: on the far side it's set only where nothing
+of her is (`set(…, '.')`).
+
+### `props/visitors.ts`, `props/performances.ts` and `props/reactions.ts`
+
+<!-- code: apps/desktop/src/renderer/src/character/props/visitors.ts -->
+
+[`src/renderer/src/character/props/visitors.ts`, lines 1–113](../../apps/desktop/src/renderer/src/character/props/visitors.ts#L1-L113)
+
+```ts
+// Her visitors: the little spirit that comes to see her.
+
+import type { Scene } from './kit'
+import { SPARKLE, TWINKLE, stage } from './kit'
+
+/**
+ * The little spirit, wings up and wings down: a round glowing body (mint and teal) with dark dot
+ * eyes, pale leaf wings, and a wisp of a tail.
+ */
+export const SPIRIT_FLAP = [
+  [
+    '.VV.......VV.',
+    'VVVV.....VVVV',
+    '.VVV.TTT.VVV.',
+    '..VVTUUUTVV..',
+    '...TUUUUUT...',
+    '...TUWUWUT...',
+    '...TUUUUUT...',
+    '....TUUUT....',
+    '.....TTT.....',
+    '......T......',
+  ],
+  [
+    '.............',
+    '.............',
+    '.....TTT.....',
+    '....TUUUT....',
+    '...TUUUUUT...',
+    'VVVTUWUWUTVVV',
+    'VVVTUUUUUTVVV',
+    '.VVVTUUUTVVV.',
+    '..V..TTT..V..',
+    '......T......',
+  ],
+]
+
+/**
+ * The little spirit's visit (Pose.spirit): appearing beside her, flying to her, on her palm, a
+ * loop round her head, waving, and gone (shares of the habit).
+ */
+export const SPIRIT = {
+  appear: [0.02, 0.12],
+  toHer: [0.12, 0.28],
+  land: [0.3, 0.56],
+  loop: [0.58, 0.78],
+  wave: [0.8, 0.9],
+  gone: [0.9, 0.99],
+} as const
+
+/**
+ * The little spirit: appears beside her in a sparkle, flies to her, lands on her palm, loops
+ * round her head (behind her on the far side), hovers beside her waving, and fades away.
+ */
+export function paintSpirit({ pose, canvas, set, hand, onHead }: Scene): void {
+  const spirit = pose.spirit ?? 0
+  if (spirit > 0 && spirit < 1) {
+    const head = onHead({ x: 0, y: -4 })
+    const beside = { x: head.x + 27, y: head.y + 6 }
+    const before = { x: head.x + 10, y: head.y + 10 }
+    const palm = { x: hand.x, y: hand.y - 6 }
+    const toHer = stage(spirit, ...SPIRIT.toHer)
+    const land = stage(spirit, ...SPIRIT.land)
+    const loop = stage(spirit, ...SPIRIT.loop)
+    const bob = Math.sin(spirit * 60) * 1
+    let at = beside
+    let behind = false
+    if (spirit >= SPIRIT.toHer[0] && spirit < SPIRIT.land[0]) {
+      at = {
+        x: beside.x + (before.x - beside.x) * toHer,
+        y: beside.y + (before.y - beside.y) * toHer + bob,
+      }
+    } else if (spirit >= SPIRIT.land[0] && spirit < SPIRIT.loop[0]) {
+      const settle = Math.min(1, land * 4)
+      at = {
+        x: before.x + (palm.x - before.x) * settle,
+        y: before.y + (palm.y - before.y) * settle + bob * 0.5,
+      }
+    } else if (spirit >= SPIRIT.loop[0] && spirit < SPIRIT.wave[0]) {
+      const angle = Math.PI / 2 - loop * Math.PI * 2
+      const ring = { x: head.x + 20 * Math.cos(angle), y: head.y + 4 + 6 * Math.sin(angle) }
+      // Eases off her palm into the loop, and out of it to beside her.
+      const into = Math.min(1, loop / 0.15)
+      const outOf = Math.max(0, (loop - 0.85) / 0.15)
+      const from = into < 1 ? palm : ring
+      const to = outOf > 0 ? beside : ring
+      const mix = into < 1 ? into : outOf
+      at = { x: from.x + (to.x - from.x) * mix, y: from.y + (to.y - from.y) * mix }
+      behind = Math.sin(angle) < 0 && into >= 1 && outOf === 0
+    } else if (spirit >= SPIRIT.wave[0]) {
+      const rise = stage(spirit, ...SPIRIT.gone)
+      at = { x: beside.x + Math.sin(spirit * 90) * 1.5, y: beside.y - rise * 8 + bob }
+    }
+    const appear = stage(spirit, ...SPIRIT.appear)
+    const gone = stage(spirit, ...SPIRIT.gone)
+    if (appear >= 0.5 && gone < 0.5) {
+      const rows = SPIRIT_FLAP[Math.floor(spirit * 70) % 2]!
+      rows.forEach((row, dy) =>
+        [...row].forEach((letter, dx) => {
+          if (letter === '.') return
+          set({ x: at.x - 6 + dx, y: at.y - 5 + dy }, letter, behind ? '.' : undefined)
+        }),
+      )
+    }
+    if (appear > 0 && appear < 1) {
+      if (appear < 0.55) canvas.stamp(SPARKLE, beside.x - 2, beside.y - 2)
+      else canvas.stamp(TWINKLE, beside.x - 1, beside.y - 1)
+    }
+    if (gone > 0 && gone < 1) {
+      if (gone < 0.55) canvas.stamp(SPARKLE, at.x - 2, at.y - 2)
+      else canvas.stamp(TWINKLE, at.x - 1, at.y - 1)
+    }
+  }
+}
+```
+
+<!-- /code -->
+
+<!-- code: apps/desktop/src/renderer/src/character/props/performances.ts -->
+
+[`src/renderer/src/character/props/performances.ts`, lines 1–18](../../apps/desktop/src/renderer/src/character/props/performances.ts#L1-L18)
+
+```ts
+// What's drawn in her performances: the glow of magic charging in her hand in her battle.
+
+import type { Scene } from './kit'
+import { SPARKLE } from './kit'
+import { add } from '../raster'
+
+/**
+ * A glow of magic charging in her near hand (her battle): a glint, then a ball, then a sparkle.
+ */
+export function paintCharge({ pose, canvas, set, hand }: Scene): void {
+  const charge = pose.charge ?? 0
+  if (charge > 0) {
+    const at = add(hand, { x: 1.5, y: -1 })
+    if (charge > 0.85) canvas.stamp(SPARKLE, at.x - 2, at.y - 2)
+    else if (charge > 0.4) canvas.stamp(['.G.', 'GwG', '.G.'], at.x - 1, at.y - 1)
+    else set(at, 'w')
+  }
+}
+```
+
+<!-- /code -->
+
+<!-- code: apps/desktop/src/renderer/src/character/props/reactions.ts -->
+
+[`src/renderer/src/character/props/reactions.ts`, lines 1–62](../../apps/desktop/src/renderer/src/character/props/reactions.ts#L1-L62)
+
+```ts
+// What's drawn in her reactions: the scroll she holds up, a bead of sweat, and hearts.
+
+import type { Scene } from './kit'
+
+/** A heart, big and small: pink, outlined in red. */
+export const HEART = ['.m.m.', 'mcmcm', 'mcccm', '.mcm.', '..m..']
+
+export const HEART_SMALL = ['c.c', 'ccc', '.c.']
+
+/** A scroll: a sheet of parchment between its two rolled ends, lines of writing and a red seal. */
+export const SCROLL = [
+  'Ff.........fF',
+  'FflllllllllfF',
+  'FflDDDlDDllfF',
+  'FflDDlDDDllfF',
+  'FflDDDDlDllfF',
+  'FfllllllmmlfF',
+  'Ff.........fF',
+]
+
+/** A bead of sweat. */
+export const SWEAT = ['.w.', 'wGw', 'GGG', '.G.']
+
+/**
+ * A scroll held open in front of her, its rolled ends in her hands.
+ */
+export function paintScroll({ pose, canvas, hand, farHand }: Scene): void {
+  if (pose.scroll && farHand) {
+    const middle = { x: (hand.x + farHand.x) / 2, y: (hand.y + farHand.y) / 2 }
+    canvas.stamp(SCROLL, middle.x - (SCROLL[0]!.length - 1) / 2, middle.y - SCROLL.length + 2)
+  }
+}
+
+/**
+ * A bead of sweat beside her forehead, on the side away from her hat's tip.
+ */
+export function paintSweat({ pose, canvas, onHead }: Scene): void {
+  if (pose.sweat) {
+    const at = onHead({ x: -10, y: -4 })
+    canvas.stamp(SWEAT, at.x - 1, at.y - 1)
+  }
+}
+
+/**
+ * Hearts floating up from her, swaying, one after another, big then small, and gone.
+ */
+export function paintHearts({ pose, canvas, onHead }: Scene): void {
+  const hearts = pose.hearts ?? 0
+  if (hearts > 0 && hearts < 1) {
+    for (let k = 0; k < 4; k++) {
+      const life = hearts * 1.6 - k * 0.2
+      if (life <= 0 || life >= 1) continue
+      const side = k % 2 === 0 ? 1 : -1
+      const at = onHead({
+        x: side * (6 + life * 6) + Math.sin(life * 9 + k) * 1.5,
+        y: -8 - life * 24,
+      })
+      const heart = life < 0.55 ? HEART : HEART_SMALL
+      canvas.stamp(heart, at.x - (heart[0]!.length - 1) / 2, at.y - (heart.length - 1) / 2)
+    }
+  }
+}
+```
+
+<!-- /code -->
+
+The little spirit that visits her (it loops round her head, behind her on the far side), the glow
+of magic charging in her hand in her battle, and her reactions' scroll, bead of sweat and hearts.
 
 ## `src/renderer/src/character/pictures.ts`: the parts drawn by hand
 
@@ -6263,28 +7103,41 @@ export const SIDE_FACE: Picture = {
   The face itself is kept light (mostly the base skin, `s`), since a face in profile in anime art
   is mostly flat colour.
 
-## `src/renderer/src/character/sprite.ts`: her animations
+## `src/renderer/src/character/sprite.ts` and `moves/`: her animations
 
 Her animations: for each pose the main process can ask for (`Pose` in `src/shared/character.ts`,
-imported here as `Name` to keep it apart from the rig's `Pose`), a list of frames and how long each
-shows. As the comment at the top says, each animation is drawn by the rig from a few _key poses_
-and the _in-betweens_ eased between them, the way an animator draws the key drawings and then
-fills in the frames between. The in-betweens come about every 40 ms (`FRAME_MS`), 25 a second,
-which is what makes her movements smooth. Frames are drawn the first time a pose is needed, then
-kept, and `Character` (below) plays them.
+imported as `Name` to keep it apart from the rig's `Pose`), a list of frames and how long each
+shows. Each animation (a _move_) is drawn by the rig from a few _key poses_ and the _in-betweens_
+eased between them, the way an animator draws the key drawings and then fills in the frames
+between. The in-betweens come about every 40 ms (`FRAME_MS`), 25 a second, which is what makes her
+movements smooth.
+
+The moves are in `moves/`, a file for each kind: `kit.ts` (the tools they're made with),
+`basics.ts` (standing, walking, carried, thrown), `everyday.ts`, `charms.ts`, `magic.ts`, `toys.ts`
+and `visitors.ts` (her habits, by their kind in `HABITS`), `reactions.ts`, `snooze.ts`, `spells.ts`
+and `performances.ts`. Each lists its moves at its bottom, and `moves/index.ts` gathers them all.
+`sprite.ts` puts them to use: frames are drawn the first time a pose is needed, then kept, and
+`Character` (below) plays them. Her colours are in `palette.ts`.
 
 ### `SPRITE_SIZE` and `PALETTE`
 
-<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#SPRITE_SIZE,SPRITE_HEADROOM,PALETTE -->
+<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#SPRITE_SIZE,SPRITE_HEADROOM -->
 
-[`src/renderer/src/character/sprite.ts`, lines 42–114](../../apps/desktop/src/renderer/src/character/sprite.ts#L42-L114)
+[`src/renderer/src/character/sprite.ts`, lines 12–32](../../apps/desktop/src/renderer/src/character/sprite.ts#L12-L32)
 
 ```ts
 // The character's animations: for each pose, a list of frames drawn by the rig (rig.ts) from key
 // poses and the in-betweens eased between them. She's an original design: an elf mage with long
-// pointed ears, long silver-white hair, amber eyes, a wide-brimmed crooked hat and a
-// long robe in the tenant's accent colour. Frames are drawn the first time a pose is needed, then
-// kept.
+// pointed ears, long silver-white hair, amber eyes, a wide-brimmed crooked hat and a long robe in
+// the tenant's accent colour. Frames are drawn the first time a pose is needed, then kept.
+//
+// Where things are:
+// - every pose's move (how its frames are made, and whether it goes round): moves/, one file for
+//   each kind (her habits by their HABITS `kind`), all listed in moves/index.ts;
+// - the things she holds and the effects round her (toys, spells, visitors): props/, drawn by the
+//   rig as a pose asks for them;
+// - her colours: palette.ts (letters to CSS classes) and components/character.css.
+// See docs/CUSTOMIZING.md for adding a habit.
 
 /**
  * The grid's size in pixels: 96 wide, and 96 tall below the headroom, filling the bubble's window,
@@ -6294,6 +7147,19 @@ export const SPRITE_SIZE = GRID
 
 /** Rows above the grid, for her hat when she rises: a frame is this much taller than it's wide. */
 export const SPRITE_HEADROOM = HEADROOM
+```
+
+<!-- /code -->
+
+<!-- code: apps/desktop/src/renderer/src/character/palette.ts -->
+
+[`src/renderer/src/character/palette.ts`, lines 1–64](../../apps/desktop/src/renderer/src/character/palette.ts#L1-L64)
+
+```ts
+// Her colours: each palette letter (a pixel of a frame) and the CSS class that colours it, in
+// components/character.css (a test checks every class has a colour there). `.` is see-through.
+// Letters free for a new colour: C, H, J, M, Z and t (X is taken: the potion's flask picture marks
+// its liquid with it, swapped for the potion's colour as it's drawn).
 
 /** Each letter's colour, as a CSS class (character.css): robe and hat follow the accent colour. */
 export const PALETTE: Record<string, string> = {
@@ -6381,9 +7247,9 @@ export const PALETTE: Record<string, string> = {
 
 ### `Frame` and `Key`
 
-<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#Frame,Key -->
+<!-- code: apps/desktop/src/renderer/src/character/moves/kit.ts#Frame,Key -->
 
-[`src/renderer/src/character/sprite.ts`, lines 116–129](../../apps/desktop/src/renderer/src/character/sprite.ts#L116-L129)
+[`src/renderer/src/character/moves/kit.ts`, lines 9–22](../../apps/desktop/src/renderer/src/character/moves/kit.ts#L9-L22)
 
 ```ts
 /**
@@ -6396,7 +7262,7 @@ export interface Frame {
 }
 
 /** A key pose and how long it shows. */
-interface Key {
+export interface Key {
   pose: Pose
   ms: number
 }
@@ -6412,34 +7278,32 @@ interface Key {
 
 ### `smooth`, `lerp`, `mixArm`, `mixLeg`, `ARM_DOWN`, `LEG_STAND` and `mix()`
 
-<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#smooth,lerp,mixArm,mixLeg,ARM_DOWN,LEG_STAND,mix -->
+<!-- code: apps/desktop/src/renderer/src/character/moves/kit.ts#smooth,lerp,mixArm,mixLeg,ARM_DOWN,LEG_STAND,mix -->
 
-[`src/renderer/src/character/sprite.ts`, lines 131–172](../../apps/desktop/src/renderer/src/character/sprite.ts#L131-L172)
+[`src/renderer/src/character/moves/kit.ts`, lines 24–67](../../apps/desktop/src/renderer/src/character/moves/kit.ts#L24-L67)
 
 ```ts
-// ------------------------------------------------------------------------------------- tweening
-
 /** Slow in, slow out. */
-const smooth = (t: number) => t * t * (3 - 2 * t)
+export const smooth = (t: number) => t * t * (3 - 2 * t)
 
-const lerp = (a = 0, b = 0, t: number) => a + (b - a) * t
+export const lerp = (a = 0, b = 0, t: number) => a + (b - a) * t
 
-const mixArm = (a: Arm, b: Arm, t: number): Arm => ({
+export const mixArm = (a: Arm, b: Arm, t: number): Arm => ({
   shoulder: lerp(a.shoulder, b.shoulder, t),
   elbow: lerp(a.elbow, b.elbow, t),
 })
 
-const mixLeg = (a: Leg, b: Leg, t: number): Leg => ({
+export const mixLeg = (a: Leg, b: Leg, t: number): Leg => ({
   hip: lerp(a.hip, b.hip, t),
   knee: lerp(a.knee, b.knee, t),
 })
 
-const ARM_DOWN: Arm = { shoulder: 0.08, elbow: 0.04 }
+export const ARM_DOWN: Arm = { shoulder: 0.08, elbow: 0.04 }
 
-const LEG_STAND: Leg = { hip: 0, knee: 0 }
+export const LEG_STAND: Leg = { hip: 0, knee: 0 }
 
 /** Part of the way from pose `a` to pose `b`: numbers in between, the rest from the nearer one. */
-function mix(a: Pose, b: Pose, t: number): Pose {
+export function mix(a: Pose, b: Pose, t: number): Pose {
   const [an = ARM_DOWN, af = ARM_DOWN] = a.arms ?? []
   const [bn = ARM_DOWN, bf = ARM_DOWN] = b.arms ?? []
   const [ln = LEG_STAND, lf = LEG_STAND] = a.legs ?? []
@@ -6492,19 +7356,19 @@ _Tweening_: working out the poses between two key poses.
 
 ### `FRAME_MS`, `tween()`, `hold` and `crouch()`
 
-<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#FRAME_MS,tween,hold,crouch -->
+<!-- code: apps/desktop/src/renderer/src/character/moves/kit.ts#FRAME_MS,tween,hold,crouch -->
 
-[`src/renderer/src/character/sprite.ts`, lines 174–200](../../apps/desktop/src/renderer/src/character/sprite.ts#L174-L200)
+[`src/renderer/src/character/moves/kit.ts`, lines 69–95](../../apps/desktop/src/renderer/src/character/moves/kit.ts#L69-L95)
 
 ```ts
 /** In-betweens come about this often (ms): 25 frames a second. */
-const FRAME_MS = 40
+export const FRAME_MS = 40
 
 /**
  * Frames easing from `a` to `b` (ending on `b`) over `ms`: one every FRAME_MS or so, their times
  * adding up to exactly `ms`.
  */
-function tween(a: Pose, b: Pose, ms: number): Key[] {
+export function tween(a: Pose, b: Pose, ms: number): Key[] {
   const steps = Math.max(1, Math.round(ms / FRAME_MS))
   return Array.from({ length: steps }, (_, i) => ({
     pose: mix(a, b, smooth((i + 1) / steps)),
@@ -6512,13 +7376,13 @@ function tween(a: Pose, b: Pose, ms: number): Key[] {
   }))
 }
 
-const hold = (pose: Pose, ms: number): Key[] => [{ pose, ms }]
+export const hold = (pose: Pose, ms: number): Key[] => [{ pose, ms }]
 
 /**
  * Legs bent so her feet stay on the ground with her hips `depth` pixels lower: the thigh and shin
  * at equal and opposite angles (outward from the front, forward side on).
  */
-function crouch(depth: number): [Leg, Leg] {
+export function crouch(depth: number): [Leg, Leg] {
   const legs = LEG_LENGTH * 2
   const angle = Math.acos(Math.min(1, (legs - depth) / legs))
   const leg = { hip: angle, knee: angle * 2 }
@@ -6554,19 +7418,25 @@ function crouch(depth: number): [Leg, Leg] {
 
 ### `FRONT`, `DIAGONAL` and `idle()`
 
-<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#FRONT,DIAGONAL,idle -->
+<!-- code: apps/desktop/src/renderer/src/character/moves/kit.ts#FRONT,DIAGONAL -->
 
-[`src/renderer/src/character/sprite.ts`, lines 202–224](../../apps/desktop/src/renderer/src/character/sprite.ts#L202-L224)
+[`src/renderer/src/character/moves/kit.ts`, lines 97–99](../../apps/desktop/src/renderer/src/character/moves/kit.ts#L97-L99)
 
 ```ts
-// ----------------------------------------------------------------------------------- the poses
+export const FRONT: Pose = { view: 'front' }
 
-const FRONT: Pose = { view: 'front' }
+export const DIAGONAL: Pose = { view: 'diagonal' }
+```
 
-const DIAGONAL: Pose = { view: 'diagonal' }
+<!-- /code -->
 
+<!-- code: apps/desktop/src/renderer/src/character/moves/basics.ts#idle -->
+
+[`src/renderer/src/character/moves/basics.ts`, lines 19–36](../../apps/desktop/src/renderer/src/character/moves/basics.ts#L19-L36)
+
+```ts
 /** Standing, breathing (a pixel lower on the out-breath), her hair stirring; a blink. */
-function idle(): Key[] {
+export function idle(): Key[] {
   return Array.from({ length: 32 }, (_, i) => {
     const phase = (i / 32) * Math.PI * 2
     const breath = (1 - Math.cos(phase)) / 2
@@ -6601,9 +7471,9 @@ function idle(): Key[] {
 
 ### `walk()`
 
-<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#walk -->
+<!-- code: apps/desktop/src/renderer/src/character/moves/basics.ts#walk -->
 
-[`src/renderer/src/character/sprite.ts`, lines 226–257](../../apps/desktop/src/renderer/src/character/sprite.ts#L226-L257)
+[`src/renderer/src/character/moves/basics.ts`, lines 38–69](../../apps/desktop/src/renderer/src/character/moves/basics.ts#L38-L69)
 
 ```ts
 /**
@@ -6612,7 +7482,7 @@ function idle(): Key[] {
  * her hair trails behind her, a ripple running down it once a stride, so it flows; and she leaves a
  * trail of little sparkles on the ground behind her.
  */
-function walk(): Key[] {
+export function walk(): Key[] {
   return Array.from({ length: 12 }, (_, i) => {
     const phase = (i / 12) * Math.PI * 2
     const swing = Math.sin(phase)
@@ -6672,13 +7542,13 @@ a cycle ahead: positive while that leg swings forward, negative while it pushes 
 
 ### `hop()`
 
-<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#hop -->
+<!-- code: apps/desktop/src/renderer/src/character/moves/everyday.ts#hop -->
 
-[`src/renderer/src/character/sprite.ts`, lines 259–317](../../apps/desktop/src/renderer/src/character/sprite.ts#L259-L317)
+[`src/renderer/src/character/moves/everyday.ts`, lines 25–83](../../apps/desktop/src/renderer/src/character/moves/everyday.ts#L25-L83)
 
 ```ts
 /** A hop: crouch, spring up with her arms flung up, float, fall, land with a bounce. */
-function hop(): Key[] {
+export function hop(): Key[] {
   const up: [Arm, Arm] = [
     { shoulder: 2.4, elbow: 0.2 },
     { shoulder: 2.4, elbow: 0.2 },
@@ -6761,13 +7631,13 @@ named, and `tween()` eases from each to the next, about 30 frames altogether.
 
 ### `wave()`
 
-<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#wave -->
+<!-- code: apps/desktop/src/renderer/src/character/moves/everyday.ts#wave -->
 
-[`src/renderer/src/character/sprite.ts`, lines 319–339](../../apps/desktop/src/renderer/src/character/sprite.ts#L319-L339)
+[`src/renderer/src/character/moves/everyday.ts`, lines 85–105](../../apps/desktop/src/renderer/src/character/moves/everyday.ts#L85-L105)
 
 ```ts
 /** A wave, seen diagonally: her hand up, waving to and fro, head tilted, smiling. */
-function wave(): Key[] {
+export function wave(): Key[] {
   const hand = (elbow: number): Pose => ({
     view: 'diagonal',
     tilt: 0.08,
@@ -6804,13 +7674,13 @@ As the comment says, a wave, seen diagonally, smiling, with her head tilted.
 
 ### `stretch()`
 
-<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#stretch -->
+<!-- code: apps/desktop/src/renderer/src/character/moves/everyday.ts#stretch -->
 
-[`src/renderer/src/character/sprite.ts`, lines 341–364](../../apps/desktop/src/renderer/src/character/sprite.ts#L341-L364)
+[`src/renderer/src/character/moves/everyday.ts`, lines 107–130](../../apps/desktop/src/renderer/src/character/moves/everyday.ts#L107-L130)
 
 ```ts
 /** A stretch: arms up, a yawn, a lean one way and the other, arms down. */
-function stretch(): Key[] {
+export function stretch(): Key[] {
   const up = (lean: number, face: Pose['face']): Pose => ({
     view: 'front',
     y: -1,
@@ -6846,13 +7716,13 @@ As the comment says, a stretch, from the front.
 
 ### `sip()`
 
-<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#sip -->
+<!-- code: apps/desktop/src/renderer/src/character/moves/everyday.ts#sip -->
 
-[`src/renderer/src/character/sprite.ts`, lines 366–398](../../apps/desktop/src/renderer/src/character/sprite.ts#L366-L398)
+[`src/renderer/src/character/moves/everyday.ts`, lines 132–164](../../apps/desktop/src/renderer/src/character/moves/everyday.ts#L132-L164)
 
 ```ts
 /** A sip of tea, seen diagonally: the cup up to her mouth, a sip, down, a contented smile. */
-function sip(): Key[] {
+export function sip(): Key[] {
   const low = (face: Pose['face'] = 'neutral'): Pose => ({
     view: 'diagonal',
     prop: 'cup',
@@ -6901,13 +7771,13 @@ As the comment says, a sip of tea, seen diagonally.
 
 ### `read()`
 
-<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#read -->
+<!-- code: apps/desktop/src/renderer/src/character/moves/everyday.ts#read -->
 
-[`src/renderer/src/character/sprite.ts`, lines 400–430](../../apps/desktop/src/renderer/src/character/sprite.ts#L400-L430)
+[`src/renderer/src/character/moves/everyday.ts`, lines 166–196](../../apps/desktop/src/renderer/src/character/moves/everyday.ts#L166-L196)
 
 ```ts
 /** Reading her spellbook, seen diagonally: head down, turning a page, a smile at something. */
-function read(): Key[] {
+export function read(): Key[] {
   const reading = (turn: number, face: Pose['face'] = 'down'): Pose => ({
     view: 'diagonal',
     prop: 'book',
@@ -6954,13 +7824,13 @@ As the comment says, reading her spellbook, seen diagonally.
 
 ### `spell()`
 
-<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#spell -->
+<!-- code: apps/desktop/src/renderer/src/character/moves/charms.ts#spell -->
 
-[`src/renderer/src/character/sprite.ts`, lines 432–455](../../apps/desktop/src/renderer/src/character/sprite.ts#L432-L455)
+[`src/renderer/src/character/moves/charms.ts`, lines 21–44](../../apps/desktop/src/renderer/src/character/moves/charms.ts#L21-L44)
 
 ```ts
 /** A little spell: her hand up, sparkles circling it, then gone with a smile. */
-function spell(): Key[] {
+export function spell(): Key[] {
   const casting = (sparkle: number, face: Pose['face'] = 'neutral'): Pose => ({
     view: 'diagonal',
     face,
@@ -6999,9 +7869,9 @@ As the comment says, a little spell, seen diagonally.
 
 ### `vision()`
 
-<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#vision -->
+<!-- code: apps/desktop/src/renderer/src/character/moves/charms.ts#vision -->
 
-[`src/renderer/src/character/sprite.ts`, lines 457–491](../../apps/desktop/src/renderer/src/character/sprite.ts#L457-L491)
+[`src/renderer/src/character/moves/charms.ts`, lines 46–80](../../apps/desktop/src/renderer/src/character/moves/charms.ts#L46-L80)
 
 ```ts
 /**
@@ -7010,7 +7880,7 @@ As the comment says, a little spell, seen diagonally.
  * her arms open, and she gazes up at it while it hovers, blinking once; she watches it rise away,
  * then settles and blinks.
  */
-function vision(): Key[] {
+export function vision(): Key[] {
   const looking = (face: Pose['face'], out: number, i = 0): Pose => {
     // A breath every second or so, so she isn't frozen while she watches.
     const breath = Math.sin((i / 25) * Math.PI * 2) * 0.03
@@ -7068,9 +7938,9 @@ blinking once; she watches it rise away, then settles and blinks.
 
 ### `levitate()`
 
-<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#levitate -->
+<!-- code: apps/desktop/src/renderer/src/character/moves/charms.ts#levitate -->
 
-[`src/renderer/src/character/sprite.ts`, lines 493–543](../../apps/desktop/src/renderer/src/character/sprite.ts#L493-L543)
+[`src/renderer/src/character/moves/charms.ts`, lines 82–132](../../apps/desktop/src/renderer/src/character/moves/charms.ts#L82-L132)
 
 ```ts
 /**
@@ -7078,7 +7948,7 @@ blinking once; she watches it rise away, then settles and blinks.
  * over it, her hair and robe lifting; she hovers, bobbing, smiling, the runes turning and sparks
  * rising; then she sinks, lands with a little bend of the knees, and the circle fades.
  */
-function levitate(): Key[] {
+export function levitate(): Key[] {
   const floating = (
     y: number,
     rune: number,
@@ -7145,13 +8015,13 @@ As the comment says, she levitates, from the front.
 
 ### `sit()`
 
-<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#sit -->
+<!-- code: apps/desktop/src/renderer/src/character/moves/everyday.ts#sit -->
 
-[`src/renderer/src/character/sprite.ts`, lines 545–585](../../apps/desktop/src/renderer/src/character/sprite.ts#L545-L585)
+[`src/renderer/src/character/moves/everyday.ts`, lines 198–238](../../apps/desktop/src/renderer/src/character/moves/everyday.ts#L198-L238)
 
 ```ts
 /** Sitting on the taskbar, her robe spread round her, swaying gently, looking about, then up again. */
-function sit(): Key[] {
+export function sit(): Key[] {
   const hug: [Arm, Arm] = [
     { shoulder: 0.55, elbow: -1.15 },
     { shoulder: 0.55, elbow: -1.15 },
@@ -7209,13 +8079,13 @@ As the comment says, sitting on the taskbar with her robe spread round her, the 
 
 ### `curtsy()`
 
-<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#curtsy -->
+<!-- code: apps/desktop/src/renderer/src/character/moves/everyday.ts#curtsy -->
 
-[`src/renderer/src/character/sprite.ts`, lines 587–612](../../apps/desktop/src/renderer/src/character/sprite.ts#L587-L612)
+[`src/renderer/src/character/moves/everyday.ts`, lines 240–265](../../apps/desktop/src/renderer/src/character/moves/everyday.ts#L240-L265)
 
 ```ts
 /** A curtsy, from the front: her robe held out at the sides, a dip with her head tilted, smiling. */
-function curtsy(): Key[] {
+export function curtsy(): Key[] {
   const holding = (depth: number, spread: number, face: Pose['face'], tilt = 0): Pose => ({
     view: 'front',
     y: depth,
@@ -7260,9 +8130,9 @@ tilted, smiling.
 
 ### `orb()`
 
-<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#orb -->
+<!-- code: apps/desktop/src/renderer/src/character/moves/charms.ts#orb -->
 
-[`src/renderer/src/character/sprite.ts`, lines 614–647](../../apps/desktop/src/renderer/src/character/sprite.ts#L614-L647)
+[`src/renderer/src/character/moves/charms.ts`, lines 134–167](../../apps/desktop/src/renderer/src/character/moves/charms.ts#L134-L167)
 
 ```ts
 /**
@@ -7270,7 +8140,7 @@ tilted, smiling.
  * as a wisp of light turns inside and sparkles circle it, then smiles at what she sees and puts it
  * away.
  */
-function orb(): Key[] {
+export function orb(): Key[] {
   const holding = (face: Pose['face'], spin = 0, sparkle = 0): Pose => ({
     view: 'front',
     prop: 'orb',
@@ -7320,9 +8190,9 @@ sees and puts it away.
 
 ### `twirl()`
 
-<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#twirl -->
+<!-- code: apps/desktop/src/renderer/src/character/moves/everyday.ts#twirl -->
 
-[`src/renderer/src/character/sprite.ts`, lines 649–685](../../apps/desktop/src/renderer/src/character/sprite.ts#L649-L685)
+[`src/renderer/src/character/moves/everyday.ts`, lines 267–303](../../apps/desktop/src/renderer/src/character/moves/everyday.ts#L267-L303)
 
 ```ts
 /**
@@ -7331,7 +8201,7 @@ sees and puts it away.
  * front, diagonal, side, then the side and diagonal mirrored (facing the other way): her back,
  * which she has no picture of, goes by in between too fast to miss.
  */
-function twirl(): Frame[] {
+export function twirl(): Frame[] {
   const out: [Arm, Arm] = [
     { shoulder: 0.9, elbow: 0.2 },
     { shoulder: 0.9, elbow: 0.2 },
@@ -7388,9 +8258,9 @@ frame, and it reuses a few drawings.
 
 ### `butterfly()`
 
-<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#butterfly -->
+<!-- code: apps/desktop/src/renderer/src/character/moves/charms.ts#butterfly -->
 
-[`src/renderer/src/character/sprite.ts`, lines 687–711](../../apps/desktop/src/renderer/src/character/sprite.ts#L687-L711)
+[`src/renderer/src/character/moves/charms.ts`, lines 169–193](../../apps/desktop/src/renderer/src/character/moves/charms.ts#L169-L193)
 
 ```ts
 /**
@@ -7398,7 +8268,7 @@ frame, and it reuses a few drawings.
  * down to it and rests there, opening and shutting its wings, while she watches it, smiling; then
  * it flies off up and away, and she lowers her hand.
  */
-function butterfly(): Key[] {
+export function butterfly(): Key[] {
   const steps = Math.round(FIDGET_MS.butterfly / FRAME_MS)
   return Array.from({ length: steps }, (_, i) => {
     const t = i / steps
@@ -7441,9 +8311,9 @@ every frame is its own pose, rather than key poses with in-betweens.
 
 ### `doze()`
 
-<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#doze -->
+<!-- code: apps/desktop/src/renderer/src/character/moves/everyday.ts#doze -->
 
-[`src/renderer/src/character/sprite.ts`, lines 713–764](../../apps/desktop/src/renderer/src/character/sprite.ts#L713-L764)
+[`src/renderer/src/character/moves/everyday.ts`, lines 305–356](../../apps/desktop/src/renderer/src/character/moves/everyday.ts#L305-L356)
 
 ```ts
 /**
@@ -7451,7 +8321,7 @@ every frame is its own pose, rather than key poses with in-betweens.
  * up from her; her head nods, and she wakes with a start, hair flying, looks one way and the other,
  * and blinks.
  */
-function doze(flipText = false): Key[] {
+export function doze(flipText = false): Key[] {
   const steps = Math.round(FIDGET_MS.doze / FRAME_MS)
   return Array.from({ length: steps }, (_, i) => {
     const t = i / steps
@@ -7526,16 +8396,16 @@ one way and the other, and blinks. Like `butterfly()`, every frame is its own po
 
 ### `look()`
 
-<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#look -->
+<!-- code: apps/desktop/src/renderer/src/character/moves/everyday.ts#look -->
 
-[`src/renderer/src/character/sprite.ts`, lines 766–788](../../apps/desktop/src/renderer/src/character/sprite.ts#L766-L788)
+[`src/renderer/src/character/moves/everyday.ts`, lines 358–380](../../apps/desktop/src/renderer/src/character/moves/everyday.ts#L358-L380)
 
 ```ts
 /**
  * A glance one way, then the other (the second a mirror image), her eyes leading her head, then a
  * blink.
  */
-function look(): Frame[] {
+export function look(): Frame[] {
   const front = draw(FRONT)
   const eyesRight = draw({ view: 'front', look: 1 })
   const eyesLeft = draw({ view: 'front', look: -1 })
@@ -7571,21 +8441,29 @@ used again.
 
 ### `between` and `juggle()`
 
-<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#between,juggle -->
+<!-- code: apps/desktop/src/renderer/src/character/moves/kit.ts#between -->
 
-[`src/renderer/src/character/sprite.ts`, lines 790–824](../../apps/desktop/src/renderer/src/character/sprite.ts#L790-L824)
+[`src/renderer/src/character/moves/kit.ts`, lines 101–103](../../apps/desktop/src/renderer/src/character/moves/kit.ts#L101-L103)
 
 ```ts
 /** Between 0 and 1: how far `t` is from `from` to `to`, eased in and out. */
-const between = (t: number, from: number, to: number) =>
+export const between = (t: number, from: number, to: number) =>
   smooth(Math.min(1, Math.max(0, (t - from) / (to - from))))
+```
 
+<!-- /code -->
+
+<!-- code: apps/desktop/src/renderer/src/character/moves/charms.ts#juggle -->
+
+[`src/renderer/src/character/moves/charms.ts`, lines 195–225](../../apps/desktop/src/renderer/src/character/moves/charms.ts#L195-L225)
+
+```ts
 /**
  * Juggling, from the front: her hands come up in front of her and three little orbs fly between
  * them, up in a high arc from her far hand to her near one and quickly back underneath, each hand
  * dipping as it throws; then they're gone into her hands and she smiles.
  */
-function juggle(): Key[] {
+export function juggle(): Key[] {
   const steps = Math.round(FIDGET_MS.juggle / FRAME_MS)
   const [start, end] = [0.1, 0.88]
   return Array.from({ length: steps }, (_, i) => {
@@ -7650,9 +8528,9 @@ Like `butterfly()`, every frame is its own pose, worked out from how far through
 
 ### `bubbles()`
 
-<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#bubbles -->
+<!-- code: apps/desktop/src/renderer/src/character/moves/charms.ts#bubbles -->
 
-[`src/renderer/src/character/sprite.ts`, lines 1046–1075](../../apps/desktop/src/renderer/src/character/sprite.ts#L1046-L1075)
+[`src/renderer/src/character/moves/charms.ts`, lines 227–256](../../apps/desktop/src/renderer/src/character/moves/charms.ts#L227-L256)
 
 ```ts
 /**
@@ -7660,7 +8538,7 @@ Like `butterfly()`, every frame is its own pose, worked out from how far through
  * through it, puffing before each bubble; they drift up and away, wobbling, and pop. She puts the
  * wand away and watches the last ones go, smiling.
  */
-function bubbles(): Key[] {
+export function bubbles(): Key[] {
   const steps = Math.round(FIDGET_MS.bubbles / FRAME_MS)
   const blowing: Arm = { shoulder: 0.75, elbow: 2.45 }
   return Array.from({ length: steps }, (_, i) => {
@@ -7709,9 +8587,9 @@ rig's `bubbles`, and the rig places the bubbles and the wand from that.
 
 ### `wisp()`
 
-<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#wisp -->
+<!-- code: apps/desktop/src/renderer/src/character/moves/charms.ts#wisp -->
 
-[`src/renderer/src/character/sprite.ts`, lines 1077–1104](../../apps/desktop/src/renderer/src/character/sprite.ts#L1077-L1104)
+[`src/renderer/src/character/moves/charms.ts`, lines 258–285](../../apps/desktop/src/renderer/src/character/moves/charms.ts#L258-L285)
 
 ```ts
 /**
@@ -7719,7 +8597,7 @@ rig's `bubbles`, and the rig places the bubbles and the wand from that.
  * her twice, behind her and in front (see wispAt), her eyes following it and a smile as it passes
  * in front; then it flies off up and away, and she waves it goodbye.
  */
-function wisp(): Key[] {
+export function wisp(): Key[] {
   const steps = Math.round(FIDGET_MS.wisp / FRAME_MS)
   return Array.from({ length: steps }, (_, i) => {
     const t = i / steps
@@ -7766,9 +8644,9 @@ pose: 120 frames of 40 ms, `FIDGET_MS.wisp` (4800 ms). The rig draws the wisp fr
 
 ### `sneeze()`
 
-<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#sneeze -->
+<!-- code: apps/desktop/src/renderer/src/character/moves/everyday.ts#sneeze -->
 
-[`src/renderer/src/character/sprite.ts`, lines 1106–1134](../../apps/desktop/src/renderer/src/character/sprite.ts#L1106-L1134)
+[`src/renderer/src/character/moves/everyday.ts`, lines 382–410](../../apps/desktop/src/renderer/src/character/moves/everyday.ts#L382-L410)
 
 ```ts
 /**
@@ -7776,7 +8654,7 @@ pose: 120 frames of 40 ms, `FIDGET_MS.wisp` (4800 ms). The rig draws the wisp fr
  * (further back, eyes shut), "choo!" (forward, hair flying, hands up), and the sneeze bursts into
  * sparkles that fly out and fade; she looks surprised, then smiles sheepishly and blinks.
  */
-function sneeze(): Key[] {
+export function sneeze(): Key[] {
   const twitch: Pose = { view: 'front', face: 'surprised' }
   const ah = (tilt: number, face: Pose['face']): Pose => ({ view: 'front', face, tilt, lift: -0.5 })
   const hands: [Arm, Arm] = [
@@ -7827,9 +8705,9 @@ to 1, and the rig draws them big, then as twinkles, then as glints.
 
 ### `dance()`
 
-<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#dance -->
+<!-- code: apps/desktop/src/renderer/src/character/moves/everyday.ts#dance -->
 
-[`src/renderer/src/character/sprite.ts`, lines 1136–1166](../../apps/desktop/src/renderer/src/character/sprite.ts#L1136-L1166)
+[`src/renderer/src/character/moves/everyday.ts`, lines 412–442](../../apps/desktop/src/renderer/src/character/moves/everyday.ts#L412-L442)
 
 ```ts
 /**
@@ -7837,7 +8715,7 @@ to 1, and the rig draws them big, then as twinkles, then as glints.
  * hip, then hops, kicking her other foot out, her robe swinging and her hair flying the other way;
  * then the other side, seven beats in all, and back to standing.
  */
-function dance(): Key[] {
+export function dance(): Key[] {
   const up: Arm = { shoulder: 2.4, elbow: 0.6 }
   const hip: Arm = { shoulder: 0.55, elbow: -1.6 }
   const kick: Leg = { hip: 0.35, knee: 0.5 }
@@ -7890,9 +8768,9 @@ in-betweens again.
 
 ### `chant()`
 
-<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#chant -->
+<!-- code: apps/desktop/src/renderer/src/character/moves/spells.ts#chant -->
 
-[`src/renderer/src/character/sprite.ts`, lines 1168–1195](../../apps/desktop/src/renderer/src/character/sprite.ts#L1168-L1195)
+[`src/renderer/src/character/moves/spells.ts`, lines 7–34](../../apps/desktop/src/renderer/src/character/moves/spells.ts#L7-L34)
 
 ```ts
 /**
@@ -7900,7 +8778,7 @@ in-betweens again.
  * a magic circle turning under her, sparkles circling her hand, her hair and robe lifting in the
  * updraft. Round and round, for as long as the chant lasts.
  */
-function chant(): Key[] {
+export function chant(): Key[] {
   return Array.from({ length: 32 }, (_, i) => {
     const phase = (i / 32) * Math.PI * 2
     const sway = Math.sin(phase) * 0.06
@@ -7950,28 +8828,36 @@ hair and robe lifting in the updraft. Unlike the fidgets, it isn't key poses wit
 
 ### `over()`, `vanish()` and `appear()`
 
-<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#over,vanish,appear -->
+<!-- code: apps/desktop/src/renderer/src/character/moves/kit.ts#over -->
 
-[`src/renderer/src/character/sprite.ts`, lines 1197–1231](../../apps/desktop/src/renderer/src/character/sprite.ts#L1197-L1231)
+[`src/renderer/src/character/moves/kit.ts`, lines 115–125](../../apps/desktop/src/renderer/src/character/moves/kit.ts#L115-L125)
 
 ```ts
 /**
  * `ms` long, a frame about every FRAME_MS: `pose(t)` for each, `t` going from 0 to 1, their times
  * adding up to exactly `ms`.
  */
-function over(ms: number, pose: (t: number) => Pose): Key[] {
+export function over(ms: number, pose: (t: number) => Pose): Key[] {
   const steps = Math.max(2, Math.round(ms / FRAME_MS))
   return Array.from({ length: steps }, (_, i) => ({
     pose: pose(i / (steps - 1)),
     ms: Math.round(((i + 1) * ms) / steps) - Math.round((i * ms) / steps),
   }))
 }
+```
 
+<!-- /code -->
+
+<!-- code: apps/desktop/src/renderer/src/character/moves/spells.ts#vanish,appear -->
+
+[`src/renderer/src/character/moves/spells.ts`, lines 36–58](../../apps/desktop/src/renderer/src/character/moves/spells.ts#L36-L58)
+
+```ts
 /**
  * Vanishing, from the front: a smile, then her eyes close and she dissolves into white motes that
  * drift up and fade (see FADE in the rig), the top of her first, until there's nothing left.
  */
-function vanish(): Key[] {
+export function vanish(): Key[] {
   return over(SPELL_POSE_MS.vanish, (t) => ({
     view: 'front',
     face: t < 0.25 ? 'happy' : 'blink',
@@ -7983,7 +8869,7 @@ function vanish(): Key[] {
  * Appearing: vanishing backwards. White motes come down out of nowhere and she forms out of them,
  * her eyes shut, then open with a smile, standing as usual by the end.
  */
-function appear(): Key[] {
+export function appear(): Key[] {
   return over(SPELL_POSE_MS.appear, (t) => ({
     view: 'front',
     face: t < 0.75 ? 'blink' : t < 0.95 ? 'happy' : 'neutral',
@@ -8022,16 +8908,16 @@ the rig turns into her dissolving (see `FADE` in `rig.ts`).
 
 ### `dragged()`
 
-<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#dragged -->
+<!-- code: apps/desktop/src/renderer/src/character/moves/basics.ts#dragged -->
 
-[`src/renderer/src/character/sprite.ts`, lines 1233–1263](../../apps/desktop/src/renderer/src/character/sprite.ts#L1233-L1263)
+[`src/renderer/src/character/moves/basics.ts`, lines 71–101](../../apps/desktop/src/renderer/src/character/moves/basics.ts#L71-L101)
 
 ```ts
 /**
  * Carried by her collar: off the ground, arms up, legs kicking, swaying, hair lifted, and no
  * shadow under her (she's in the air, wherever the pointer takes her).
  */
-function dragged(): Key[] {
+export function dragged(): Key[] {
   return Array.from({ length: 12 }, (_, i) => {
     const phase = (i / 12) * Math.PI * 2
     const kick = Math.sin(phase * 2)
@@ -8075,9 +8961,9 @@ Twelve frames of 55 ms, round and round.
 
 ### `gaze()`
 
-<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#gaze -->
+<!-- code: apps/desktop/src/renderer/src/character/moves/basics.ts#gaze -->
 
-[`src/renderer/src/character/sprite.ts`, lines 1265–1288](../../apps/desktop/src/renderer/src/character/sprite.ts#L1265-L1288)
+[`src/renderer/src/character/moves/basics.ts`, lines 103–126](../../apps/desktop/src/renderer/src/character/moves/basics.ts#L103-L126)
 
 ```ts
 /**
@@ -8085,7 +8971,7 @@ Twelve frames of 55 ms, round and round.
  * slightly from side to side in the evening breeze, her hair and robe stirring with it, round and
  * round every few seconds.
  */
-function gaze(): Key[] {
+export function gaze(): Key[] {
   const count = 48
   return Array.from({ length: count }, (_, i) => {
     const phase = (i / count) * Math.PI * 2
@@ -8126,208 +9012,159 @@ the screen saver is on), so it has no entry in `MAKERS`; `gazeFrames()`, below, 
   (0.6) and stirring either way of it, a little behind the sway (`+ 0.8`), as hair follows a
   movement.
 
-### `drawn`, `MAKERS`, `LEFT_MAKERS` and `LOOPS`
+### `drawn`, `Move`, `once`, `repeating` and `MOVES`
 
-<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#drawn,MAKERS,LEFT_MAKERS,LOOPS -->
+<!-- code: apps/desktop/src/renderer/src/character/moves/kit.ts#drawn,mirror,Move,Moves,once,repeating -->
 
-[`src/renderer/src/character/sprite.ts`, lines 2093–2271](../../apps/desktop/src/renderer/src/character/sprite.ts#L2093-L2271)
+[`src/renderer/src/character/moves/kit.ts`, lines 146–180](../../apps/desktop/src/renderer/src/character/moves/kit.ts#L146-L180)
 
 ```ts
-// ------------------------------------------------------------------------------------- frames
+export const drawn = (keys: Key[]): Frame[] =>
+  keys.map(({ pose, ms }) => ({ rows: draw(pose), ms }))
 
-const drawn = (keys: Key[]): Frame[] => keys.map(({ pose, ms }) => ({ rows: draw(pose), ms }))
-
-/** How each pose's frames are made, facing right. */
-const MAKERS: Record<Name, () => Frame[]> = {
-  idle: () => drawn(idle()),
-  'walk-right': () => drawn(walk()),
-  'walk-left': () => drawn(walk()),
-  hop: () => drawn(hop()),
-  wave: () => drawn(wave()),
-  stretch: () => drawn(stretch()),
-  sip: () => drawn(sip()),
-  read: () => drawn(read()),
-  spell: () => drawn(spell()),
-  levitate: () => drawn(levitate()),
-  vision: () => drawn(vision()),
-  curtsy: () => drawn(curtsy()),
-  orb: () => drawn(orb()),
-  twirl,
-  butterfly: () => drawn(butterfly()),
-  doze: () => drawn(doze()),
-  sit: () => drawn(sit()),
-  look,
-  juggle: () => drawn(juggle()),
-  bubbles: () => drawn(bubbles()),
-  wisp: () => drawn(wisp()),
-  sneeze: () => drawn(sneeze()),
-  dance: () => drawn(dance()),
-  flame: () => drawn(flame()),
-  frost: () => drawn(frost()),
-  bloom: () => drawn(bloom()),
-  sigil: () => drawn(sigil()),
-  rainbow: () => drawn(rainbow()),
-  hat: () => drawn(hat()),
-  star: () => drawn(star()),
-  rain: () => drawn(rain()),
-  potion: () => drawn(potion()),
-  tome: () => drawn(tome()),
-  yoyo: () => drawn(yoyo()),
-  top: () => drawn(top()),
-  cards: () => drawn(cards()),
-  plane: () => drawn(plane()),
-  ball: () => drawn(ball()),
-  chant: () => drawn(chant()),
-  vanish: () => drawn(vanish()),
-  appear: () => drawn(appear()),
-  dragged: () => drawn(dragged()),
-  flung,
-  splat: () => drawn(splat()),
-  yawn: () => drawn(yawn()),
-  confetti: () => drawn(confetti()),
-  pet: () => drawn(pet()),
-  scroll: () => drawn(scroll()),
-  startle: () => drawn(startle()),
-  'pounce-left': () => drawn(pounce()),
-  'pounce-right': () => drawn(pounce()),
-  lift: () => drawn(lift()),
-  lower: () => drawn(lower()),
-  guilty: () => drawn(guilty()),
-  toss: () => drawn(toss()),
-  watch: () => drawn(watch()),
-  'peek-left': () => drawn(peek()),
-  'peek-right': () => drawn(peek()),
-  portal: () => portal(),
-  'portal-back': () => portal(true),
-  'ready-left': () => drawn(ready()),
-  'ready-right': () => drawn(ready()),
-  'cast-left': () => drawn(cast()),
-  'cast-right': () => drawn(cast()),
-  spirit: () => drawn(spirit()),
-  settle: () => drawn(settle()),
-  rouse: () => drawn(rouse()),
-  snooze: () => drawn(snooze()),
+/** The frame mirrored left to right. */
+export function mirror(rows: string[]): string[] {
+  return rows.map((row) => [...row].reverse().join(''))
 }
 
 /**
- * Poses with letters in them (the dozer's z's), drawn the other way round for facing left, so
- * they read right once the frame is mirrored.
+ * How a pose's frames are made: `frames` draws them (facing right), `loops` says whether they go
+ * round and round (else they play once), and `left`, if there is one, draws them for facing left
+ * before they're mirrored (for writing that has to read the right way round once mirrored).
  */
-const LEFT_MAKERS: Partial<Record<Name, () => Frame[]>> = {
-  doze: () => drawn(doze(true)),
-  snooze: () => drawn(snooze(true)),
+export interface Move {
+  frames: () => Frame[]
+  loops: boolean
+  left?: () => Frame[]
 }
 
-/** Whether a pose's animation repeats (the fidgets play once, for FIDGET_MS). */
-export const LOOPS: Record<Name, boolean> = {
-  idle: true,
-  'walk-left': true,
-  'walk-right': true,
-  dragged: true,
-  // Tumbling through the air goes round until she lands; her hard landing plays once.
-  flung: true,
-  splat: false,
-  // Answers play once; her performances' poses go round until they're done with.
-  pet: false,
-  scroll: false,
-  startle: false,
-  'pounce-left': false,
-  'pounce-right': false,
-  lift: false,
-  lower: false,
-  guilty: false,
-  toss: false,
-  watch: true,
-  'peek-left': true,
-  'peek-right': true,
-  portal: false,
-  'portal-back': false,
-  'ready-left': true,
-  'ready-right': true,
-  'cast-left': false,
-  'cast-right': false,
-  spirit: false,
-  settle: false,
-  rouse: false,
-  snooze: true,
-  hop: false,
-  wave: false,
-  stretch: false,
-  sip: false,
-  read: false,
-  spell: false,
-  levitate: false,
-  vision: false,
-  curtsy: false,
-  orb: false,
-  twirl: false,
-  butterfly: false,
-  doze: false,
-  sit: false,
-  look: false,
-  juggle: false,
-  bubbles: false,
-  wisp: false,
-  sneeze: false,
-  dance: false,
-  yawn: false,
-  confetti: false,
-  flame: false,
-  frost: false,
-  bloom: false,
-  sigil: false,
-  rainbow: false,
-  hat: false,
-  star: false,
-  rain: false,
-  potion: false,
-  tome: false,
-  yoyo: false,
-  top: false,
-  cards: false,
-  plane: false,
-  ball: false,
-  // Her spells': the chant goes round for as long as it lasts; vanishing and appearing play once.
-  chant: true,
-  vanish: false,
-  appear: false,
+/** Moves by pose: each file of moves exports one of these. */
+export type Moves = Partial<Record<Name, Move>>
+
+/** A move from key poses that plays once (`left`: see Move). */
+export const once = (keys: () => Key[], left?: () => Key[]): Move => ({
+  frames: () => drawn(keys()),
+  loops: false,
+  ...(left ? { left: () => drawn(left()) } : {}),
+})
+
+/** A move from key poses that goes round and round (`left`: see Move). */
+export const repeating = (keys: () => Key[], left?: () => Key[]): Move => ({
+  frames: () => drawn(keys()),
+  loops: true,
+  ...(left ? { left: () => drawn(left()) } : {}),
+})
+```
+
+<!-- /code -->
+
+<!-- code: apps/desktop/src/renderer/src/character/moves/index.ts -->
+
+[`src/renderer/src/character/moves/index.ts`, lines 1–30](../../apps/desktop/src/renderer/src/character/moves/index.ts#L1-L30)
+
+```ts
+// Every pose's move, by name: one place that says how each pose is drawn and whether it goes round.
+// Each kind of move has its own file here (the habits by HABITS `kind`); to add one, write its
+// function in the right file, add it to that file's list at the bottom, and it's in. TypeScript
+// won't build without a move for every pose (Pose in shared/character.ts).
+
+import type { Pose as Name } from '@shared/character'
+import { BASIC_MOVES } from './basics'
+import { CHARM_MOVES } from './charms'
+import { EVERYDAY_MOVES } from './everyday'
+import type { Move } from './kit'
+import { MAGIC_MOVES } from './magic'
+import { PERFORMANCE_MOVES } from './performances'
+import { REACTION_MOVES } from './reactions'
+import { SNOOZE_MOVES } from './snooze'
+import { SPELL_MOVES } from './spells'
+import { TOY_MOVES } from './toys'
+import { VISITOR_MOVES } from './visitors'
+
+export const MOVES: Record<Name, Move> = {
+  ...BASIC_MOVES,
+  ...EVERYDAY_MOVES,
+  ...CHARM_MOVES,
+  ...MAGIC_MOVES,
+  ...TOY_MOVES,
+  ...VISITOR_MOVES,
+  ...REACTION_MOVES,
+  ...SNOOZE_MOVES,
+  ...SPELL_MOVES,
+  ...PERFORMANCE_MOVES,
 }
 ```
 
 <!-- /code -->
 
+<!-- code: apps/desktop/src/renderer/src/character/moves/everyday.ts#EVERYDAY_MOVES -->
+
+[`src/renderer/src/character/moves/everyday.ts`, lines 489–506](../../apps/desktop/src/renderer/src/character/moves/everyday.ts#L489-L506)
+
+```ts
+/** Her everyday habits, by pose (each plays once, for its HABITS `ms`). */
+export const EVERYDAY_MOVES = {
+  hop: once(hop),
+  wave: once(wave),
+  stretch: once(stretch),
+  sip: once(sip),
+  read: once(read),
+  sit: once(sit),
+  curtsy: once(curtsy),
+  twirl: { frames: twirl, loops: false },
+  // Its z's are drawn the other way round for facing left, so they read right once mirrored.
+  doze: once(doze, () => doze(true)),
+  look: { frames: look, loops: false },
+  sneeze: once(sneeze),
+  dance: once(dance),
+  yawn: once(yawn),
+  confetti: once(confetti),
+} satisfies Moves
+```
+
+<!-- /code -->
+
+<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#LOOPS -->
+
+[`src/renderer/src/character/sprite.ts`, lines 74–77](../../apps/desktop/src/renderer/src/character/sprite.ts#L74-L77)
+
+```ts
+/** Whether a pose's animation repeats (the habits and reactions play once). See moves/. */
+export const LOOPS = Object.fromEntries(
+  Object.entries(MOVES).map(([pose, move]) => [pose, move.loops]),
+) as Record<Name, boolean>
+```
+
+<!-- /code -->
+
 - `drawn(keys)`: key poses into frames: the rig draws each pose (`draw()`), and each keeps its time.
-- `MAKERS`: as the comment says, how each pose's frames are made, facing right. They're functions,
-  not the frames themselves, so nothing is drawn until it's needed. `Record<Name, ...>` makes
-  TypeScript insist on every pose. Both walks make the same right-facing frames; `framesOf()`
-  mirrors them for `walk-left`. `look` and `twirl` make their frames themselves. Every fidget has
-  its maker here, the ten magic ones (`flame`, `frost`, `bloom`, `sigil`, `rainbow`, `hat`,
-  `star`, `rain`, `potion`, `tome`) included; like most, they make key poses, which `drawn()` turns
-  into frames. The magic ones each make a frame every 40 ms with `through()`, from how far through
-  the habit it is, and set one number on the pose (`flame`, `frost` and so on, or `hatLift`,
-  `hatTurn` and `shower` for the hat trick) that the rig turns into the effect, timed by the rig's
-  `FLAME`, `FROST`, `BLOOM`, `SIGIL`, `RAINBOW`, `STAR_CATCH`, `RAIN`, `POTION` and `TOME`. So do her spells' three poses
-  (`chant`, `vanish` and `appear`).
-- `LEFT_MAKERS`: as the comment says, poses with letters in them, drawn the other way round for
-  facing left, so they read right once the frame is mirrored. Only the dozer's z's so far:
-  `doze(true)`. `Partial<Record<...>>` lets it list only the poses that need it.
-- `LOOPS`: as the comment says, which poses go round and round (idle, the walks and dangling) and
-  which play once (all thirty fidgets, the magic ones included: their last frame stays until the
-  main process changes the pose, which it does just as `FIDGET_MS` runs out). Of her spells'
-  poses, as the comment says, the chant goes round for as long as it lasts, and vanishing and
-  appearing play once (`SPELL_POSE_MS` times them; after vanishing, her last frame is empty).
-  `Record<Name, boolean>` makes TypeScript insist on an answer for every pose, so a new habit can't
-  be left out.
+- `Move`: how a pose's frames are made, as its comment says: `frames` draws them facing right (a
+  function, so nothing is drawn until it's needed), `loops` says whether they go round and round
+  (idle, the walks, dangling, her performances' held poses) or play once (every habit and reaction:
+  the last frame stays until the main process changes the pose, which it does just as `FIDGET_MS`
+  runs out), and `left`, for the few poses with letters in them (the dozer's and the snoozer's z's),
+  draws them the other way round for facing left, so they read right once the frame is mirrored.
+- `once(keys)` and `repeating(keys)`: a move from a function making key poses, played once or round
+  and round; most moves are one or the other. `look`, `twirl`, `flung` and the portal make their
+  frames themselves, so their `Move` is written out.
+- Each file of moves lists its own at its bottom (`EVERYDAY_MOVES` here, for one), `satisfies
+Moves`: a move for any pose, keeping the exact names. Both walks make the same right-facing
+  frames; `framesOf()` mirrors them for `walk-left`.
+- `MOVES` (`moves/index.ts`) gathers them. Typed `Record<Name, Move>`, it won't compile without a
+  move for every pose, so a new habit can't be left without one, and a test checks each habit's
+  move is in the file for its kind.
+- `LOOPS`: whether each pose goes round, read off `MOVES`.
 
 ### `gazing` and `gazeFrames()`
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#gazing,gazeFrames -->
 
-[`src/renderer/src/character/sprite.ts`, lines 2178–2196](../../apps/desktop/src/renderer/src/character/sprite.ts#L2178-L2196)
+[`src/renderer/src/character/sprite.ts`, lines 53–72](../../apps/desktop/src/renderer/src/character/sprite.ts#L53-L72)
 
 ```ts
 let gazing: Frame[] | null = null
 
+/** Her frames watching the sunset, from behind (see gaze): round and round. Drawn once, then kept. */
 export function gazeFrames(): Frame[] {
   gazing ??= drawn(gaze())
   return gazing
@@ -8336,7 +9173,7 @@ export function gazeFrames(): Frame[] {
 
 <!-- /code -->
 
-In the source these sit between `LEFT_MAKERS` and `LOOPS`, above.
+In the source these sit just after `setHat()`.
 
 - `gazing`: her frames watching the sunset, once drawn; `null` until then.
 - `gazeFrames()`: as its comment says, her frames watching the sunset, from behind (`gaze()`),
@@ -8347,32 +9184,38 @@ In the source these sit between `LEFT_MAKERS` and `LOOPS`, above.
 
 ### `Facing`, `made` and `framesOf()`
 
-<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#Facing,made,framesOf -->
+<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#Facing,made,wayOf,drawFacing,framesOf -->
 
-[`src/renderer/src/character/sprite.ts`, lines 2273–2297](../../apps/desktop/src/renderer/src/character/sprite.ts#L2273-L2297)
+[`src/renderer/src/character/sprite.ts`, lines 79–109](../../apps/desktop/src/renderer/src/character/sprite.ts#L79-L109)
 
 ```ts
 export type Facing = 'left' | 'right'
 
 const made = new Map<string, Frame[]>()
 
+/** Which way a pose faces: poses with a way in their name (walking, pouncing, peeking) face that way. */
+const wayOf = (pose: Name, facing: Facing): Facing =>
+  pose.endsWith('-left') ? 'left' : pose.endsWith('-right') ? 'right' : facing
+
+/** A pose's frames drawn facing `way` (from `right`, its frames facing right, if they're drawn). */
+function drawFacing(pose: Name, way: Facing, right?: Frame[]): Frame[] {
+  const move = MOVES[pose]
+  if (way === 'right') return right ?? move.frames()
+  return (move.left?.() ?? right ?? move.frames()).map((f) => ({ rows: mirror(f.rows), ms: f.ms }))
+}
+
 /**
  * A pose's frames, facing `facing` (walking faces the way she walks, whatever `facing` says).
  * Drawn the first time they're asked for, then kept.
  */
 export function framesOf(pose: Name, facing: Facing): Frame[] {
-  // Poses with a way in their name (walking, pouncing, peeking) face that way, whatever `facing`
-  // says.
-  const way = pose.endsWith('-left') ? 'left' : pose.endsWith('-right') ? 'right' : facing
+  const way = wayOf(pose, facing)
   const key = `${pose}:${way}`
   let frames = made.get(key)
   if (!frames) {
-    const right = made.get(`${pose}:right`) ?? MAKERS[pose]()
+    const right = made.get(`${pose}:right`) ?? MOVES[pose].frames()
     made.set(`${pose}:right`, right)
-    frames =
-      way === 'right'
-        ? right
-        : (LEFT_MAKERS[pose]?.() ?? right).map((f) => ({ rows: mirror(f.rows), ms: f.ms }))
+    frames = drawFacing(pose, way, right)
     made.set(key, frames)
   }
   return frames
@@ -8384,28 +9227,64 @@ export function framesOf(pose: Name, facing: Facing): Frame[] {
 - `Facing`: which way she faces. `Character` chooses it: toward the middle of the screen.
 - `made`: the frames drawn so far, by pose and facing (such as `'idle:left'`), so each is drawn
   only once.
-- `framesOf(pose, facing)`: as the comment says, a pose's frames. A walk faces the way she walks
-  (`way`), whatever `facing` says. Frames not made yet are made from the right-facing ones (drawn
-  now if they haven't been already), and facing left they're those mirrored, with the same times.
-  The rig only ever draws her facing right, so every animation works both ways. A pose in
-  `LEFT_MAKERS` is drawn again for facing left (with its letters back to front) before it's
-  mirrored, instead of mirroring the right-facing frames: `LEFT_MAKERS[pose]?.() ?? right`.
+- `wayOf(pose, facing)`: a pose whose name ends in `-left` or `-right` (the walks, pounces, peeks)
+  faces that way, whatever `facing` says.
+- `drawFacing(pose, way, right)`: a pose's frames drawn facing `way`: facing right, its move's
+  frames (or `right`, if they're drawn already); facing left, those mirrored with the same times,
+  or, for a move with a `left` (letters in it), that drawn and mirrored. The rig only ever draws her
+  facing right, so every animation works both ways.
+- `framesOf(pose, facing)`: as the comment says, a pose's frames, drawn the first time they're
+  asked for and kept, the right-facing ones too, which facing left is made from.
 
-### `animationLength()` and `mirror()`
+### `ShownFrame`, `shown` and `shownFrames()`
 
-<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#animationLength,mirror -->
+<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#ShownFrame,shown,shownFrames -->
 
-[`src/renderer/src/character/sprite.ts`, lines 2299–2306](../../apps/desktop/src/renderer/src/character/sprite.ts#L2299-L2306)
+[`src/renderer/src/character/sprite.ts`, lines 111–133](../../apps/desktop/src/renderer/src/character/sprite.ts#L111-L133)
 
 ```ts
-/** How long a pose's frames last altogether (a fidget's must match FIDGET_MS). */
+/** A frame ready to show: its SVG paths (see framePaths), and how long it shows. */
+export interface ShownFrame {
+  paths: { className: string; d: string }[]
+  ms: number
+}
+
+const shown = new Map<string, ShownFrame[]>()
+
+/**
+ * A pose's frames as framesOf has them, ready to show as SVG paths: what Character plays. Only
+ * the paths are kept, not the frames' letters (nor her frames facing the other way), so her page
+ * holds much less: all her poses' frames come to some thousands.
+ */
+export function shownFrames(pose: Name, facing: Facing): ShownFrame[] {
+  const way = wayOf(pose, facing)
+  const key = `${pose}:${way}`
+  let frames = shown.get(key)
+  if (!frames) {
+    frames = drawFacing(pose, way).map((f) => ({ paths: framePaths(f.rows), ms: f.ms }))
+    shown.set(key, frames)
+  }
+  return frames
+}
+```
+
+<!-- /code -->
+
+What `Character` plays: a pose's frames as `framesOf()` has them, already turned into SVG paths
+(`framePaths()`). As the comment says, it keeps only the paths, not the frames' letters, nor the
+frames facing the other way: all her poses come to over 4,000 frames, so her page holds a fraction
+of what it would holding both. A test checks they're the same frames as `framesOf()`'s.
+
+### `animationLength()`
+
+<!-- code: apps/desktop/src/renderer/src/character/sprite.ts#animationLength -->
+
+[`src/renderer/src/character/sprite.ts`, lines 135–137](../../apps/desktop/src/renderer/src/character/sprite.ts#L135-L137)
+
+```ts
+/** How long a pose's frames last altogether (a habit's must match its HABITS `ms`). */
 export const animationLength = (pose: Name): number =>
   framesOf(pose, 'right').reduce((total, f) => total + f.ms, 0)
-
-/** The frame mirrored left to right. */
-export function mirror(rows: string[]): string[] {
-  return rows.map((row) => [...row].reverse().join(''))
-}
 ```
 
 <!-- /code -->
@@ -8413,40 +9292,53 @@ export function mirror(rows: string[]): string[] {
 - `animationLength(pose)`: as the comment says, how long a pose's frames last altogether.
   `reduce()` adds up each frame's `ms`, starting from 0. The tests use it to check every fidget
   matches `FIDGET_MS`.
-- `mirror(rows)`: a whole frame mirrored left to right: each row's letters reversed (`[...row]`
-  splits it into letters, and `join('')` puts them back together). Facing left, and the second
-  glance in `look()`, are mirror images.
+- `mirror(rows)` (in `moves/kit.ts`, shown with `drawn` above): a whole frame mirrored left to
+  right: each row's letters reversed (`[...row]` splits it into letters, and `join('')` puts them
+  back together). Facing left, and the second glance in `look()`, are mirror images.
 
 ### `framePaths()`
 
 <!-- code: apps/desktop/src/renderer/src/character/sprite.ts#framePaths -->
 
-[`src/renderer/src/character/sprite.ts`, lines 2308–2332](../../apps/desktop/src/renderer/src/character/sprite.ts#L2308-L2332)
+[`src/renderer/src/character/sprite.ts`, lines 139–176](../../apps/desktop/src/renderer/src/character/sprite.ts#L139-L176)
 
 ```ts
 /**
- * A frame as one SVG path per colour: each run of same-coloured pixels along a row is one
- * rectangle, so a frame is a few dozen elements rather than thousands.
+ * A frame as one SVG path per colour, each a set of rectangles: a run of same-coloured pixels
+ * along a row, carried on down the rows below for as long as they have the same run. So a frame
+ * is a few dozen elements rather than thousands, and its paths are short.
  */
 export function framePaths(rows: string[]): { className: string; d: string }[] {
   const byColour = new Map<string, string[]>()
+  // Runs still going down the rows (colour, start and end along the row): the row each began on.
+  let open = new Map<string, number>()
+  const close = (run: string, top: number, bottom: number) => {
+    const [pixel, x, end] = run.split('|') as [string, string, string]
+    const width = Number(end) - Number(x)
+    const rects = byColour.get(pixel) ?? []
+    rects.push(`M${x} ${top}h${width}v${bottom - top}h-${width}z`)
+    byColour.set(pixel, rects)
+  }
   rows.forEach((row, y) => {
+    const runs = new Map<string, number>()
     let x = 0
     while (x < row.length) {
       const pixel = row[x]!
       let end = x + 1
       while (end < row.length && row[end] === pixel) end++
       if (pixel !== '.') {
-        const runs = byColour.get(pixel) ?? []
-        runs.push(`M${x} ${y}h${end - x}v1h-${end - x}z`)
-        byColour.set(pixel, runs)
+        const run = `${pixel}|${x}|${end}`
+        runs.set(run, open.get(run) ?? y)
       }
       x = end
     }
+    for (const [run, top] of open) if (!runs.has(run)) close(run, top, y)
+    open = runs
   })
-  return [...byColour].map(([pixel, runs]) => ({
+  for (const [run, top] of open) close(run, top, rows.length)
+  return [...byColour].map(([pixel, rects]) => ({
     className: PALETTE[pixel] ?? 'px-hair-line',
-    d: runs.join(''),
+    d: rects.join(''),
   }))
 }
 ```
@@ -8458,13 +9350,1214 @@ pixel (a frame has a few thousand).
 
 - Each row is scanned for _runs_, stretches of the same letter. `while (end < row.length && row[end]
 === pixel) end++` finds where a run ends.
-- A run becomes `M{x} {y}h{n}v1h-{n}z`: move to its top-left corner, a line `n` pixels across, one
-  down, back, and close the shape. That's a rectangle `n` pixels wide and one tall, in grid units,
-  which the `<svg>`'s `viewBox` makes one DIP each at her usual size.
-- The runs are collected by letter in a `Map` (which keeps the order letters were first seen), and
-  each letter's runs, joined, become one path with that letter's class.
+- A run carries on down the rows below for as long as each has the same run (the same letter, from
+  the same place to the same place): `open` keeps the runs still going and the row each began on.
+  A run that doesn't carry on to the next row is closed: it becomes `M{x} {y}h{w}v{h}h-{w}z`, move
+  to its top-left corner, a line `w` across, `h` down, back, and close the shape, a rectangle in
+  grid units, which the `<svg>`'s `viewBox` makes one DIP each at her usual size. A whole patch of
+  robe or hair the same width for several rows is one rectangle rather than one a row.
+- The rectangles are collected by letter in a `Map`, and each letter's, joined, become one path with
+  that letter's class.
 - See-through runs (`.`) are skipped. A letter that isn't in the palette, which the tests rule out,
-  would fall back to the darkest colour, the hair's outline (`px-hair-line`).
+  would fall back to the darkest colour, the hair's outline (`px-hair-line`). A test turns every
+  frame of every pose into paths and back, and checks it comes out exactly the same.
+
+## `src/renderer/src/character/moves/`: the rest of her moves
+
+The moves not shown above, file by file: the tools the habits share, being thrown and landing hard,
+her magic habits, toys and visitor, her reactions, her snooze, and her performances' poses.
+
+<!-- code: apps/desktop/src/renderer/src/character/moves/kit.ts#span,OUT_FRONT,OUT_SIDE,through,toward,CUPPED,blinking -->
+
+[`src/renderer/src/character/moves/kit.ts`, lines 105–144](../../apps/desktop/src/renderer/src/character/moves/kit.ts#L105-L144)
+
+```ts
+/** How far through a span (as rig.ts's stage): 0 before it, 1 after it. */
+export const span = (t: number, [from, to]: readonly [number, number]) =>
+  Math.min(1, Math.max(0, (t - from) / (to - from)))
+
+/** Her hands held out in front of her at her waist (from the front), for her cards. */
+export const OUT_FRONT: Arm = { shoulder: 0.5, elbow: -1.45 }
+
+/** Her hand held out to her side (from the front), clear of her robe, for her other toys. */
+export const OUT_SIDE: Arm = { shoulder: 0.95, elbow: -0.4 }
+
+/** Frames every FRAME_MS through a habit `ms` long, each made from how far through it is (0 to 1). */
+export function through(ms: number, pose: (t: number) => Pose): Key[] {
+  const steps = Math.round(ms / FRAME_MS)
+  return Array.from({ length: steps }, (_, i) => ({ pose: pose(i / steps), ms: FRAME_MS }))
+}
+
+/** An arm part of the way (`share`, 0 to 1) from hanging down to `to`. */
+export const toward = (to: Arm, share: number): Arm => ({
+  shoulder: lerp(ARM_DOWN.shoulder, to.shoulder, share),
+  elbow: lerp(ARM_DOWN.elbow, to.elbow, share),
+})
+
+/** Her forearms turned in and up, hands cupped together in front of her chest (from the front). */
+export const CUPPED: Arm = { shoulder: 0.5, elbow: -1.45 }
+
+/** A blink at `at` (a share of the habit) for a moment, otherwise `face`. */
+export const blinking = (t: number, at: number, face: Face): Face =>
+  t >= at && t < at + 0.03 ? 'blink' : face
+```
+
+<!-- /code -->
+
+<!-- code: apps/desktop/src/renderer/src/character/moves/basics.ts#flung,splat -->
+
+[`src/renderer/src/character/moves/basics.ts`, lines 128–250](../../apps/desktop/src/renderer/src/character/moves/basics.ts#L128-L250)
+
+```ts
+/**
+ * Thrown, flying through the air: she tumbles round and round (front, side, her back, the other
+ * side), arms and legs flailing, her hair flying up, wide-eyed, and no shadow under her. Round and
+ * round until she lands.
+ */
+export function flung(): Frame[] {
+  const frames: Frame[] = []
+  for (let i = 0; i < 12; i++) {
+    const phase = (i / 12) * Math.PI * 4
+    const flail = Math.sin(phase * 1.5)
+    const pose = {
+      face: 'surprised' as const,
+      shadow: false,
+      lift: 3,
+      wind: Math.sin(phase) * 2,
+      arms: [
+        { shoulder: 2.3 + 0.5 * flail, elbow: 0.5 },
+        { shoulder: 2.3 - 0.5 * flail, elbow: 0.5 },
+      ] as [Arm, Arm],
+      legs: [
+        { hip: 0.2 + 0.25 * flail, knee: 0.4 + 0.3 * Math.max(0, flail) },
+        { hip: 0.2 - 0.25 * flail, knee: 0.4 + 0.3 * Math.max(0, -flail) },
+      ] as [Leg, Leg],
+    }
+    // Six turns of her a tumble: front, diagonal, side, her back, then the side and diagonal facing
+    // the other way.
+    const turn = i % 6
+    const rows =
+      turn === 0
+        ? draw({ ...pose, view: 'front' })
+        : turn === 1
+          ? draw({ ...pose, view: 'diagonal' })
+          : turn === 2
+            ? draw({ ...pose, view: 'side' })
+            : turn === 3
+              ? draw({ ...pose, view: 'front', back: true })
+              : turn === 4
+                ? mirror(draw({ ...pose, view: 'side' }))
+                : mirror(draw({ ...pose, view: 'diagonal' }))
+    frames.push({ rows, ms: 70 })
+  }
+  return frames
+}
+
+/**
+ * A hard landing, from the front: she hits the ground flat (crouched, arms flung up, hair and hat
+ * flying up) in a puff of dust, and thumps down on her bottom with her hat knocked down over her
+ * eyes; she sits there dazed, head wobbling, stars going round her head; pushes her hat back up
+ * (a start), shakes her head, gets up, and smiles sheepishly. LANDING.splatMs in all.
+ */
+export function splat(): Key[] {
+  const legsOut: [Leg, Leg] = [
+    { hip: 0.5, knee: 0.15 },
+    { hip: 0.5, knee: 0.15 },
+  ]
+  const propped: Arm = { shoulder: 0.95, elbow: 0.1 }
+  const impact: Pose = {
+    view: 'front',
+    face: 'surprised',
+    y: 6,
+    legs: crouch(6),
+    lift: 4,
+    hatLift: 4,
+    dust: 0.04,
+    arms: [
+      { shoulder: 2.6, elbow: 0.3 },
+      { shoulder: 2.6, elbow: 0.3 },
+    ],
+  }
+  const dazed = (i: number, count: number): Pose => ({
+    view: 'front',
+    sitting: true,
+    face: 'blink',
+    hatLift: -9,
+    tilt: Math.sin((i / count) * Math.PI * 4) * 0.08,
+    dizzy: (i / count) * 2.5,
+    dust: 0.12 + (i / count) * 0.88,
+    arms: [propped, propped],
+    legs: legsOut,
+  })
+  const pushing = (hatLift: number, face: Face): Pose => ({
+    view: 'front',
+    sitting: true,
+    face,
+    hatLift,
+    arms: [{ shoulder: 2.75, elbow: 1.3 }, propped],
+    legs: legsOut,
+  })
+  const shaking = (tilt: number): Pose => ({
+    view: 'front',
+    sitting: true,
+    face: 'blink',
+    tilt,
+    arms: [propped, propped],
+    legs: legsOut,
+  })
+  const squat: Pose = {
+    view: 'front',
+    y: 5,
+    legs: crouch(5),
+    arms: [
+      { shoulder: 0.3, elbow: 0.2 },
+      { shoulder: 0.3, elbow: 0.2 },
+    ],
+  }
+  const keys: Key[] = [
+    ...hold(impact, 120),
+    ...hold({ ...dazed(0, 1), face: 'surprised', hatLift: -3, dizzy: undefined, dust: 0.08 }, 80),
+    ...Array.from({ length: 22 }, (_, i) => ({ pose: dazed(i, 22), ms: 60 })),
+    ...tween(pushing(-9, 'blink'), pushing(0, 'surprised'), 280),
+    ...hold(pushing(0, 'surprised'), 160),
+    ...hold(pushing(0, 'blink'), 100),
+    ...[0.12, -0.12, 0.1, -0.08].map((tilt) => ({ pose: shaking(tilt), ms: 70 })),
+    ...hold(squat, 160),
+    ...tween(squat, FRONT, 240),
+  ]
+  const used = keys.reduce((total, key) => total + key.ms, 0)
+  return [
+    ...keys,
+    ...hold({ view: 'front', face: 'happy' }, LANDING.splatMs - used - 120),
+    ...hold({ view: 'front', face: 'blink' }, 120),
+  ]
+}
+```
+
+<!-- /code -->
+
+<!-- code: apps/desktop/src/renderer/src/character/moves/magic.ts -->
+
+[`src/renderer/src/character/moves/magic.ts`, lines 1–270](../../apps/desktop/src/renderer/src/character/moves/magic.ts#L1-L270)
+
+```ts
+// Her magic habits (HABITS, kind 'magic'): little spells, each drawn with its own effect (props/).
+
+import { FIDGET_MS } from '@shared/character'
+import { type Arm, type Face } from '../rig'
+import { BLOOM, FLAME, FROST, POTION, RAIN, RAINBOW, SIGIL, STAR_CATCH, TOME } from '../props/magic'
+import {
+  type Key,
+  smooth,
+  lerp,
+  ARM_DOWN,
+  between,
+  through,
+  toward,
+  CUPPED,
+  blinking,
+  type Moves,
+  once,
+} from './kit'
+
+/**
+ * A flame, seen diagonally: she holds her hand out, palm up, looking down at it; a spark kindles
+ * there (she's delighted) and grows into a flickering flame; she leans in and blows it out, and
+ * smiles as the smoke curls up.
+ */
+export function flame(): Key[] {
+  return through(FIDGET_MS.flame, (t) => {
+    const up = between(t, 0, 0.09) * (1 - between(t, 0.88, 0.97))
+    const blowing = t > FLAME.blow[0] - 0.02 && t < FLAME.blow[1] + 0.02
+    const face: Face = blowing
+      ? 'sip'
+      : t > 0.12 && t < 0.22
+        ? 'happy'
+        : t > FLAME.blow[1]
+          ? blinking(t, 0.9, 'happy')
+          : 'down'
+    return {
+      view: 'diagonal',
+      flame: t,
+      tilt: blowing ? 0.06 : 0.03 * up,
+      face,
+      arms: [toward({ shoulder: 0.55, elbow: 1.7 }, up), ARM_DOWN],
+    }
+  })
+}
+
+/**
+ * Frost, from the front: she cups her hands in front of her and looks down into them as a
+ * snowflake grows there; she smiles at it, it bursts into glitter (a start), and she smiles again
+ * as it drifts down.
+ */
+export function frost(): Key[] {
+  return through(FIDGET_MS.frost, (t) => {
+    const ready = between(t, 0, 0.1) * (1 - between(t, 0.86, 0.96))
+    const arm = toward(CUPPED, ready)
+    const face: Face =
+      t < FROST.grow[0]
+        ? 'neutral'
+        : t < FROST.grow[1]
+          ? 'down'
+          : t < FROST.burst[0]
+            ? 'happy'
+            : t < FROST.burst[0] + 0.06
+              ? 'surprised'
+              : blinking(t, 0.9, 'happy')
+    return { view: 'front', frost: t, face, arms: [arm, arm] }
+  })
+}
+
+/**
+ * A flower, seen diagonally: she points down at the ground in front of her, head bowed, as
+ * sparkles drip from her finger and a flower comes up and blooms; she smiles at it, lowers her
+ * hand, and watches it scatter into sparkles.
+ */
+export function bloom(): Key[] {
+  return through(FIDGET_MS.bloom, (t) => {
+    const point = between(t, 0.02, 0.1) * (1 - between(t, 0.6, 0.7))
+    const face: Face =
+      t < BLOOM.open[0] ? 'down' : t < BLOOM.scatter[0] ? blinking(t, 0.78, 'happy') : 'awe'
+    return {
+      view: 'diagonal',
+      bloom: t,
+      tilt: 0.06 * point,
+      face: t > 0.97 ? 'happy' : face,
+      arms: [toward({ shoulder: 0.85, elbow: 0.05 }, point), ARM_DOWN],
+    }
+  })
+}
+
+/**
+ * A sigil, from the front: she raises her hand and draws a star in the air beside her, her hand
+ * moving with the point of light and her eyes on it; it flashes as it closes (a start), and she
+ * smiles at it as it glows and fades, lowering her hand.
+ */
+export function sigil(): Key[] {
+  return through(FIDGET_MS.sigil, (t) => {
+    const raise = between(t, 0, 0.1) * (1 - between(t, 0.82, 0.94))
+    const tracing = between(t, ...SIGIL.trace)
+    const wobble = tracing > 0 && tracing < 1 ? Math.sin(tracing * Math.PI * 10) * 0.12 : 0
+    const face: Face =
+      t < SIGIL.trace[1]
+        ? 'neutral'
+        : t < SIGIL.trace[1] + 0.07
+          ? 'surprised'
+          : blinking(t, 0.9, 'happy')
+    return {
+      view: 'front',
+      sigil: t,
+      look: t > 0.08 && t < 0.84 ? 1 : 0,
+      face,
+      arms: [toward({ shoulder: 2.2 + wobble, elbow: 0.5 }, raise), ARM_DOWN],
+    }
+  })
+}
+
+/**
+ * A rainbow, from the front: she raises both hands together over her head, then sweeps them apart
+ * and down either side, painting the rainbow over her as they go; she lowers them, smiling, and
+ * the rainbow shimmers and fades.
+ */
+export function rainbow(): Key[] {
+  return through(FIDGET_MS.rainbow, (t) => {
+    const up = between(t, 0, RAINBOW.paint[0])
+    const sweep = between(t, ...RAINBOW.paint)
+    const down = between(t, 0.5, 0.62)
+    const shoulder =
+      ARM_DOWN.shoulder +
+      (2.9 - ARM_DOWN.shoulder) * up +
+      (1.3 - 2.9) * smooth(sweep) +
+      (ARM_DOWN.shoulder - 1.3) * down
+    const arm: Arm = { shoulder, elbow: lerp(ARM_DOWN.elbow, 0.15, up * (1 - down)) }
+    const face: Face =
+      t < RAINBOW.paint[0] ? 'neutral' : t < 0.45 ? 'up' : blinking(t, 0.85, 'happy')
+    return { view: 'front', rainbow: t, face, arms: [arm, arm] }
+  })
+}
+
+/**
+ * Her hat trick, from the front: her hat lifts off her head by itself (a start), spins round
+ * twice showering sparkles over her while she looks up at it, delighted, her hands clasped, and
+ * settles back on her head.
+ */
+export function hat(): Key[] {
+  return through(FIDGET_MS.hat, (t) => {
+    const lifted = smooth(between(t, 0.08, 0.3)) * (1 - smooth(between(t, 0.66, 0.84)))
+    const spin = between(t, 0.26, 0.66)
+    const delight = between(t, 0.28, 0.36) * (1 - between(t, 0.7, 0.8))
+    const hands: Arm = { shoulder: 0.3, elbow: -0.9 }
+    const face: Face =
+      t < 0.06 ? 'neutral' : t < 0.22 ? 'surprised' : t < 0.68 ? 'up' : blinking(t, 0.9, 'happy')
+    return {
+      view: 'front',
+      hatLift: lifted * 10,
+      hatTurn: smooth(spin) * Math.PI * 4,
+      shower: spin > 0 && spin < 1 ? spin : 0,
+      face,
+      arms: [toward(hands, delight), toward(hands, delight)],
+    }
+  })
+}
+
+/**
+ * A falling star, from the front: she looks up as a star falls toward her, cups her hands and
+ * catches it, smiles down at it glowing there, then tosses it back up into the sky, watching it
+ * go, and smiles.
+ */
+export function star(): Key[] {
+  return through(FIDGET_MS.star, (t) => {
+    const catching = between(t, 0.2, 0.33) * (1 - between(t, STAR_CATCH.toss[0], 0.76))
+    const toss =
+      t >= STAR_CATCH.toss[0] && t < STAR_CATCH.toss[0] + 0.1
+        ? Math.sin(between(t, STAR_CATCH.toss[0], STAR_CATCH.toss[0] + 0.1) * Math.PI)
+        : 0
+    const arm: Arm = {
+      shoulder: lerp(ARM_DOWN.shoulder, CUPPED.shoulder, catching) + 1.9 * toss,
+      elbow: lerp(ARM_DOWN.elbow, CUPPED.elbow, catching) * (1 - toss),
+    }
+    const face: Face =
+      t < STAR_CATCH.fall[0]
+        ? 'neutral'
+        : t < STAR_CATCH.fall[1]
+          ? 'up'
+          : t < STAR_CATCH.toss[0]
+            ? 'happy'
+            : t < 0.88
+              ? 'up'
+              : blinking(t, 0.93, 'happy')
+    return {
+      view: 'front',
+      star: t,
+      look: t > 0.06 && t < 0.26 ? 1 : 0,
+      face,
+      arms: [arm, arm],
+    }
+  })
+}
+
+/**
+ * A rain cloud, from the front: she looks up as a little cloud gathers over her, and droops as it
+ * rains on her; she shoos it with a wave and it bursts into sparkles, and she smiles.
+ */
+export function rain(): Key[] {
+  return through(FIDGET_MS.rain, (t) => {
+    const shoo = between(t, 0.6, 0.63) * (1 - between(t, RAIN.burst[0], RAIN.burst[0] + 0.04))
+    const arm: Arm = {
+      shoulder: lerp(ARM_DOWN.shoulder, 2.6, shoo),
+      elbow: lerp(ARM_DOWN.elbow, 0.6 + 0.4 * Math.sin(t * 90), shoo),
+    }
+    const face: Face =
+      t < RAIN.gather[0]
+        ? 'neutral'
+        : t < RAIN.pour[0] + 0.03
+          ? 'up'
+          : t < 0.6
+            ? 'down'
+            : t < RAIN.burst[0]
+              ? 'neutral'
+              : blinking(t, 0.92, 'happy')
+    return { view: 'front', rain: t, face, arms: [arm, ARM_DOWN] }
+  })
+}
+
+/**
+ * A potion, seen diagonally: she holds up a little flask and gives it a shake, watching it bubble
+ * and change colour; the cork pops (a start), coloured smoke puffs out, and she smiles.
+ */
+export function potion(): Key[] {
+  return through(FIDGET_MS.potion, (t) => {
+    const up = between(t, 0, 0.08) * (1 - between(t, 0.88, 0.96))
+    const shaking = t > 0.14 && t < 0.46 ? Math.sin(t * 160) * 0.12 : 0
+    const arm = toward({ shoulder: 0.5, elbow: 2 + shaking }, up)
+    const face: Face =
+      t < 0.12
+        ? 'neutral'
+        : t < POTION.pop
+          ? 'happy'
+          : t < POTION.pop + 0.08
+            ? 'surprised'
+            : blinking(t, 0.9, 'happy')
+    return { view: 'diagonal', potion: t, face, arms: [arm, ARM_DOWN] }
+  })
+}
+
+/**
+ * Her spellbook, from the front: she holds her hands out either side as the book rises open in
+ * front of her, her hair lifting; she looks down at it as its pages turn by themselves, smiles as
+ * the letters rise, and lowers her hands as it closes and vanishes.
+ */
+export function tome(): Key[] {
+  return through(FIDGET_MS.tome, (t) => {
+    const open = between(t, 0.02, 0.12) * (1 - between(t, 0.86, 0.96))
+    const arm = toward({ shoulder: 0.85, elbow: -0.5 }, open)
+    const face: Face =
+      t < TOME.appear[1] ? 'neutral' : t < 0.5 ? 'down' : blinking(t, 0.92, 'happy')
+    return { view: 'front', tome: t, lift: open, face, arms: [arm, arm] }
+  })
+}
+
+/** Her magic habits, by pose (each plays once, for its HABITS `ms`). */
+export const MAGIC_MOVES = {
+  flame: once(flame),
+  frost: once(frost),
+  bloom: once(bloom),
+  sigil: once(sigil),
+  rainbow: once(rainbow),
+  hat: once(hat),
+  star: once(star),
+  rain: once(rain),
+  potion: once(potion),
+  tome: once(tome),
+} satisfies Moves
+```
+
+<!-- /code -->
+
+<!-- code: apps/desktop/src/renderer/src/character/moves/toys.ts -->
+
+[`src/renderer/src/character/moves/toys.ts`, lines 1–154](../../apps/desktop/src/renderer/src/character/moves/toys.ts#L1-L154)
+
+```ts
+// Her toys (HABITS, kind 'toy'): habits where she summons a toy and plays with it a few seconds.
+
+import { FIDGET_MS } from '@shared/character'
+import { type Arm, type Face } from '../rig'
+import { BALL, DECK, PLANE, SPIN_TOP, YOYO } from '../props/toys'
+import {
+  type Key,
+  lerp,
+  ARM_DOWN,
+  between,
+  span,
+  OUT_FRONT,
+  OUT_SIDE,
+  through,
+  toward,
+  blinking,
+  type Moves,
+  once,
+} from './kit'
+
+/**
+ * Her yo-yo, from the front: she holds her hand out and a yo-yo appears in it in a sparkle; she
+ * spins it down and up, watching it, her hand giving a little flick as each drop starts; then
+ * raises her hand and swings it round in a loop, smiling; and it vanishes in a twinkle.
+ */
+export function yoyo(): Key[] {
+  return through(FIDGET_MS.yoyo, (t) => {
+    const ready = between(t, 0, 0.08) * (1 - between(t, 0.92, 1))
+    const drops = span(t, YOYO.drops)
+    const flick =
+      drops > 0 && drops < 1
+        ? Math.max(0, Math.cos(drops * YOYO.count * Math.PI * 2)) ** 6 * 0.25
+        : 0
+    const looping =
+      between(t, YOYO.loop[0] - 0.04, YOYO.loop[0]) *
+      (1 - between(t, YOYO.loop[1], YOYO.loop[1] + 0.04))
+    const arm: Arm = {
+      shoulder: lerp(ARM_DOWN.shoulder, OUT_SIDE.shoulder + 0.4 * looping, ready),
+      elbow: lerp(ARM_DOWN.elbow, OUT_SIDE.elbow + 0.3 * looping, ready) + flick,
+    }
+    const face: Face = drops > 0 && drops < 1 ? 'down' : t > YOYO.loop[0] ? 'happy' : 'neutral'
+    return { view: 'front', yoyo: t, face, arms: [arm, ARM_DOWN] }
+  })
+}
+
+/**
+ * Her spinning top, from the front: she holds her palm out and a top appears on it, spinning; she
+ * watches it wobble; flicks her hand to send it up, catches it, smiles; and it vanishes.
+ */
+export function top(): Key[] {
+  return through(FIDGET_MS.top, (t) => {
+    const ready = between(t, 0, 0.08) * (1 - between(t, 0.92, 1))
+    const flick = span(t, SPIN_TOP.flick)
+    const toss = flick > 0 && flick < 0.25 ? Math.sin((flick / 0.25) * Math.PI) * 0.35 : 0
+    const arm = toward({ shoulder: OUT_SIDE.shoulder, elbow: OUT_SIDE.elbow + toss }, ready)
+    const face: Face =
+      t < SPIN_TOP.spin[0] ? 'neutral' : t < SPIN_TOP.flick[0] ? 'down' : flick < 1 ? 'up' : 'happy'
+    return { view: 'front', spinTop: t, face, arms: [arm, ARM_DOWN] }
+  })
+}
+
+/**
+ * Her cards, from the front: she holds both hands out and a deck appears in her far hand; she
+ * springs the cards across to her other hand in an arc, and back, her hands bobbing as they go;
+ * smiles; and they vanish.
+ */
+export function cards(): Key[] {
+  return through(FIDGET_MS.cards, (t) => {
+    const ready = between(t, 0, 0.08) * (1 - between(t, 0.92, 1))
+    const springing =
+      (t > DECK.across[0] && t < DECK.across[1]) || (t > DECK.back[0] && t < DECK.back[1])
+    const bob = springing ? Math.sin(t * 120) * 0.08 : 0
+    const arm = (d: number) =>
+      toward({ shoulder: OUT_FRONT.shoulder, elbow: OUT_FRONT.elbow + d }, ready)
+    const face: Face = t > DECK.back[1] ? 'happy' : blinking(t, 0.48, 'neutral')
+    return { view: 'front', deck: t, face, arms: [arm(bob), arm(-bob)] }
+  })
+}
+
+/**
+ * Her paper plane, from the front: she raises her hand and a paper plane appears in it; she throws
+ * it, watching it fly round her, her head turning after it; holds her hand out as it comes back,
+ * catches it, smiles; and it vanishes.
+ */
+export function plane(): Key[] {
+  return through(FIDGET_MS.plane, (t) => {
+    const raised = between(t, 0, 0.08)
+    const thrown = between(t, PLANE.fly[0] - 0.05, PLANE.fly[0])
+    const catching = between(t, PLANE.fly[1] - 0.1, PLANE.fly[1] - 0.02)
+    const away = 1 - between(t, 0.92, 1)
+    const holding = toward({ shoulder: 1.3, elbow: -1 }, raised)
+    const throwing: Arm = {
+      shoulder: lerp(holding.shoulder, 0.5, thrown),
+      elbow: lerp(holding.elbow, 0, thrown),
+    }
+    const flying: Arm = {
+      shoulder: lerp(
+        throwing.shoulder,
+        ARM_DOWN.shoulder,
+        between(t, PLANE.fly[0], PLANE.fly[0] + 0.1),
+      ),
+      elbow: lerp(throwing.elbow, ARM_DOWN.elbow, between(t, PLANE.fly[0], PLANE.fly[0] + 0.1)),
+    }
+    const reach = {
+      shoulder: lerp(flying.shoulder, 0.8, catching),
+      elbow: lerp(flying.elbow, -0.9, catching),
+    }
+    const arm = toward(reach, away)
+    const fly = span(t, PLANE.fly)
+    const turn = fly > 0 && fly < 1 ? Math.cos(Math.PI / 4 - fly * Math.PI * 2) : 0
+    const face: Face = fly > 0 && fly < 1 ? 'up' : t > PLANE.fly[1] ? 'happy' : 'neutral'
+    return { view: 'front', plane: t, face, tilt: 0.08 * turn, arms: [arm, ARM_DOWN] }
+  })
+}
+
+/**
+ * Her bouncy ball, from the front: she holds her hand out and a ball appears in it; she bounces it
+ * on the taskbar, her hand pushing it down each time, watching; tosses it up high, looking up, and
+ * catches it, smiling; and it vanishes.
+ */
+export function ball(): Key[] {
+  return through(FIDGET_MS.ball, (t) => {
+    const ready = between(t, 0, 0.08) * (1 - between(t, 0.92, 1))
+    const bounces = span(t, BALL.bounces)
+    const push =
+      bounces > 0 && bounces < 1
+        ? Math.max(0, Math.cos(bounces * BALL.count * Math.PI * 2)) ** 4 * 0.35
+        : 0
+    const toss = span(t, BALL.toss)
+    const up = toss > 0 && toss < 0.2 ? Math.sin((toss / 0.2) * Math.PI) * 0.6 : 0
+    const arm = toward(
+      { shoulder: OUT_SIDE.shoulder + up, elbow: OUT_SIDE.elbow + push - up * 0.5 },
+      ready,
+    )
+    const face: Face =
+      bounces > 0 && bounces < 1
+        ? 'down'
+        : toss > 0 && toss < 1
+          ? 'up'
+          : t > BALL.toss[1]
+            ? 'happy'
+            : 'neutral'
+    return { view: 'front', ball: t, face, arms: [arm, ARM_DOWN] }
+  })
+}
+
+/** Her toys, by pose (each plays once, for its HABITS `ms`). */
+export const TOY_MOVES = {
+  yoyo: once(yoyo),
+  top: once(top),
+  cards: once(cards),
+  plane: once(plane),
+  ball: once(ball),
+} satisfies Moves
+```
+
+<!-- /code -->
+
+<!-- code: apps/desktop/src/renderer/src/character/moves/visitors.ts -->
+
+[`src/renderer/src/character/moves/visitors.ts`, lines 1–64](../../apps/desktop/src/renderer/src/character/moves/visitors.ts#L1-L64)
+
+```ts
+// Her visitors (HABITS, kind 'visitor'): habits where something comes to see her.
+
+import { FIDGET_MS } from '@shared/character'
+import { type Arm, type Face } from '../rig'
+import { SPIRIT } from '../props/visitors'
+import {
+  type Key,
+  lerp,
+  ARM_DOWN,
+  between,
+  OUT_SIDE,
+  through,
+  toward,
+  blinking,
+  type Moves,
+  once,
+} from './kit'
+
+/**
+ * A little spirit visiting, from the front: it appears beside her and she looks round, surprised,
+ * then smiles; she holds her hand out and it lands on her palm (hearts), her head tilting to it;
+ * it loops round her head and she follows it; it hovers beside her and they wave to each other;
+ * and it fades away.
+ */
+export function spirit(): Key[] {
+  return through(FIDGET_MS.spirit, (t) => {
+    const holding =
+      between(t, SPIRIT.toHer[1] - 0.04, SPIRIT.land[0]) *
+      (1 - between(t, SPIRIT.land[1], SPIRIT.loop[0] + 0.04))
+    const waving =
+      between(t, SPIRIT.wave[0] - 0.03, SPIRIT.wave[0]) *
+      (1 - between(t, SPIRIT.wave[1], SPIRIT.gone[0] + 0.02))
+    const swing = Math.sin(t * 90) * waving
+    const hold = toward(OUT_SIDE, holding)
+    const arm: Arm =
+      waving > 0
+        ? {
+            shoulder: lerp(hold.shoulder, 2.5 + 0.15 * swing, waving),
+            elbow: lerp(hold.elbow, 0.3 + 0.35 * swing, waving),
+          }
+        : hold
+    const landed = t >= SPIRIT.land[0] + 0.06 && t < SPIRIT.land[1]
+    const hearts = t >= 0.4 && t < 0.56 ? (t - 0.4) / 0.16 : 0
+    const face: Face =
+      t < SPIRIT.appear[1]
+        ? 'neutral'
+        : t < SPIRIT.toHer[0] + 0.06
+          ? 'surprised'
+          : blinking(t, 0.66, 'happy')
+    return {
+      view: 'front',
+      spirit: t,
+      face,
+      tilt: landed ? 0.07 : 0,
+      hearts,
+      arms: [arm, ARM_DOWN],
+    }
+  })
+}
+
+/** Her visitors, by pose (each plays once, for its HABITS `ms`). */
+export const VISITOR_MOVES = {
+  spirit: once(spirit),
+} satisfies Moves
+```
+
+<!-- /code -->
+
+<!-- code: apps/desktop/src/renderer/src/character/moves/reactions.ts -->
+
+[`src/renderer/src/character/moves/reactions.ts`, lines 1–193](../../apps/desktop/src/renderer/src/character/moves/reactions.ts#L1-L193)
+
+```ts
+// Her reactions (REACTIONS): played once, in answer to something.
+
+import { REACTION_MS } from '@shared/character'
+import { type Arm, type Face, type Pose } from '../rig'
+import {
+  type Key,
+  ARM_DOWN,
+  tween,
+  hold,
+  crouch,
+  FRONT,
+  DIAGONAL,
+  between,
+  through,
+  toward,
+  blinking,
+  type Moves,
+  once,
+} from './kit'
+
+import { juggle } from './charms'
+
+/** Petted, from the front: a happy little wiggle, her hands clasped, hearts floating up. */
+export function pet(): Key[] {
+  return through(REACTION_MS.pet, (t) => {
+    const wiggle = Math.sin(t * Math.PI * 8) * (1 - between(t, 0.75, 1))
+    const clasp = between(t, 0, 0.1) * (1 - between(t, 0.85, 1))
+    const hands = toward({ shoulder: 0.3, elbow: -0.9 }, clasp)
+    return {
+      view: 'front',
+      hearts: t,
+      x: Math.round(wiggle),
+      tilt: wiggle * 0.06,
+      face: blinking(t, 0.5, 'happy'),
+      arms: [hands, hands],
+    }
+  })
+}
+
+/** A new notification, from the front: she hops up holding a scroll open in front of her, delighted. */
+export function scroll(): Key[] {
+  return through(REACTION_MS.scroll, (t) => {
+    const up = between(t, 0, 0.12) * (1 - between(t, 0.82, 0.94))
+    const hop = (from: number) =>
+      t > from && t < from + 0.16 ? Math.sin(between(t, from, from + 0.16) * Math.PI) : 0
+    const bounce = hop(0.12) + hop(0.34) * 0.6
+    const arm = toward({ shoulder: 1.25, elbow: -2.35 }, up)
+    return {
+      view: 'front',
+      scroll: up > 0.85,
+      y: Math.round(-5 * bounce),
+      lift: 2 * bounce,
+      face: blinking(t, 0.7, 'happy'),
+      arms: [arm, arm],
+    }
+  })
+}
+
+/** Startled, from the front: a jump straight up, hair flying, arms out, wide-eyed; then a blink. */
+export function startle(): Key[] {
+  const crouched: Pose = { view: 'front', face: 'surprised', y: 2, legs: crouch(2) }
+  const air: Pose = {
+    view: 'front',
+    face: 'surprised',
+    y: -8,
+    lift: 4,
+    arms: [
+      { shoulder: 1.6, elbow: 0.3 },
+      { shoulder: 1.6, elbow: 0.3 },
+    ],
+  }
+  return [
+    ...hold(crouched, 80),
+    ...tween(crouched, air, 160),
+    ...hold(air, 140),
+    ...tween(air, { ...FRONT, face: 'surprised' }, 200),
+    ...hold({ ...FRONT, face: 'surprised' }, 180),
+    ...hold({ view: 'front', face: 'blink' }, 120),
+    ...hold(FRONT, 120),
+  ]
+}
+
+/**
+ * Pouncing at the pointer, seen diagonally (mirrored to go left): she crouches, leaps up and
+ * forward with both hands reaching to grab it, lands, and looks at her empty hands.
+ */
+export function pounce(): Key[] {
+  const crouched: Pose = { ...DIAGONAL, face: 'down', y: 4, legs: crouch(4), tilt: 0.05 }
+  const leap: Pose = {
+    ...DIAGONAL,
+    face: 'surprised',
+    x: 4,
+    y: -8,
+    lift: 3,
+    arms: [
+      { shoulder: 2.3, elbow: 0.2 },
+      { shoulder: 2.1, elbow: 0.2 },
+    ],
+    legs: [
+      { hip: -0.3, knee: 0.6 },
+      { hip: 0.4, knee: 0.8 },
+    ],
+  }
+  const landed: Pose = {
+    ...DIAGONAL,
+    face: 'down',
+    x: 6,
+    arms: [{ shoulder: 0.8, elbow: 1.2 }, ARM_DOWN],
+  }
+  return [
+    ...tween(DIAGONAL, crouched, 200),
+    ...hold(crouched, 120),
+    ...tween(crouched, leap, 180),
+    ...hold(leap, 120),
+    ...tween(leap, landed, 200),
+    ...hold(landed, 300),
+    ...hold({ ...landed, face: 'blink' }, 100),
+    ...tween(landed, DIAGONAL, 180),
+  ]
+}
+
+/** Lifting something by magic, from the front: her arms rise overhead, palms up, eyes on it. */
+export function lift(): Key[] {
+  const up: Pose = {
+    view: 'front',
+    face: 'up',
+    arms: [
+      { shoulder: 2.6, elbow: 0.5 },
+      { shoulder: 2.6, elbow: 0.5 },
+    ],
+  }
+  return [...tween({ ...FRONT, face: 'down' }, up, 560), ...hold(up, 240)]
+}
+
+/** Setting something down by magic, from the front: her arms come down from overhead, eyes on it. */
+export function lower(): Key[] {
+  const up: Pose = {
+    view: 'front',
+    face: 'up',
+    arms: [
+      { shoulder: 2.6, elbow: 0.5 },
+      { shoulder: 2.6, elbow: 0.5 },
+    ],
+  }
+  return [...hold(up, 120), ...tween(up, { ...FRONT, face: 'down' }, 520), ...hold(FRONT, 160)]
+}
+
+/**
+ * Guilty, from the front (after a prank): hands behind her back, she glances one way and the
+ * other, a bead of sweat by her forehead, then gives a sheepish smile.
+ */
+export function guilty(): Key[] {
+  const behind: [Arm, Arm] = [
+    { shoulder: 0.02, elbow: -0.35 },
+    { shoulder: 0.02, elbow: -0.35 },
+  ]
+  const glance = (look: number, face: Face = 'neutral'): Pose => ({
+    view: 'front',
+    face,
+    look,
+    sweat: true,
+    tilt: look * 0.04,
+    arms: behind,
+  })
+  return [
+    ...tween(FRONT, glance(0), 200),
+    ...hold(glance(-1), 320),
+    ...hold(glance(1), 320),
+    ...hold(glance(-1), 280),
+    ...hold(glance(1), 280),
+    ...hold(glance(0, 'blink'), 120),
+    ...hold(glance(0, 'happy'), 640),
+    ...tween(glance(0, 'happy'), FRONT, 240),
+  ]
+}
+
+/** Juggling with her hands alone (what she juggles is drawn by someone else): see juggle. */
+export function toss(): Key[] {
+  return juggle().map(({ pose, ms }) => ({ pose: { ...pose, juggle: undefined }, ms }))
+}
+
+/** Her reactions, by pose (each plays once, for its REACTION_MS). */
+export const REACTION_MOVES = {
+  pet: once(pet),
+  scroll: once(scroll),
+  startle: once(startle),
+  'pounce-left': once(pounce),
+  'pounce-right': once(pounce),
+  lift: once(lift),
+  lower: once(lower),
+  guilty: once(guilty),
+  toss: once(toss),
+} satisfies Moves
+```
+
+<!-- /code -->
+
+<!-- code: apps/desktop/src/renderer/src/character/moves/snooze.ts -->
+
+[`src/renderer/src/character/moves/snooze.ts`, lines 1–62](../../apps/desktop/src/renderer/src/character/moves/snooze.ts#L1-L62)
+
+```ts
+// Her snooze: nodding off (settle), sitting asleep (snooze, held for as long as nobody's at the
+// PC) and waking (rouse).
+
+import { type Pose } from '../rig'
+import { type Key, tween, hold, crouch, FRONT, type Moves, once, repeating } from './kit'
+
+/** Sitting asleep, from the front: hugging her knees, eyes shut, her head drooping a little more and less. */
+export const asleep = (i: number, count: number, flipText = false): Pose => {
+  const phase = (i / count) * Math.PI * 2
+  return {
+    view: 'front',
+    sitting: true,
+    face: 'blink',
+    tilt: 0.1 + Math.sin(phase) * 0.025,
+    zzz: i / count,
+    flipText,
+    arms: [
+      { shoulder: 0.55, elbow: -1.15 },
+      { shoulder: 0.55, elbow: -1.15 },
+    ],
+    legs: [
+      { hip: 0.3, knee: 0.3 },
+      { hip: 0.3, knee: 0.3 },
+    ],
+  }
+}
+
+/** Nodding off, from the front: she crouches and sits down, her eyes closing. */
+export function settle(): Key[] {
+  const squat: Pose = { view: 'front', face: 'blink', y: 5, legs: crouch(5) }
+  return [
+    ...tween({ ...FRONT, face: 'down' }, squat, 300),
+    ...hold({ ...asleep(0, 1), zzz: undefined }, 600),
+  ]
+}
+
+/** Snoozing, round and round: sitting asleep, z's floating up from her. */
+export function snooze(flipText = false): Key[] {
+  return Array.from({ length: 26 }, (_, i) => ({ pose: asleep(i, 26, flipText), ms: 100 }))
+}
+
+/** Woken from her snooze, from the front: she blinks awake, gets up, and smiles. */
+export function rouse(): Key[] {
+  const sat = { ...asleep(0, 1), zzz: undefined }
+  const squat: Pose = { view: 'front', face: 'neutral', y: 5, legs: crouch(5) }
+  return [
+    ...hold(sat, 200),
+    ...hold({ ...sat, face: 'surprised', tilt: 0 }, 200),
+    ...hold({ ...sat, face: 'blink', tilt: 0 }, 100),
+    ...tween({ ...sat, face: 'neutral', tilt: 0 }, squat, 250),
+    ...tween(squat, FRONT, 300),
+    ...hold({ view: 'front', face: 'happy' }, 350),
+  ]
+}
+
+/** Her snooze, by pose. */
+export const SNOOZE_MOVES = {
+  settle: once(settle),
+  // Its z's are drawn the other way round for facing left, so they read right once mirrored.
+  snooze: repeating(snooze, () => snooze(true)),
+  rouse: once(rouse),
+} satisfies Moves
+```
+
+<!-- /code -->
+
+<!-- code: apps/desktop/src/renderer/src/character/moves/performances.ts -->
+
+[`src/renderer/src/character/moves/performances.ts`, lines 1–226](../../apps/desktop/src/renderer/src/character/moves/performances.ts#L1-L226)
+
+```ts
+// Her performances' poses (HELD_POSES): watching the pointer, peeking round a window, waving
+// through a portal, and her battle with monsters.
+
+import { PORTAL } from '@shared/character'
+import { BATTLE } from '@shared/battle'
+import { draw, GRID, HEADROOM, type Face, type Pose } from '../rig'
+import {
+  type Key,
+  type Frame,
+  smooth,
+  lerp,
+  ARM_DOWN,
+  FRAME_MS,
+  hold,
+  FRONT,
+  between,
+  through,
+  type Moves,
+  once,
+  repeating,
+} from './kit'
+
+/**
+ * Facing monsters (her battle), seen diagonally: her near hand held out toward them, a glow
+ * charging in it, her other hand back; breathing, watching them, steady.
+ */
+export function ready(): Key[] {
+  return Array.from({ length: 16 }, (_, i) => {
+    const phase = (i / 16) * Math.PI * 2
+    return {
+      pose: {
+        view: 'diagonal',
+        face: 'neutral',
+        lean: 0.04,
+        charge: 0.5 + 0.3 * Math.sin(phase),
+        arms: [
+          { shoulder: 1.15 + 0.03 * Math.sin(phase), elbow: 0.35 },
+          { shoulder: 0.35, elbow: 0.5 },
+        ],
+      },
+      ms: 80,
+    }
+  })
+}
+
+/**
+ * Casting at a monster (her battle), seen diagonally: she thrusts her hand out at it, the glow
+ * flaring into a sparkle as the bolt leaves her hand (BATTLE.launchMs in), then draws it back.
+ */
+export function cast(): Key[] {
+  return through(BATTLE.castMs, (t) => {
+    const thrust = Math.sin(Math.min(1, t / 0.37) * (Math.PI / 2)) * (1 - between(t, 0.6, 1))
+    return {
+      view: 'diagonal',
+      face: t < 0.5 ? 'chant' : 'neutral',
+      lean: 0.04 + 0.05 * thrust,
+      charge: t < 0.37 ? 0.6 + t : t < 0.5 ? 0.9 : 0.3,
+      arms: [
+        { shoulder: 1.15 + 0.4 * thrust, elbow: 0.35 - 0.35 * thrust },
+        { shoulder: 0.35, elbow: 0.5 },
+      ],
+    }
+  })
+}
+
+/** Watching, before the main process says where the pointer is: looking ahead, blinking now and then. */
+export function watch(): Key[] {
+  return [...hold(FRONT, 2400), ...hold({ view: 'front', face: 'blink' }, 120)]
+}
+
+/**
+ * Peeking round the edge of a window, from the front (mirrored to peek the other way): leaning
+ * out to the right, looking that way, a blink, a smile and a little wave, round and round.
+ */
+export function peek(): Key[] {
+  const out = (face: Face, wave = 0): Pose => ({
+    view: 'front',
+    face,
+    look: 1,
+    lean: 0.22,
+    x: 2,
+    tilt: 0.06,
+    arms: wave ? [{ shoulder: 2.9, elbow: 0.2 + 0.35 * wave }, ARM_DOWN] : [ARM_DOWN, ARM_DOWN],
+  })
+  return [
+    ...hold(out('neutral'), 700),
+    ...hold(out('blink'), 120),
+    ...hold(out('happy'), 400),
+    ...Array.from({ length: 8 }, (_, i) => ({
+      pose: out('happy', Math.sin((i / 4) * Math.PI * 2)),
+      ms: 70,
+    })),
+    ...hold(out('neutral'), 500),
+  ]
+}
+
+/** The portal's middle, and its half-width and half-height when fully open (grid pixels). */
+export const PORTAL_SHAPE = { x: 48, y: 50, rx: 29, ry: 42 }
+
+/** How far down she's drawn in the portal (her hips, pixels): seen from the knees up; and hidden. */
+export const PORTAL_SHOWN = 18
+
+export const PORTAL_HIDDEN = 72
+
+export const fraction = (v: number) => v - Math.floor(v)
+
+/**
+ * A frame of the portal: `her` frame (or none) seen through it, open `open` (0 to 1), its swirl
+ * turned to `t` seconds. Inside, her pixels over the swirl (deep, mid and light teal bands turning
+ * round its middle); outside it, nothing (so whatever of her is outside it is cut away, as if she
+ * were on its far side); round its edge, a glowing rim, in front of her, with sparkles running
+ * round it.
+ */
+export function portalFrame(her: string[] | null, open: number, t: number): string[] {
+  const { x: cx, y: cy, rx, ry } = PORTAL_SHAPE
+  return Array.from({ length: GRID + HEADROOM }, (_, row) => {
+    const y = row - HEADROOM
+    let line = ''
+    for (let x = 0; x < GRID; x++) {
+      if (open <= 0.02) {
+        line += '.'
+        continue
+      }
+      const dx = (x + 0.5 - cx) / (rx * open)
+      const dy = (y + 0.5 - cy) / (ry * open)
+      const d = Math.hypot(dx, dy)
+      if (d > 1) {
+        line += '.'
+        continue
+      }
+      // How far in from the rim, in pixels (about).
+      const edge = (1 - d) * Math.min(rx, ry) * open
+      const angle = Math.atan2(dy, dx) / (Math.PI * 2)
+      if (edge < 2.2) {
+        const sparkle = edge < 1.4 && fraction(angle * 10 - t * 0.8) < 0.06
+        line += sparkle ? 'w' : edge < 1.1 ? 'R' : 'r'
+        continue
+      }
+      const pixel = her?.[row]?.[x] ?? '.'
+      if (pixel !== '.' && pixel !== 'x') {
+        line += pixel
+        continue
+      }
+      const band = fraction(angle * 3 + d * 2.2 - t * 0.9)
+      line += d < 0.18 ? 'r' : band < 0.16 ? 'r' : band < 0.5 ? 'p' : 'd'
+    }
+    return line
+  })
+}
+
+/** Her in the portal: from the front, `y` pixels down, waving (`wave`, 0 to 1 round a wave). */
+export function inPortal(y: number, wave: number, face: Face = 'happy'): Pose {
+  const swing = Math.sin(wave * Math.PI * 2)
+  return {
+    view: 'front',
+    y,
+    shadow: false,
+    face,
+    tilt: 0.05 * swing,
+    arms: [
+      { shoulder: 2.55 + 0.12 * swing, elbow: 0.3 + 0.55 * swing },
+      { shoulder: 0.3, elbow: 0.35 },
+    ],
+  }
+}
+
+/**
+ * Waving through a portal on top of a window (her `portal` pose, played once: PORTAL): a ring of
+ * light opens; she rises into it from below, as if on its far side, seen from the knees up; waves
+ * a while, blinking now and then; sinks away; and it closes, leaving nothing. `back`: clicked, she
+ * goes back at once (her `portal-back` pose): just the sinking away and the closing.
+ */
+export function portal(back = false): Frame[] {
+  const keys: { open: number; her: Pose | null; ms: number }[] = []
+  // `ms` split into frames of about `step` ms whose lengths add up to exactly `ms`.
+  const phase = (
+    ms: number,
+    step: number,
+    at: (u: number, i: number) => Omit<(typeof keys)[number], 'ms'>,
+  ) => {
+    const count = Math.max(1, Math.round(ms / step))
+    for (let i = 0; i < count; i++) {
+      keys.push({
+        ...at((i + 1) / count, i),
+        ms: Math.round(((i + 1) * ms) / count) - Math.round((i * ms) / count),
+      })
+    }
+  }
+  const { openMs, riseMs, waveMs, sinkMs, closeMs } = PORTAL
+  if (!back) {
+    phase(openMs, FRAME_MS, (u) => ({ open: smooth(u), her: null }))
+    phase(riseMs, FRAME_MS, (u) => ({
+      open: 1,
+      her: inPortal(lerp(PORTAL_HIDDEN, PORTAL_SHOWN, smooth(u)), 0),
+    }))
+    // A wave every eight frames.
+    phase(waveMs, 80, (_, i) => ({
+      open: 1,
+      her: inPortal(PORTAL_SHOWN, (i % 8) / 8, i % 23 === 11 ? 'blink' : 'happy'),
+    }))
+  }
+  phase(sinkMs, FRAME_MS, (u) => ({
+    open: 1,
+    her: inPortal(lerp(PORTAL_SHOWN, PORTAL_HIDDEN, smooth(u)), 0),
+  }))
+  phase(closeMs, FRAME_MS, (u) => ({ open: 1 - smooth(u), her: null }))
+  let t = 0
+  return keys.map(({ open, her, ms }) => {
+    const rows = portalFrame(her ? draw(her) : null, open, t)
+    t += ms / 1000
+    return { rows, ms }
+  })
+}
+
+/** Her performances' poses: held for as long as the performance says, but the portal's, which play once. */
+export const PERFORMANCE_MOVES = {
+  watch: repeating(watch),
+  'peek-left': repeating(peek),
+  'peek-right': repeating(peek),
+  portal: { frames: () => portal(), loops: false },
+  'portal-back': { frames: () => portal(true), loops: false },
+  'ready-left': repeating(ready),
+  'ready-right': repeating(ready),
+  'cast-left': once(cast),
+  'cast-right': once(cast),
+} satisfies Moves
+```
+
+<!-- /code -->
 
 ## `src/renderer/src/components/Character.tsx` and `character.css`: the character
 
@@ -8479,10 +10572,10 @@ the pose and way of facing from `lib/clones.ts`.
 
 <!-- code: apps/desktop/src/renderer/src/components/Character.tsx#paths,pathsOf,ALL_POSES,Character -->
 
-[`src/renderer/src/components/Character.tsx`, lines 16–99](../../apps/desktop/src/renderer/src/components/Character.tsx#L16-L99)
+[`src/renderer/src/components/Character.tsx`, lines 16–88](../../apps/desktop/src/renderer/src/components/Character.tsx#L16-L88)
 
 ```tsx
-/** Each frame's SVG paths, worked out the first time it shows. */
+/** Each gaze frame's SVG paths, worked out the first time it shows. */
 const paths = new WeakMap<Frame, ReturnType<typeof framePaths>>()
 
 function pathsOf(frame: Frame): ReturnType<typeof framePaths> {
@@ -8494,19 +10587,8 @@ function pathsOf(frame: Frame): ReturnType<typeof framePaths> {
   return found
 }
 
-/** Every pose, for drawing ahead of time. */
-const ALL_POSES: Pose[] = [
-  'idle',
-  'walk-left',
-  'walk-right',
-  'dragged',
-  'flung',
-  'splat',
-  ...FIDGETS,
-  ...SPELL_POSES,
-  ...REACTIONS,
-  ...HELD_POSES,
-]
+/** Every pose (each has a move: character/moves/), for drawing ahead of time, the basics first. */
+const ALL_POSES = Object.keys(LOOPS) as Pose[]
 
 /**
  * The character: pixel art (character/sprite.ts) drawn `box` DIPs wide and a little taller, for
@@ -8538,7 +10620,7 @@ export function Character(props: {
     let timer = setTimeout(function next() {
       const pose = waiting.shift()
       if (!pose) return
-      framesOf(pose, facing).forEach(pathsOf)
+      shownFrames(pose, facing)
       timer = setTimeout(next, 50)
     }, 500)
     return () => clearTimeout(timer)
@@ -8571,14 +10653,15 @@ export function Character(props: {
 
 <!-- /code -->
 
-- `paths` and `pathsOf(frame)`: as the comment says, each frame's SVG paths (`framePaths()`),
-  worked out the first time the frame shows and then kept, so showing it again is only swapping
-  which paths are drawn. A `WeakMap` is keyed by the frame object itself, and doesn't keep a frame
+- `paths` and `pathsOf(frame)`: as the comment says, each gaze frame's SVG paths (`framePaths()`):
+  her frames watching the pointer, worked out the first time each shows and then kept, so showing
+  it again is only swapping which paths are drawn (every other pose's paths come ready from
+  `shownFrames()`). A `WeakMap` is keyed by the frame object itself, and doesn't keep a frame
   in memory on its own account (`sprite.ts` keeps the frames anyway).
   `ReturnType<typeof framePaths>` means "whatever `framePaths()` returns", so the type isn't
   written out twice.
-- `ALL_POSES`: every pose, for drawing ahead of time: the four that aren't fidgets, then
-  `...FIDGETS`, then her spells' poses, `...SPELL_POSES`.
+- `ALL_POSES`: every pose, for drawing ahead of time: the names in `LOOPS`, which has one for every
+  move (`moves/index.ts`), the basic moves first.
 - `Character({ pose, facing, box, expanded })`: the component itself. As the comment says, it draws
   her `box` DIPs wide and a little taller, for the room above her hat (`SPRITE_HEADROOM`), her feet
   on its bottom edge. In the bubble that fills its window, which the main process keeps on the
@@ -8599,7 +10682,7 @@ export function Character(props: {
     itself again, and `waiting.shift()` takes the next pose off the front of the list. The effect
     runs again when `facing` changes (she's moved to the other corner), and the cleanup cancels
     whatever was scheduled. Every clone runs it too, but frames and their paths are only ever made
-    once (`framesOf()` and `pathsOf()` keep them), so after the first it costs next to nothing.
+    once (`shownFrames()` keeps them), so after the first it costs next to nothing.
   - `<svg>`: with a `viewBox` of the whole frame, `SPRITE_SIZE` wide and
     `SPRITE_SIZE + SPRITE_HEADROOM` tall (96 by 104 pixels, the headroom rows at the top), so the
     browser scales the frame to fill it: each pixel is one DIP at her usual size, and `box / 96`
@@ -8625,7 +10708,7 @@ export function Character(props: {
 
 <!-- code: apps/desktop/src/renderer/src/components/Character.tsx#Frames -->
 
-[`src/renderer/src/components/Character.tsx`, lines 101–120](../../apps/desktop/src/renderer/src/components/Character.tsx#L101-L120)
+[`src/renderer/src/components/Character.tsx`, lines 90–109](../../apps/desktop/src/renderer/src/components/Character.tsx#L90-L109)
 
 ```tsx
 /**
@@ -8636,7 +10719,7 @@ export function Character(props: {
 function Frames({ pose, facing }: { pose: Pose; facing: Facing }) {
   const [index, setIndex] = useState(0)
   const [still] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches)
-  const frames = framesOf(pose, facing)
+  const frames = shownFrames(pose, facing)
 
   useEffect(() => {
     if (still || (!LOOPS[pose] && index === frames.length - 1)) return
@@ -8644,7 +10727,7 @@ function Frames({ pose, facing }: { pose: Pose; facing: Facing }) {
     return () => clearTimeout(timer)
   }, [pose, index, frames, still])
 
-  return pathsOf(frames[index]!).map(({ className, d }) => (
+  return frames[index]!.paths.map(({ className, d }) => (
     <path key={className} className={className} d={d} />
   ))
 }
@@ -8657,8 +10740,8 @@ Plays a pose's frames, as the comment says.
 - `index`: which frame shows. `still` is read once, when the component is made: whether Windows'
   reduced-motion setting is on (`matchMedia` asks the same question as the CSS
   `prefers-reduced-motion`). `useState(() => ...)` runs the question only the first time.
-- `framesOf(pose, facing)`: the pose's frames, already drawn by the background work above, or
-  drawn now if it hasn't got that far.
+- `shownFrames(pose, facing)`: the pose's frames as paths, already drawn by the background work
+  above, or drawn now if it hasn't got that far.
 - The effect waits the current frame's time, then moves on to the next (`% frames.length` wraps
   round to the first). It runs again whenever `index` changes, so each frame schedules the next;
   the cleanup cancels the wait if the pose changes first (or the component goes).
@@ -8666,7 +10749,7 @@ Plays a pose's frames, as the comment says.
   doesn't loop (a fidget), where the main process takes over: it changes the pose just as the
   fidget ends.
 - The return draws the frame: one `<path>` per colour, keyed by its class (a frame has one path per
-  class), from `pathsOf()`.
+  class).
 
 ### `character.css`
 

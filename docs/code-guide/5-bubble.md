@@ -103,7 +103,7 @@ windows; the controller only sleeps and wakes.
 **Left alone.** While `collapsed`, the character has a life of its own. Every 8 to 20 seconds it
 walks somewhere else in its zone (the pose `walk-left` or `walk-right`, while the controller moves
 its window along the taskbar a frame at a time). Once nobody has done anything with it for 30
-seconds, more often than not it does one of its thirty fidgets instead (a hop, a wave, a stretch,
+seconds, more often than not it does one of its 38 habits instead (a hop, a wave, a stretch,
 a sip of tea, a vision, a curtsy, gazing into a crystal ball, reading its spellbook, a little
 spell, levitating over a magic circle, a sit on the taskbar, a twirl, a butterfly landing on its
 finger, a doze, a glance about, juggling, blowing bubbles, a will-o'-wisp going round it, a
@@ -2489,7 +2489,7 @@ tune. `as const` makes them read-only, and keeps each pair a fixed pair of numbe
 
 <!-- code: apps/desktop/src/main/bubble/wander.ts#Activity,Pastimes,FIDGET_WEIGHT -->
 
-[`src/main/bubble/wander.ts`, lines 185–204](../../apps/desktop/src/main/bubble/wander.ts#L185-L204)
+[`src/main/bubble/wander.ts`, lines 185–206](../../apps/desktop/src/main/bubble/wander.ts#L185-L206)
 
 ```ts
 export type Activity =
@@ -2508,10 +2508,12 @@ export interface Pastimes {
 }
 
 /**
- * How often a fidget comes up compared with the others, which count 1 each: the vision (the
- * company's logo coming down to her) is a rare treat, about a fifth as likely as any other.
+ * How often a habit comes up compared with the others, which count 1 each: its HABITS `weight` (the
+ * vision, the company's logo coming down to her, is a rare treat, about a fifth as likely).
  */
-export const FIDGET_WEIGHT: Partial<Record<Fidget, number>> = { vision: 0.2 }
+export const FIDGET_WEIGHT = Object.fromEntries(
+  FIDGETS.map((fidget) => [fidget, HABITS[fidget].weight ?? 1]),
+) as Record<Fidget, number>
 ```
 
 <!-- /code -->
@@ -2523,16 +2525,16 @@ export const FIDGET_WEIGHT: Partial<Record<Fidget, number>> = { vision: 0.2 }
 - `Pastimes`: as its comment says, what she may do on her own: `walk` about, and `fidget`. Settings
   can turn either off (Stand still, No idle animations); `pastimesOf()` in `BubbleController.ts`
   makes one from them.
-- `FIDGET_WEIGHT`: as its comment says, how often each fidget comes up compared with the others,
-  which count 1 each. Only the vision is listed, at 0.2: the company's logo coming down to her is
-  meant to be a rare treat, about a fifth as likely as any other fidget. `Partial<Record<...>>`
-  lets it list only the fidgets that aren't 1.
+- `FIDGET_WEIGHT`: as its comment says, how often each habit comes up compared with the others,
+  which count 1 each: each habit's `weight` in `HABITS` (`src/shared/character.ts`), or 1. Only the
+  vision has one, 0.2: the company's logo coming down to her is meant to be a rare treat, about a
+  fifth as likely as any other habit.
 
 ### `activityDelay()`
 
 <!-- code: apps/desktop/src/main/bubble/wander.ts#activityDelay -->
 
-[`src/main/bubble/wander.ts`, lines 259–263](../../apps/desktop/src/main/bubble/wander.ts#L259-L263)
+[`src/main/bubble/wander.ts`, lines 272–276](../../apps/desktop/src/main/bubble/wander.ts#L272-L276)
 
 ```ts
 /** How long until the next thing the character does on its own (ms). */
@@ -2556,7 +2558,7 @@ How long the character waits before doing something on its own, in milliseconds.
 
 <!-- code: apps/desktop/src/main/bubble/wander.ts#nextActivity -->
 
-[`src/main/bubble/wander.ts`, lines 265–319](../../apps/desktop/src/main/bubble/wander.ts#L265-L319)
+[`src/main/bubble/wander.ts`, lines 278–332](../../apps/desktop/src/main/bubble/wander.ts#L278-L332)
 
 ```ts
 /**
@@ -2633,11 +2635,11 @@ they wait for a quiet spell rather than starting up while someone has just been 
 - `last?: Fidget`: the fidget it did last (`BubbleController.lastFidget`), or `undefined` if it
   hasn't done one yet. The `?` makes the parameter optional.
 - `FIDGETS.filter((fidget) => fidget !== last)`: every fidget but that one, so it never does the
-  same one twice in a row. With no `last`, all thirty are choices.
+  same one twice in a row. With no `last`, all 38 are choices.
 - `weights`: how likely each choice is, from `FIDGET_WEIGHT` (above): 1 for every fidget but the
-  vision, which is 0.2, so it's rare. `?? 1` gives 1 to any fidget the list leaves out.
+  vision, which is 0.2, so it's rare.
 - `let roll = random() * ...`: a second roll, as a point along all the weights laid end to end
-  (`reduce()` adds them up): 29.2 long with all thirty fidgets as choices.
+  (`reduce()` adds them up): 37.2 long with all 38 habits as choices.
 - The loop walks along the choices, taking each one's weight off the roll; the first that takes it
   below 0 is the one the point fell in. So each fidget is picked in proportion to its weight: the
   vision about one time in 96 (0.2 of 19.2), each of the others about one in 19. `choices.entries()`
@@ -2655,7 +2657,7 @@ they wait for a quiet spell rather than starting up while someone has just been 
 
 <!-- code: apps/desktop/src/main/bubble/wander.ts#walkTarget -->
 
-[`src/main/bubble/wander.ts`, lines 321–333](../../apps/desktop/src/main/bubble/wander.ts#L321-L333)
+[`src/main/bubble/wander.ts`, lines 334–346](../../apps/desktop/src/main/bubble/wander.ts#L334-L346)
 
 ```ts
 /**
@@ -2697,7 +2699,7 @@ toward its corner or away from it, with `roll` choosing the spot.
 
 <!-- code: apps/desktop/src/main/bubble/wander.ts#walkStep -->
 
-[`src/main/bubble/wander.ts`, lines 335–347](../../apps/desktop/src/main/bubble/wander.ts#L335-L347)
+[`src/main/bubble/wander.ts`, lines 348–360](../../apps/desktop/src/main/bubble/wander.ts#L348-L360)
 
 ```ts
 /**
@@ -2732,7 +2734,7 @@ One frame of a walk: the new inset, `dtMs` milliseconds of walking closer to `to
 
 <!-- code: apps/desktop/src/main/bubble/wander.ts#fallDuration -->
 
-[`src/main/bubble/wander.ts`, lines 349–357](../../apps/desktop/src/main/bubble/wander.ts#L349-L357)
+[`src/main/bubble/wander.ts`, lines 362–370](../../apps/desktop/src/main/bubble/wander.ts#L362-L370)
 
 ```ts
 /**
@@ -2761,7 +2763,7 @@ How long the fall after a drop takes, in milliseconds.
 
 <!-- code: apps/desktop/src/main/bubble/wander.ts#fallPosition -->
 
-[`src/main/bubble/wander.ts`, lines 359–365](../../apps/desktop/src/main/bubble/wander.ts#L359-L365)
+[`src/main/bubble/wander.ts`, lines 372–378](../../apps/desktop/src/main/bubble/wander.ts#L372-L378)
 
 ```ts
 /** Position at progress `t` (0–1) of the fall: speeding up as it falls, like a dropped thing. */
@@ -3707,51 +3709,56 @@ Key ideas:
   bubble, and relying on Windows' mouse forwarding there made clicks occasionally fall through the
   bubble to the window behind it. The clones', the vision's and the spells' windows are the
   opposite: they only show something, so they ignore the mouse altogether, all the time, and can't take the focus
-  (`passive()`). The screen saver's windows aren't passive: any movement of the mouse, click or key
+  (`isPassive()`). The screen saver's windows aren't passive: any movement of the mouse, click or key
   over them is what ends it, so, like the bubble's, they take the mouse and can take the focus.
 
-### `View`, `passive()`
+### `View` and `isPassive()` (in `src/shared/views.ts`)
 
-<!-- code: apps/desktop/src/main/bubble/windows.ts#View,passive -->
+<!-- code: apps/desktop/src/shared/views.ts -->
 
-[`src/main/bubble/windows.ts`, lines 8–26](../../apps/desktop/src/main/bubble/windows.ts#L8-L26)
+[`src/shared/views.ts`, lines 1–17](../../apps/desktop/src/shared/views.ts#L1-L17)
 
 ```ts
-export type View =
-  | 'bubble'
-  | 'panel'
-  | 'clones'
-  | 'vision'
-  | 'spell'
-  | 'screensaver'
-  | 'familiar'
-  | 'trick'
-  | 'battle'
+// The app's kinds of window. Every one loads the same page, and its address (`index.html?view=…`)
+// says which it is: the main process makes them (bubble/windows.ts) and the page shows the view
+// for each (renderer/src/main.tsx, which won't build without one for every view here).
 
-/** Windows that only show something: they never take the mouse or the focus. */
-const passive = (view: View) =>
-  view === 'clones' ||
-  view === 'vision' ||
-  view === 'spell' ||
-  view === 'familiar' ||
-  view === 'trick' ||
-  view === 'battle'
+/**
+ * Windows that only show something over the screen (her clones, her vision, spells' effects, her
+ * familiar, her taskbar tricks' icons, her battle): they never take the mouse or the focus. To add
+ * one, name it here, give it a page (main.tsx), and open it with index.ts's openOverlay.
+ */
+export const PASSIVE_VIEWS = ['clones', 'vision', 'spell', 'familiar', 'trick', 'battle'] as const
+export type PassiveView = (typeof PASSIVE_VIEWS)[number]
+
+/** Every kind of window: her own, the panel beside her, the screen saver's, and the passive ones. */
+export type View = 'bubble' | 'panel' | 'screensaver' | PassiveView
+
+export const isPassive = (view: View): view is PassiveView =>
+  (PASSIVE_VIEWS as readonly string[]).includes(view)
 ```
 
 <!-- /code -->
 
-- `View`: a _union type_: a `View` can only be the string `'bubble'`, `'panel'`, `'clones'`,
-  `'vision'`, `'spell'` or `'screensaver'`, and TypeScript rejects anything else.
-- `passive`: as its comment says, the windows that only show something, the clones', the vision's
-  and the spells', which never take the mouse or the focus. `createOverlayWindow()` asks it twice, so
-  the two rules can't drift apart. The screen saver's windows are left out on purpose: they must
-  hear the mouse and the keyboard, to know when the user is back.
+The kinds of window are named in `src/shared/views.ts`, so the main process (which makes them) and
+the page (which shows the view for each) use the same names.
+
+- `PASSIVE_VIEWS`: as its comment says, the windows that only show something (her clones, her
+  vision, spells' effects, her familiar, her taskbar tricks' icons, her battle), which never take
+  the mouse or the focus. `createOverlayWindow()` asks `isPassive()` twice, so the two rules can't
+  drift apart. `as const` makes it a list of those exact names, and `PassiveView` the type of any of
+  them: `openOverlay()` in `index.ts` takes only those.
+- `View`: a _union type_: her window (`'bubble'`), the panel, the screen saver's, or a passive one;
+  TypeScript rejects anything else. The screen saver's windows are left out of the passive ones on
+  purpose: they must hear the mouse and the keyboard, to know when the user is back.
+- `isPassive(view)`: whether a view is one of `PASSIVE_VIEWS`. Its return type, `view is
+PassiveView`, is a type guard: where it's true, TypeScript treats `view` as a `PassiveView`.
 
 ### `ON_TOP_LEVEL`, `ON_TOP_CHECK_MS`
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#ON_TOP_LEVEL,ON_TOP_CHECK_MS -->
 
-[`src/main/bubble/windows.ts`, lines 28–39](../../apps/desktop/src/main/bubble/windows.ts#L28-L39)
+[`src/main/bubble/windows.ts`, lines 11–22](../../apps/desktop/src/main/bubble/windows.ts#L11-L22)
 
 ```ts
 /**
@@ -3791,7 +3798,7 @@ the windows' style: before, neither was on top; now both are.
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#createOverlayWindow -->
 
-[`src/main/bubble/windows.ts`, lines 41–108](../../apps/desktop/src/main/bubble/windows.ts#L41-L108)
+[`src/main/bubble/windows.ts`, lines 24–91](../../apps/desktop/src/main/bubble/windows.ts#L24-L91)
 
 ```ts
 /**
@@ -3835,7 +3842,7 @@ export function createOverlayWindow(
     // Clicking the bubble now takes the focus from an open panel; BubbleController.clickBubble
     // knows that press closed it. The clones', the vision's and the spells' windows never need
     // it.
-    focusable: !passive(view),
+    focusable: !isPassive(view),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: true,
@@ -3851,7 +3858,7 @@ export function createOverlayWindow(
     win.setIgnoreMouseEvents(true, { forward: true })
     addEditContextMenu(win)
   }
-  if (passive(view)) win.setIgnoreMouseEvents(true)
+  if (isPassive(view)) win.setIgnoreMouseEvents(true)
 
   const search = { ...query, view }
   const devServer = process.env['ELECTRON_RENDERER_URL']
@@ -3869,7 +3876,8 @@ export function createOverlayWindow(
 Creates one overlay window. `new BrowserWindow({...})` makes a native window with a Chromium page
 inside; the options say what kind of window. As the comment says, `query` adds to the page's query
 string, and the clones' and the vision's windows never take the mouse or the focus; nor do the
-spells' windows, which the comment doesn't mention (`passive()` covers all three).
+spells' windows and the other passive ones, which the comment doesn't name (`isPassive()` covers
+them all).
 
 - `...size`: the window's `width` and `height`: `box` wide and `box + headroom` tall for the
   bubble (from `bubbleMetrics()`), `panelWindowSize(actionCount)` for the panel, both at her usual
@@ -3950,7 +3958,7 @@ spells' windows, which the comment doesn't mention (`passive()` covers all three
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#keepOnTop -->
 
-[`src/main/bubble/windows.ts`, lines 110–126](../../apps/desktop/src/main/bubble/windows.ts#L110-L126)
+[`src/main/bubble/windows.ts`, lines 93–109](../../apps/desktop/src/main/bubble/windows.ts#L93-L109)
 
 ```ts
 /**
@@ -3994,7 +4002,7 @@ ON_TOP_LEVEL)`, which also puts the window at the top of the always-on-top windo
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#bringToFront -->
 
-[`src/main/bubble/windows.ts`, lines 128–140](../../apps/desktop/src/main/bubble/windows.ts#L128-L140)
+[`src/main/bubble/windows.ts`, lines 111–123](../../apps/desktop/src/main/bubble/windows.ts#L111-L123)
 
 ```ts
 /**
@@ -4027,7 +4035,7 @@ calls it for the bubble when Windows says something else is at the bubble's cent
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#bubbleSurface,panelSurface -->
 
-[`src/main/bubble/windows.ts`, lines 142–165](../../apps/desktop/src/main/bubble/windows.ts#L142-L165)
+[`src/main/bubble/windows.ts`, lines 125–148](../../apps/desktop/src/main/bubble/windows.ts#L125-L148)
 
 ```ts
 export function bubbleSurface(win: BrowserWindow): Surface {
@@ -4073,7 +4081,7 @@ forwards each call to the matching Electron method.
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#resetClickThrough -->
 
-[`src/main/bubble/windows.ts`, lines 167–179](../../apps/desktop/src/main/bubble/windows.ts#L167-L179)
+[`src/main/bubble/windows.ts`, lines 150–162](../../apps/desktop/src/main/bubble/windows.ts#L150-L162)
 
 ```ts
 /**
@@ -4111,7 +4119,7 @@ been hidden, for example for a screenshot.
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#lockDown -->
 
-[`src/main/bubble/windows.ts`, lines 181–190](../../apps/desktop/src/main/bubble/windows.ts#L181-L190)
+[`src/main/bubble/windows.ts`, lines 164–173](../../apps/desktop/src/main/bubble/windows.ts#L164-L173)
 
 ```ts
 function lockDown(win: BrowserWindow, view: View): void {
@@ -4146,7 +4154,7 @@ Basic safety and crash recovery for every overlay page.
 
 <!-- code: apps/desktop/src/main/bubble/windows.ts#addEditContextMenu -->
 
-[`src/main/bubble/windows.ts`, lines 192–213](../../apps/desktop/src/main/bubble/windows.ts#L192-L213)
+[`src/main/bubble/windows.ts`, lines 175–196](../../apps/desktop/src/main/bubble/windows.ts#L175-L196)
 
 ```ts
 /** Right-click menu for the text box: spelling suggestions plus the usual edit commands. */
