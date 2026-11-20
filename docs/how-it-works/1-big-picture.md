@@ -49,11 +49,13 @@ of the screen. Click her and a panel of icons opens beside her. For Morse Micro 
 
 Left alone, she has a life of her own:
 
-- she strolls near her corner and does **habits**: 37 of them, ten magic, five where she summons a
-  toy and plays with it (a yo-yo, a spinning top, cards, a paper plane, a bouncy ball), two only at certain times
+- she strolls near her corner and does **habits**: 38 of them, ten magic, five where she summons a
+  toy and plays with it (a yo-yo, a spinning top, cards, a paper plane, a bouncy ball), one a visit
+  from a little spirit, two only at certain times
   (yawning late at night, confetti on Friday evenings);
 - now and then she **performs**: peeks round a window, waves through a portal on top of one, gets a visit from her black
-  cat, and, rarely, plays **tricks with the taskbar's icons** (all pretend: nothing really moves);
+  cat, and, rarely, plays **tricks with the taskbar's icons** (all pretend: nothing really moves) or
+  fights off three little **monsters** that come along the taskbar;
 - she **reacts**: to the pointer zipping past or being wiggled near her, to a double-click (hearts),
   to a new Jira notification (a scroll), and to nobody being at the PC for five minutes (she sits
   down and snoozes);
@@ -95,7 +97,7 @@ Desktop-Assist/
 │   │   ├── ipc.ts                 every request from the pages, checked
 │   │   ├── actions.ts             the icons' commands (screenshot, screen saver, close …)
 │   │   ├── bubble/                the character: BubbleController, wander, layout, windows …
-│   │   ├── performances/          her longer acts: watching, tricks, peeking, portals, the cat
+│   │   ├── performances/          her longer acts: watching, tricks, peeking, portals, the cat, battles
 │   │   ├── shell/probe.ts         reads the taskbar and windows (UI Automation, read-only)
 │   │   ├── familiar.ts            the cat's window
 │   │   ├── screenSaver.ts         the screen saver's windows
@@ -137,7 +139,7 @@ is compiled into all three, so they agree on names and types.
 layers
 ```
 
-There are eight kinds of window, all frameless, see-through and always on top. They all load the
+There are nine kinds of window, all frameless, see-through and always on top. They all load the
 same page, and its address (`index.html?view=…`) says which one it is:
 
 | View          | What it is                                                                                   | Takes the mouse?  |
@@ -150,10 +152,11 @@ same page, and its address (`index.html?view=…`) says which one it is:
 | `screensaver` | One over each whole screen while the screen saver is on.                                     | yes, to wake it   |
 | `familiar`    | A strip along the taskbar where her black cat walks.                                         | never             |
 | `trick`       | The taskbar's icons, copied, while she plays a trick with them.                              | never             |
+| `battle`      | A strip along the bottom of her screen where the monsters of her battle come and go.         | never             |
 
 > **Why it's built this way**
 > Keeping her in her own tiny window means only a small window moves when she walks, and the panel
-> never resizes or flickers as she does. The passive windows (clones, vision, spells, cat, tricks)
+> never resizes or flickers as she does. The passive windows (clones, vision, spells, cat, tricks, battles)
 > never take the mouse or the focus, so they can cover the screen without ever getting in the way.
 
 ## 5. The life of a click

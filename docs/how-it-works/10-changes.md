@@ -74,7 +74,7 @@ own `tenant.json`, `logo.png` and `icon.png`, built with `TENANT=<folder> npm ru
 | DIP                          | Device-independent pixel: a screen pixel at 100% scaling; most of the app's numbers are DIPs.               |
 | DPAPI                        | Windows' encryption tied to the signed-in user, used through Electron's `safeStorage`.                      |
 | Ed25519                      | The kind of signature the release key makes.                                                                |
-| Fidget, habit                | One of her 37 short animations (`FIDGETS`).                                                                 |
+| Fidget, habit                | One of her 38 short animations (`FIDGETS`).                                                                 |
 | Frame                        | One picture of her, a grid of palette letters, shown for its time.                                          |
 | Fuse                         | A switch set inside the `.exe` when it's built, which can't be changed afterwards.                          |
 | Hash                         | A fingerprint of some data (SHA-256 here): easy to make, impossible to reverse, changed by any change.      |
@@ -83,7 +83,7 @@ own `tenant.json`, `logo.png` and `icon.png`, built with `TENANT=<folder> npm ru
 | MCP                          | Model Context Protocol: a standard way to call another service's tools.                                     |
 | Mode                         | What the bubble is doing as a whole: collapsed, expanded, dragging, returning or capturing.                 |
 | OAuth, OIDC                  | The standards for signing in through the browser and getting tokens; OIDC adds who someone is.              |
-| Performance                  | One of her longer acts (a trick, a peek, a portal, a visit), played frame by frame by `BubbleController`.   |
+| Performance                  | One of her longer acts (a trick, a peek, a portal, a visit, a battle), played by `BubbleController`.        |
 | PKCE                         | Proof Key for Code Exchange: makes a stolen sign-in code useless.                                           |
 | Pose                         | What she's doing, by name (`hop`, `walk-left`, `snooze`), which picks her frames.                           |
 | Preload                      | The script that runs in each page first and hands it `window.assist`.                                       |

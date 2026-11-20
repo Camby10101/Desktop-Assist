@@ -69,6 +69,7 @@ import { Familiar } from './familiar'
 import { TaskbarTricks } from './performances/taskbarTricks'
 import { WindowTricks } from './performances/windowTricks'
 import { ShellProbe, type PhysicalRect } from './shell/probe'
+import { Battle } from './performances/battle'
 import { familiarVisit } from './performances/familiarVisit'
 import { ScreenSaver } from './screenSaver'
 import { SettingsService } from './settings'
@@ -169,7 +170,7 @@ async function start(): Promise<void> {
   // `above`: over her too (her taskbar tricks' icons pass in front of her); otherwise she's put
   // back in front of it.
   const openOverlay =
-    (view: 'clones' | 'vision' | 'spell' | 'familiar' | 'trick', above = false) =>
+    (view: 'clones' | 'vision' | 'spell' | 'familiar' | 'trick' | 'battle', above = false) =>
     (bounds: Rect, query: Record<string, string>) => {
       const win = createOverlayWindow(view, { width: bounds.width, height: bounds.height }, query)
       win.setBounds(bounds)
@@ -278,6 +279,8 @@ async function start(): Promise<void> {
     taskbarTricks
       ? { moves: true, prepare: (standing: Standing) => taskbarTricks.prepare(name, standing) }
       : undefined
+  // Her battle with monsters: drawn in a window along the bottom of her screen, behind her.
+  const battle = new Battle({ open: openOverlay('battle'), random: Math.random })
   const performances = new Performances({
     displays: electronDisplays,
     onGaze: (gaze) => bubbleWindow.webContents.send(IPC.gaze, gaze),
@@ -291,6 +294,8 @@ async function start(): Promise<void> {
         : {}),
       // Her tricks with the taskbar's icons (Windows only).
       ...Object.fromEntries(TRICKS.flatMap((name) => (trick(name) ? [[name, trick(name)!]] : []))),
+      // A battle with monsters: she stays where she stands.
+      battle: { moves: false, prepare: async (standing) => battle.prepare(standing) },
       // A visit from her familiar: it appears beside her, and she sits down with it a while.
       familiar: {
         moves: false,

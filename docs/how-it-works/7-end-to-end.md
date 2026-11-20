@@ -50,9 +50,9 @@ bottom-right corner, and her last habit was a wave.
 1. The timer set by `scheduleActivity()` fires: `doActivity()` asks `nextActivity()`.
 2. She's been alone over 30 seconds (`fidgetAfter`), and the first roll is under 0.6, so it's a habit
    or a performance rather than a stroll.
-3. The options: 34 habits (all but the two timed ones out of their hours, and the wave, done last),
+3. The options: 35 habits (all but the two timed ones out of their hours, and the wave, done last),
    each weighing 1, with the vision at 0.2; and what `Performances.available(true)` offers: `watch`,
-   `peek`, `portal`, the six tricks and `familiar`. The weights add up to about 36.
+   `peek`, `portal`, the six tricks, `familiar` and `battle`. The weights add up to about 37.
 4. The second roll lands in `peek`'s stretch. `doActivity()` calls `prepare('peek')`.
 5. `WindowTricks.peek()` asks the shell probe for the windows, keeps the usable ones on her screen,
    and `peekEdge()` finds a browser window whose right edge is 150 DIPs to her left, coming down over

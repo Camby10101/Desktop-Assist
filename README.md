@@ -5,7 +5,7 @@ corner of the screen and opens a panel when clicked. Built for Morse Micro first
 [`tenants/`](tenants/README.md), so another business can use it later.
 
 **Download:** the newest installer is in [`installer/`](installer/)
-([Desktop Wizard-Setup-2.5.1.exe](installer/Desktop%20Wizard-Setup-2.5.1.exe), with its signature
+([Desktop Wizard-Setup-2.5.2.exe](installer/Desktop%20Wizard-Setup-2.5.2.exe), with its signature
 beside it). Run it to install Desktop Wizard for yourself (no admin needed); an installed copy
 updates itself from Settings → Check for updates.
 
@@ -31,9 +31,10 @@ sign-in) and 4 (logos, favourites, service desk, light/dark mode, bubble-click f
 3.1 (questions open in Claude Desktop) and 3.2 (Apps list, Uninstall) are complete, as are
 Milestone 5 (the app-opening spinner; Jira and the service desk) and its fixes 5.1 and 5.2 (the
 bubble kept in front, and Check for updates). Version **1.0.0** was the first release (see
-[PLAN.md](docs/PLAN.md) §7h and [RELEASING.md](docs/RELEASING.md)); this is version **2.5.1**, with
-the animated character (thirty-seven habits, ten of them magic and five with toys she summons; throw her and she tumbles; tricks
-with the taskbar's icons and the windows on the screen; her familiar, a black cat), her spells,
+[PLAN.md](docs/PLAN.md) §7h and [RELEASING.md](docs/RELEASING.md)); this is version **2.5.2**, with
+the animated character (thirty-eight habits, ten of them magic, five with toys she summons and one a
+visit from a little spirit; throw her and she tumbles; tricks with the taskbar's icons and the
+windows on the screen; battles with little monsters; her familiar, a black cat), her spells,
 the screen saver, and Robe colour, Stand still and No idle animations in Settings
 (PLAN.md §7i).
 
@@ -92,7 +93,9 @@ name are sent on to it.
   dragged, and drops her if it's minimised or closed; click her in it and she goes straight back
   home), does tricks with the taskbar's icons (carrying one about, juggling three, swapping two and
   swapping them back, sitting on one, sneezing one flying, a wand tap), or watches the pointer for
-  ten seconds. The
+  ten seconds. Just as rarely, three little monsters (a slime, a walking toadstool and a flying imp)
+  come along the taskbar from the far side of the screen; she faces them, knocks each one tumbling
+  back off the screen with a magic bolt, and hops for joy. The
   tricks are pretend: copies of the icons, cut from a screenshot that never leaves the PC, are drawn
   over the taskbar; nothing on it really moves. She yawns late at night (10pm to 6am), and throws
   confetti on Friday evenings (4pm to 8pm). With nobody at the PC for five minutes (no mouse or

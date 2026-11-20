@@ -537,7 +537,7 @@ timetable of one of her habits, and `CLONES` the numbers for her clones, which b
 
 <!-- code: apps/desktop/src/shared/character.ts#FIDGETS,Fidget,Pose,FIDGET_MS,isFidget -->
 
-[`src/shared/character.ts`, lines 6–291](../../apps/desktop/src/shared/character.ts#L6-L291)
+[`src/shared/character.ts`, lines 6–302](../../apps/desktop/src/shared/character.ts#L6-L302)
 
 ```ts
 /**
@@ -589,6 +589,8 @@ timetable of one of her habits, and `CLONES` the numbers for her clones, which b
  *   her and back in front), and she catches it.
  * - `ball`: a bouncy ball appears in her hand; she bounces it on the taskbar, tosses it up high and
  *   catches it.
+ * - `spirit`: a little spirit with leaf wings appears beside her in a swirl of sparkles; it flies to
+ *   her, lands on her palm (hearts), loops round her head, they wave to each other, and it fades.
  * - `dance`: a little jig, stepping side to side, an arm up and a hand on her hip, then the other.
  * - `yawn`: a big yawn behind her hand, then a sleepy sway (late at night only: see TIMED).
  * - `confetti`: a cheer and a burst of confetti (Friday evenings only, and often then: see TIMED).
@@ -628,6 +630,7 @@ export const FIDGETS = [
   'cards',
   'plane',
   'ball',
+  'spirit',
   'yawn',
   'confetti',
   'dance',
@@ -693,6 +696,7 @@ export const FIDGET_MS: Record<Fidget, number> = {
   cards: 4000,
   plane: 4400,
   ball: 4000,
+  spirit: 6400,
   yawn: 3600,
   confetti: 3200,
   dance: 3200,
@@ -748,7 +752,7 @@ export const isFidget = (pose: Pose): pose is Fidget =>
 
 <!-- code: apps/desktop/src/shared/character.ts#SPELL_POSES,SpellPose,SPELL_POSE_MS,isSpellPose -->
 
-[`src/shared/character.ts`, lines 100–120](../../apps/desktop/src/shared/character.ts#L100-L120)
+[`src/shared/character.ts`, lines 103–123](../../apps/desktop/src/shared/character.ts#L103-L123)
 
 ```ts
 /**
@@ -802,7 +806,7 @@ the main process plays them on purpose (`BubbleController.act()` and `teleport()
 
 <!-- code: apps/desktop/src/shared/character.ts#VISION -->
 
-[`src/shared/character.ts`, lines 293–304](../../apps/desktop/src/shared/character.ts#L293-L304)
+[`src/shared/character.ts`, lines 304–315](../../apps/desktop/src/shared/character.ts#L304-L315)
 
 ```ts
 /**
@@ -841,7 +845,7 @@ pages. Each entry is a `[from, to]` pair:
 
 <!-- code: apps/desktop/src/shared/character.ts#CLONES -->
 
-[`src/shared/character.ts`, lines 319–323](../../apps/desktop/src/shared/character.ts#L319-L323)
+[`src/shared/character.ts`, lines 330–334](../../apps/desktop/src/shared/character.ts#L330-L334)
 
 ```ts
 /**

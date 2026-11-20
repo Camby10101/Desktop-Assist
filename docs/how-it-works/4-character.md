@@ -311,7 +311,7 @@ return {
 #### `createOverlayWindow(view, size, query)` (in `windows.ts`)
 
 Every window is made here: frameless, transparent, hidden from the taskbar and Alt+Tab, and its page
-locked down. The passive ones (clones, vision, spell, familiar, trick) can't take the focus, and
+locked down. The passive ones (clones, vision, spell, familiar, trick, battle) can't take the focus, and
 ignore the mouse entirely.
 
 ```ts
@@ -382,7 +382,7 @@ any moment without waiting.
 
 ## 19. performances/ and shell/ — her bigger acts
 
-**Folders:** `src/main/performances/`, `src/main/shell/`, plus `familiar.ts` and `shared/tricks.ts`
+**Folders:** `src/main/performances/`, `src/main/shell/`, plus `familiar.ts`, `shared/tricks.ts` and `shared/battle.ts`
 · **Job:** the things she does that move her about and draw outside her own window. **Used by:**
 `BubbleController`, through the `Performer` interface.
 
@@ -406,6 +406,7 @@ saying whether it moves her. With Stand still on, only the ones that keep her in
 | `peek`      | 1      | slips behind the edge of a window near her, and peeks out                       | `windowTricks.ts`  |
 | `portal`    | 0.1    | opens a portal on top of a window and waves through it; it goes with the window | `windowTricks.ts`  |
 | `familiar`  | 1      | her black cat appears beside her, and she sits down with it a while             | `familiarVisit.ts` |
+| `battle`    | 0.1    | three little monsters come along the taskbar; she knocks each off with a bolt   | `battle.ts`        |
 
 ### shell/probe.ts — looking at Windows' own shell
 
@@ -549,3 +550,26 @@ if (her) {
 
 A **visit** (the `familiar` performance) starts the cat for 16 seconds, and `familiarVisit()` has her
 stand while it arrives, then sit with it. The Summon familiar spell starts it for a minute.
+
+### battle.ts and shared/battle.ts — her battle with monsters
+
+`planBattle()` works out a battle where she stands: the side the monsters come from (the far side
+of her screen, where there's room), and for each of the three (a slime, a toadstool, an imp, in a
+random order) how long it takes to come on (three to four seconds, however far) and where it stops,
+150 DIPs or more from her. `battleFrame(plan, t)` is the whole battle as a function of the time:
+her pose (startled, then `ready-left` or `-right`, `cast-…` at each monster in turn as it stops,
+and a hop once they're all gone), where each monster is (coming, waiting, or knocked tumbling back
+off the screen in an arc), her bolts in flight and the bursts where they hit.
+
+```ts
+const cast = Math.max(arrive, free) // she casts once it's stopped, and she's done with the last
+free = cast + BATTLE.castMs
+const launch = cast + BATTLE.launchMs // the bolt leaves her hand
+const hit = launch + flight // and flies at BATTLE.boltSpeed to the monster's middle
+return { enter, arrive, cast, launch, hit, gone: hit + BATTLE.flyMs }
+```
+
+`Battle.prepare()` opens a `battle` window, a strip along the bottom of her screen, with the plan and
+the time it began in its address, and returns a performance whose `at(t)` is her pose from the same
+`battleFrame()`; `BattleView` draws the monsters and the spells from it. Both work from the same
+plan and clock, so her casts and the bolts stay in step without any messages between them.

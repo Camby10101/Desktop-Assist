@@ -76,11 +76,12 @@ describe('her timed habits', () => {
     expect(tally(undefined).get('yawn')).toBeUndefined()
   })
 
-  it('draws the performances that can be done, the taskbar and pointer ones a tenth as often', () => {
-    const counts = tally({ performances: ['watch', 'carry', 'peek', 'familiar'] }, 20_000)
+  it('draws the performances that can be done, the taskbar, pointer and battle ones a tenth as often', () => {
+    const counts = tally({ performances: ['watch', 'carry', 'peek', 'familiar', 'battle'] }, 20_000)
     const hop = counts.get('hop')!
     expect(counts.get('watch')! / hop).toBeCloseTo(PERFORMANCE_WEIGHT.watch, 1)
     expect(counts.get('carry')! / hop).toBeCloseTo(0.1, 1)
+    expect(counts.get('battle')! / hop).toBeCloseTo(0.1, 1)
     expect(counts.get('peek')! / hop).toBeCloseTo(1, 0)
     expect(counts.get('familiar')! / hop).toBeCloseTo(1, 0)
     expect(counts.get('swap')).toBeUndefined() // not offered
@@ -213,8 +214,11 @@ describe('the new poses', () => {
   })
 
   it('hold her performances’ poses round and round, and pounce and peek either way', () => {
-    // All but the portal's, which open, have her wave through it (or go back), and close, once.
-    for (const pose of HELD_POSES) expect(LOOPS[pose], pose).toBe(!pose.startsWith('portal'))
+    // All but the portal's, which open, have her wave through it (or go back), and close, once,
+    // and her casts in a battle (a thrust of her hand each).
+    for (const pose of HELD_POSES) {
+      expect(LOOPS[pose], pose).toBe(!pose.startsWith('portal') && !pose.startsWith('cast'))
+    }
     for (const pose of REACTIONS) expect(LOOPS[pose], pose).toBe(false)
     const right = framesOf('pounce-right', 'left').map((f) => f.rows.join(''))
     const left = framesOf('pounce-left', 'right').map((f) => f.rows.join(''))
